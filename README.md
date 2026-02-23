@@ -220,6 +220,39 @@ All models are GGUF format, loaded on-demand:
 
 Models are downloaded automatically on first use to `~/.cache/nano-brain/models/`.
 
+## How nano-brain Compares
+
+| | nano-brain | Mem0 / OpenMemory | Zep / Graphiti | OMEGA | Letta (MemGPT) | Claude Native |
+|---|---|---|---|---|---|---|
+| **Search** | Hybrid (BM25 + vector + LLM reranking) | Vector only | Graph traversal + vector | Semantic + BM25 | Agent-managed | Text file read |
+| **Storage** | SQLite (single file) | PostgreSQL + Qdrant | Neo4j | SQLite | PostgreSQL / SQLite | Flat text files |
+| **MCP Tools** | 10 | 4-9 | 9-10 | 12 | 7 | 0 |
+| **Local-First** | Yes (zero cloud) | Requires OpenAI API key | Requires Docker + Neo4j | Yes | Yes | Yes |
+| **AI Models** | Local GGUF (nomic-embed, bge-reranker) | Cloud API (OpenAI) | Cloud API | Local ONNX | Cloud API | None |
+| **Codebase Indexing** | Yes (structural boundary detection) | No | No | No | No | No |
+| **Session Recall** | Yes (auto-harvests past sessions) | No | No | No | No | Limited (CLAUDE.md) |
+| **Query Expansion** | Yes (local LLM) | No | No | No | No | No |
+| **LLM Reranking** | Yes (bge-reranker-v2-m3) | No | No | No | No | No |
+| **Privacy** | 100% local, no data leaves machine | Cloud API calls | Cloud or self-host | 100% local | Self-host or cloud | Local files |
+| **Dependencies** | SQLite + GGUF models (~1.5GB) | Docker + PostgreSQL + Qdrant + OpenAI key | Docker + Neo4j | SQLite + ONNX | PostgreSQL | None |
+| **Pricing** | Free (open source, MIT) | Free tier / Pro $249/mo | Free self-host / Cloud $25-475/mo | Free (Apache-2.0) | Free (Apache-2.0) | Free (with Claude) |
+| **GitHub Stars** | New | ~47K | ~23K | ~25 | ~21K | N/A |
+
+### Where nano-brain shines
+
+- **Hybrid search pipeline** — the only MCP memory server with BM25 + vector + query expansion + LLM reranking in a single pipeline
+- **Codebase indexing** — index your source files with structural boundary detection, not just conversations
+- **Session recall** — automatically harvests and indexes past AI coding sessions
+- **Zero dependencies** — single SQLite file, local GGUF models, no Docker/PostgreSQL/Neo4j/API keys
+- **Privacy** — 100% local processing, your code and conversations never leave your machine
+
+### Consider alternatives if
+
+- You need a knowledge graph with temporal reasoning (Zep/Graphiti)
+- You want a full agent framework, not just memory (Letta)
+- You need cloud-hosted memory shared across teams (Mem0 Cloud)
+- You only need basic session notes (Claude native memory)
+
 ## AI Agent Integration
 
 nano-brain ships with a SKILL.md that teaches AI agents when and how to use memory tools. When loaded as an OpenCode skill, agents automatically:

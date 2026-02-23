@@ -1,0 +1,100 @@
+      <section id="compare" class="fade-in">
+        <h2 class="section-title">How nano-brain Compares</h2>
+        <p class="section-subtitle">The only MCP memory server with a full hybrid search pipeline — BM25 + vector + query expansion + LLM reranking. All local.</p>
+        <div class="compare-table-wrap">
+          <table class="compare-table">
+            <thead>
+              <tr>
+                <th>Feature</th>
+                <th class="highlight">nano-brain</th>
+                <th>Mem0</th>
+                <th>Zep</th>
+                <th>OMEGA</th>
+                <th>Letta</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Search</td>
+                <td class="highlight">BM25 + Vector + Reranking</td>
+                <td>Vector only</td>
+                <td>Graph + Vector</td>
+                <td>Semantic + BM25</td>
+                <td>Agent-managed</td>
+              </tr>
+              <tr>
+                <td>Storage</td>
+                <td class="highlight">SQLite (single file)</td>
+                <td>PostgreSQL + Qdrant</td>
+                <td>Neo4j</td>
+                <td>SQLite</td>
+                <td>PostgreSQL</td>
+              </tr>
+              <tr>
+                <td>Local AI Models</td>
+                <td class="highlight">GGUF (nomic + bge)</td>
+                <td>Cloud API</td>
+                <td>Cloud API</td>
+                <td>ONNX</td>
+                <td>Cloud API</td>
+              </tr>
+              <tr>
+                <td>Codebase Indexing</td>
+                <td class="highlight">&#10003;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+              </tr>
+              <tr>
+                <td>Session Recall</td>
+                <td class="highlight">&#10003;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+              </tr>
+              <tr>
+                <td>Query Expansion</td>
+                <td class="highlight">&#10003;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+              </tr>
+              <tr>
+                <td>LLM Reranking</td>
+                <td class="highlight">&#10003;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+                <td>&#10007;</td>
+              </tr>
+              <tr>
+                <td>Privacy</td>
+                <td class="highlight">100% local</td>
+                <td>Cloud API calls</td>
+                <td>Cloud / self-host</td>
+                <td>100% local</td>
+                <td>Self-host / cloud</td>
+              </tr>
+              <tr>
+                <td>External Deps</td>
+                <td class="highlight">None</td>
+                <td>Docker + PG + Qdrant</td>
+                <td>Docker + Neo4j</td>
+                <td>None</td>
+                <td>PostgreSQL</td>
+              </tr>
+              <tr>
+                <td>Pricing</td>
+                <td class="highlight">Free (MIT)</td>
+                <td>Free / $249/mo</td>
+                <td>Free / $25-475/mo</td>
+                <td>Free (Apache-2.0)</td>
+                <td>Free (Apache-2.0)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
