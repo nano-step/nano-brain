@@ -1,6 +1,6 @@
 # nano-brain
 
-Persistent memory system for OpenCode. Hybrid search across past sessions, codebase, curated notes, and daily logs.
+Persistent memory system for AI coding agents. Hybrid search across past sessions, codebase, curated notes, and daily logs.
 
 ## When to Use (Routing Rules)
 
