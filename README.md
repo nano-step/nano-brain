@@ -1,12 +1,12 @@
 # nano-brain
 
-Persistent memory system for OpenCode. Hybrid search (BM25 + vector + LLM reranking) across past sessions, codebase, curated notes, and daily logs.
+Persistent memory system for AI coding agents. Hybrid search (BM25 + vector + LLM reranking) across past sessions, codebase, curated notes, and daily logs.
 
 ## What It Does
 
-An MCP server that gives OpenCode persistent memory across sessions. Indexes markdown documents, past sessions, and daily logs into a searchable SQLite database with FTS5 and vector embeddings. Provides 10 MCP tools for search, retrieval, and memory management using a sophisticated hybrid search pipeline with query expansion, RRF fusion, and neural reranking.
+An MCP server that gives AI coding agents persistent memory across sessions. Indexes markdown documents, past sessions, and daily logs into a searchable SQLite database with FTS5 and vector embeddings. Provides 10 MCP tools for search, retrieval, and memory management using a sophisticated hybrid search pipeline with query expansion, RRF fusion, and neural reranking.
 
-Inspired by [QMD](https://github.com/tobi/qmd).
+Inspired by [QMD](https://github.com/tobi/qmd) and [OpenClaw](https://github.com/openclaw/openclaw).
 
 ## Architecture
 
