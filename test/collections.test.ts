@@ -22,7 +22,7 @@ describe('Collections', () => {
   let configPath: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-collections-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-collections-test-'));
     configPath = path.join(tmpDir, 'config.yml');
   });
 
@@ -43,7 +43,7 @@ describe('Collections', () => {
         globalContext: 'Test context',
         collections: {
           sessions: {
-            path: '~/.opencode-memory/sessions',
+            path: '~/.nano-brain/sessions',
             pattern: '**/*.md',
             context: {
               'sessions/': 'Harvested sessions',
@@ -59,7 +59,7 @@ describe('Collections', () => {
       expect(loaded).not.toBeNull();
       expect(loaded?.globalContext).toBe('Test context');
       expect(loaded?.collections.sessions).toBeDefined();
-      expect(loaded?.collections.sessions.path).toBe('~/.opencode-memory/sessions');
+      expect(loaded?.collections.sessions.path).toBe('~/.nano-brain/sessions');
     });
 
     it('should throw on malformed YAML', () => {
@@ -74,7 +74,7 @@ describe('Collections', () => {
         globalContext: 'Test context',
         collections: {
           memory: {
-            path: '~/.opencode-memory/memory',
+            path: '~/.nano-brain/memory',
             pattern: '**/*.md',
             update: 'auto',
           },
@@ -110,14 +110,14 @@ describe('Collections', () => {
       const config: CollectionConfig = {
         collections: {
           sessions: {
-            path: '~/.opencode-memory/sessions',
+            path: '~/.nano-brain/sessions',
             pattern: '**/*.md',
             context: {
               'sessions/': 'Harvested sessions',
             },
           },
           memory: {
-            path: '~/.opencode-memory/memory',
+            path: '~/.nano-brain/memory',
           },
         },
       };
@@ -126,7 +126,7 @@ describe('Collections', () => {
 
       expect(collections).toHaveLength(2);
       expect(collections[0].name).toBe('sessions');
-      expect(collections[0].path).toBe('~/.opencode-memory/sessions');
+      expect(collections[0].path).toBe('~/.nano-brain/sessions');
       expect(collections[0].pattern).toBe('**/*.md');
       expect(collections[0].context).toEqual({ 'sessions/': 'Harvested sessions' });
 
@@ -525,7 +525,7 @@ describe('Collections', () => {
 
     it('should expand tilde in path', async () => {
       const homeDir = os.homedir();
-      const testDir = path.join(homeDir, '.opencode-memory-test-scan');
+      const testDir = path.join(homeDir, '.nano-brain-test-scan');
       
       try {
         fs.mkdirSync(testDir, { recursive: true });
@@ -533,7 +533,7 @@ describe('Collections', () => {
 
         const collection: Collection = {
           name: 'test',
-          path: '~/.opencode-memory-test-scan',
+          path: '~/.nano-brain-test-scan',
           pattern: '**/*.md',
         };
 

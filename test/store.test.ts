@@ -10,7 +10,7 @@ describe('Store', () => {
   let dbPath: string;
   
   beforeEach(() => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-test-'));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-test-'));
     dbPath = path.join(tmpDir, 'test.db');
     store = createStore(dbPath);
   });

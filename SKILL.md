@@ -1,4 +1,4 @@
-# opencode-memory
+# nano-brain
 
 Persistent memory system for OpenCode. Hybrid search across past sessions, codebase, curated notes, and daily logs.
 
@@ -115,7 +115,7 @@ memory_query("what have we done regarding {topic}")
 memory_write("## {date} - {topic}\n- Decision: ...\n- Reason: ...\n- Files changed: ...")
 
 # When delegating to subagents, include memory context:
-task(category="...", load_skills=["opencode-memory"], prompt="... CONTEXT from memory: ...")
+task(category="...", load_skills=["nano-brain"], prompt="... CONTEXT from memory: ...")
 ```
 
 ### As a subagent:
@@ -130,7 +130,7 @@ memory_search("{error message or symptom}")
 
 ## Memory vs Native Tools
 
-| Capability | opencode-memory | Native (grep/glob/ast-grep) |
+| Capability | nano-brain | Native (grep/glob/ast-grep) |
 |-----------|----------------|---------------------------|
 | Past session recall | ✅ Searches all past sessions | ❌ session_search is basic text match |
 | Semantic understanding | ✅ "notification workflow" finds related concepts | ❌ Literal pattern matching only |

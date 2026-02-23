@@ -1,9 +1,9 @@
 <!-- OPENCODE-MEMORY:START -->
-<!-- Managed block - do not edit manually. Updated by: npx opencode-memory init -->
+<!-- Managed block - do not edit manually. Updated by: npx nano-brain init -->
 
-## Memory System (opencode-memory)
+## Memory System (nano-brain)
 
-This project uses **opencode-memory** for persistent context across sessions.
+This project uses **nano-brain** for persistent context across sessions.
 
 ### Quick Reference
 

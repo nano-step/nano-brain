@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>opencode-memory · MCP Server</title>
+    <title>nano-brain · MCP Server</title>
     <style>
       :root {
   color-scheme: dark;
@@ -517,7 +517,7 @@ footer {
   <body>
     <header class="nav">
       <div class="nav-inner">
-        <div class="brand"><span class="brand-dot"></span>opencode-memory</div>
+        <div class="brand"><span class="brand-dot"></span>nano-brain</div>
         <nav class="nav-links">
           <a href="#features">Features</a>
           <a href="#how">How It Works</a>
@@ -531,11 +531,11 @@ footer {
     <div class="page">
             <section class="hero fade-in" id="hero">
         <span class="badge">v2026.1.0</span>
-        <h1>opencode-memory</h1>
+        <h1>nano-brain</h1>
         <p>Persistent hybrid search memory for AI coding agents.</p>
         <div class="hero-actions">
-          <a class="button primary" href="https://github.com/kokorolx/opencode-memory">GitHub</a>
-          <span class="code-pill">npm i opencode-memory</span>
+          <a class="button primary" href="https://github.com/kokorolx/nano-brain">GitHub</a>
+          <span class="code-pill">npm i nano-brain</span>
         </div>
       </section>
             <section id="features" class="fade-in">
@@ -695,17 +695,17 @@ footer {
         <p class="section-subtitle">Drop this MCP config into your OpenCode settings.</p>
         <pre class="codeblock"><code>{
   <span class="token-string">"mcp"</span>: {
-    <span class="token-string">"opencode-memory"</span>: {
+    <span class="token-string">"nano-brain"</span>: {
       <span class="token-string">"type"</span>: <span class="token-string">"local"</span>,
-      <span class="token-string">"command"</span>: [<span class="token-string">"node"</span>, <span class="token-string">"path/to/opencode-memory/bin/cli.js"</span>, <span class="token-string">"mcp"</span>],
+      <span class="token-string">"command"</span>: [<span class="token-string">"node"</span>, <span class="token-string">"path/to/nano-brain/bin/cli.js"</span>, <span class="token-string">"mcp"</span>],
       <span class="token-string">"enabled"</span>: <span class="token-boolean">true</span>
     }
   }
 }</code></pre>
-        <pre class="codeblock"><code><span class="token-comment"># ~/.config/opencode-memory/config.yml</span>
+        <pre class="codeblock"><code><span class="token-comment"># ~/.config/nano-brain/config.yml</span>
 <span class="token-key">collections</span>:
   <span class="token-key">memory</span>:
-    <span class="token-key">path</span>: <span class="token-string">~/.opencode-memory</span>
+    <span class="token-key">path</span>: <span class="token-string">~/.nano-brain</span>
     <span class="token-key">pattern</span>: <span class="token-string">"**/*.md"</span>
     <span class="token-key">update</span>: <span class="token-string">auto</span>
   <span class="token-key">sessions</span>:
@@ -717,16 +717,16 @@ footer {
         <h2 class="section-title">Quick Start</h2>
         <p class="section-subtitle">CLI workflows for MCP, search, and indexing.</p>
         <pre class="codeblock"><code><span class="token-comment"># MCP server</span>
-opencode-memory mcp              <span class="token-comment"># Start MCP server (stdio)</span>
-opencode-memory mcp --http       <span class="token-comment"># Start MCP server (HTTP)</span>
+nano-brain mcp              <span class="token-comment"># Start MCP server (stdio)</span>
+nano-brain mcp --http       <span class="token-comment"># Start MCP server (HTTP)</span>
 
 <span class="token-comment"># Search</span>
-opencode-memory search "query"   <span class="token-comment"># BM25 search</span>
-opencode-memory query "query"    <span class="token-comment"># Hybrid search</span>
+nano-brain search "query"   <span class="token-comment"># BM25 search</span>
+nano-brain query "query"    <span class="token-comment"># Hybrid search</span>
 
 <span class="token-comment"># Index management</span>
-opencode-memory status           <span class="token-comment"># Show index health</span>
-opencode-memory update           <span class="token-comment"># Reindex all collections</span></code></pre>
+nano-brain status           <span class="token-comment"># Show index health</span>
+nano-brain update           <span class="token-comment"># Reindex all collections</span></code></pre>
       </section>
             <section id="models" class="fade-in">
         <h2 class="section-title">Models</h2>
@@ -763,7 +763,7 @@ opencode-memory update           <span class="token-comment"># Reindex all colle
             <footer>
         <div>MIT License · Built for OpenCode <span aria-hidden="true">♥</span> · Inspired by QMD</div>
         <div>
-          <a href="https://github.com/kokorolx/opencode-memory">GitHub</a>
+          <a href="https://github.com/kokorolx/nano-brain">GitHub</a>
         </div>
       </footer>
     </div>

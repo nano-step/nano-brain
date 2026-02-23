@@ -4,7 +4,7 @@
 - [x] 1.2 Handle edge cases: empty/whitespace-only queries return empty string, hyphenated words preserved as phrases
 - [x] 1.3 Apply `sanitizeFTS5Query` in `searchFTS()` before passing to prepared statements
 - [x] 1.4 Add unit tests for `sanitizeFTS5Query`: normal words, hyphens, FTS5 operators, double quotes, empty input, column name words
-- [x] 1.5 Verify `memory_search` works via MCP with query `opencode-memory architecture` (manual test)
+- [x] 1.5 Verify `memory_search` works via MCP with query `nano-brain architecture` (manual test)
 
 ## 2. ESM Compliance
 
@@ -22,7 +22,7 @@
 - [x] 4.1 Create `tests/integration.test.ts` with test helper that creates a real temp SQLite DB with sqlite-vec loaded
 - [x] 4.2 Add test fixture: index 2-3 markdown documents into the real DB with FTS5 triggers firing
 - [x] 4.3 Test `memory_search` handler end-to-end: valid query returns results with title, path, snippet
-- [x] 4.4 Test `memory_search` with hyphenated query (`opencode-memory`) — no SQL error
+- [x] 4.4 Test `memory_search` with hyphenated query (`nano-brain`) — no SQL error
 - [x] 4.5 Test `memory_search` with FTS5 operator words (`AND OR NOT`) — no SQL error
 - [x] 4.6 Test `memory_search` with collection filter — only matching collection returned
 - [x] 4.7 Test `memory_search` with empty query — returns empty results, no error

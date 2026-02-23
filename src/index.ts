@@ -9,10 +9,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-const DEFAULT_DB_DIR = path.join(os.homedir(), '.cache', 'opencode-memory');
-const DEFAULT_CONFIG = path.join(os.homedir(), '.config', 'opencode-memory', 'config.yml');
-const DEFAULT_OUTPUT_DIR = path.join(os.homedir(), '.opencode-memory', 'sessions');
-const DEFAULT_MEMORY_DIR = path.join(os.homedir(), '.opencode-memory', 'memory');
+const DEFAULT_DB_DIR = path.join(os.homedir(), '.cache', 'nano-brain');
+const DEFAULT_CONFIG = path.join(os.homedir(), '.config', 'nano-brain', 'config.yml');
+const DEFAULT_OUTPUT_DIR = path.join(os.homedir(), '.nano-brain', 'sessions');
+const DEFAULT_MEMORY_DIR = path.join(os.homedir(), '.nano-brain', 'memory');
 
 interface GlobalOptions {
   dbPath: string;
@@ -52,14 +52,14 @@ export function parseGlobalOptions(args: string[]): GlobalOptions {
 
 export function showHelp(): void {
   console.log(`
-opencode-memory - Memory system with hybrid search
+nano-brain - Memory system with hybrid search
 
 Usage:
-  opencode-memory [global-options] <command> [command-options]
+  nano-brain [global-options] <command> [command-options]
 
 Global Options:
-  --db=<path>       SQLite database path (default: ~/.cache/opencode-memory/default.sqlite)
-  --config=<path>   Config YAML path (default: ~/.config/opencode-memory/config.yml)
+  --db=<path>       SQLite database path (default: ~/.cache/nano-brain/default.sqlite)
+  --config=<path>   Config YAML path (default: ~/.config/nano-brain/config.yml)
   --help, -h        Show help
   --version, -v     Show version
 
@@ -101,7 +101,7 @@ Commands:
 }
 
 export function showVersion(): void {
-  console.log('opencode-memory v0.1.0');
+  console.log('nano-brain v0.1.0');
 }
 
 export function formatSearchOutput(results: SearchResult[], format: 'text' | 'json' | 'files'): string {

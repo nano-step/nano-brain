@@ -1,6 +1,6 @@
 ## Context
 
-opencode-memory is an MCP server providing persistent memory across OpenCode sessions. It harvests session JSON from `~/.local/share/opencode/storage/`, converts to markdown, indexes into SQLite (FTS5 + sqlite-vec), and exposes search via MCP tools.
+nano-brain is an MCP server providing persistent memory across OpenCode sessions. It harvests session JSON from `~/.local/share/opencode/storage/`, converts to markdown, indexes into SQLite (FTS5 + sqlite-vec), and exposes search via MCP tools.
 
 Current state:
 - **956 sessions** across 7 workspaces are mixed into one flat index (30MB SQLite DB)

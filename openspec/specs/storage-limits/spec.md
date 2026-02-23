@@ -64,7 +64,7 @@ Eviction SHALL only remove harvested markdown files and their database entries. 
 
 #### Scenario: Session evicted
 - **WHEN** a session is evicted due to retention or size limits
-- **THEN** only the harvested markdown file in `~/.opencode-memory/sessions/` is deleted
+- **THEN** only the harvested markdown file in `~/.nano-brain/sessions/` is deleted
 - **THEN** the original JSON in `~/.local/share/opencode/storage/sessions/` remains untouched
 
 ### Requirement: Disk safety guard

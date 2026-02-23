@@ -89,7 +89,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
   
   const server = new McpServer(
     {
-      name: 'opencode-memory',
+      name: 'nano-brain',
       version: '0.1.0',
     },
     {
@@ -500,8 +500,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const { dbPath, configPath, httpPort, daemon } = options;
   
   const homeDir = os.homedir();
-  const outputDir = path.join(homeDir, '.opencode-memory');
-  const cacheDir = path.join(homeDir, '.cache', 'opencode-memory');
+  const outputDir = path.join(homeDir, '.nano-brain');
+  const cacheDir = path.join(homeDir, '.cache', 'nano-brain');
   const pidPath = path.join(cacheDir, 'mcp.pid');
   const finalConfigPath = configPath || path.join(outputDir, 'collections.yaml');
   const config = loadCollectionConfig(finalConfigPath);

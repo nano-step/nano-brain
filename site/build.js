@@ -44,7 +44,7 @@ function build() {
   console.log(`  ✅ Built index.html (${kb} KB) in ${ms}ms`)
 }
 
-console.log('🔨 Building opencode-memory landing page...')
+console.log('🔨 Building nano-brain landing page...')
 build()
 
 if (process.argv.includes('--watch')) {

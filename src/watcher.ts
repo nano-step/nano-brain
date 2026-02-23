@@ -50,7 +50,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
     pollIntervalMs = 300000,
     sessionPollMs = 120000,
     sessionStorageDir = path.join(os.homedir(), '.local/share/opencode/storage'),
-    outputDir = path.join(os.homedir(), '.opencode-memory/sessions'),
+    outputDir = path.join(os.homedir(), '.nano-brain/sessions'),
     storageConfig,
     dbPath,
     codebaseConfig,

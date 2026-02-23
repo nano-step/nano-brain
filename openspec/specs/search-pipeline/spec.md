@@ -4,7 +4,7 @@
 The `searchFTS` function SHALL sanitize user queries before passing them to FTS5 `MATCH`. All user-provided query strings MUST be treated as literal search text, never as FTS5 syntax.
 
 #### Scenario: Query containing hyphenated words
-- **WHEN** user searches for `opencode-memory`
+- **WHEN** user searches for `nano-brain`
 - **THEN** the search treats the entire hyphenated term as a literal phrase, not as `opencode NOT memory`
 
 #### Scenario: Query containing FTS5 column names

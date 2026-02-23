@@ -1,6 +1,6 @@
 ## Context
 
-opencode-memory is an MCP server that provides hybrid search (BM25 + vector) over indexed markdown documents. It runs as a subprocess spawned by OpenCode via stdio transport. The server uses better-sqlite3 with FTS5 for full-text search and sqlite-vec for vector search.
+nano-brain is an MCP server that provides hybrid search (BM25 + vector) over indexed markdown documents. It runs as a subprocess spawned by OpenCode via stdio transport. The server uses better-sqlite3 with FTS5 for full-text search and sqlite-vec for vector search.
 
 Three categories of bugs surfaced during real-world testing that unit tests failed to catch:
 
@@ -29,11 +29,11 @@ Three categories of bugs surfaced during real-world testing that unit tests fail
 
 **Rationale:** FTS5 has complex query syntax where bare words can be interpreted as column names, `AND`/`OR`/`NOT`/`NEAR` as operators, and `-` as NOT prefix. Rather than trying to escape individual characters, we split the user query into tokens, wrap each in double quotes (`"term"`), and join them. This ensures every token is treated as a literal search term.
 
-**Example:** `opencode-memory architecture` → `"opencode" "memory" "architecture"` (hyphen splits into separate quoted terms since FTS5 treats `-` as NOT)
+**Example:** `nano-brain architecture` → `"opencode" "memory" "architecture"` (hyphen splits into separate quoted terms since FTS5 treats `-` as NOT)
 
 Actually, better approach: wrap the entire query in double quotes to preserve phrases, and escape any internal double quotes.
 
-**Final decision:** `"opencode-memory architecture"` → `"opencode-memory architecture"` (single quoted phrase). Escape internal `"` as `""`.
+**Final decision:** `"nano-brain architecture"` → `"nano-brain architecture"` (single quoted phrase). Escape internal `"` as `""`.
 
 **Alternatives considered:**
 - Column-prefixed queries (`body:"query"`) — too restrictive, we want to search all columns

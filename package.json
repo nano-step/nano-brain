@@ -1,9 +1,9 @@
 {
-  "name": "@opencode-memory/server",
+  "name": "nano-brain",
   "version": "2026.1.0",
   "type": "module",
   "bin": {
-    "opencode-memory": "./bin/cli.js"
+    "nano-brain": "./bin/cli.js"
   },
   "main": "src/index.ts",
   "scripts": {

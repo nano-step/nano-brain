@@ -1,6 +1,6 @@
 ## Why
 
-opencode-memory currently indexes only session transcripts, MEMORY.md, and daily logs — it has zero knowledge of the actual source code. When an agent queries `memory_query query="how does authentication work"`, it finds past *conversations* about auth but not the actual implementation. This forces agents to rely on grep (exact keywords only) and LSP (requires knowing symbol names upfront) for code discovery, which fails for semantic/conceptual queries across large codebases.
+nano-brain currently indexes only session transcripts, MEMORY.md, and daily logs — it has zero knowledge of the actual source code. When an agent queries `memory_query query="how does authentication work"`, it finds past *conversations* about auth but not the actual implementation. This forces agents to rely on grep (exact keywords only) and LSP (requires knowing symbol names upfront) for code discovery, which fails for semantic/conceptual queries across large codebases.
 
 Indexing source code enables semantic search over the codebase — finding related code by meaning, not just keywords. This is the single highest-impact improvement for agent productivity in unfamiliar or large projects.
 

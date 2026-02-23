@@ -138,7 +138,7 @@ describe('Storage Limits', () => {
     let store: Store;
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-storage-test-'));
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-storage-test-'));
       sessionsDir = path.join(tmpDir, 'sessions');
       dbPath = path.join(tmpDir, 'test.db');
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -219,7 +219,7 @@ describe('Storage Limits', () => {
     let store: Store;
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-delete-test-'));
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-delete-test-'));
       dbPath = path.join(tmpDir, 'test.db');
       store = createStore(dbPath);
     });
@@ -263,7 +263,7 @@ describe('Storage Limits', () => {
     let store: Store;
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-orphan-test-'));
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-orphan-test-'));
       dbPath = path.join(tmpDir, 'test.db');
       store = createStore(dbPath);
     });

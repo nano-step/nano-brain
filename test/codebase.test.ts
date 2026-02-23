@@ -18,7 +18,7 @@ describe('detectProjectType', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-codebase-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-codebase-test-'));
   });
 
   afterEach(() => {
@@ -110,7 +110,7 @@ describe('loadGitignorePatterns', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-gitignore-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-gitignore-test-'));
   });
 
   afterEach(() => {
@@ -180,7 +180,7 @@ describe('mergeExcludePatterns', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-merge-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-merge-test-'));
   });
 
   afterEach(() => {
@@ -235,7 +235,7 @@ describe('resolveExtensions', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-resolve-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-resolve-test-'));
   });
 
   afterEach(() => {
@@ -270,7 +270,7 @@ describe('scanCodebaseFiles', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-scan-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-scan-test-'));
   });
 
   afterEach(() => {
@@ -379,7 +379,7 @@ describe('indexCodebase - integration', () => {
   let store: Store;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-index-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-index-test-'));
     dbPath = path.join(tmpDir, 'test.db');
     store = createStore(dbPath);
   });
@@ -515,7 +515,7 @@ describe('getCollectionStorageSize - integration', () => {
   let store: Store;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-storage-size-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-storage-size-test-'));
     dbPath = path.join(tmpDir, 'test.db');
     store = createStore(dbPath);
   });
@@ -618,7 +618,7 @@ describe('getCodebaseStats', () => {
   let store: Store;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-stats-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-stats-test-'));
     dbPath = path.join(tmpDir, 'test.db');
     store = createStore(dbPath);
   });

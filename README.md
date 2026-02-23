@@ -1,4 +1,4 @@
-# opencode-memory
+# nano-brain
 
 Persistent memory system for OpenCode. Hybrid search (BM25 + vector + LLM reranking) across past sessions, codebase, curated notes, and daily logs.
 
@@ -109,7 +109,7 @@ Heading-aware markdown chunking that respects document structure:
 ```bash
 # Clone and install
 git clone <repo-url>
-cd opencode-memory
+cd nano-brain
 npm install
 ```
 
@@ -118,9 +118,9 @@ Add to OpenCode config (`~/.config/opencode/opencode.json`):
 ```json
 {
   "mcp": {
-    "opencode-memory": {
+    "nano-brain": {
       "type": "local",
-      "command": ["node", "/path/to/opencode-memory/bin/cli.js", "mcp"],
+      "command": ["node", "/path/to/nano-brain/bin/cli.js", "mcp"],
       "enabled": true
     }
   }
@@ -129,12 +129,12 @@ Add to OpenCode config (`~/.config/opencode/opencode.json`):
 
 ## Configuration
 
-Create `~/.config/opencode-memory/config.yml`:
+Create `~/.config/nano-brain/config.yml`:
 
 ```yaml
 collections:
   memory:
-    path: ~/.opencode-memory
+    path: ~/.nano-brain
     pattern: "**/*.md"
     update: auto
   
@@ -158,22 +158,22 @@ collections:
 
 ```bash
 # MCP server
-opencode-memory mcp              # Start MCP server (stdio)
-opencode-memory mcp --http       # Start MCP server (HTTP, port 8282)
+nano-brain mcp              # Start MCP server (stdio)
+nano-brain mcp --http       # Start MCP server (HTTP, port 8282)
 
 # Index management
-opencode-memory status           # Show index health
-opencode-memory update           # Reindex all collections
+nano-brain status           # Show index health
+nano-brain update           # Reindex all collections
 
 # Search
-opencode-memory search "query"   # BM25 search
-opencode-memory vsearch "query"  # Vector search
-opencode-memory query "query"    # Hybrid search
+nano-brain search "query"   # BM25 search
+nano-brain vsearch "query"  # Vector search
+nano-brain query "query"    # Hybrid search
 
 # Collections
-opencode-memory collection add <name> <path>     # Add collection
-opencode-memory collection remove <name>         # Remove collection
-opencode-memory collection list                  # List collections
+nano-brain collection add <name> <path>     # Add collection
+nano-brain collection remove <name>         # Remove collection
+nano-brain collection list                  # List collections
 ```
 
 ## Project Structure
@@ -218,11 +218,11 @@ All models are GGUF format, loaded on-demand:
 - **Reranker:** bge-reranker-v2-m3 (~1.1GB)
 - **Query Expansion:** qmd-query-expansion-1.7B (~1GB)
 
-Models are downloaded automatically on first use to `~/.cache/opencode-memory/models/`.
+Models are downloaded automatically on first use to `~/.cache/nano-brain/models/`.
 
 ## AI Agent Integration
 
-opencode-memory ships with a SKILL.md that teaches AI agents when and how to use memory tools. When loaded as an OpenCode skill, agents automatically:
+nano-brain ships with a SKILL.md that teaches AI agents when and how to use memory tools. When loaded as an OpenCode skill, agents automatically:
 
 - **Check memory before starting work** — recall past decisions, patterns, and context
 - **Save context after completing work** — persist key decisions and debugging insights
@@ -230,14 +230,14 @@ opencode-memory ships with a SKILL.md that teaches AI agents when and how to use
 
 ### SKILL.md (Auto-loaded)
 
-The skill file at `SKILL.md` provides routing rules, trigger phrases, tool selection guides, and integration patterns. It's automatically loaded when any agent references the `opencode-memory` skill.
+The skill file at `SKILL.md` provides routing rules, trigger phrases, tool selection guides, and integration patterns. It's automatically loaded when any agent references the `nano-brain` skill.
 
 ### AGENTS_SNIPPET.md (Optional, project-level)
 
 For project-level integration, `AGENTS_SNIPPET.md` provides a managed block that can be injected into a project's `AGENTS.md`:
 
 ```bash
-# Future: npx opencode-memory init
+# Future: npx nano-brain init
 # For now: copy the managed block from AGENTS_SNIPPET.md into your project's AGENTS.md
 ```
 

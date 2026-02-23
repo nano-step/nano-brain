@@ -1,6 +1,6 @@
 ## Context
 
-opencode-memory indexes markdown documents (sessions, MEMORY.md, daily logs) into SQLite with FTS5 + sqlite-vec for hybrid search. The existing pipeline is:
+nano-brain indexes markdown documents (sessions, MEMORY.md, daily logs) into SQLite with FTS5 + sqlite-vec for hybrid search. The existing pipeline is:
 
 1. **Collections** define directories + glob patterns to scan (`config.yml`)
 2. **Watcher** monitors collections via chokidar, triggers reindex on changes

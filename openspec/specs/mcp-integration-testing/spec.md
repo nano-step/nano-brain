@@ -22,7 +22,7 @@ Integration tests SHALL verify that `memory_search` works end-to-end with real F
 - **THEN** the response contains the matching document with title, path, and snippet
 
 #### Scenario: Search with hyphenated query
-- **WHEN** `memory_search` handler is called with query `opencode-memory`
+- **WHEN** `memory_search` handler is called with query `nano-brain`
 - **THEN** the response completes without error
 - **THEN** results include documents containing the term
 

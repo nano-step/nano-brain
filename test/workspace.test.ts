@@ -12,7 +12,7 @@ describe('Workspace Scoping', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-workspace-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-workspace-test-'));
     dbPath = path.join(tmpDir, 'test.db');
     store = createStore(dbPath);
   });

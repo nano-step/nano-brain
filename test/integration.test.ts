@@ -12,7 +12,7 @@ describe('FTS5 Query Sanitization', () => {
   });
 
   it('preserves hyphenated words', () => {
-    expect(sanitizeFTS5Query('opencode-memory')).toBe('"opencode-memory"');
+    expect(sanitizeFTS5Query('nano-brain')).toBe('"nano-brain"');
   });
 
   it('escapes internal double quotes', () => {
@@ -42,17 +42,17 @@ describe('Real Database Integration', () => {
   let store: Store;
 
   beforeAll(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-memory-test-'));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-test-'));
     dbPath = path.join(tempDir, 'test.db');
     store = createStore(dbPath);
 
-    const doc1Content = '# OpenCode Memory\n\nThis is a test document about opencode-memory architecture.';
+    const doc1Content = '# Nano Brain\n\nThis is a test document about nano-brain architecture.';
     const doc1Hash = crypto.createHash('sha256').update(doc1Content).digest('hex');
     store.insertContent(doc1Hash, doc1Content);
     store.insertDocument({
       collection: 'test-collection',
       path: '/test/doc1.md',
-      title: 'OpenCode Memory',
+      title: 'Nano Brain',
       hash: doc1Hash,
       createdAt: new Date().toISOString(),
       modifiedAt: new Date().toISOString(),
@@ -95,12 +95,12 @@ describe('Real Database Integration', () => {
   it('search finds indexed documents', () => {
     const results = store.searchFTS('memory', 10);
     expect(results.length).toBeGreaterThan(0);
-    expect(results.some(r => r.title === 'OpenCode Memory')).toBe(true);
+    expect(results.some(r => r.title === 'Nano Brain')).toBe(true);
   });
 
   it('hyphenated query works without error', () => {
     expect(() => {
-      const results = store.searchFTS('opencode-memory', 10);
+      const results = store.searchFTS('nano-brain', 10);
       expect(Array.isArray(results)).toBe(true);
     }).not.toThrow();
   });

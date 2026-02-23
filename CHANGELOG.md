@@ -5,7 +5,7 @@
 ### Added
 
 - **AI agent routing instructions (SKILL.md)**: Enhanced SKILL.md with trigger phrases, when-to-use rules, tool selection guide, collection filtering, and integration patterns for orchestrator and subagent workflows. Agents now auto-route to memory for recall, past decisions, cross-session context, and repeated patterns.
-- **AGENTS_SNIPPET.md**: Optional managed block for project-level AGENTS.md installation. Provides quick reference table, session workflow (start/end), and memory vs codebase search guidance. Designed for `npx opencode-memory init` injection.
+- **AGENTS_SNIPPET.md**: Optional managed block for project-level AGENTS.md installation. Provides quick reference table, session workflow (start/end), and memory vs codebase search guidance. Designed for `npx nano-brain init` injection.
 - **`memory_index_codebase` documented**: Added to SKILL.md, README, and site API reference.
 - **`workspace` parameter documented**: Added to search tool docs showing workspace scoping.
 

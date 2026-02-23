@@ -54,8 +54,8 @@ describe('CLI Argument Parsing', () => {
       const args = ['status'];
       const result = parseGlobalOptions(args);
       
-      expect(result.dbPath).toContain('.cache/opencode-memory/default.sqlite');
-      expect(result.configPath).toContain('.config/opencode-memory/config.yml');
+      expect(result.dbPath).toContain('.cache/nano-brain/default.sqlite');
+      expect(result.configPath).toContain('.config/nano-brain/config.yml');
       expect(result.remaining).toEqual(['status']);
     });
     
@@ -102,7 +102,7 @@ describe('CLI Argument Parsing', () => {
       expect(consoleLogSpy).toHaveBeenCalledOnce();
       const output = consoleLogSpy.mock.calls[0][0] as string;
       
-      expect(output).toContain('opencode-memory');
+      expect(output).toContain('nano-brain');
       expect(output).toContain('Usage:');
       expect(output).toContain('Commands:');
       expect(output).toContain('mcp');
@@ -126,7 +126,7 @@ describe('CLI Argument Parsing', () => {
     it('should output version', () => {
       showVersion();
       
-      expect(consoleLogSpy).toHaveBeenCalledWith('opencode-memory v0.1.0');
+      expect(consoleLogSpy).toHaveBeenCalledWith('nano-brain v0.1.0');
     });
   });
 });
