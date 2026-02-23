@@ -17,6 +17,7 @@ export interface HybridSearchOptions {
   useExpansion?: boolean;
   useReranking?: boolean;
   topK?: number;
+  projectHash?: string;
 }
 
 export interface SearchProviders {
@@ -171,6 +172,7 @@ export async function hybridSearch(
     useExpansion = true,
     useReranking = true,
     topK = 30,
+    projectHash,
   } = options;
   
   const { embedder, reranker, expander } = providers;
@@ -207,14 +209,14 @@ export async function hybridSearch(
     const isOriginal = i === 0;
     const weight = isOriginal ? 2 : 1;
     
-    const ftsResults = store.searchFTS(q, topK, collection);
+    const ftsResults = store.searchFTS(q, topK, collection, projectHash);
     allResultSets.push(ftsResults);
     weights.push(weight);
     
     if (embedder) {
       try {
         const { embedding } = await embedder.embed(q);
-        const vecResults = store.searchVec(q, embedding, topK, collection);
+        const vecResults = store.searchVec(q, embedding, topK, collection, projectHash);
         allResultSets.push(vecResults);
         weights.push(weight);
       } catch {

@@ -6,6 +6,13 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { chunkMarkdown } from './chunker.js';
 
+export function sanitizeFTS5Query(query: string): string {
+  const trimmed = query.trim();
+  if (!trimmed) return '';
+  const escaped = trimmed.replace(/"/g, '""');
+  return `"${escaped}"`;
+}
+
 export function createStore(dbPath: string): Store {
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
@@ -90,6 +97,21 @@ export function createStore(dbPath: string): Store {
     );
   `);
   
+  const hasProjectHash = (db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>).some(col => col.name === 'project_hash');
+  if (!hasProjectHash) {
+    db.exec("ALTER TABLE documents ADD COLUMN project_hash TEXT DEFAULT 'global'");
+    const sessionPathRegex = /sessions\/([a-f0-9]{12})\//i;
+    const rows = db.prepare("SELECT id, path FROM documents").all() as Array<{ id: number; path: string }>;
+    const updateStmt = db.prepare("UPDATE documents SET project_hash = ? WHERE id = ?");
+    for (const row of rows) {
+      const match = row.path.match(sessionPathRegex);
+      if (match) {
+        updateStmt.run(match[1], row.id);
+      }
+    }
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_documents_project_hash ON documents(project_hash, active)");
+  
   if (vecAvailable) {
     try {
       db.exec(`
@@ -109,23 +131,24 @@ export function createStore(dbPath: string): Store {
   `);
   
   const insertDocumentStmt = db.prepare(`
-    INSERT INTO documents (collection, path, title, hash, agent, created_at, modified_at, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO documents (collection, path, title, hash, agent, created_at, modified_at, active, project_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(collection, path) DO UPDATE SET
       title = excluded.title,
       hash = excluded.hash,
       agent = excluded.agent,
       modified_at = excluded.modified_at,
-      active = excluded.active
+      active = excluded.active,
+      project_hash = excluded.project_hash
   `);
   
   const findDocumentByPathStmt = db.prepare(`
-    SELECT id, collection, path, title, hash, agent, created_at as createdAt, modified_at as modifiedAt, active
+    SELECT id, collection, path, title, hash, agent, created_at as createdAt, modified_at as modifiedAt, active, project_hash as projectHash
     FROM documents WHERE path = ? AND active = 1
   `);
   
   const findDocumentByDocidStmt = db.prepare(`
-    SELECT id, collection, path, title, hash, agent, created_at as createdAt, modified_at as modifiedAt, active
+    SELECT id, collection, path, title, hash, agent, created_at as createdAt, modified_at as modifiedAt, active, project_hash as projectHash
     FROM documents WHERE substr(hash, 1, 6) = ? AND active = 1
   `);
   
@@ -166,6 +189,30 @@ export function createStore(dbPath: string): Store {
     LIMIT ?
   `);
   
+  const searchFTSWithWorkspaceStmt = db.prepare(`
+    SELECT 
+      d.id, d.path, d.collection, d.title, d.hash, d.agent,
+      snippet(documents_fts, 2, '<mark>', '</mark>', '...', 64) as snippet,
+      bm25(documents_fts) as score
+    FROM documents_fts f
+    JOIN documents d ON f.filepath = d.collection || '/' || d.path
+    WHERE documents_fts MATCH ? AND d.active = 1 AND d.project_hash IN (?, 'global')
+    ORDER BY bm25(documents_fts)
+    LIMIT ?
+  `);
+  
+  const searchFTSWithWorkspaceAndCollectionStmt = db.prepare(`
+    SELECT 
+      d.id, d.path, d.collection, d.title, d.hash, d.agent,
+      snippet(documents_fts, 2, '<mark>', '</mark>', '...', 64) as snippet,
+      bm25(documents_fts) as score
+    FROM documents_fts f
+    JOIN documents d ON f.filepath = d.collection || '/' || d.path
+    WHERE documents_fts MATCH ? AND d.active = 1 AND d.collection = ? AND d.project_hash IN (?, 'global')
+    ORDER BY bm25(documents_fts)
+    LIMIT ?
+  `);
+  
   const insertEmbeddingStmt = db.prepare(`
     INSERT OR REPLACE INTO content_vectors (hash, seq, pos, model)
     VALUES (?, ?, ?, ?)
@@ -193,6 +240,12 @@ export function createStore(dbPath: string): Store {
     GROUP BY collection
   `);
   
+  const getWorkspaceStatsStmt = db.prepare(`
+    SELECT project_hash as projectHash, COUNT(*) as count
+    FROM documents WHERE active = 1
+    GROUP BY project_hash
+  `);
+  
   const getHashesNeedingEmbeddingStmt = db.prepare(`
     SELECT c.hash, c.body, d.path
     FROM content c
@@ -202,6 +255,12 @@ export function createStore(dbPath: string): Store {
   `);
   
   return {
+    modelStatus: {
+      embedding: 'missing',
+      reranker: 'missing',
+      expander: 'missing',
+    },
+    
     close() {
       db.close();
     },
@@ -219,7 +278,8 @@ export function createStore(dbPath: string): Store {
         doc.agent ?? null,
         doc.createdAt,
         doc.modifiedAt,
-        doc.active ? 1 : 0
+        doc.active ? 1 : 0,
+        doc.projectHash ?? 'global'
       );
       return Number(result.lastInsertRowid);
     },
@@ -247,6 +307,7 @@ export function createStore(dbPath: string): Store {
         createdAt: row.createdAt as string,
         modifiedAt: row.modifiedAt as string,
         active: Boolean(row.active),
+        projectHash: row.projectHash as string | undefined,
       };
     },
     
@@ -305,10 +366,22 @@ export function createStore(dbPath: string): Store {
       }
     },
     
-    searchFTS(query: string, limit = 10, collection?: string): SearchResult[] {
-      const rows = collection
-        ? searchFTSWithCollectionStmt.all(query, collection, limit)
-        : searchFTSStmt.all(query, limit);
+    searchFTS(query: string, limit = 10, collection?: string, projectHash?: string): SearchResult[] {
+      const sanitized = sanitizeFTS5Query(query);
+      if (!sanitized) return [];
+      
+      let rows: unknown[];
+      if (projectHash && projectHash !== 'all') {
+        if (collection) {
+          rows = searchFTSWithWorkspaceAndCollectionStmt.all(sanitized, collection, projectHash, limit);
+        } else {
+          rows = searchFTSWithWorkspaceStmt.all(sanitized, projectHash, limit);
+        }
+      } else {
+        rows = collection
+          ? searchFTSWithCollectionStmt.all(sanitized, collection, limit)
+          : searchFTSStmt.all(sanitized, limit);
+      }
       
       return (rows as Array<Record<string, unknown>>).map(row => ({
         id: String(row.id),
@@ -324,7 +397,7 @@ export function createStore(dbPath: string): Store {
       }));
     },
     
-    searchVec(query: string, embedding: number[], limit = 10, collection?: string): SearchResult[] {
+    searchVec(query: string, embedding: number[], limit = 10, collection?: string, projectHash?: string): SearchResult[] {
       if (!vecAvailable) {
         return [];
       }
@@ -337,14 +410,22 @@ export function createStore(dbPath: string): Store {
           WHERE d.active = 1
         `;
         
+        const params: (Float32Array | string | number)[] = [new Float32Array(embedding)];
+        
         if (collection) {
           sql += ` AND d.collection = ?`;
+          params.push(collection);
+        }
+        
+        if (projectHash && projectHash !== 'all') {
+          sql += ` AND d.project_hash IN (?, 'global')`;
+          params.push(projectHash);
         }
         
         sql += ` ORDER BY v.distance LIMIT ?`;
+        params.push(limit);
         
         const stmt = db.prepare(sql);
-        const params = collection ? [new Float32Array(embedding), collection, limit] : [new Float32Array(embedding), limit];
         const rows = stmt.all(...params) as Array<Record<string, unknown>>;
         
         return rows.map(row => ({
@@ -379,6 +460,7 @@ export function createStore(dbPath: string): Store {
       const chunkCount = (getChunkCountStmt.get() as { count: number }).count;
       const collections = getCollectionStatsStmt.all() as Array<{ name: string; documentCount: number; path: string }>;
       const pending = (getHashesNeedingEmbeddingStmt.all() as unknown[]).length;
+      const workspaceStats = this.getWorkspaceStats();
       
       let dbSize = 0;
       try {
@@ -394,16 +476,46 @@ export function createStore(dbPath: string): Store {
         pendingEmbeddings: pending,
         collections: collections,
         databaseSize: dbSize,
-        modelStatus: {
-          embedding: 'missing',
-          reranker: 'missing',
-          expander: 'missing',
-        },
+        modelStatus: this.modelStatus,
+        workspaceStats: workspaceStats,
       };
     },
     
     getHashesNeedingEmbedding(): Array<{ hash: string; body: string; path: string }> {
       return getHashesNeedingEmbeddingStmt.all() as Array<{ hash: string; body: string; path: string }>;
+    },
+    
+    getWorkspaceStats(): Array<{ projectHash: string; count: number }> {
+      return getWorkspaceStatsStmt.all() as Array<{ projectHash: string; count: number }>;
+    },
+    
+    deleteDocumentsByPath(filePath: string): number {
+      const deleteStmt = db.prepare(`DELETE FROM documents WHERE path = ? AND active = 1`);
+      const result = deleteStmt.run(filePath);
+      return result.changes;
+    },
+    
+    cleanOrphanedEmbeddings(): number {
+      let totalDeleted = 0;
+      
+      const deleteContentVectorsStmt = db.prepare(`
+        DELETE FROM content_vectors WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)
+      `);
+      const cvResult = deleteContentVectorsStmt.run();
+      totalDeleted += cvResult.changes;
+      
+      if (vecAvailable) {
+        try {
+          const deleteVecStmt = db.prepare(`
+            DELETE FROM vectors_vec WHERE substr(hash_seq, 1, instr(hash_seq, ':') - 1) NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)
+          `);
+          const vecResult = deleteVecStmt.run();
+          totalDeleted += vecResult.changes;
+        } catch {
+        }
+      }
+      
+      return totalDeleted;
     },
   };
 }

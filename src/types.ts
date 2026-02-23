@@ -21,6 +21,7 @@ export interface Document {
   createdAt: string;
   modifiedAt: string;
   active: boolean;
+  projectHash?: string;
 }
 
 export interface MemoryChunk {
@@ -59,6 +60,17 @@ export interface CollectionConfig {
     context?: Record<string, string>;
     update?: string;
   }>;
+  storage?: {
+    maxSize?: string;
+    retention?: string;
+    minFreeDisk?: string;
+  };
+}
+
+export interface StorageConfig {
+  maxSize: number;
+  retention: number;
+  minFreeDisk: number;
 }
 
 export interface EmbeddingResult {
@@ -108,10 +120,11 @@ export interface IndexHealth {
   }>;
   databaseSize: number;
   modelStatus: {
-    embedding: 'loaded' | 'available' | 'missing';
-    reranker: 'loaded' | 'available' | 'missing';
-    expander: 'loaded' | 'available' | 'missing';
+    embedding: string;
+    reranker: string;
+    expander: string;
   };
+  workspaceStats?: Array<{ projectHash: string; count: number }>;
 }
 
 export interface Store {
@@ -128,12 +141,22 @@ export interface Store {
   insertEmbedding(hash: string, seq: number, pos: number, embedding: number[], model: string): void;
   ensureVecTable(dimensions: number): void;
   
-  searchFTS(query: string, limit?: number, collection?: string): SearchResult[];
-  searchVec(query: string, embedding: number[], limit?: number, collection?: string): SearchResult[];
+  searchFTS(query: string, limit?: number, collection?: string, projectHash?: string): SearchResult[];
+  searchVec(query: string, embedding: number[], limit?: number, collection?: string, projectHash?: string): SearchResult[];
   
   getCachedResult(hash: string): string | null;
   setCachedResult(hash: string, result: string): void;
   
   getIndexHealth(): IndexHealth;
   getHashesNeedingEmbedding(): Array<{ hash: string; body: string; path: string }>;
+  getWorkspaceStats(): Array<{ projectHash: string; count: number }>;
+  
+  deleteDocumentsByPath(filePath: string): number;
+  cleanOrphanedEmbeddings(): number;
+  
+  modelStatus: {
+    embedding: string;
+    reranker: string;
+    expander: string;
+  };
 }
