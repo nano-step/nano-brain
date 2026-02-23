@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026.1.2] - 2026-02-23
+
+### Added
+
+- **`init` command**: Full self-initializing setup via `npx nano-brain init --root=/path`. Creates config with auto-detected Ollama URL, indexes codebase, harvests sessions, indexes collections, generates embeddings, and injects AGENTS.md snippet. One command to go from zero to fully operational.
+- **Ollama embedding support**: Configurable embedding provider in `~/.config/nano-brain/config.yml`. Supports Ollama API with auto-detected URL (localhost:11434 natively, host.docker.internal:11434 in Docker). User-overridable model and URL.
+- **Embedding server health in `status`**: `npx nano-brain status` and MCP `memory_status` tool now show embedding server connectivity, model availability, and available models.
+- **`checkOllamaHealth()` utility**: Probes Ollama API for connectivity and model availability, used by both `init` and `status`.
+
+### Fixed
+
+- **ESM `require()` bug in Docker detection**: `detectOllamaUrl()` used `require('fs')` inside an ESM module, which silently failed and always returned localhost even inside Docker. Fixed by using ESM `import { accessSync, readFileSync } from 'fs'`.
+- **sqlite-vec `INSERT OR REPLACE` bug**: sqlite-vec virtual tables don't support `INSERT OR REPLACE` — they treat it as plain `INSERT`, causing `UNIQUE constraint failed` errors on re-embedding. Fixed with DELETE-then-INSERT pattern.
+- **`init` never generated embeddings**: `handleInit()` indexed documents but never created an embedding provider or called `embedPendingCodebase()`. Documents stayed permanently "pending". Fixed by adding embedding step after indexing.
+
 ## [2026.1.0] - 2026-02-23
 
 ### Added

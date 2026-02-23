@@ -6,12 +6,12 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import * as http from 'http';
-import type { Store, SearchResult, IndexHealth, Collection, StorageConfig, CodebaseConfig } from './types.js'
+import type { Store, SearchResult, IndexHealth, Collection, StorageConfig, CodebaseConfig, EmbeddingConfig } from './types.js'
 import type { SearchProviders } from './search.js';
 import { hybridSearch } from './search.js';
 import { createStore } from './store.js';
 import { loadCollectionConfig, getCollections, scanCollectionFiles } from './collections.js';
-import { createEmbeddingProvider } from './embeddings.js';
+import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth } from './embeddings.js';
 import { createReranker } from './reranker.js';
 import { startWatcher } from './watcher.js';
 import { parseStorageConfig } from './storage.js';
@@ -34,6 +34,7 @@ export interface ServerDeps {
   currentProjectHash: string
   codebaseConfig?: CodebaseConfig
   workspaceRoot: string
+  embeddingConfig?: EmbeddingConfig
 }
 
 export function formatSearchResults(results: SearchResult[]): string {
@@ -48,7 +49,11 @@ export function formatSearchResults(results: SearchResult[]): string {
   ).join('\n---\n\n');
 }
 
-export function formatStatus(health: IndexHealth, codebaseStats?: { enabled: boolean; documents: number; chunks: number; extensions: string[]; excludeCount: number; storageUsed: number; maxSize: number }): string {
+export function formatStatus(
+  health: IndexHealth,
+  codebaseStats?: { enabled: boolean; documents: number; chunks: number; extensions: string[]; excludeCount: number; storageUsed: number; maxSize: number },
+  embeddingHealth?: { provider: string; url: string; model: string; reachable: boolean; models?: string[]; error?: string }
+): string {
   const lines = [
     `📊 **Memory Index Status**`,
     `Documents: ${health.documentCount} | Chunks: ${health.chunkCount} | Pending embeddings: ${health.pendingEmbeddings}`,
@@ -62,6 +67,21 @@ export function formatStatus(health: IndexHealth, codebaseStats?: { enabled: boo
     `  - Reranker: ${health.modelStatus.reranker}`,
     `  - Expander: ${health.modelStatus.expander}`,
   ]
+  if (embeddingHealth) {
+    lines.push(``)
+    lines.push(`**Embedding Server:**`)
+    lines.push(`  - Provider: ${embeddingHealth.provider}`)
+    lines.push(`  - URL: ${embeddingHealth.url}`)
+    lines.push(`  - Model: ${embeddingHealth.model}`)
+    if (embeddingHealth.reachable) {
+      const hasModel = embeddingHealth.models?.some(m => m.startsWith(embeddingHealth.model))
+      lines.push(`  - Status: ✅ connected`)
+      lines.push(`  - Model available: ${hasModel ? '✅ yes' : '❌ not found — run: ollama pull ' + embeddingHealth.model}`)
+    } else {
+      lines.push(`  - Status: ❌ unreachable (${embeddingHealth.error})`)
+      lines.push(`  - Fallback: local GGUF (node-llama-cpp)`)
+    }
+  }
   if (codebaseStats) {
     const usedMB = (codebaseStats.storageUsed / 1024 / 1024).toFixed(1)
     const maxMB = (codebaseStats.maxSize / 1024 / 1024).toFixed(0)
@@ -80,7 +100,6 @@ export function formatStatus(health: IndexHealth, codebaseStats?: { enabled: boo
       lines.push(`  - ${ws.projectHash}: ${ws.count} docs`)
     }
   }
-  
   return lines.join('\n')
 }
 
@@ -340,11 +359,24 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       const health = store.getIndexHealth()
       const effectiveRoot = root || deps.workspaceRoot
       const codebaseStats = getCodebaseStats(store, deps.codebaseConfig, effectiveRoot)
+      // Probe embedding server connectivity
+      const embeddingConfig = deps.embeddingConfig
+      const ollamaUrl = embeddingConfig?.url || detectOllamaUrl()
+      const ollamaModel = embeddingConfig?.model || 'nomic-embed-text'
+      const provider = embeddingConfig?.provider || 'ollama'
+      let embeddingHealth: { provider: string; url: string; model: string; reachable: boolean; models?: string[]; error?: string } | undefined
+      
+      if (provider !== 'local') {
+        const ollamaHealth = await checkOllamaHealth(ollamaUrl)
+        embeddingHealth = { provider, url: ollamaUrl, model: ollamaModel, ...ollamaHealth }
+      } else {
+        embeddingHealth = { provider, url: 'n/a', model: ollamaModel, reachable: true }
+      }
       return {
         content: [
           {
             type: 'text',
-            text: formatStatus(health, codebaseStats),
+            text: formatStatus(health, codebaseStats, embeddingHealth),
           },
         ],
       }
@@ -541,6 +573,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     storageConfig,
     currentProjectHash,
     codebaseConfig: config?.codebase,
+    embeddingConfig: config?.embedding,
     workspaceRoot: resolvedWorkspaceRoot,
   };
   

@@ -1,13 +1,15 @@
 import { startServer } from './server.js';
 import { createStore, computeHash, indexDocument } from './store.js';
-import { loadCollectionConfig, addCollection, removeCollection, renameCollection, listCollections, getCollections, scanCollectionFiles } from './collections.js';
+import { loadCollectionConfig, addCollection, removeCollection, renameCollection, listCollections, getCollections, scanCollectionFiles, saveCollectionConfig } from './collections.js';
 import { harvestSessions } from './harvester.js';
-import { createEmbeddingProvider } from './embeddings.js';
+import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth } from './embeddings.js';
 import { hybridSearch } from './search.js';
+import { indexCodebase, embedPendingCodebase } from './codebase.js';
 import type { SearchResult } from './types.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
 
 const DEFAULT_DB_DIR = path.join(os.homedir(), '.cache', 'nano-brain');
 const DEFAULT_CONFIG = path.join(os.homedir(), '.config', 'nano-brain', 'config.yml');
@@ -53,50 +55,41 @@ export function parseGlobalOptions(args: string[]): GlobalOptions {
 export function showHelp(): void {
   console.log(`
 nano-brain - Memory system with hybrid search
-
-Usage:
   nano-brain [global-options] <command> [command-options]
-
-Global Options:
   --db=<path>       SQLite database path (default: ~/.cache/nano-brain/default.sqlite)
   --config=<path>   Config YAML path (default: ~/.config/nano-brain/config.yml)
   --help, -h        Show help
   --version, -v     Show version
-
-Commands:
+  init              Initialize nano-brain for current workspace
+    --root=<path>   Workspace root (default: current directory)
   mcp               Start MCP server (default command if no args)
     --http          Use HTTP transport instead of stdio
     --port=<n>      HTTP port (default: 8282)
     --daemon        Run as background daemon
     stop            Stop running daemon
-
+  status            Show index health, embedding server status, and stats
   collection        Manage collections
     add <name> <path> [--pattern=<glob>]
     remove <name>
     list
     rename <old> <new>
-
-  status            Show index health and stats
-  update            Re-scan and reindex all collections
   embed             Generate embeddings for unembedded chunks
     --force         Re-embed all chunks
-
-  search <query>    BM25 keyword search
     -n <limit>      Max results (default: 10)
     -c <collection> Filter by collection
     --json          Output as JSON
     --files         Show file paths only
-
-  vsearch <query>   Vector semantic search (same options as search)
   query <query>     Full hybrid search (same options as search)
     --min-score=<n> Minimum score threshold
-
-  get <id>          Get document by path or docid
     --full          Show full content
     --from=<line>   Start line
     --lines=<n>     Number of lines
-
   harvest           Manually trigger session harvesting
+Embedding Config (~/.config/nano-brain/config.yml):
+  embedding:
+    provider: ollama              # 'ollama' or 'local'
+    url: http://localhost:11434   # Ollama API URL
+    model: nomic-embed-text       # embedding model name
 `);
 }
 
@@ -233,25 +226,198 @@ async function handleCollection(globalOpts: GlobalOptions, commandArgs: string[]
 
 async function handleStatus(globalOpts: GlobalOptions): Promise<void> {
   const store = createStore(globalOpts.dbPath);
+  const config = loadCollectionConfig(globalOpts.configPath);
   const health = store.getIndexHealth();
-  
-  console.log('Index Health:');
-  console.log(`  Documents: ${health.documentCount}`);
-  console.log(`  Chunks: ${health.chunkCount}`);
-  console.log(`  Pending embeddings: ${health.pendingEmbeddings}`);
-  console.log(`  Database size: ${(health.databaseSize / 1024 / 1024).toFixed(2)} MB`);
+  console.log('nano-brain Status');
+  console.log('═══════════════════════════════════════════════════');
   console.log('');
-  console.log('Collections:');
-  for (const coll of health.collections) {
-    console.log(`  ${coll.name}: ${coll.documentCount} documents`);
+  console.log('Index:');
+  console.log(`  Documents:          ${health.documentCount}`);
+  console.log(`  Chunks:             ${health.chunkCount}`);
+  console.log(`  Pending embeddings: ${health.pendingEmbeddings}`);
+  console.log(`  Database size:      ${(health.databaseSize / 1024 / 1024).toFixed(2)} MB`);
+  console.log('');
+  
+  if (health.collections.length > 0) {
+    console.log('Collections:');
+    for (const coll of health.collections) {
+      console.log(`  ${coll.name}: ${coll.documentCount} documents`);
+    }
+    console.log('');
+  }
+  
+  const embeddingConfig = config?.embedding;
+  const ollamaUrl = embeddingConfig?.url || detectOllamaUrl();
+  const ollamaModel = embeddingConfig?.model || 'nomic-embed-text';
+  const provider = embeddingConfig?.provider || 'ollama';
+  
+  console.log('Embedding Server:');
+  console.log(`  Provider:  ${provider}`);
+  console.log(`  URL:       ${ollamaUrl}`);
+  console.log(`  Model:     ${ollamaModel}`);
+  
+  if (provider !== 'local') {
+    const ollamaHealth = await checkOllamaHealth(ollamaUrl);
+    if (ollamaHealth.reachable) {
+      const hasModel = ollamaHealth.models?.some(m => m.startsWith(ollamaModel));
+      console.log(`  Status:    ✅ connected`);
+      console.log(`  Model:     ${hasModel ? '✅ available' : '❌ not found — run: ollama pull ' + ollamaModel}`);
+      if (ollamaHealth.models && ollamaHealth.models.length > 0) {
+        console.log(`  Available: ${ollamaHealth.models.join(', ')}`);
+      }
+    } else {
+      console.log(`  Status:    ❌ unreachable (${ollamaHealth.error})`);
+      console.log(`  Fallback:  local GGUF (node-llama-cpp)`);
+    }
+  } else {
+    console.log(`  Status:    local GGUF mode`);
   }
   console.log('');
-  console.log('Model Status:');
-  console.log(`  Embedding: ${health.modelStatus.embedding}`);
-  console.log(`  Reranker: ${health.modelStatus.reranker}`);
-  console.log(`  Expander: ${health.modelStatus.expander}`);
   
+  console.log('Models:');
+  console.log(`  Embedding: ${health.modelStatus.embedding}`);
+  console.log(`  Reranker:  ${health.modelStatus.reranker}`);
+  console.log(`  Expander: ${health.modelStatus.expander}`);
   store.close();
+}
+
+async function handleInit(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
+  let root = process.cwd();
+  
+  for (const arg of commandArgs) {
+    if (arg.startsWith('--root=')) {
+      root = arg.substring(7);
+    }
+  }
+  
+  const configDir = path.dirname(globalOpts.configPath);
+  const configPath = globalOpts.configPath;
+  
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true });
+  }
+  
+  let config = loadCollectionConfig(configPath);
+  const isNewConfig = !config;
+  
+  if (!config) {
+    config = {
+      collections: {
+        memory: {
+          path: DEFAULT_MEMORY_DIR,
+          pattern: '**/*.md',
+          update: 'auto'
+        },
+        sessions: {
+          path: DEFAULT_OUTPUT_DIR,
+          pattern: '**/*.md',
+          update: 'auto'
+        }
+      },
+      embedding: {
+        provider: 'ollama',
+        url: detectOllamaUrl(),
+        model: 'nomic-embed-text'
+      }
+    };
+    saveCollectionConfig(configPath, config);
+    console.log(`✅ Created config: ${configPath}`);
+  } else if (!config.embedding) {
+    config.embedding = {
+      provider: 'ollama',
+      url: detectOllamaUrl(),
+      model: 'nomic-embed-text'
+    };
+    saveCollectionConfig(configPath, config);
+    console.log(`✅ Updated config with embedding section`);
+  } else {
+    console.log(`ℹ️  Config exists: ${configPath}`);
+  }
+  
+  const ollamaUrl = config.embedding?.url || detectOllamaUrl();
+  const ollamaHealth = await checkOllamaHealth(ollamaUrl);
+  
+  if (ollamaHealth.reachable) {
+    console.log(`✅ Ollama reachable at ${ollamaUrl}`);
+  } else {
+    console.log(`⚠️  Ollama not reachable at ${ollamaUrl} — will use local GGUF fallback`);
+  }
+  
+  const store = createStore(globalOpts.dbPath);
+  
+  console.log('📂 Indexing codebase...');
+  const projectHash = crypto.createHash('sha256').update(root).digest('hex').substring(0, 12);
+  const codebaseConfig = { enabled: true, root };
+  const codebaseStats = await indexCodebase(store, root, codebaseConfig, projectHash);
+  console.log(`✅ Indexed ${codebaseStats.filesIndexed} files (${codebaseStats.filesSkippedUnchanged} unchanged)`);
+  
+  console.log('📜 Harvesting sessions...');
+  const sessionDir = path.join(os.homedir(), '.opencode', 'storage');
+  const sessions = await harvestSessions({ sessionDir, outputDir: DEFAULT_OUTPUT_DIR });
+  console.log(`✅ Harvested ${sessions.length} sessions`);
+  
+  console.log('📚 Indexing collections...');
+  const collections = getCollections(config);
+  let totalIndexed = 0;
+  
+  for (const collection of collections) {
+    const files = await scanCollectionFiles(collection);
+    for (const file of files) {
+      const content = fs.readFileSync(file, 'utf-8');
+      const title = path.basename(file, path.extname(file));
+      const result = indexDocument(store, collection.name, file, content, title);
+      if (!result.skipped) {
+        totalIndexed++;
+      }
+    }
+  }
+  console.log(`✅ Indexed ${totalIndexed} documents from collections`);
+  // Generate embeddings for all indexed documents
+  console.log('🧠 Generating embeddings...');
+  const embeddingConfig = config.embedding;
+  const provider = await createEmbeddingProvider({ embeddingConfig });
+  
+  if (provider) {
+    store.ensureVecTable(provider.getDimensions());
+    const embedded = await embedPendingCodebase(store, provider, 10, projectHash);
+    console.log(`✅ Embedded ${embedded} documents`);
+    provider.dispose();
+  } else {
+    const pending = store.getHashesNeedingEmbedding();
+    console.log(`⚠️  No embedding provider available — ${pending.length} documents pending`);
+    console.log(`   Run 'npx nano-brain embed' later to generate embeddings`);
+  }
+  store.close();
+  
+  const agentsPath = path.join(root, 'AGENTS.md');
+  const snippetPath = path.join(path.dirname(import.meta.url.replace('file://', '')), '..', 'AGENTS_SNIPPET.md');
+  const startMarker = '<!-- OPENCODE-MEMORY:START -->';
+  const endMarker = '<!-- OPENCODE-MEMORY:END -->';
+  
+  if (fs.existsSync(snippetPath)) {
+    const snippet = fs.readFileSync(snippetPath, 'utf-8');
+    
+    if (fs.existsSync(agentsPath)) {
+      let agentsContent = fs.readFileSync(agentsPath, 'utf-8');
+      const startIdx = agentsContent.indexOf(startMarker);
+      const endIdx = agentsContent.indexOf(endMarker);
+      
+      if (startIdx !== -1 && endIdx !== -1) {
+        agentsContent = agentsContent.substring(0, startIdx) + snippet + agentsContent.substring(endIdx + endMarker.length);
+        fs.writeFileSync(agentsPath, agentsContent);
+        console.log(`✅ Updated AGENTS.md with memory snippet`);
+      } else {
+        fs.appendFileSync(agentsPath, '\n\n' + snippet);
+        console.log(`✅ Appended memory snippet to AGENTS.md`);
+      }
+    } else {
+      fs.writeFileSync(agentsPath, snippet);
+      console.log(`✅ Created AGENTS.md with memory snippet`);
+    }
+  }
+  
+  console.log('');
+  console.log('nano-brain initialized! Run `npx nano-brain status` to verify.');
 }
 
 async function handleUpdate(globalOpts: GlobalOptions): Promise<void> {
@@ -466,6 +632,8 @@ async function main() {
   switch (command) {
     case 'mcp':
       return handleMcp(globalOpts, commandArgs);
+    case 'init':
+      return handleInit(globalOpts, commandArgs);
     case 'collection':
       return handleCollection(globalOpts, commandArgs);
     case 'status':

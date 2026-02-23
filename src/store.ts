@@ -365,12 +365,23 @@ export function createStore(dbPath: string): Store {
       if (vecAvailable) {
         try {
           const hashSeq = `${hash}:${seq}`;
+          // sqlite-vec virtual tables don't support INSERT OR REPLACE,
+          // so delete first then insert to handle re-embedding
+          try {
+            db.prepare(`DELETE FROM vectors_vec WHERE hash_seq = ?`).run(hashSeq);
+          } catch {
+            // Ignore if row doesn't exist
+          }
           const insertVecStmt = db.prepare(`
-            INSERT OR REPLACE INTO vectors_vec (hash_seq, embedding) VALUES (?, ?)
+            INSERT INTO vectors_vec (hash_seq, embedding) VALUES (?, ?)
           `);
           insertVecStmt.run(hashSeq, new Float32Array(embedding));
         } catch (err) {
-          console.warn('Failed to insert vector:', err);
+          // Silently ignore duplicate key errors (vector already exists)
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!msg.includes('UNIQUE constraint')) {
+            console.warn('Failed to insert vector:', err);
+          }
         }
       }
     },

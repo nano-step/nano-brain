@@ -1,5 +1,5 @@
 import { getLlama } from 'node-llama-cpp';
-import { promises as fs } from 'fs';
+import { promises as fs, accessSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir, cpus } from 'os';
 import type { EmbeddingResult, EmbeddingConfig } from './types.js';
@@ -117,6 +117,36 @@ function truncateForOllama(text: string): string {
   if (text.length <= OLLAMA_MAX_CHARS) return text;
   return text.substring(0, OLLAMA_MAX_CHARS);
 }
+export function detectOllamaUrl(): string {
+  const isDocker = (() => {
+    try {
+      accessSync('/.dockerenv');
+      return true;
+    } catch {
+      try {
+        const cgroup = readFileSync('/proc/1/cgroup', 'utf-8');
+        return cgroup.includes('docker') || cgroup.includes('containerd');
+      } catch {
+        return false;
+      }
+    }
+  })();
+  return isDocker ? 'http://host.docker.internal:11434' : 'http://localhost:11434';
+}
+
+export async function checkOllamaHealth(url: string): Promise<{ reachable: boolean; models?: string[]; error?: string }> {
+  try {
+    const resp = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    if (resp.ok) {
+      const data = await resp.json() as { models?: Array<{ name: string }> };
+      return { reachable: true, models: data.models?.map(m => m.name) || [] };
+    }
+    return { reachable: false, error: `HTTP ${resp.status}` };
+  } catch (err) {
+    return { reachable: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 class OllamaEmbeddingProvider implements EmbeddingProvider {
   private url: string;
   private model: string;
@@ -248,7 +278,7 @@ export async function createEmbeddingProvider(
 
   // Try Ollama if configured (or by default)
   if (!config || config.provider !== 'local') {
-    const url = config?.url || 'http://host.docker.internal:11434';
+    const url = config?.url || detectOllamaUrl();
     const model = config?.model || 'nomic-embed-text';
 
     try {
