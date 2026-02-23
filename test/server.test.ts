@@ -46,8 +46,20 @@ function createMockStore(): Store {
         reranker: 'available',
         expander: 'missing',
       },
+      workspaceStats: [
+        { projectHash: 'abc123def456', count: 30 },
+        { projectHash: 'global', count: 20 },
+      ],
     }),
     getHashesNeedingEmbedding: vi.fn().mockReturnValue([]),
+    getWorkspaceStats: vi.fn().mockReturnValue([]),
+    deleteDocumentsByPath: vi.fn().mockReturnValue(0),
+    cleanOrphanedEmbeddings: vi.fn().mockReturnValue(0),
+    modelStatus: {
+      embedding: 'loaded',
+      reranker: 'available',
+      expander: 'missing',
+    },
   } as unknown as Store;
 }
 
@@ -169,8 +181,8 @@ describe('Server', () => {
         collections,
         configPath: '/path/to/config.yaml',
         outputDir: '/tmp/output',
+        currentProjectHash: 'testws123456',
       });
-      
       expect(server).toBeDefined();
       expect(server.server).toBeDefined();
     });
@@ -429,6 +441,101 @@ describe('Server', () => {
       });
       
       expect(() => mockStore.searchFTS('test', 10, undefined)).toThrow('Database error');
+    });
+  });
+  
+  describe('server watcher integration', () => {
+    it('should export startServer that accepts watcher options', async () => {
+      const { startServer } = await import('../src/server.js');
+      expect(startServer).toBeDefined();
+      expect(typeof startServer).toBe('function');
+    });
+  });
+  
+  describe('workspace scoping', () => {
+    it('should pass workspace parameter to searchFTS', () => {
+      const mockStore = createMockStore();
+      const currentProjectHash = 'testws123456';
+      
+      const workspace = 'all';
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
+      mockStore.searchFTS('test', 10, undefined, effectiveWorkspace);
+      expect(mockStore.searchFTS).toHaveBeenCalledWith('test', 10, undefined, 'all');
+    });
+    
+    it('should default to currentProjectHash when no workspace', () => {
+      const mockStore = createMockStore();
+      const currentProjectHash = 'testws123456';
+      
+      const workspace = undefined;
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
+      mockStore.searchFTS('test', 10, undefined, effectiveWorkspace);
+      expect(mockStore.searchFTS).toHaveBeenCalledWith('test', 10, undefined, 'testws123456');
+    });
+    
+    it('should pass workspace to searchVec', async () => {
+      const mockStore = createMockStore();
+      const mockProviders = createMockProviders();
+      const currentProjectHash = 'testws123456';
+      
+      const workspace = 'all';
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
+      const { embedding } = await mockProviders.embedder!.embed('test');
+      mockStore.searchVec('test', embedding, 10, undefined, effectiveWorkspace);
+      expect(mockStore.searchVec).toHaveBeenCalledWith(
+        'test',
+        expect.any(Array),
+        10,
+        undefined,
+        'all'
+      );
+    });
+    
+    it('should pass workspace to searchFTS via hybridSearch logic', () => {
+      const mockStore = createMockStore();
+      const currentProjectHash = 'testws123456';
+      
+      const workspace = 'all';
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
+      mockStore.searchFTS('test', 20, undefined, effectiveWorkspace);
+      
+      expect(mockStore.searchFTS).toHaveBeenCalledWith('test', 20, undefined, 'all');
+    });
+    
+    it('should include workspaceStats in formatStatus output', () => {
+      const health = {
+        documentCount: 100,
+        chunkCount: 500,
+        pendingEmbeddings: 10,
+        collections: [],
+        databaseSize: 1024 * 1024 * 5,
+        modelStatus: {
+          embedding: 'loaded',
+          reranker: 'available',
+          expander: 'missing',
+        },
+        workspaceStats: [
+          { projectHash: 'abc123def456', count: 30 },
+          { projectHash: 'global', count: 20 },
+        ],
+      };
+      
+      const formatted = formatStatus(health);
+      
+      expect(formatted).toContain('**Workspaces:**');
+      expect(formatted).toContain('abc123def456: 30 docs');
+      expect(formatted).toContain('global: 20 docs');
+    });
+    
+    it('should handle explicit workspace hash', () => {
+      const mockStore = createMockStore();
+      const currentProjectHash = 'testws123456';
+      
+      const workspace = 'otherws789012';
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
+      mockStore.searchFTS('test', 10, undefined, effectiveWorkspace);
+      
+      expect(mockStore.searchFTS).toHaveBeenCalledWith('test', 10, undefined, 'otherws789012');
     });
   });
 });

@@ -586,4 +586,71 @@ describe('Watcher', () => {
       watcher.stop();
     });
   });
+  
+  describe('auto-embed', () => {
+    it('should embed new chunks when embedder is provided', async () => {
+      const testFile = path.join(collectionPath, 'embed-test.md');
+      fs.writeFileSync(testFile, '# Embed Test\n\nContent to embed');
+
+      const mockEmbedder = {
+        embed: vi.fn().mockResolvedValue({ embedding: new Array(768).fill(0.1), model: 'test-model' }),
+      };
+
+      vi.mocked(mockStore.getHashesNeedingEmbedding).mockReturnValue([
+        { hash: 'abc123', body: 'Content to embed', path: testFile },
+      ]);
+
+      const watcher = startWatcher({
+        store: mockStore,
+        collections,
+        embedder: mockEmbedder,
+      });
+
+      await watcher.triggerReindex();
+
+      expect(mockEmbedder.embed).toHaveBeenCalledWith('Content to embed');
+      expect(mockStore.insertEmbedding).toHaveBeenCalled();
+
+      watcher.stop();
+    });
+
+    it('should skip embedding when no embedder provided', async () => {
+      const testFile = path.join(collectionPath, 'no-embed.md');
+      fs.writeFileSync(testFile, '# No Embed\n\nContent');
+
+      const watcher = startWatcher({
+        store: mockStore,
+        collections,
+      });
+
+      await watcher.triggerReindex();
+
+      expect(mockStore.insertEmbedding).not.toHaveBeenCalled();
+
+      watcher.stop();
+    });
+
+    it('should handle embedding errors gracefully', async () => {
+      const testFile = path.join(collectionPath, 'error-embed.md');
+      fs.writeFileSync(testFile, '# Error Embed\n\nContent');
+
+      const mockEmbedder = {
+        embed: vi.fn().mockRejectedValue(new Error('Model unavailable')),
+      };
+
+      vi.mocked(mockStore.getHashesNeedingEmbedding).mockReturnValue([
+        { hash: 'abc123', body: 'Content', path: testFile },
+      ]);
+
+      const watcher = startWatcher({
+        store: mockStore,
+        collections,
+        embedder: mockEmbedder,
+      });
+
+      await expect(watcher.triggerReindex()).resolves.not.toThrow();
+
+      watcher.stop();
+    });
+  });
 });
