@@ -94,7 +94,13 @@ Embedding Config (~/.config/nano-brain/config.yml):
 }
 
 export function showVersion(): void {
-  console.log('nano-brain v0.1.0');
+  const pkgPath = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'package.json');
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    console.log(`nano-brain v${pkg.version}`);
+  } catch {
+    console.log('nano-brain (unknown version)');
+  }
 }
 
 export function formatSearchOutput(results: SearchResult[], format: 'text' | 'json' | 'files'): string {
