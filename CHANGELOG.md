@@ -1,0 +1,39 @@
+# Changelog
+
+## [0.2.0] - 2026-02-23
+
+### Added
+
+- **Workspace scoping**: Search results are now scoped to the current workspace by default. Each workspace is identified by a SHA-256 hash of its directory path, matching the harvester convention. Cross-workspace search is available via `workspace: "all"` parameter.
+- **Storage limits**: Configurable `maxSize` (default 2GB), `retention` (default 90d), and `minFreeDisk` (default 100MB) in `config.yml` under a `storage` section. Human-readable values like `500MB`, `30d`, `1y` are supported.
+- **Disk safety guard**: Checks available disk space via `fs.statfsSync()` before writes. Skips harvest/reindex/embed when disk is critically low.
+- **Retention-based eviction**: Automatically deletes harvested session markdown older than the retention period during each harvest cycle.
+- **Size-based eviction**: If total storage exceeds `maxSize` after retention eviction, deletes oldest sessions until under limit. Original OpenCode session JSON is never touched.
+- **Orphan embedding cleanup**: Removes embedding vectors for deleted documents every 10 harvest cycles.
+- **Incremental harvesting**: Tracks session file mtimes in `.harvest-state.json` to skip unchanged files, reducing harvest time from O(all) to O(changed).
+- **`workspace` parameter** on `memory_search`, `memory_vsearch`, and `memory_query` MCP tools. Omit for current workspace, `"all"` for cross-workspace.
+- **Per-workspace stats** in `memory_status` output showing document counts per workspace hash.
+- **45 new tests**: `workspace.test.ts` (18), `storage.test.ts` (27), plus integration tests in `server.test.ts` and `watcher.test.ts`. Total: 310 tests.
+
+### Changed
+
+- Switched embedding model from EmbeddingGemma-300M (384d) to **nomic-embed-text-v1.5** (768d) for better search quality.
+- Switched reranker from Qwen3-Reranker-0.6B to **bge-reranker-v2-m3** (8192 context) for improved reranking.
+- Updated prompt format to nomic `search_query:`/`search_document:` convention.
+- `documents` table now has a `project_hash` column with automatic migration and backfill on first startup.
+
+### Fixed
+
+- Crash when session JSON has undefined `slug` field (now falls back to session id).
+
+## [0.1.0] - 2026-02-16
+
+### Added
+
+- Initial release with hybrid search (BM25 + vector + LLM reranking).
+- 8 MCP tools: `memory_search`, `memory_vsearch`, `memory_query`, `memory_get`, `memory_multi_get`, `memory_write`, `memory_status`, `memory_update`.
+- SQLite storage with FTS5 and sqlite-vec.
+- Heading-aware markdown chunking.
+- YAML-configured collections with auto-indexing via chokidar.
+- OpenCode session harvesting (JSON to markdown).
+- GGUF model inference via node-llama-cpp.
