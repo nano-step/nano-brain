@@ -6,11 +6,15 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import * as http from 'http';
-import type { Store, SearchResult, IndexHealth, Collection } from './types.js';
+import type { Store, SearchResult, IndexHealth, Collection, StorageConfig } from './types.js';
 import type { SearchProviders } from './search.js';
 import { hybridSearch } from './search.js';
 import { createStore } from './store.js';
 import { loadCollectionConfig, getCollections, scanCollectionFiles } from './collections.js';
+import { createEmbeddingProvider } from './embeddings.js';
+import { createReranker } from './reranker.js';
+import { startWatcher } from './watcher.js';
+import { parseStorageConfig } from './storage.js';
 
 export interface ServerOptions {
   dbPath: string;
@@ -25,6 +29,8 @@ export interface ServerDeps {
   collections: Collection[];
   configPath: string;
   outputDir: string;
+  storageConfig?: StorageConfig;
+  currentProjectHash: string;
 }
 
 export function formatSearchResults(results: SearchResult[]): string {
@@ -40,7 +46,7 @@ export function formatSearchResults(results: SearchResult[]): string {
 }
 
 export function formatStatus(health: IndexHealth): string {
-  return [
+  const lines = [
     `📊 **Memory Index Status**`,
     `Documents: ${health.documentCount} | Chunks: ${health.chunkCount} | Pending embeddings: ${health.pendingEmbeddings}`,
     `Database size: ${(health.databaseSize / 1024 / 1024).toFixed(1)} MB`,
@@ -52,11 +58,21 @@ export function formatStatus(health: IndexHealth): string {
     `  - Embedding: ${health.modelStatus.embedding}`,
     `  - Reranker: ${health.modelStatus.reranker}`,
     `  - Expander: ${health.modelStatus.expander}`,
-  ].join('\n');
+  ];
+  
+  if (health.workspaceStats && health.workspaceStats.length > 0) {
+    lines.push(``);
+    lines.push(`**Workspaces:**`);
+    for (const ws of health.workspaceStats) {
+      lines.push(`  - ${ws.projectHash}: ${ws.count} docs`);
+    }
+  }
+  
+  return lines.join('\n');
 }
 
 export function createMcpServer(deps: ServerDeps): McpServer {
-  const { store, providers, collections, configPath, outputDir } = deps;
+  const { store, providers, collections, configPath, outputDir, currentProjectHash } = deps;
   
   const server = new McpServer(
     {
@@ -77,9 +93,11 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       query: z.string().describe('Search query'),
       limit: z.number().optional().default(10).describe('Max results'),
       collection: z.string().optional().describe('Filter by collection name'),
+      workspace: z.string().optional().describe('Filter by workspace hash. Omit for current workspace, "all" for cross-workspace search'),
     },
-    async ({ query, limit, collection }) => {
-      const results = store.searchFTS(query, limit, collection);
+    async ({ query, limit, collection, workspace }) => {
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
+      const results = store.searchFTS(query, limit, collection, effectiveWorkspace);
       return {
         content: [
           {
@@ -98,12 +116,14 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       query: z.string().describe('Search query'),
       limit: z.number().optional().default(10).describe('Max results'),
       collection: z.string().optional().describe('Filter by collection name'),
+      workspace: z.string().optional().describe('Filter by workspace hash. Omit for current workspace, "all" for cross-workspace search'),
     },
-    async ({ query, limit, collection }) => {
+    async ({ query, limit, collection, workspace }) => {
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
       if (providers.embedder) {
         try {
           const { embedding } = await providers.embedder.embed(query);
-          const results = store.searchVec(query, embedding, limit, collection);
+          const results = store.searchVec(query, embedding, limit, collection, effectiveWorkspace);
           return {
             content: [
               {
@@ -113,7 +133,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             ],
           };
         } catch (err) {
-          const fallbackResults = store.searchFTS(query, limit, collection);
+          const fallbackResults = store.searchFTS(query, limit, collection, effectiveWorkspace);
           return {
             content: [
               {
@@ -124,7 +144,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           };
         }
       } else {
-        const fallbackResults = store.searchFTS(query, limit, collection);
+        const fallbackResults = store.searchFTS(query, limit, collection, effectiveWorkspace);
         return {
           content: [
             {
@@ -145,11 +165,13 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       limit: z.number().optional().default(10).describe('Max results'),
       collection: z.string().optional().describe('Filter by collection name'),
       minScore: z.number().optional().default(0).describe('Minimum score threshold'),
+      workspace: z.string().optional().describe('Filter by workspace hash. Omit for current workspace, "all" for cross-workspace search'),
     },
-    async ({ query, limit, collection, minScore }) => {
+    async ({ query, limit, collection, minScore, workspace }) => {
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
       const results = await hybridSearch(
         store,
-        { query, limit, collection, minScore },
+        { query, limit, collection, minScore, projectHash: effectiveWorkspace },
         providers
       );
       
@@ -320,7 +342,6 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       let totalAdded = 0;
       let totalUpdated = 0;
       
-      // Reload config to pick up newly added collections
       const freshConfig = loadCollectionConfig(deps.configPath);
       const freshCollections = freshConfig ? getCollections(freshConfig) : deps.collections;
       
@@ -416,30 +437,30 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const cacheDir = path.join(homeDir, '.cache', 'opencode-memory');
   const pidPath = path.join(cacheDir, 'mcp.pid');
   
-  if (daemon) {
-    checkStalePid(pidPath);
-    writePidFile(pidPath);
-    
-    const cleanup = () => {
-      removePidFile(pidPath);
-      store.close();
-      process.exit(0);
-    };
-    
-    process.on('SIGTERM', cleanup);
-    process.on('SIGINT', cleanup);
-  }
+  const currentProjectHash = crypto.createHash('sha256').update(process.cwd()).digest('hex').substring(0, 12);
   
   const store = createStore(dbPath);
   
   const finalConfigPath = configPath || path.join(outputDir, 'collections.yaml');
   const config = loadCollectionConfig(finalConfigPath);
   const collections = config ? getCollections(config) : [];
+  const storageConfig = parseStorageConfig(config?.storage);
+  
+  const [embedder, reranker] = await Promise.all([
+    createEmbeddingProvider(),
+    createReranker(),
+  ]);
   
   const providers: SearchProviders = {
-    embedder: null,
-    reranker: null,
+    embedder,
+    reranker,
     expander: null,
+  };
+  
+  store.modelStatus = {
+    embedding: embedder ? embedder.getModel() : 'missing',
+    reranker: reranker ? 'bge-reranker-v2-m3' : 'missing',
+    expander: 'disabled',
   };
   
   const deps: ServerDeps = {
@@ -448,9 +469,44 @@ export async function startServer(options: ServerOptions): Promise<void> {
     collections,
     configPath: finalConfigPath,
     outputDir,
+    storageConfig,
+    currentProjectHash,
   };
   
   const server = createMcpServer(deps);
+  
+  const watcher = startWatcher({
+    store,
+    collections,
+    embedder: providers.embedder,
+    debounceMs: 2000,
+    pollIntervalMs: 300000,
+    sessionPollMs: 120000,
+    sessionStorageDir: path.join(homeDir, '.local/share/opencode/storage'),
+    outputDir: path.join(outputDir, 'sessions'),
+    storageConfig,
+    dbPath,
+    onUpdate: (filePath) => {
+      if (!daemon) {
+        console.error(`[watcher] File changed: ${filePath}`);
+      }
+    },
+  });
+  
+  if (daemon) {
+    checkStalePid(pidPath);
+    writePidFile(pidPath);
+    
+    const cleanup = () => {
+      watcher.stop();
+      removePidFile(pidPath);
+      store.close();
+      process.exit(0);
+    };
+    
+    process.on('SIGTERM', cleanup);
+    process.on('SIGINT', cleanup);
+  }
   
   if (httpPort) {
     const httpServer = http.createServer((req, res) => {

@@ -1,8 +1,9 @@
 import { watch, type FSWatcher } from 'chokidar';
-import type { Store, Collection } from './types.js';
+import type { Store, Collection, StorageConfig } from './types.js';
 import { scanCollectionFiles } from './collections.js';
 import { indexDocument, computeHash } from './store.js';
 import { harvestSessions } from './harvester.js';
+import { checkDiskSpace, evictExpiredSessions, evictBySize } from './storage.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -10,12 +11,15 @@ import * as os from 'os';
 export interface WatcherOptions {
   store: Store;
   collections: Collection[];
+  embedder?: { embed(text: string): Promise<{ embedding: number[]; model: string }> } | null;
   onUpdate?: (path: string) => void;
   debounceMs?: number;
   pollIntervalMs?: number;
   sessionPollMs?: number;
   sessionStorageDir?: string;
   outputDir?: string;
+  storageConfig?: StorageConfig;
+  dbPath?: string;
 }
 
 export interface Watcher {
@@ -36,12 +40,15 @@ export function startWatcher(options: WatcherOptions): Watcher {
   const {
     store,
     collections,
+    embedder,
     onUpdate,
     debounceMs = 2000,
     pollIntervalMs = 300000,
     sessionPollMs = 120000,
     sessionStorageDir = path.join(os.homedir(), '.local/share/opencode/storage'),
     outputDir = path.join(os.homedir(), '.opencode-memory/sessions'),
+    storageConfig,
+    dbPath,
   } = options;
 
   let dirty = false;
@@ -53,7 +60,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
   let pollInterval: NodeJS.Timeout | null = null;
   let sessionPollInterval: NodeJS.Timeout | null = null;
   let watcher: FSWatcher | null = null;
-
+  let harvestCycleCount = 0;
   const watchedPaths = new Set<string>();
 
   const handleFileChange = (filePath: string) => {
@@ -102,6 +109,19 @@ export function startWatcher(options: WatcherOptions): Watcher {
         }
         
         store.bulkDeactivateExcept(collection.name, activePaths);
+      }
+      
+      if (embedder) {
+        const hashes = store.getHashesNeedingEmbedding();
+        for (const { hash, body } of hashes) {
+          try {
+            const result = await embedder.embed(body);
+            store.insertEmbedding(hash, 0, 0, result.embedding, result.model);
+          } catch (err) {
+            console.warn(`[watcher] Embedding failed for chunk ${hash.substring(0, 8)}:`, err);
+            break;
+          }
+        }
       }
       
       dirty = false;
@@ -195,12 +215,39 @@ export function startWatcher(options: WatcherOptions): Watcher {
     
     sessionPollInterval = setInterval(async () => {
       if (stopped) return;
+      if (storageConfig) {
+        const diskCheck = checkDiskSpace(outputDir, storageConfig.minFreeDisk);
+        if (!diskCheck.ok) {
+          console.warn(`[storage] Disk space critically low (<${Math.round(storageConfig.minFreeDisk / 1024 / 1024)}MB free), skipping writes`);
+          return;
+        }
+      }
       
       try {
         await harvestSessions({
           sessionDir: sessionStorageDir,
           outputDir,
         });
+        
+        if (storageConfig && dbPath) {
+          const expiredCount = evictExpiredSessions(outputDir, storageConfig.retention, store);
+          if (expiredCount > 0) {
+            console.log(`[storage] Evicted ${expiredCount} expired session(s)`);
+          }
+          
+          const sizeEvictedCount = evictBySize(outputDir, dbPath, storageConfig.maxSize, store);
+          if (sizeEvictedCount > 0) {
+            console.log(`[storage] Evicted ${sizeEvictedCount} session(s) due to size limit`);
+          }
+        }
+        
+        harvestCycleCount++;
+        if (harvestCycleCount % 10 === 0) {
+          const orphansDeleted = store.cleanOrphanedEmbeddings();
+          if (orphansDeleted > 0) {
+            console.log(`[storage] Cleaned ${orphansDeleted} orphaned embedding(s)`);
+          }
+        }
       } catch (err) {
         console.warn('Session harvest failed:', err);
       }
