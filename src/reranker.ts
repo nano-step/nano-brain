@@ -13,9 +13,9 @@ export interface RerankerOptions {
   cacheDir?: string;
 }
 
-const DEFAULT_MODEL_URI = 'hf:nicoboss/Qwen3-Reranker-0.6B-GGUF/Qwen3-Reranker-0.6B-Q8_0.gguf';
-const MODEL_NAME = 'Qwen3-Reranker-0.6B';
-const CONTEXT_SIZE = 2048;
+const DEFAULT_MODEL_URI = 'hf:gpustack/bge-reranker-v2-m3-GGUF/bge-reranker-v2-m3-Q4_K_M.gguf';
+const MODEL_NAME = 'bge-reranker-v2-m3';
+const CONTEXT_SIZE = 8192;
 
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));

@@ -11,7 +11,7 @@ import { createQueryExpander } from '../src/expansion.js';
 vi.mock('node-llama-cpp', () => {
   const mockEmbeddingContext = {
     getEmbeddingFor: vi.fn().mockResolvedValue({
-      vector: new Array(384).fill(0.1),
+      vector: new Array(768).fill(0.1),
     }),
   };
   
@@ -95,7 +95,7 @@ describe('Prompt Formatting', () => {
     const query = 'test search query';
     const formatted = formatQueryPrompt(query);
     
-    expect(formatted).toBe('task: search result | query: test search query');
+    expect(formatted).toBe('search_query: test search query');
   });
   
   it('should format document prompt correctly', () => {
@@ -103,7 +103,7 @@ describe('Prompt Formatting', () => {
     const content = 'Document content here';
     const formatted = formatDocumentPrompt(title, content);
     
-    expect(formatted).toBe('title: Document Title | text: Document content here');
+    expect(formatted).toBe('search_document: Document content here');
   });
 });
 
@@ -112,8 +112,8 @@ describe('EmbeddingProvider', () => {
     const provider = await createEmbeddingProvider();
     
     expect(provider).not.toBeNull();
-    expect(provider?.getDimensions()).toBe(384);
-    expect(provider?.getModel()).toBe('EmbeddingGemma-300M');
+    expect(provider?.getDimensions()).toBe(768);
+    expect(provider?.getModel()).toBe('nomic-embed-text-v1.5');
   });
   
   it('should embed single text', async () => {
@@ -126,9 +126,9 @@ describe('EmbeddingProvider', () => {
       expect(result).toHaveProperty('embedding');
       expect(result).toHaveProperty('model');
       expect(result).toHaveProperty('dimensions');
-      expect(result.embedding).toHaveLength(384);
-      expect(result.model).toBe('EmbeddingGemma-300M');
-      expect(result.dimensions).toBe(384);
+      expect(result.embedding).toHaveLength(768);
+      expect(result.model).toBe('nomic-embed-text-v1.5');
+      expect(result.dimensions).toBe(768);
     }
   });
   
@@ -142,9 +142,9 @@ describe('EmbeddingProvider', () => {
       
       expect(results).toHaveLength(3);
       results.forEach(result => {
-        expect(result.embedding).toHaveLength(384);
-        expect(result.model).toBe('EmbeddingGemma-300M');
-        expect(result.dimensions).toBe(384);
+        expect(result.embedding).toHaveLength(768);
+        expect(result.model).toBe('nomic-embed-text-v1.5');
+        expect(result.dimensions).toBe(768);
       });
     }
   });
@@ -154,7 +154,7 @@ describe('EmbeddingProvider', () => {
     expect(provider).not.toBeNull();
     
     if (provider) {
-      expect(provider.getDimensions()).toBe(384);
+      expect(provider.getDimensions()).toBe(768);
     }
   });
   
@@ -163,7 +163,7 @@ describe('EmbeddingProvider', () => {
     expect(provider).not.toBeNull();
     
     if (provider) {
-      expect(provider.getModel()).toBe('EmbeddingGemma-300M');
+      expect(provider.getModel()).toBe('nomic-embed-text-v1.5');
     }
   });
   
@@ -202,7 +202,7 @@ describe('Reranker', () => {
       
       expect(result).toHaveProperty('results');
       expect(result).toHaveProperty('model');
-      expect(result.model).toBe('Qwen3-Reranker-0.6B');
+      expect(result.model).toBe('bge-reranker-v2-m3');
       expect(result.results).toHaveLength(3);
       
       result.results.forEach(item => {

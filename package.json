@@ -11,7 +11,8 @@
     "start": "node bin/cli.js",
     "mcp": "node bin/cli.js mcp",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint:esm": "! grep -r 'require(' src/ --include='*.ts'"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",

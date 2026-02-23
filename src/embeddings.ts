@@ -17,9 +17,9 @@ export interface EmbeddingProviderOptions {
   cacheDir?: string;
 }
 
-const DEFAULT_MODEL_URI = 'hf:nicoboss/EmbeddingGemma-300M-GGUF/EmbeddingGemma-300M-Q8_0.gguf';
-const MODEL_NAME = 'EmbeddingGemma-300M';
-const DIMENSIONS = 384;
+const DEFAULT_MODEL_URI = 'hf:nomic-ai/nomic-embed-text-v1.5-GGUF/nomic-embed-text-v1.5.Q4_K_M.gguf';
+const MODEL_NAME = 'nomic-embed-text-v1.5';
+const DIMENSIONS = 768;
 
 interface ParsedModelURI {
   org: string;
@@ -101,11 +101,11 @@ export async function resolveModelPath(
 }
 
 function formatQueryPrompt(query: string): string {
-  return `task: search result | query: ${query}`;
+  return `search_query: ${query}`;
 }
 
 function formatDocumentPrompt(title: string, content: string): string {
-  return `title: ${title} | text: ${content}`;
+  return `search_document: ${content}`;
 }
 
 class EmbeddingProviderImpl implements EmbeddingProvider {
