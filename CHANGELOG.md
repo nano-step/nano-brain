@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.1.6] - 2026-02-24
+
+### Added
+
+- **Per-workspace codebase config**: Global config now supports a `workspaces` map, allowing different codebase settings (enabled, extensions, exclude) per project. `init --root=/path` creates a workspace entry with codebase enabled by default.
+- **`getWorkspaceConfig()` resolver**: Resolution order: workspace map → top-level `codebase` fallback → default (enabled). Existing configs with top-level `codebase` continue working without migration.
+- **`setWorkspaceConfig()` helper**: Programmatic API for adding/updating workspace entries in config.
+
+### Changed
+
+- **`init` writes workspace entries**: Instead of a single global `codebase` field, `handleInit()` now adds per-workspace entries to the `workspaces` map. Multiple `init --root=` calls for different projects coexist.
+- **Server resolves workspace config**: `startServer()` uses `getWorkspaceConfig()` to resolve codebase config for the current workspace instead of reading the top-level `codebase` field.
+
 ## [2026.1.4] - 2026-02-23
 
 ### Added

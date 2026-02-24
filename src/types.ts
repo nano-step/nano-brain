@@ -66,6 +66,7 @@ export interface CollectionConfig {
     minFreeDisk?: string
   }
   codebase?: CodebaseConfig
+  workspaces?: Record<string, WorkspaceConfig>
   embedding?: EmbeddingConfig
   watcher?: WatcherConfig
 }
@@ -78,6 +79,10 @@ export interface CodebaseConfig {
   maxFileSize?: string
   maxSize?: string
   batchSize?: number
+}
+
+export interface WorkspaceConfig {
+  codebase?: CodebaseConfig
 }
 
 export interface EmbeddingConfig {

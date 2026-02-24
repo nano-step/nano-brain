@@ -94,6 +94,14 @@ Embedding Config (~/.config/nano-brain/config.yml):
     pollIntervalMs: 120000          # reindex interval (default: 120000 = 2min)
     sessionPollMs: 120000           # session harvest interval (default: 120000)
     embedIntervalMs: 60000          # embedding interval (default: 60000 = 1min)
+  workspaces:
+    /path/to/project-a:
+      codebase:
+        enabled: true
+    /path/to/project-b:
+      codebase:
+        enabled: true
+        extensions: [".ts", ".vue"]
 `);
 }
 
@@ -354,10 +362,22 @@ async function handleInit(globalOpts: GlobalOptions, commandArgs: string[]): Pro
   }
   
   const store = createStore(globalOpts.dbPath);
-  
+  if (!config.workspaces) {
+    config.workspaces = {};
+  }
+  if (!config.workspaces[root]) {
+    config.workspaces[root] = {
+      codebase: { enabled: true }
+    };
+    saveCollectionConfig(configPath, config);
+    console.log(`✅ Enabled codebase indexing for workspace: ${root}`);
+  } else {
+    console.log(`ℹ️  Workspace already configured: ${root}`);
+  }
   console.log('📂 Indexing codebase...');
   const projectHash = crypto.createHash('sha256').update(root).digest('hex').substring(0, 12);
-  const codebaseConfig = { enabled: true, root };
+  const wsConfig = config.workspaces[root];
+  const codebaseConfig = wsConfig?.codebase ?? { enabled: true };
   const codebaseStats = await indexCodebase(store, root, codebaseConfig, projectHash);
   console.log(`✅ Indexed ${codebaseStats.filesIndexed} files (${codebaseStats.filesSkippedUnchanged} unchanged)`);
   

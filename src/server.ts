@@ -10,7 +10,7 @@ import type { Store, SearchResult, IndexHealth, Collection, StorageConfig, Codeb
 import type { SearchProviders } from './search.js';
 import { hybridSearch } from './search.js';
 import { createStore } from './store.js';
-import { loadCollectionConfig, getCollections, scanCollectionFiles } from './collections.js';
+import { loadCollectionConfig, getCollections, scanCollectionFiles, getWorkspaceConfig } from './collections.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth } from './embeddings.js';
 import { createReranker } from './reranker.js';
 import { startWatcher } from './watcher.js';
@@ -539,7 +539,9 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const config = loadCollectionConfig(finalConfigPath);
   const collections = config ? getCollections(config) : [];
   const storageConfig = parseStorageConfig(config?.storage);
-  const resolvedWorkspaceRoot = config?.codebase?.root || process.cwd();
+  const resolvedWorkspaceRoot = process.cwd();
+  const wsConfig = getWorkspaceConfig(config, resolvedWorkspaceRoot);
+  const resolvedCodebaseConfig = wsConfig.codebase;
   const currentProjectHash = crypto.createHash('sha256').update(resolvedWorkspaceRoot).digest('hex').substring(0, 12);
   // Use per-workspace database: {dirName}-{hash}.sqlite instead of default.sqlite
   const isDefaultDb = dbPath.endsWith('/default.sqlite') || dbPath.endsWith('\\default.sqlite');
@@ -572,7 +574,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     outputDir,
     storageConfig,
     currentProjectHash,
-    codebaseConfig: config?.codebase,
+    codebaseConfig: resolvedCodebaseConfig,
     embeddingConfig: config?.embedding,
     workspaceRoot: resolvedWorkspaceRoot,
   };
@@ -602,7 +604,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
           console.error(`[watcher] File changed: ${filePath}`);
         }
       },
-      codebaseConfig: config?.codebase,
+      codebaseConfig: resolvedCodebaseConfig,
       workspaceRoot: resolvedWorkspaceRoot,
       projectHash: currentProjectHash,
     });
@@ -693,7 +695,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       }),
   ]);
 
-  if (!config?.codebase?.enabled) {
+  if (!resolvedCodebaseConfig?.enabled) {
     startFileWatcher();
   }
 }

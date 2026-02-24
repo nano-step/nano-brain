@@ -1,4 +1,4 @@
-import type { Collection, CollectionConfig } from './types.js';
+import type { Collection, CollectionConfig, WorkspaceConfig } from './types.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -189,4 +189,29 @@ export async function scanCollectionFiles(collection: Collection): Promise<strin
 
 export function resolveCollectionPath(collection: Collection, basePath: string): string {
   return collection.path;
+}
+
+export function getWorkspaceConfig(config: CollectionConfig | null, workspaceRoot: string): WorkspaceConfig {
+  // 1. Check workspaces map for exact match
+  if (config?.workspaces?.[workspaceRoot]) {
+    return config.workspaces[workspaceRoot]
+  }
+  // 2. Fall back to top-level codebase (backward compat)
+  if (config?.codebase) {
+    return { codebase: config.codebase }
+  }
+  // 3. Default: codebase enabled, auto-detect everything
+  return { codebase: { enabled: true } }
+}
+
+export function setWorkspaceConfig(configPath: string, workspaceRoot: string, wsConfig: WorkspaceConfig): void {
+  let config = loadCollectionConfig(configPath)
+  if (!config) {
+    config = { collections: {} }
+  }
+  if (!config.workspaces) {
+    config.workspaces = {}
+  }
+  config.workspaces[workspaceRoot] = wsConfig
+  saveCollectionConfig(configPath, config)
 }
