@@ -4,42 +4,78 @@ Persistent memory for AI coding agents. Hybrid search (BM25 + semantic + LLM rer
 
 ## Slash Commands
 
-| Command | When |
-|---------|------|
-| `/nano-brain-init` | First-time workspace setup |
-| `/nano-brain-status` | Health check, embedding progress |
-| `/nano-brain-reindex` | After branch switch, pull, or major changes |
+| Command | When to Use |
+|---------|-------------|
+| `/nano-brain-init` | First time in a workspace — indexes codebase and sets up memory |
+| `/nano-brain-status` | Check health: document counts, embedding progress, server status |
+| `/nano-brain-reindex` | After git pull, branch switch, or major code changes |
+
+## MCP Tools Reference
+
+### Search Tools
+
+| Tool | Use When | Speed |
+|------|----------|-------|
+| `memory_search` | Exact keyword: error messages, function names, specific terms | Fast |
+| `memory_vsearch` | Conceptual: "how does auth work", "payment flow" | Medium |
+| `memory_query` | Best quality, complex questions (combines BM25 + vector + reranking) | Slower |
+
+**Default: Use `memory_query`** — it gives best results for most questions.
+
+### Retrieval Tools
+
+| Tool | Use When |
+|------|----------|
+| `memory_get` | Retrieve specific document by path or docid |
+| `memory_multi_get` | Batch retrieve by glob pattern |
+
+### Management Tools
+
+| Tool | Use When |
+|------|----------|
+| `memory_status` | Check index health, embedding progress |
+| `memory_index_codebase` | Rescan source files (call with `root` param) |
+| `memory_update` | Refresh all collection indexes |
+| `memory_write` | Save insight to daily log or MEMORY.md |
 
 ## When to Use Memory
 
-**Before work:** Recall past decisions, patterns, debugging insights, cross-session context.
-**After work:** Save key decisions, architecture choices, non-obvious fixes, domain knowledge.
+**Before starting work:**
+- Recall past decisions on similar features
+- Find debugging insights from previous sessions
+- Check existing patterns in codebase
 
-## Tool Selection
-
-| Need | Tool |
-|------|------|
-| Exact keyword (error msg, function name) | `memory_search` |
-| Conceptual ("how does auth work") | `memory_vsearch` |
-| Best quality, complex question | `memory_query` |
-| Retrieve specific doc | `memory_get` / `memory_multi_get` |
-| Save insight or decision | `memory_write` |
-| Check health | `memory_status` |
-| Rescan source files | `memory_index_codebase` |
-| Refresh all indexes | `memory_update` |
-
-**Default:** Use `memory_query` — it combines BM25 + vector + reranking for best results.
+**After completing work:**
+- Save key architectural decisions
+- Document non-obvious fixes
+- Record domain knowledge for future sessions
 
 ## Collection Filtering
 
-- `collection: "codebase"` — source files only
-- `collection: "sessions"` — past AI sessions only
-- `collection: "memory"` — curated notes only
-- Omit — search everything (recommended)
+Add `collection` parameter to narrow search scope:
+
+| Collection | Contains |
+|------------|----------|
+| `codebase` | Source files from workspace |
+| `sessions` | Past AI coding sessions |
+| `memory` | Curated notes (MEMORY.md, daily logs) |
+
+Omit `collection` to search everything (recommended for most queries).
 
 ## Memory vs Native Tools
 
-Memory excels at **recall and semantics** — past sessions, conceptual search, cross-project knowledge.
-Native tools (grep, ast-grep, glob) excel at **precise code patterns** — exact matches, AST structure.
+| Task | Use |
+|------|-----|
+| Semantic search, past context, cross-session recall | **nano-brain** |
+| Exact code patterns, AST structure, precise matches | **grep, ast-grep, glob** |
 
-**They are complementary.** Use both.
+They complement each other. Use both.
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "tool not found" | Add nano-brain to MCP config in opencode.json |
+| 0 codebase docs | Run `/nano-brain-init` |
+| Embeddings stuck | Check Ollama running: `ollama serve` |
+| Stale results | Run `/nano-brain-reindex` |
