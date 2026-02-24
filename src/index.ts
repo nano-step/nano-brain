@@ -405,29 +405,50 @@ async function handleInit(globalOpts: GlobalOptions, commandArgs: string[]): Pro
   
   console.log('📚 Indexing collections...');
   const collections = getCollections(config);
+  // Only index core collections during init; MCP watcher handles the rest
+  const initCollections = collections.filter(c => c.name === 'memory' || c.name === 'sessions');
+  const skippedCount = collections.length - initCollections.length;
   let totalIndexed = 0;
-  
-  for (const collection of collections) {
+  for (const collection of initCollections) {
     const files = await scanCollectionFiles(collection);
+    let collIndexed = 0;
     for (const file of files) {
       const content = fs.readFileSync(file, 'utf-8');
       const title = path.basename(file, path.extname(file));
       const result = indexDocument(store, collection.name, file, content, title);
       if (!result.skipped) {
+        collIndexed++;
         totalIndexed++;
       }
     }
+    console.log(`  ${collection.name}: ${files.length} files (${collIndexed} new)`);
+  }
+  if (skippedCount > 0) {
+    console.log(`  (${skippedCount} other collection(s) deferred to MCP watcher)`);
   }
   console.log(`✅ Indexed ${totalIndexed} documents from collections`);
-  // Generate embeddings for all indexed documents
+  // Generate embeddings — cap at 50 during init, MCP server handles the rest
   console.log('🧠 Generating embeddings...');
   const embeddingConfig = config.embedding;
   const provider = await createEmbeddingProvider({ embeddingConfig });
-  
+  const INIT_EMBED_CAP = 50;
   if (provider) {
     store.ensureVecTable(provider.getDimensions());
-    const embedded = await embedPendingCodebase(store, provider, 10, projectHash);
-    console.log(`✅ Embedded ${embedded} documents`);
+    let embedded = 0;
+    // Embed up to INIT_EMBED_CAP documents during init for quick startup
+    while (embedded < INIT_EMBED_CAP) {
+      const row = store.getNextHashNeedingEmbedding(projectHash);
+      if (!row) break;
+      try {
+        const result = await provider.embed(row.body.slice(0, 8000));
+        store.insertEmbedding(row.hash, 0, 0, result.embedding, 'nomic-embed-text-v1.5');
+        embedded++;
+      } catch {
+        break;
+      }
+    }
+    const remaining = store.getHashesNeedingEmbedding().length;
+    console.log(`✅ Embedded ${embedded} documents${remaining > 0 ? ` (${remaining} remaining — MCP server will continue in background)` : ''}`);
     provider.dispose();
   } else {
     const pending = store.getHashesNeedingEmbedding();

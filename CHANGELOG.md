@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1.8] - 2026-02-24
+
+### Fixed
+
+- **`init` no longer hangs on large collections**: Init now only indexes core collections (memory, sessions) and defers other collections to the MCP watcher. Previously, scanning a large project collection (e.g., thousands of source files) would block init indefinitely.
+- **`init` caps embedding at 50 documents**: Embeds first 50 docs for quick startup, reports remaining count, and defers the rest to the MCP server's background embedding interval. Previously tried to embed all documents synchronously.
+- **Per-collection progress logging**: Init now shows per-collection file counts and new/skipped stats.
+
 ## [2026.1.7] - 2026-02-24
 
 ### Fixed
