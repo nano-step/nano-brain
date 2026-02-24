@@ -36,7 +36,7 @@ Persistent memory for AI coding agents. Hybrid search (BM25 + semantic + LLM rer
 | `memory_status` | Check index health, embedding progress |
 | `memory_index_codebase` | Rescan source files (call with `root` param) |
 | `memory_update` | Refresh all collection indexes |
-| `memory_write` | Save insight to daily log or MEMORY.md |
+| `memory_write` | Save insight to daily log (tagged with workspace) |
 
 ## When to Use Memory
 
@@ -58,7 +58,7 @@ Add `collection` parameter to narrow search scope:
 |------------|----------|
 | `codebase` | Source files from workspace |
 | `sessions` | Past AI coding sessions |
-| `memory` | Curated notes (MEMORY.md, daily logs) |
+| `memory` | Daily logs (tagged with workspace context) |
 
 Omit `collection` to search everything (recommended for most queries).
 

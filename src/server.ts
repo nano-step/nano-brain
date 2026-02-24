@@ -104,7 +104,7 @@ export function formatStatus(
 }
 
 export function createMcpServer(deps: ServerDeps): McpServer {
-  const { store, providers, collections, configPath, outputDir, currentProjectHash } = deps;
+  const { store, providers, collections, configPath, outputDir, currentProjectHash, workspaceRoot } = deps;
   
   const server = new McpServer(
     {
@@ -306,35 +306,18 @@ export function createMcpServer(deps: ServerDeps): McpServer {
   
   server.tool(
     'memory_write',
-    'Write content to daily log or MEMORY.md',
+    'Write content to daily log with workspace context',
     {
       content: z.string().describe('Content to write'),
-      target: z.string().optional().default('daily').describe('Target: "daily" for daily log, "memory" for MEMORY.md'),
     },
-    async ({ content, target }) => {
-      let targetPath: string;
-      
-      if (target === 'daily') {
-        const date = new Date().toISOString().split('T')[0];
-        const memoryDir = path.join(outputDir, 'memory');
-        fs.mkdirSync(memoryDir, { recursive: true });
-        targetPath = path.join(memoryDir, `${date}.md`);
-      } else if (target === 'memory') {
-        targetPath = path.join(outputDir, 'MEMORY.md');
-      } else {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Invalid target: ${target}. Use "daily" or "memory".`,
-            },
-          ],
-          isError: true,
-        };
-      }
-      
+    async ({ content }) => {
+      const date = new Date().toISOString().split('T')[0];
+      const memoryDir = path.join(outputDir, 'memory');
+      fs.mkdirSync(memoryDir, { recursive: true });
+      const targetPath = path.join(memoryDir, `${date}.md`);
       const timestamp = new Date().toISOString();
-      const entry = `\n## ${timestamp}\n\n${content}\n`;
+      const workspaceName = path.basename(workspaceRoot);
+      const entry = `\n## ${timestamp}\n\n**Workspace:** ${workspaceName} (${currentProjectHash})\n\n${content}\n`;
       
       fs.appendFileSync(targetPath, entry, 'utf-8');
       
@@ -342,7 +325,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         content: [
           {
             type: 'text',
-            text: `✅ Written to ${targetPath}`,
+            text: `✅ Written to ${targetPath} [${workspaceName}]`,
           },
         ],
       };

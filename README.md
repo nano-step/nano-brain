@@ -99,7 +99,7 @@ Heading-aware markdown chunking that respects document structure:
 | `memory_query` | Full hybrid search with expansion + reranking |
 | `memory_get` | Retrieve document by path or docid (#abc123) |
 | `memory_multi_get` | Batch retrieve by glob pattern |
-| `memory_write` | Write to daily log or MEMORY.md |
+| `memory_write` | Write to daily log (tagged with workspace) |
 | `memory_status` | Index health, collections, model status |
 | `memory_index_codebase` | Index codebase files in current workspace |
 | `memory_update` | Trigger reindex of all collections |
