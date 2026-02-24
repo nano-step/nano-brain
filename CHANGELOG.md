@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1.7] - 2026-02-24
+
+### Fixed
+
+- **CLI per-workspace DB resolution**: CLI commands (`status`, `search`, `init`, etc.) now resolve the same per-workspace database as the MCP server (`{dirName}-{hash}.sqlite`). Previously CLI always read `default.sqlite`, showing stale data from the old global DB.
+- **"Chunks" → "Embedded" label**: Status output renamed misleading "Chunks" count (which counted `content_vectors` rows) to "Embedded" — accurately reflecting what it measures.
+
 ## [2026.1.6] - 2026-02-24
 
 ### Added

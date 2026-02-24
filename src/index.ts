@@ -52,6 +52,20 @@ export function parseGlobalOptions(args: string[]): GlobalOptions {
   return { dbPath, configPath, remaining };
 }
 
+
+/**
+ * Resolve per-workspace database path.
+ * If dbPath ends with 'default.sqlite', replace with '{dirName}-{hash}.sqlite'
+ * where dirName is the sanitized basename of workspaceRoot and hash is first 12 chars of SHA-256.
+ * If user explicitly set --db=, that path is returned unchanged.
+ */
+export function resolveDbPath(dbPath: string, workspaceRoot: string): string {
+  const isDefaultDb = dbPath.endsWith('/default.sqlite') || dbPath.endsWith('\\default.sqlite');
+  if (!isDefaultDb) return dbPath;
+  const hash = crypto.createHash('sha256').update(workspaceRoot).digest('hex').substring(0, 12);
+  const dirName = path.basename(workspaceRoot).replace(/[^a-zA-Z0-9_-]/g, '_');
+  return path.join(path.dirname(dbPath), `${dirName}-${hash}.sqlite`);
+}
 export function showHelp(): void {
   console.log(`
 nano-brain - Memory system with hybrid search
@@ -251,7 +265,7 @@ async function handleStatus(globalOpts: GlobalOptions): Promise<void> {
   console.log('');
   console.log('Index:');
   console.log(`  Documents:          ${health.documentCount}`);
-  console.log(`  Chunks:             ${health.chunkCount}`);
+  console.log(`  Embedded:           ${health.embeddedCount}`);
   console.log(`  Pending embeddings: ${health.pendingEmbeddings}`);
   console.log(`  Database size:      ${(health.databaseSize / 1024 / 1024).toFixed(2)} MB`);
   console.log('');
@@ -308,6 +322,9 @@ async function handleInit(globalOpts: GlobalOptions, commandArgs: string[]): Pro
     }
   }
   
+  
+  // Resolve per-workspace DB path with the actual root
+  globalOpts.dbPath = resolveDbPath(globalOpts.dbPath, root);
   const configDir = path.dirname(globalOpts.configPath);
   const configPath = globalOpts.configPath;
   
@@ -672,9 +689,13 @@ async function main() {
   const args = process.argv.slice(2);
   
   const globalOpts = parseGlobalOptions(args);
-  
   const command = globalOpts.remaining[0] || 'mcp';
   const commandArgs = globalOpts.remaining.slice(1);
+
+  // Resolve per-workspace DB path (init command handles this separately with --root)
+  if (command !== 'init') {
+    globalOpts.dbPath = resolveDbPath(globalOpts.dbPath, process.cwd());
+  }
   
   switch (command) {
     case 'mcp':

@@ -153,7 +153,7 @@ export interface HarvestedSession {
 
 export interface IndexHealth {
   documentCount: number
-  chunkCount: number
+  embeddedCount: number
   pendingEmbeddings: number
   collections: Array<{
     name: string

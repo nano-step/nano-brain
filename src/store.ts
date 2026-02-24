@@ -230,7 +230,7 @@ export function createStore(dbPath: string): Store {
     SELECT COUNT(*) as count FROM documents WHERE active = 1
   `);
   
-  const getChunkCountStmt = db.prepare(`
+  const getEmbeddedCountStmt = db.prepare(`
     SELECT COUNT(*) as count FROM content_vectors
   `);
   
@@ -511,7 +511,7 @@ export function createStore(dbPath: string): Store {
     
     getIndexHealth(): IndexHealth {
       const docCount = (getDocumentCountStmt.get() as { count: number }).count;
-      const chunkCount = (getChunkCountStmt.get() as { count: number }).count;
+      const embeddedCount = (getEmbeddedCountStmt.get() as { count: number }).count;
       const collections = getCollectionStatsStmt.all() as Array<{ name: string; documentCount: number; path: string }>;
       const pending = (getHashesNeedingEmbeddingStmt.all() as unknown[]).length;
       const workspaceStats = this.getWorkspaceStats();
@@ -526,7 +526,7 @@ export function createStore(dbPath: string): Store {
       
       return {
         documentCount: docCount,
-        chunkCount: chunkCount,
+        embeddedCount: embeddedCount,
         pendingEmbeddings: pending,
         collections: collections,
         databaseSize: dbSize,

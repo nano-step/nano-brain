@@ -56,7 +56,7 @@ export function formatStatus(
 ): string {
   const lines = [
     `📊 **Memory Index Status**`,
-    `Documents: ${health.documentCount} | Chunks: ${health.chunkCount} | Pending embeddings: ${health.pendingEmbeddings}`,
+    `Documents: ${health.documentCount} | Embedded: ${health.embeddedCount} | Pending embeddings: ${health.pendingEmbeddings}`,
     `Database size: ${(health.databaseSize / 1024 / 1024).toFixed(1)} MB`,
     ``,
     `**Collections:**`,
