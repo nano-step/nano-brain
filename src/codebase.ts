@@ -10,19 +10,113 @@ const DEFAULT_MAX_FILE_SIZE = 5 * 1024 * 1024
 const DEFAULT_CODEBASE_MAX_SIZE = 2 * 1024 * 1024 * 1024
 
 const BUILTIN_EXCLUDE_PATTERNS = [
-  '**/node_modules/**',
+  // Version control
   '**/.git/**',
+  '**/.svn/**',
+  '**/.hg/**',
+
+  // JS/TS — dependencies
+  '**/node_modules/**',
+  '**/.pnpm-store/**',
+  '**/.yarn/**',
+  '**/bower_components/**',
+
+  // JS/TS — build outputs
   '**/dist/**',
   '**/build/**',
-  '**/__pycache__/**',
-  '**/vendor/**',
+  '**/out/**',
+  '**/output/**',
   '**/.next/**',
   '**/.nuxt/**',
-  '**/target/**',
+  '**/.svelte-kit/**',
+  '**/.astro/**',
+  '**/.remix/**',
+  '**/.turbo/**',
+  '**/.vercel/**',
+  '**/.output/**',
+  '**/.cache/**',
+  '**/.parcel-cache/**',
+  '**/.vite/**',
+  '**/storybook-static/**',
+
+  // JS/TS — generated files
   '**/*.min.js',
+  '**/*.min.css',
   '**/*.map',
   '**/*.lock',
+  '**/*.tsbuildinfo',
+  '**/.eslintcache',
+
+  // Python
+  '**/__pycache__/**',
+  '**/.venv/**',
+  '**/venv/**',
+  '**/env/**',
+  '**/.env/**',
+  '**/.conda/**',
+  '**/*.egg-info/**',
+  '**/.mypy_cache/**',
+  '**/.ruff_cache/**',
+  '**/.pytest_cache/**',
+  '**/htmlcov/**',
+  '**/.tox/**',
+
+  // Go
+  '**/vendor/**',
+
+  // Rust
+  '**/target/**',
+
+  // Java/Kotlin/JVM
+  '**/.gradle/**',
+  '**/.mvn/**',
+  '**/gradle/wrapper/**',
+  '**/*.class',
+  '**/*.jar',
+  '**/*.war',
+
+  // Ruby
+  '**/gems/**',
+  '**/.bundle/**',
+
+  // PHP
+  '**/storage/framework/**',
+  '**/bootstrap/cache/**',
+
+  // Mobile — iOS
+  '**/Pods/**',
+  '**/*.xcworkspace/**',
+  '**/DerivedData/**',
+
+  // Mobile — Android
+  '**/.gradle/**',
+  '**/generated/**',
+
+  // DevOps / infra
+  '**/.terraform/**',
+  '**/.terraform.lock.hcl',
+  '**/terraform.tfstate*',
+
+  // Editors & IDEs
+  '**/.idea/**',
+  '**/.vscode/extensions/**',
+
+  // Logs & tmp
+  '**/logs/**',
+  '**/log/**',
+  '**/tmp/**',
+  '**/temp/**',
+  '**/*.log',
+
+  // Test coverage
+  '**/coverage/**',
+  '**/.nyc_output/**',
+  '**/lcov-report/**',
+
+  // Misc large binary/generated
   '**/*.sum',
+  '**/*.snap',
+  '**/docker-data/**',
 ]
 
 const PROJECT_TYPE_MARKERS: Record<string, string[]> = {

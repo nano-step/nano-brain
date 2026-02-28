@@ -10,33 +10,61 @@ Persistent memory for AI coding agents. Hybrid search (BM25 + semantic + LLM rer
 | `/nano-brain-status` | Check health: document counts, embedding progress, server status |
 | `/nano-brain-reindex` | After git pull, branch switch, or major code changes |
 
-## MCP Tools Reference
+## CLI Commands
 
-### Search Tools
+All memory operations use the `npx nano-brain` CLI via the Bash tool.
 
-| Tool | Use When | Speed |
-|------|----------|-------|
-| `memory_search` | Exact keyword: error messages, function names, specific terms | Fast |
-| `memory_vsearch` | Conceptual: "how does auth work", "payment flow" | Medium |
-| `memory_query` | Best quality, complex questions (combines BM25 + vector + reranking) | Slower |
+### Search
 
-**Default: Use `memory_query`** — it gives best results for most questions.
+| Command | Use When | Speed |
+|---------|----------|-------|
+| `npx nano-brain query "search terms"` | Best quality, complex questions (BM25 + vector + reranking) | Slower |
+| `npx nano-brain search "search terms"` | Exact keyword: error messages, function names, specific terms | Fast |
+| `npx nano-brain vsearch "search terms"` | Conceptual: "how does auth work", "payment flow" | Medium |
 
-### Retrieval Tools
+**Default: Use `npx nano-brain query`** — it gives best results for most questions.
 
-| Tool | Use When |
-|------|----------|
-| `memory_get` | Retrieve specific document by path or docid |
-| `memory_multi_get` | Batch retrieve by glob pattern |
+**Search options:**
+- `-n <limit>` — Max results (default: 10)
+- `-c <collection>` — Filter by collection (codebase, sessions, memory)
+- `--full` — Show full content of results
+- `--json` — Output as JSON
+- `--files` — Show file paths only
+- `--min-score=<n>` — Minimum score threshold
 
-### Management Tools
+### Retrieval
 
-| Tool | Use When |
-|------|----------|
-| `memory_status` | Check index health, embedding progress |
-| `memory_index_codebase` | Rescan source files (call with `root` param) |
-| `memory_update` | Refresh all collection indexes |
-| `memory_write` | Save insight to daily log (tagged with workspace) |
+| Command | Use When |
+|---------|----------|
+| `npx nano-brain get <docid-or-path>` | Retrieve specific document by path or docid |
+| `npx nano-brain get <id> --full` | Full content with all metadata |
+| `npx nano-brain get <id> --from=<line> --lines=<n>` | Specific line range |
+
+### Management
+
+| Command | Use When |
+|---------|----------|
+| `npx nano-brain status` | Check index health, embedding progress |
+| `npx nano-brain update` | Refresh all collection indexes |
+| `npx nano-brain harvest` | Harvest past AI sessions into searchable markdown |
+| `npx nano-brain embed` | Generate embeddings for unembedded chunks |
+| `npx nano-brain init --root=<path>` | Re-index a workspace |
+
+### Writing Notes
+
+There is no CLI write command. To save a note, create a markdown file directly:
+
+```bash
+# Save a decision or insight
+cat > ~/.nano-brain/memory/$(date +%Y-%m-%d)-topic.md << 'EOF'
+## Summary
+- Decision: ...
+- Why: ...
+- Files: ...
+EOF
+```
+
+Then run `npx nano-brain update` to index the new file.
 
 ## When to Use Memory
 
@@ -52,7 +80,7 @@ Persistent memory for AI coding agents. Hybrid search (BM25 + semantic + LLM rer
 
 ## Collection Filtering
 
-Add `collection` parameter to narrow search scope:
+Add `-c <collection>` to narrow search scope:
 
 | Collection | Contains |
 |------------|----------|
@@ -60,7 +88,7 @@ Add `collection` parameter to narrow search scope:
 | `sessions` | Past AI coding sessions |
 | `memory` | Daily logs (tagged with workspace context) |
 
-Omit `collection` to search everything (recommended for most queries).
+Omit `-c` to search everything (recommended for most queries).
 
 ## Memory vs Native Tools
 
@@ -75,7 +103,7 @@ They complement each other. Use both.
 
 | Issue | Solution |
 |-------|----------|
-| "tool not found" | Add nano-brain to MCP config in opencode.json |
 | 0 codebase docs | Run `/nano-brain-init` |
 | Embeddings stuck | Check Ollama running: `ollama serve` |
 | Stale results | Run `/nano-brain-reindex` |
+| New notes not searchable | Run `npx nano-brain update` |

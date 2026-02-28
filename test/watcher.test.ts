@@ -653,4 +653,65 @@ describe('Watcher', () => {
       watcher.stop();
     });
   });
+  describe('session projectHash extraction', () => {
+    it('should extract projectHash from session file paths during reindex', async () => {
+      const sessionsDir = path.join(tmpDir, 'sessions');
+      const hash1Dir = path.join(sessionsDir, 'aaa111bbb222');
+      const hash2Dir = path.join(sessionsDir, 'ccc333ddd444');
+      fs.mkdirSync(hash1Dir, { recursive: true });
+      fs.mkdirSync(hash2Dir, { recursive: true });
+
+      const sessionA = path.join(hash1Dir, '2026-02-16-session-a.md');
+      const sessionB = path.join(hash2Dir, '2026-02-16-session-b.md');
+      fs.writeFileSync(sessionA, '# Session A\n\nContent A');
+      fs.writeFileSync(sessionB, '# Session B\n\nContent B');
+
+      const sessionsCollection: Collection[] = [{
+        name: 'sessions',
+        path: sessionsDir,
+        pattern: '**/*.md',
+      }];
+
+      const watcher = startWatcher({
+        store: mockStore,
+        collections: sessionsCollection,
+        outputDir: sessionsDir,
+        projectHash: 'zzz999yyy888',
+      });
+
+      await watcher.triggerReindex();
+
+      const calls = vi.mocked(mockStore.insertDocument).mock.calls;
+      const sessionACall = calls.find(call => (call[0] as { path: string }).path.includes('session-a.md'));
+      const sessionBCall = calls.find(call => (call[0] as { path: string }).path.includes('session-b.md'));
+
+      expect(sessionACall).toBeDefined();
+      expect(sessionBCall).toBeDefined();
+      expect((sessionACall![0] as { projectHash?: string }).projectHash).toBe('aaa111bbb222');
+      expect((sessionBCall![0] as { projectHash?: string }).projectHash).toBe('ccc333ddd444');
+
+      watcher.stop();
+    });
+
+    it('should fall back to watcher projectHash for non-session collections', async () => {
+      const testFile = path.join(collectionPath, 'test.md');
+      fs.writeFileSync(testFile, '# Test\n\nContent');
+
+      const watcher = startWatcher({
+        store: mockStore,
+        collections,
+        projectHash: 'mywkspace123',
+      });
+
+      await watcher.triggerReindex();
+
+      const calls = vi.mocked(mockStore.insertDocument).mock.calls;
+      const testCall = calls.find(call => (call[0] as { path: string }).path.includes('test.md'));
+
+      expect(testCall).toBeDefined();
+      expect((testCall![0] as { projectHash?: string }).projectHash).toBe('mywkspace123');
+
+      watcher.stop();
+    });
+  });
 });

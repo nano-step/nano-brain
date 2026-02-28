@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createStore, computeHash, indexDocument } from '../src/store.js';
+import { createStore, computeHash, indexDocument, extractProjectHashFromPath } from '../src/store.js';
 import type { Store } from '../src/types.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -462,4 +462,69 @@ describe('Store', () => {
       expect(result.chunks).toBeGreaterThan(1);
     });
   });
+  
+  describe('extractProjectHashFromPath', () => {
+    it('should extract projectHash from valid session path', () => {
+      const sessionsDir = '/home/user/.nano-brain/sessions';
+      const filePath = '/home/user/.nano-brain/sessions/abc123def456/2024-01-15-session.md';
+      const result = extractProjectHashFromPath(filePath, sessionsDir);
+      expect(result).toBe('abc123def456');
+    });
+    
+    it('should return undefined for non-session path (memory dir)', () => {
+      const sessionsDir = '/home/user/.nano-brain/sessions';
+      const filePath = '/home/user/.nano-brain/memory/2024-01-15.md';
+      const result = extractProjectHashFromPath(filePath, sessionsDir);
+      expect(result).toBeUndefined();
+    });
+    
+    it('should return undefined for path with non-hex subdirectory', () => {
+      const sessionsDir = '/home/user/.nano-brain/sessions';
+      const filePath = '/home/user/.nano-brain/sessions/not-a-hex-dir/file.md';
+      const result = extractProjectHashFromPath(filePath, sessionsDir);
+      expect(result).toBeUndefined();
+    });
+    
+    it('should return undefined for path without sessionsDir prefix', () => {
+      const sessionsDir = '/home/user/.nano-brain/sessions';
+      const filePath = '/other/path/abc123def456/file.md';
+      const result = extractProjectHashFromPath(filePath, sessionsDir);
+      expect(result).toBeUndefined();
+    });
+    
+    it('should return undefined for empty string inputs', () => {
+      expect(extractProjectHashFromPath('', '/home/user/.nano-brain/sessions')).toBeUndefined();
+      expect(extractProjectHashFromPath('/some/path', '')).toBeUndefined();
+      expect(extractProjectHashFromPath('', '')).toBeUndefined();
+    });
+    
+    it('should handle trailing slashes on sessionsDir', () => {
+      const sessionsDir = '/home/user/.nano-brain/sessions/';
+      const filePath = '/home/user/.nano-brain/sessions/abc123def456/file.md';
+      const result = extractProjectHashFromPath(filePath, sessionsDir);
+      expect(result).toBe('abc123def456');
+    });
+    
+    it('should return lowercase hash even if path has uppercase', () => {
+      const sessionsDir = '/home/user/.nano-brain/sessions';
+      const filePath = '/home/user/.nano-brain/sessions/ABC123DEF456/file.md';
+      const result = extractProjectHashFromPath(filePath, sessionsDir);
+      expect(result).toBe('abc123def456');
+    });
+    
+    it('should return undefined for hash with wrong length', () => {
+      const sessionsDir = '/home/user/.nano-brain/sessions';
+      const filePath = '/home/user/.nano-brain/sessions/abc123/file.md';
+      const result = extractProjectHashFromPath(filePath, sessionsDir);
+      expect(result).toBeUndefined();
+    });
+    
+    it('should return undefined for file directly in sessionsDir (no subdirectory)', () => {
+      const sessionsDir = '/home/user/.nano-brain/sessions';
+      const filePath = '/home/user/.nano-brain/sessions/file.md';
+      const result = extractProjectHashFromPath(filePath, sessionsDir);
+      expect(result).toBeUndefined();
+    });
+  });
+
 });

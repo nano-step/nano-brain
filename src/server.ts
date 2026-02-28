@@ -9,7 +9,7 @@ import * as http from 'http';
 import type { Store, SearchResult, IndexHealth, Collection, StorageConfig, CodebaseConfig, EmbeddingConfig, WatcherConfig } from './types.js'
 import type { SearchProviders } from './search.js';
 import { hybridSearch } from './search.js';
-import { createStore } from './store.js';
+import { createStore, extractProjectHashFromPath } from './store.js';
 import { loadCollectionConfig, getCollections, scanCollectionFiles, getWorkspaceConfig } from './collections.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth } from './embeddings.js';
 import { createReranker } from './reranker.js';
@@ -447,6 +447,9 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             totalAdded++;
           }
           
+          const effectiveProjectHash = collection.name === 'sessions'
+            ? extractProjectHashFromPath(filePath, path.join(outputDir, 'sessions'))
+            : currentProjectHash;
           const title = path.basename(filePath, path.extname(filePath));
           store.insertContent(hash, content);
           store.insertDocument({
@@ -457,6 +460,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             createdAt: stats.birthtime.toISOString(),
             modifiedAt: stats.mtime.toISOString(),
             active: true,
+            projectHash: effectiveProjectHash,
           });
         }
       }
@@ -488,27 +492,50 @@ function removePidFile(pidPath: string): void {
   }
 }
 
-function checkStalePid(pidPath: string): void {
-  if (!fs.existsSync(pidPath)) {
-    return;
-  }
-  
-  const pidStr = fs.readFileSync(pidPath, 'utf-8').trim();
-  const pid = parseInt(pidStr, 10);
-  
-  if (isNaN(pid)) {
-    fs.unlinkSync(pidPath);
-    return;
-  }
-  
+/**
+ * Singleton guard using PID file.
+ * 1. Read old PID from file (if exists)
+ * 2. Write our PID immediately
+ * 3. After delay, kill the old PID if it's still alive
+ * 4. Periodically check if someone overwrote our PID — if so, exit
+ */
+function setupSingletonGuard(pidPath: string, store: Store, stopWatcher: () => void): void {
+  // Read previous PID before overwriting
+  let oldPid: number | null = null;
   try {
-    process.kill(pid, 0);
-    console.error(`Server already running with PID ${pid}`);
-    process.exit(1);
-  } catch {
-    console.warn(`Removing stale PID file (PID ${pid} not running)`);
-    fs.unlinkSync(pidPath);
+    const pidStr = fs.readFileSync(pidPath, 'utf-8').trim();
+    const pid = parseInt(pidStr, 10);
+    if (!isNaN(pid) && pid !== process.pid) oldPid = pid;
+  } catch { /* no previous PID file */ }
+  
+  // Write our PID
+  writePidFile(pidPath);
+  
+  // After startup settles, kill the old process
+  if (oldPid) {
+    setTimeout(() => {
+      try {
+        process.kill(oldPid!, 0); // Still alive?
+        console.error(`[memory] Killing previous nano-brain process (PID ${oldPid})`);
+        process.kill(oldPid!, 'SIGTERM');
+      } catch { /* already dead */ }
+    }, 2000);
   }
+  
+  // Periodically check if a newer instance took over
+  const ownerCheck = setInterval(() => {
+    try {
+      const currentPid = parseInt(fs.readFileSync(pidPath, 'utf-8').trim(), 10);
+      if (currentPid !== process.pid) {
+        console.error(`[memory] Newer instance detected (PID ${currentPid}), shutting down`);
+        clearInterval(ownerCheck);
+        stopWatcher();
+        store.close();
+        process.exit(0);
+      }
+    } catch { /* PID file gone — continue running */ }
+  }, 5000);
+  ownerCheck.unref();
 }
 
 export async function startServer(options: ServerOptions): Promise<void> {
@@ -518,6 +545,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const nanoBrainHome = path.join(homeDir, '.nano-brain');
   const outputDir = nanoBrainHome;
   const pidPath = path.join(nanoBrainHome, 'mcp.pid');
+  
+  // PID file path — singleton guard set up after server starts
   const finalConfigPath = configPath || path.join(outputDir, 'collections.yaml');
   const config = loadCollectionConfig(finalConfigPath);
   const collections = config ? getCollections(config) : [];
@@ -593,22 +622,19 @@ export async function startServer(options: ServerOptions): Promise<void> {
     });
   };
   
-  if (daemon) {
-    checkStalePid(pidPath);
-    writePidFile(pidPath);
-    
-    const cleanup = () => {
-      if (watcher) {
-        watcher.stop();
-      }
-      removePidFile(pidPath);
-      store.close();
-      process.exit(0);
-    };
-    
-    process.on('SIGTERM', cleanup);
-    process.on('SIGINT', cleanup);
-  }
+  // Cleanup on exit (all modes, not just daemon)
+  const cleanup = () => {
+    if (watcher) watcher.stop();
+    // Only remove PID file if it's still ours
+    try {
+      const currentPid = parseInt(fs.readFileSync(pidPath, 'utf-8').trim(), 10);
+      if (currentPid === process.pid) removePidFile(pidPath);
+    } catch { }
+    store.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
   
   if (httpPort) {
     const httpServer = http.createServer((req, res) => {
@@ -650,6 +676,9 @@ export async function startServer(options: ServerOptions): Promise<void> {
     console.error('MCP server started on stdio');
   }
   
+  // Singleton guard: write PID, kill old process, monitor for newer instances
+  setupSingletonGuard(pidPath, store, () => { if (watcher) watcher.stop(); });
+  
   Promise.all([
     createEmbeddingProvider({ embeddingConfig: config?.embedding })
       .then((loadedEmbedder) => {
@@ -677,6 +706,55 @@ export async function startServer(options: ServerOptions): Promise<void> {
         console.error('[memory] Reranker model failed:', err);
       }),
   ]);
+
+  // Ollama reconnect — retry if fell back to local GGUF at startup
+  const embeddingConfig = config?.embedding;
+  if (!embeddingConfig || embeddingConfig.provider !== 'local') {
+    const ollamaUrl = embeddingConfig?.url || detectOllamaUrl();
+    const ollamaModel = embeddingConfig?.model || 'nomic-embed-text';
+    let startedWithLocalGGUF = false;
+    
+    // Check after initial provider loads whether we're using local GGUF
+    setTimeout(() => {
+      // Local GGUF model is 'nomic-embed-text-v1.5', Ollama is 'nomic-embed-text'
+      if (store.modelStatus.embedding === 'nomic-embed-text-v1.5') {
+        startedWithLocalGGUF = true;
+      }
+    }, 5000);
+    
+    const reconnectTimer = setInterval(async () => {
+      if (!startedWithLocalGGUF) {
+        clearInterval(reconnectTimer);
+        return;
+      }
+      // Already reconnected?
+      if (store.modelStatus.embedding === ollamaModel) {
+        clearInterval(reconnectTimer);
+        return;
+      }
+      try {
+        const health = await checkOllamaHealth(ollamaUrl);
+        if (health.reachable) {
+          const newProvider = await createEmbeddingProvider({ embeddingConfig: { provider: 'ollama', url: ollamaUrl, model: ollamaModel } });
+          if (newProvider) {
+            const oldProvider = providers.embedder;
+            providers.embedder = newProvider;
+            store.modelStatus.embedding = newProvider.getModel();
+            store.ensureVecTable(newProvider.getDimensions());
+            if (oldProvider && 'dispose' in oldProvider) (oldProvider as { dispose(): void }).dispose();
+            console.error(`[memory] Reconnected to Ollama at ${ollamaUrl} — switched from local GGUF`);
+            startedWithLocalGGUF = false;
+            clearInterval(reconnectTimer);
+          }
+        }
+      } catch {
+        // Silent retry — don't spam logs
+      }
+    }, 60000);
+    
+    // Don't prevent process exit
+    reconnectTimer.unref();
+  }
 
   if (!resolvedCodebaseConfig?.enabled) {
     startFileWatcher();

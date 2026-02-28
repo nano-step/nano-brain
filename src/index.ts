@@ -1,5 +1,5 @@
 import { startServer } from './server.js';
-import { createStore, computeHash, indexDocument } from './store.js';
+import { createStore, computeHash, indexDocument, extractProjectHashFromPath } from './store.js';
 import { loadCollectionConfig, addCollection, removeCollection, renameCollection, listCollections, getCollections, scanCollectionFiles, saveCollectionConfig } from './collections.js';
 import { harvestSessions } from './harvester.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth } from './embeddings.js';
@@ -10,6 +10,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+
+function resolveOpenCodeStorageDir(): string {
+  // XDG path (Linux): ~/.local/share/opencode/storage
+  const xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+  const xdgPath = path.join(xdgData, 'opencode', 'storage');
+  if (fs.existsSync(xdgPath)) return xdgPath;
+  // macOS / legacy fallback: ~/.opencode/storage
+  return path.join(os.homedir(), '.opencode', 'storage');
+}
 
 const NANO_BRAIN_HOME = path.join(os.homedir(), '.nano-brain');
 const DEFAULT_DB_DIR = path.join(NANO_BRAIN_HOME, 'data');
@@ -400,7 +409,7 @@ async function handleInit(globalOpts: GlobalOptions, commandArgs: string[]): Pro
   console.log(`✅ Indexed ${codebaseStats.filesIndexed} files (${codebaseStats.filesSkippedUnchanged} unchanged)`);
   
   console.log('📜 Harvesting sessions...');
-  const sessionDir = path.join(os.homedir(), '.opencode', 'storage');
+  const sessionDir = resolveOpenCodeStorageDir();
   const sessions = await harvestSessions({ sessionDir, outputDir: DEFAULT_OUTPUT_DIR });
   console.log(`✅ Harvested ${sessions.length} sessions`);
   
@@ -416,7 +425,10 @@ async function handleInit(globalOpts: GlobalOptions, commandArgs: string[]): Pro
     for (const file of files) {
       const content = fs.readFileSync(file, 'utf-8');
       const title = path.basename(file, path.extname(file));
-      const result = indexDocument(store, collection.name, file, content, title);
+      const effectiveProjectHash = collection.name === 'sessions'
+        ? extractProjectHashFromPath(file, DEFAULT_OUTPUT_DIR) ?? projectHash
+        : projectHash;
+      const result = indexDocument(store, collection.name, file, content, title, effectiveProjectHash);
       if (!result.skipped) {
         collIndexed++;
         totalIndexed++;
@@ -527,7 +539,10 @@ async function handleUpdate(globalOpts: GlobalOptions): Promise<void> {
     for (const file of files) {
       const content = fs.readFileSync(file, 'utf-8');
       const title = path.basename(file, path.extname(file));
-      const result = indexDocument(store, collection.name, file, content, title);
+      const effectiveProjectHash = collection.name === 'sessions'
+        ? extractProjectHashFromPath(file, DEFAULT_OUTPUT_DIR)
+        : undefined;
+      const result = indexDocument(store, collection.name, file, content, title, effectiveProjectHash);
       
       if (result.skipped) {
         totalSkipped++;
@@ -698,7 +713,7 @@ async function handleGet(globalOpts: GlobalOptions, commandArgs: string[]): Prom
 }
 
 async function handleHarvest(globalOpts: GlobalOptions): Promise<void> {
-  const sessionDir = path.join(os.homedir(), '.opencode', 'storage');
+  const sessionDir = resolveOpenCodeStorageDir();
   const outputDir = DEFAULT_OUTPUT_DIR;
   
   console.log('Harvesting sessions...');
@@ -706,8 +721,6 @@ async function handleHarvest(globalOpts: GlobalOptions): Promise<void> {
   
   console.log(`✅ Harvested ${sessions.length} sessions to ${outputDir}`);
 }
-
-
 
 async function main() {
   const args = process.argv.slice(2);

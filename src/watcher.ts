@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from 'chokidar';
 import type { Store, Collection, StorageConfig, CodebaseConfig } from './types.js'
 import { scanCollectionFiles } from './collections.js';
-import { indexDocument, computeHash } from './store.js';
+import { indexDocument, computeHash, extractProjectHashFromPath } from './store.js';
 import { harvestSessions } from './harvester.js';
 import { checkDiskSpace, evictExpiredSessions, evictBySize } from './storage.js';
 import { indexCodebase, mergeExcludePatterns, resolveExtensions, embedPendingCodebase } from './codebase.js'
@@ -119,7 +119,10 @@ export function startWatcher(options: WatcherOptions): Watcher {
           const existingDoc = store.findDocument(filePath)
           if (!existingDoc || existingDoc.hash !== hash) {
             const title = extractTitle(content)
-            indexDocument(store, collection.name, filePath, content, title, projectHash)
+            const effectiveProjectHash = collection.name === 'sessions'
+              ? extractProjectHashFromPath(filePath, outputDir) ?? projectHash
+              : projectHash;
+            indexDocument(store, collection.name, filePath, content, title, effectiveProjectHash)
           }
           
           activePaths.push(filePath)

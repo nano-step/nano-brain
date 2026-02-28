@@ -599,6 +599,25 @@ export function computeHash(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
+/**
+ * Extract projectHash from a session file path.
+ * Matches pattern: {sessionsDir}/{12-char-hex}/*.md
+ * Returns undefined for non-session files.
+ */
+export function extractProjectHashFromPath(filePath: string, sessionsDir: string): string | undefined {
+  if (!filePath || !sessionsDir) return undefined;
+  const normalizedFile = filePath.replace(/\\/g, '/');
+  const normalizedSessions = sessionsDir.replace(/\\/g, '/').replace(/\/$/, '');
+  if (!normalizedFile.startsWith(normalizedSessions + '/')) return undefined;
+  const relativePath = normalizedFile.slice(normalizedSessions.length + 1);
+  const firstSlash = relativePath.indexOf('/');
+  if (firstSlash === -1) return undefined;
+  const subdirName = relativePath.slice(0, firstSlash);
+  if (subdirName.length !== 12) return undefined;
+  if (!/^[a-f0-9]{12}$/i.test(subdirName)) return undefined;
+  return subdirName.toLowerCase();
+}
+
 export function indexDocument(
   store: Store,
   collection: string,

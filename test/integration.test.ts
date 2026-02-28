@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
-import { createStore, sanitizeFTS5Query } from '../src/store.js';
+import { createStore, sanitizeFTS5Query, extractProjectHashFromPath, indexDocument } from '../src/store.js';
 import type { Store } from '../src/types.js';
 
 describe('FTS5 Query Sanitization', () => {
@@ -146,5 +146,74 @@ describe('Real Database Integration', () => {
     const dailyCollection = health.collections.find(c => c.name === 'daily');
     expect(dailyCollection).toBeDefined();
     expect(dailyCollection?.documentCount).toBe(1);
+  });
+});
+
+describe('Workspace-scoped session indexing', () => {
+  let tempDir: string;
+  let dbPath: string;
+  let store: Store;
+  let sessionsDir: string;
+
+  beforeAll(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-workspace-test-'));
+    dbPath = path.join(tempDir, 'test.db');
+    store = createStore(dbPath);
+    sessionsDir = path.join(tempDir, 'sessions');
+
+    const hash1Dir = path.join(sessionsDir, 'abc123def456');
+    const hash2Dir = path.join(sessionsDir, 'fff000eee111');
+    fs.mkdirSync(hash1Dir, { recursive: true });
+    fs.mkdirSync(hash2Dir, { recursive: true });
+
+    const sessionA = path.join(hash1Dir, 'session-a.md');
+    const sessionB = path.join(hash2Dir, 'session-b.md');
+    fs.writeFileSync(sessionA, '# Session Alpha\n\nThis is workspace alpha content about testing.');
+    fs.writeFileSync(sessionB, '# Session Beta\n\nThis is workspace beta content about testing.');
+  });
+
+  afterAll(() => {
+    store.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('should store correct project_hash for each session file (task 5.1)', () => {
+    const sessionAPath = path.join(sessionsDir, 'abc123def456', 'session-a.md');
+    const sessionBPath = path.join(sessionsDir, 'fff000eee111', 'session-b.md');
+
+    const contentA = fs.readFileSync(sessionAPath, 'utf-8');
+    const contentB = fs.readFileSync(sessionBPath, 'utf-8');
+
+    const hashA = extractProjectHashFromPath(sessionAPath, sessionsDir);
+    const hashB = extractProjectHashFromPath(sessionBPath, sessionsDir);
+
+    expect(hashA).toBe('abc123def456');
+    expect(hashB).toBe('fff000eee111');
+
+    indexDocument(store, 'sessions', sessionAPath, contentA, 'Session Alpha', hashA);
+    indexDocument(store, 'sessions', sessionBPath, contentB, 'Session Beta', hashB);
+
+    const docA = store.findDocument(sessionAPath);
+    const docB = store.findDocument(sessionBPath);
+
+    expect(docA).not.toBeNull();
+    expect(docB).not.toBeNull();
+    expect(docA!.projectHash).toBe('abc123def456');
+    expect(docB!.projectHash).toBe('fff000eee111');
+  });
+
+  it('should filter search results by workspace (task 5.2)', () => {
+    const resultsAlpha = store.searchFTS('testing', 10, undefined, 'abc123def456');
+    expect(resultsAlpha.length).toBe(1);
+    expect(resultsAlpha[0].title).toBe('Session Alpha');
+
+    const resultsBeta = store.searchFTS('testing', 10, undefined, 'fff000eee111');
+    expect(resultsBeta.length).toBe(1);
+    expect(resultsBeta[0].title).toBe('Session Beta');
+
+    const resultsAll = store.searchFTS('testing', 10, undefined, 'all');
+    expect(resultsAll.length).toBe(2);
+    const titles = resultsAll.map(r => r.title).sort();
+    expect(titles).toEqual(['Session Alpha', 'Session Beta']);
   });
 });

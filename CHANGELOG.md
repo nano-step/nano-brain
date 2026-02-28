@@ -1,5 +1,38 @@
 # Changelog
 
+## [2026.1.13] - 2026-02-28
+
+### Fixed
+
+- **Workspace-scoped session indexing**: Session documents were indexed with the current workspace's `projectHash` instead of extracting it from the session file's directory path (`sessions/{hash}/*.md`). This caused all sessions from every workspace to be tagged as belonging to the current workspace, defeating workspace-scoped search. Added `extractProjectHashFromPath()` utility and fixed all 4 indexing code paths (watcher, init, update, memory_update tool).
+
+## [2026.1.12] - 2026-02-24
+
+### Fixed
+
+- **Session harvesting on Linux/Docker**: Harvester hardcoded `~/.opencode/storage` (macOS path). On Linux, OpenCode follows XDG and stores sessions at `~/.local/share/opencode/storage`. Added `resolveOpenCodeStorageDir()` that checks XDG path first and falls back to `~/.opencode/storage`, so harvesting now works on both platforms.
+
+### Changed
+
+- **Expanded built-in codebase exclude patterns**: `BUILTIN_EXCLUDE_PATTERNS` grew from 12 to 55 patterns covering all major ecosystems — prevents accidental indexing of large generated directories that cause OOM and DB bloat:
+  - **JS/TS**: `.pnpm-store`, `.yarn`, `bower_components`, `out`, `.svelte-kit`, `.astro`, `.remix`, `.turbo`, `.vercel`, `.cache`, `.parcel-cache`, `.vite`, `storybook-static`, `*.min.css`, `*.tsbuildinfo`, `.eslintcache`
+  - **Python**: `.venv`, `venv`, `env`, `.conda`, `*.egg-info`, `.mypy_cache`, `.ruff_cache`, `.pytest_cache`, `htmlcov`, `.tox`
+  - **Java/JVM**: `.gradle`, `.mvn`, `*.class`, `*.jar`, `*.war`
+  - **Ruby**: `gems`, `.bundle`
+  - **PHP**: `storage/framework`, `bootstrap/cache`
+  - **Mobile**: `Pods`, `*.xcworkspace`, `DerivedData`, `generated`
+  - **DevOps**: `.terraform`, `terraform.tfstate*`
+  - **Logs/tmp**: `logs`, `log`, `tmp`, `temp`, `*.log`
+  - **Test coverage**: `coverage`, `.nyc_output`, `lcov-report`
+  - **Version control**: `.svn`, `.hg`
+
+## [2026.1.11] - 2026-02-24
+
+### Fixed
+
+- **MCP singleton guard**: Multiple nano-brain MCP server instances would pile up (OpenCode respawns MCP servers on reconnect), causing SQLite lock contention and Ollama timeout errors. New PID-based singleton guard ensures only one instance runs — new instances kill the previous one, and old instances detect they've been superseded and exit gracefully.
+- **Ollama auto-reconnect**: If Ollama is unreachable at MCP server startup, the server falls back to local GGUF embeddings and now retries Ollama every 60 seconds. When Ollama becomes available, the embedding provider is hot-swapped without restart.
+
 ## [2026.1.10] - 2026-02-24
 
 ### Fixed
