@@ -195,8 +195,14 @@ export interface Store {
   searchFTS(query: string, limit?: number, collection?: string, projectHash?: string): SearchResult[];
   searchVec(query: string, embedding: number[], limit?: number, collection?: string, projectHash?: string): SearchResult[];
   
-  getCachedResult(hash: string): string | null;
-  setCachedResult(hash: string, result: string): void;
+  getCachedResult(hash: string, projectHash?: string): string | null;
+  setCachedResult(hash: string, result: string, projectHash?: string, type?: string): void;
+  clearCache(projectHash?: string, type?: string): number;
+  getCacheStats(): Array<{ type: string; projectHash: string; count: number }>;
+  
+  getQueryEmbeddingCache(query: string): number[] | null;
+  setQueryEmbeddingCache(query: string, embedding: number[]): void;
+  clearQueryEmbeddingCache(): void;
   
   getIndexHealth(): IndexHealth;
   getHashesNeedingEmbedding(projectHash?: string): Array<{ hash: string; body: string; path: string }>;

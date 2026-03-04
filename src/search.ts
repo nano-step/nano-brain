@@ -181,7 +181,7 @@ export async function hybridSearch(
   
   if (useExpansion && expander) {
     const expansionCacheKey = cacheHash('expand', query);
-    const cached = store.getCachedResult(expansionCacheKey);
+    const cached = store.getCachedResult(expansionCacheKey, projectHash);
     
     if (cached) {
       try {
@@ -193,7 +193,7 @@ export async function hybridSearch(
     } else {
       try {
         const variants = await expander.expand(query);
-        store.setCachedResult(expansionCacheKey, JSON.stringify(variants));
+        store.setCachedResult(expansionCacheKey, JSON.stringify(variants), projectHash, 'expand');
         queries = [query, ...variants];
       } catch {
         queries = [query];
@@ -201,26 +201,42 @@ export async function hybridSearch(
     }
   }
   
-  const allResultSets: SearchResult[][] = [];
-  const weights: number[] = [];
-  
-  for (let i = 0; i < queries.length; i++) {
-    const q = queries[i];
+  const searchPromises = queries.map(async (q, i) => {
     const isOriginal = i === 0;
     const weight = isOriginal ? 2 : 1;
     
     const ftsResults = store.searchFTS(q, topK, collection, projectHash);
-    allResultSets.push(ftsResults);
-    weights.push(weight);
     
+    let vecResults: SearchResult[] = [];
     if (embedder) {
       try {
-        const { embedding } = await embedder.embed(q);
-        const vecResults = store.searchVec(q, embedding, topK, collection, projectHash);
-        allResultSets.push(vecResults);
-        weights.push(weight);
+        let embedding: number[];
+        const cached = store.getQueryEmbeddingCache(q);
+        if (cached) {
+          embedding = cached;
+        } else {
+          const result = await embedder.embed(q);
+          embedding = result.embedding;
+          store.setQueryEmbeddingCache(q, embedding);
+        }
+        vecResults = store.searchVec(q, embedding, topK, collection, projectHash);
       } catch {
       }
+    }
+    
+    return { ftsResults, vecResults, weight };
+  });
+
+  const searchResults = await Promise.all(searchPromises);
+
+  const allResultSets: SearchResult[][] = [];
+  const weights: number[] = [];
+  for (const { ftsResults, vecResults, weight } of searchResults) {
+    allResultSets.push(ftsResults);
+    weights.push(weight);
+    if (vecResults.length > 0) {
+      allResultSets.push(vecResults);
+      weights.push(weight);
     }
   }
   
@@ -235,7 +251,7 @@ export async function hybridSearch(
   if (useReranking && reranker && candidates.length > 0) {
     const candidateIds = candidates.map(c => c.id).join(',');
     const rerankCacheKey = cacheHash('rerank', query, candidateIds);
-    const cachedRerank = store.getCachedResult(rerankCacheKey);
+    const cachedRerank = store.getCachedResult(rerankCacheKey, projectHash);
     
     let rerankScores = new Map<string, number>();
     
@@ -263,7 +279,7 @@ export async function hybridSearch(
           file: r.file,
           score: r.score,
         }));
-        store.setCachedResult(rerankCacheKey, JSON.stringify(cacheData));
+        store.setCachedResult(rerankCacheKey, JSON.stringify(cacheData), projectHash, 'rerank');
       } catch {
       }
     }

@@ -91,9 +91,12 @@ export function createStore(dbPath: string): Store {
     );
 
     CREATE TABLE IF NOT EXISTS llm_cache (
-      hash TEXT PRIMARY KEY,
+      hash TEXT NOT NULL,
+      project_hash TEXT NOT NULL DEFAULT 'global',
+      type TEXT NOT NULL DEFAULT 'general',
       result TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (hash, project_hash)
     );
   `);
   
@@ -111,6 +114,24 @@ export function createStore(dbPath: string): Store {
     }
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_documents_project_hash ON documents(project_hash, active)");
+  
+  const hasProjectHashCol = (db.pragma('table_info(llm_cache)') as Array<{name: string}>).some(c => c.name === 'project_hash');
+  if (!hasProjectHashCol) {
+    db.exec(`
+      ALTER TABLE llm_cache RENAME TO llm_cache_old;
+      CREATE TABLE llm_cache (
+        hash TEXT NOT NULL,
+        project_hash TEXT NOT NULL DEFAULT 'global',
+        type TEXT NOT NULL DEFAULT 'general',
+        result TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (hash, project_hash)
+      );
+      INSERT INTO llm_cache (hash, project_hash, type, result, created_at)
+        SELECT hash, 'global', 'general', result, created_at FROM llm_cache_old;
+      DROP TABLE llm_cache_old;
+    `);
+  }
   
   if (vecAvailable) {
     try {
@@ -219,11 +240,11 @@ export function createStore(dbPath: string): Store {
   `);
   
   const getCachedResultStmt = db.prepare(`
-    SELECT result FROM llm_cache WHERE hash = ?
+    SELECT result FROM llm_cache WHERE hash = ? AND project_hash = ?
   `);
   
   const setCachedResultStmt = db.prepare(`
-    INSERT OR REPLACE INTO llm_cache (hash, result) VALUES (?, ?)
+    INSERT OR REPLACE INTO llm_cache (hash, project_hash, type, result) VALUES (?, ?, ?, ?)
   `);
   
   const getDocumentCountStmt = db.prepare(`
@@ -409,13 +430,14 @@ export function createStore(dbPath: string): Store {
         if (needsRebuild) {
           db.exec(`DROP TABLE IF EXISTS vectors_vec`);
           db.exec(`DELETE FROM content_vectors`);
+          db.exec(`DELETE FROM llm_cache`);
           db.exec(`
             CREATE VIRTUAL TABLE vectors_vec USING vec0(
               hash_seq TEXT PRIMARY KEY,
               embedding float[${dimensions}] distance_metric=cosine
             );
           `);
-          console.error(`[store] Recreated vectors_vec with ${dimensions} dimensions, cleared content_vectors for re-embedding`);
+          console.error(`[store] Recreated vectors_vec with ${dimensions} dimensions, cleared content_vectors and llm_cache for re-embedding`);
         }
       } catch (err) {
         console.warn('Failed to recreate vector table:', err);
@@ -460,9 +482,11 @@ export function createStore(dbPath: string): Store {
       
       try {
         let sql = `
-          SELECT v.hash_seq, v.distance, d.id, d.path, d.collection, d.title, d.hash, d.agent
+          SELECT v.hash_seq, v.distance, d.id, d.path, d.collection, d.title, d.hash, d.agent,
+                 substr(c.body, 1, 700) as snippet
           FROM vectors_vec v
           JOIN documents d ON substr(v.hash_seq, 1, instr(v.hash_seq, ':') - 1) = d.hash
+          LEFT JOIN content c ON c.hash = d.hash
           WHERE v.embedding MATCH ?
             AND k = ?
             AND d.active = 1
@@ -487,7 +511,7 @@ export function createStore(dbPath: string): Store {
           path: row.path as string,
           collection: row.collection as string,
           title: row.title as string,
-          snippet: '',
+          snippet: (row.snippet as string) || '',
           score: 1 - (row.distance as number),
           startLine: 0,
           endLine: 0,
@@ -500,13 +524,33 @@ export function createStore(dbPath: string): Store {
       }
     },
     
-    getCachedResult(hash: string): string | null {
-      const row = getCachedResultStmt.get(hash) as { result: string } | undefined;
+    getCachedResult(hash: string, projectHash: string = 'global'): string | null {
+      const row = getCachedResultStmt.get(hash, projectHash) as { result: string } | undefined;
       return row?.result ?? null;
     },
     
-    setCachedResult(hash: string, result: string) {
-      setCachedResultStmt.run(hash, result);
+    setCachedResult(hash: string, result: string, projectHash: string = 'global', type: string = 'general') {
+      setCachedResultStmt.run(hash, projectHash, type, result);
+    },
+    
+    getQueryEmbeddingCache(query: string): number[] | null {
+      const key = computeHash('qembed:' + query);
+      const cached = getCachedResultStmt.get(key, 'global') as { result: string } | undefined;
+      if (!cached) return null;
+      try {
+        return JSON.parse(cached.result) as number[];
+      } catch {
+        return null;
+      }
+    },
+    
+    setQueryEmbeddingCache(query: string, embedding: number[]) {
+      const key = computeHash('qembed:' + query);
+      setCachedResultStmt.run(key, 'global', 'qembed', JSON.stringify(embedding));
+    },
+    
+    clearQueryEmbeddingCache() {
+      db.exec("DELETE FROM llm_cache WHERE type = 'qembed'");
     },
     
     getIndexHealth(): IndexHealth {
@@ -600,6 +644,9 @@ export function createStore(dbPath: string): Store {
           db.prepare('DELETE FROM content WHERE hash = ?').run(hash);
         }
 
+        // 6. Delete cache entries for this workspace
+        db.prepare('DELETE FROM llm_cache WHERE project_hash = ?').run(projectHash);
+
         return { documentsDeleted: deleteResult.changes, embeddingsDeleted };
       });
       return transaction();
@@ -637,6 +684,29 @@ export function createStore(dbPath: string): Store {
       `);
       const row = stmt.get(collection) as { totalSize: number } | undefined;
       return row?.totalSize ?? 0;
+    },
+    
+    clearCache(projectHash?: string, type?: string): number {
+      let sql = 'DELETE FROM llm_cache';
+      const conditions: string[] = [];
+      const params: string[] = [];
+      if (projectHash) {
+        conditions.push('project_hash = ?');
+        params.push(projectHash);
+      }
+      if (type) {
+        conditions.push('type = ?');
+        params.push(type);
+      }
+      if (conditions.length > 0) {
+        sql += ' WHERE ' + conditions.join(' AND ');
+      }
+      const result = db.prepare(sql).run(...params);
+      return result.changes;
+    },
+    
+    getCacheStats(): Array<{ type: string; projectHash: string; count: number }> {
+      return db.prepare('SELECT type, project_hash as projectHash, COUNT(*) as count FROM llm_cache GROUP BY type, project_hash ORDER BY count DESC').all() as Array<{ type: string; projectHash: string; count: number }>;
     },
   };
 }

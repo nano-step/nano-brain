@@ -154,7 +154,15 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
       if (providers.embedder) {
         try {
-          const { embedding } = await providers.embedder.embed(query);
+          let embedding: number[];
+          const cached = store.getQueryEmbeddingCache(query);
+          if (cached) {
+            embedding = cached;
+          } else {
+            const result = await providers.embedder.embed(query);
+            embedding = result.embedding;
+            store.setQueryEmbeddingCache(query, embedding);
+          }
           const results = store.searchVec(query, embedding, limit, collection, effectiveWorkspace);
           return {
             content: [
@@ -345,7 +353,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       // Probe embedding server connectivity
       const embeddingConfig = deps.embeddingConfig
       const ollamaUrl = embeddingConfig?.url || detectOllamaUrl()
-      const ollamaModel = embeddingConfig?.model || 'nomic-embed-text'
+      const ollamaModel = embeddingConfig?.model || 'mxbai-embed-large'
       const provider = embeddingConfig?.provider || 'ollama'
       let embeddingHealth: { provider: string; url: string; model: string; reachable: boolean; models?: string[]; error?: string } | undefined
       
@@ -397,7 +405,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           )
           console.error(`[codebase] Indexing complete: ${result.filesScanned} scanned, ${result.filesIndexed} indexed, ${result.filesSkippedUnchanged} unchanged`)
           if (providers.embedder) {
-            const embedded = await embedPendingCodebase(store, providers.embedder, 10, effectiveProjectHash)
+            const embedded = await embedPendingCodebase(store, providers.embedder, 50, effectiveProjectHash)
             console.error(`[codebase] Embedding complete: ${embedded} chunks embedded`)
           }
         } catch (err) {
@@ -711,7 +719,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const embeddingConfig = config?.embedding;
   if (!embeddingConfig || embeddingConfig.provider !== 'local') {
     const ollamaUrl = embeddingConfig?.url || detectOllamaUrl();
-    const ollamaModel = embeddingConfig?.model || 'nomic-embed-text';
+    const ollamaModel = embeddingConfig?.model || 'mxbai-embed-large';
     let startedWithLocalGGUF = false;
     
     // Check after initial provider loads whether we're using local GGUF
