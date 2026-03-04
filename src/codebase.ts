@@ -338,15 +338,16 @@ export async function embedPendingCodebase(
   let embedded = 0
   const failedHashes = new Set<string>()
   while (true) {
+    const allPending = store.getHashesNeedingEmbedding(projectHash)
     const batch: Array<{ hash: string; body: string; path: string }> = []
-    for (let i = 0; i < batchSize; i++) {
-      const row = store.getNextHashNeedingEmbedding(projectHash)
-      if (!row) break
-      if (failedHashes.has(row.hash)) break // all remaining docs already failed
+    for (const row of allPending) {
+      if (batch.length >= batchSize) break
+      if (failedHashes.has(row.hash)) continue
       batch.push(row)
     }
     if (batch.length === 0) break
 
+    const maxChunksPerBatch = 200
     const allChunks: Array<{ hash: string; seq: number; pos: number; text: string }> = []
     for (const row of batch) {
       const chunks = chunkMarkdown(row.body, row.hash)
@@ -358,6 +359,7 @@ export async function embedPendingCodebase(
           text: chunk.text.length > maxChars ? chunk.text.substring(0, maxChars) : chunk.text,
         })
       }
+      if (allChunks.length >= maxChunksPerBatch) break
     }
 
     const texts = allChunks.map(c => c.text)

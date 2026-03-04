@@ -158,7 +158,6 @@ export async function checkOpenAIHealth(
         model,
         input: ['test'],
         input_type: 'query',
-        encoding_format: 'float',
       }),
       signal: AbortSignal.timeout(10000),
     });
@@ -372,7 +371,6 @@ class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
       model: this.model,
       input: [this.truncate(text)],
       input_type: 'query',
-      encoding_format: 'float',
     }, 30000);
 
     const embedding = data.data[0]?.embedding;
@@ -388,36 +386,61 @@ class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
   }
 
   async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
-    const data = await this.fetchWithRetry({
-      model: this.model,
-      input: texts.map(text => this.truncate(text)),
-      input_type: 'passage',
-      encoding_format: 'float',
-    }, 120000);
+    const truncated = texts.map(text => this.truncate(text));
 
-    const results = new Map<number, EmbeddingResult>();
-    for (const item of data.data) {
-      const embedding = item.embedding;
-      if (!embedding) continue;
-      this.setDimensions(embedding);
-      results.set(item.index, {
-        embedding,
-        model: this.model,
-        dimensions: this.dimensions ?? embedding.length,
-      });
-    }
+    // Sub-batch to stay under API token limits (~100K token budget, ~3 chars/token)
+    const maxCharsPerBatch = 200_000;
+    const subBatches: string[][] = [];
+    let currentBatch: string[] = [];
+    let currentChars = 0;
 
-    if (results.size !== texts.length) {
-      throw new Error('OpenAI-compatible embedBatch failed: missing embeddings');
-    }
-
-    return texts.map((_, index) => {
-      const result = results.get(index);
-      if (!result) {
-        throw new Error('OpenAI-compatible embedBatch failed: missing embedding index');
+    for (const text of truncated) {
+      if (currentBatch.length > 0 && currentChars + text.length > maxCharsPerBatch) {
+        subBatches.push(currentBatch);
+        currentBatch = [];
+        currentChars = 0;
       }
-      return result;
-    });
+      currentBatch.push(text);
+      currentChars += text.length;
+    }
+    if (currentBatch.length > 0) {
+      subBatches.push(currentBatch);
+    }
+
+    const allResults: EmbeddingResult[] = [];
+    for (const batch of subBatches) {
+      const data = await this.fetchWithRetry({
+        model: this.model,
+        input: batch,
+        input_type: 'document',
+      }, 120000);
+
+      const batchResults = new Map<number, EmbeddingResult>();
+      for (const item of data.data) {
+        const embedding = item.embedding;
+        if (!embedding) continue;
+        this.setDimensions(embedding);
+        batchResults.set(item.index, {
+          embedding,
+          model: this.model,
+          dimensions: this.dimensions ?? embedding.length,
+        });
+      }
+
+      if (batchResults.size !== batch.length) {
+        throw new Error('OpenAI-compatible embedBatch failed: missing embeddings');
+      }
+
+      for (let i = 0; i < batch.length; i++) {
+        const result = batchResults.get(i);
+        if (!result) {
+          throw new Error('OpenAI-compatible embedBatch failed: missing embedding index');
+        }
+        allResults.push(result);
+      }
+    }
+
+    return allResults;
   }
 
   getDimensions(): number {

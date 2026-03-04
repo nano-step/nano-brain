@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1.21] - 2026-03-04
+
+### Fixed
+
+- **Voyage AI compatibility**: Removed unsupported `encoding_format` parameter and corrected `input_type` from "passage" to "document".
+- **Batch embedding loop correctness**: Use `getHashesNeedingEmbedding()` instead of repeatedly re-fetching the same hash, preventing re-processing.
+- **OpenAI-compatible batch limits**: Added sub-batching to stay under API token limits (200K chars/request) and capped embed batch chunk count at 200.
+
 ## [2026.1.20] - 2026-03-04
 
 ### Fixed
