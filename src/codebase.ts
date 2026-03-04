@@ -1,6 +1,6 @@
 import type { Store, CodebaseConfig, CodebaseIndexResult } from './types.js'
 import { computeHash } from './store.js'
-import { chunkSourceCode } from './chunker.js'
+import { chunkSourceCode, chunkMarkdown } from './chunker.js'
 import { parseSize } from './storage.js'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -328,7 +328,7 @@ export async function indexCodebase(
   }
 }
 
-const MAX_EMBED_CHARS = 1800
+const MAX_EMBED_CHARS = 6000
 
 function truncateForEmbedding(text: string): string {
   if (text.length <= MAX_EMBED_CHARS) return text
@@ -337,8 +337,8 @@ function truncateForEmbedding(text: string): string {
 
 export async function embedPendingCodebase(
   store: Store,
-  embedder: { embed(text: string): Promise<{ embedding: number[] }>; embedBatch?(texts: string[]): Promise<Array<{ embedding: number[] }>> },
-  batchSize: number = 10,
+  embedder: { embed(text: string): Promise<{ embedding: number[]; model?: string }>; embedBatch?(texts: string[]): Promise<Array<{ embedding: number[] }>>; getModel?(): string },
+  batchSize: number = 50,
   projectHash?: string
 ): Promise<number> {
   let embedded = 0
@@ -351,40 +351,48 @@ export async function embedPendingCodebase(
     }
     if (batch.length === 0) break
 
-    const texts = batch.map(row => truncateForEmbedding(row.body))
+    const allChunks: Array<{ hash: string; seq: number; pos: number; text: string }> = []
+    for (const row of batch) {
+      const chunks = chunkMarkdown(row.body, row.hash)
+      for (const chunk of chunks) {
+        allChunks.push({
+          hash: row.hash,
+          seq: chunk.seq,
+          pos: chunk.pos,
+          text: truncateForEmbedding(chunk.text),
+        })
+      }
+    }
 
-    console.error(`[embed] Batch ${batch.length} docs: ${batch.map((b, i) => `${b.path.split('/').pop()}(${texts[i].length}ch)`).join(', ')}`)
+    const texts = allChunks.map(c => c.text)
+    const modelName = embedder.getModel?.() || 'unknown'
+
+    console.error(`[embed] Batch ${batch.length} docs, ${allChunks.length} chunks`)
     try {
-      if (embedder.embedBatch && batch.length > 1) {
+      if (embedder.embedBatch && texts.length > 1) {
         const results = await embedder.embedBatch(texts)
-        for (let i = 0; i < batch.length; i++) {
-          store.insertEmbedding(batch[i].hash, 0, 0, results[i].embedding, 'nomic-embed-text-v1.5')
+        for (let i = 0; i < allChunks.length; i++) {
+          store.insertEmbedding(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, results[i].embedding, modelName)
         }
-        embedded += batch.length
       } else {
-        for (let i = 0; i < batch.length; i++) {
-          try {
-            const result = await embedder.embed(texts[i])
-            store.insertEmbedding(batch[i].hash, 0, 0, result.embedding, 'nomic-embed-text-v1.5')
-            embedded++
-          } catch {
-            console.warn(`[embed] Failed to embed ${batch[i].path}, skipping`)
-            continue
-          }
+        for (let i = 0; i < allChunks.length; i++) {
+          const result = await embedder.embed(texts[i])
+          store.insertEmbedding(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, result.embedding, result.model || modelName)
         }
       }
+      embedded += batch.length
     } catch (err) {
       console.warn('[embed] Batch failed, falling back to sequential:', err)
-      for (const item of batch) {
+      for (let i = 0; i < allChunks.length; i++) {
         try {
-          const result = await embedder.embed(truncateForEmbedding(item.body))
-          store.insertEmbedding(item.hash, 0, 0, result.embedding, 'nomic-embed-text-v1.5')
-          embedded++
+          const result = await embedder.embed(texts[i])
+          store.insertEmbedding(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, result.embedding, result.model || modelName)
         } catch {
-          console.warn(`[embed] Skipping ${item.path}`)
+          console.warn(`[embed] Skipping chunk ${allChunks[i].hash}:${allChunks[i].seq}`)
           continue
         }
       }
+      embedded += batch.length
     }
 
     if (embedded > 0 && embedded % 50 === 0) {

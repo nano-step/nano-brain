@@ -135,7 +135,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
         await indexCodebase(store, workspaceRoot, codebaseConfig, projectHash, embedder)
       }
       if (embedder) {
-        await embedPendingCodebase(store, embedder, 10, projectHash)
+        await embedPendingCodebase(store, embedder, 50, projectHash)
       }
       
       dirty = false
@@ -291,7 +291,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
         if (stopped || isEmbedding) return;
         isEmbedding = true;
         try {
-          const count = await embedPendingCodebase(store, embedder, 10, projectHash);
+          const count = await embedPendingCodebase(store, embedder, 50, projectHash);
           if (count > 0) {
             console.log(`[embed] Embedded ${count} document(s)`);
           }
@@ -314,7 +314,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
     setTimeout(async () => {
       isEmbedding = true;
       try {
-        const count = await embedPendingCodebase(store, embedder, 10, projectHash);
+        const count = await embedPendingCodebase(store, embedder, 50, projectHash);
         if (count > 0) {
           console.log(`[embed] Initial embedding: ${count} document(s)`);
         }

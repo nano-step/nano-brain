@@ -110,8 +110,8 @@ function formatDocumentPrompt(title: string, content: string): string {
 }
 
 // Ollama's truncate:true is broken (github.com/ollama/ollama/issues/14186)
-// Client-side truncation: 1800 chars ≈ ~450 tokens, safe for 2048 context
-const OLLAMA_MAX_CHARS = 1800;
+// Client-side truncation: 6000 chars for larger context models
+const OLLAMA_MAX_CHARS = 6000;
 
 function truncateForOllama(text: string): string {
   if (text.length <= OLLAMA_MAX_CHARS) return text;
@@ -150,6 +150,7 @@ export async function checkOllamaHealth(url: string): Promise<{ reachable: boole
 class OllamaEmbeddingProvider implements EmbeddingProvider {
   private url: string;
   private model: string;
+  private dimensions: number = DIMENSIONS;
   constructor(url: string, model: string) {
     this.url = url.replace(/\/$/, '');
     this.model = model;
@@ -170,10 +171,11 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
     }
 
     const data = await response.json() as { embeddings: number[][] };
+    this.dimensions = data.embeddings[0].length;
     return {
       embedding: data.embeddings[0],
       model: this.model,
-      dimensions: data.embeddings[0].length,
+      dimensions: this.dimensions,
     };
   }
   async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
@@ -192,6 +194,9 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
     }
 
     const data = await response.json() as { embeddings: number[][] };
+    if (data.embeddings.length > 0) {
+      this.dimensions = data.embeddings[0].length;
+    }
     return data.embeddings.map(emb => ({
       embedding: emb,
       model: this.model,
@@ -199,7 +204,7 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
     }));
   }
   getDimensions(): number {
-    return DIMENSIONS;
+    return this.dimensions;
   }
   getModel(): string {
     return this.model;
@@ -281,7 +286,7 @@ export async function createEmbeddingProvider(
   // Try Ollama if configured (or by default)
   if (!config || config.provider !== 'local') {
     const url = config?.url || detectOllamaUrl();
-    const model = config?.model || 'nomic-embed-text';
+    const model = config?.model || 'mxbai-embed-large';
 
     try {
       // Health check — verify Ollama is reachable
