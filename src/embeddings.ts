@@ -141,6 +141,37 @@ export async function checkOllamaHealth(url: string): Promise<{ reachable: boole
   }
 }
 
+export async function checkOpenAIHealth(
+  baseUrl: string,
+  apiKey: string,
+  model: string
+): Promise<{ reachable: boolean; model?: string; error?: string }> {
+  const url = baseUrl.replace(/\/$/, '');
+  try {
+    const resp = await fetch(`${url}/v1/embeddings`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        input: ['test'],
+        input_type: 'query',
+        encoding_format: 'float',
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (resp.ok) {
+      return { reachable: true, model };
+    }
+    const errorText = await resp.text();
+    return { reachable: false, error: errorText || `HTTP ${resp.status}` };
+  } catch (err) {
+    return { reachable: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 class OllamaEmbeddingProvider implements EmbeddingProvider {
   private url: string;
   private model: string;

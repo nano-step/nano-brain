@@ -2,7 +2,7 @@ import { startServer } from './server.js';
 import { createStore, computeHash, indexDocument, extractProjectHashFromPath } from './store.js';
 import { loadCollectionConfig, addCollection, removeCollection, renameCollection, listCollections, getCollections, scanCollectionFiles, saveCollectionConfig } from './collections.js';
 import { harvestSessions } from './harvester.js';
-import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth } from './embeddings.js';
+import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth, checkOpenAIHealth } from './embeddings.js';
 import { hybridSearch } from './search.js';
 import { indexCodebase, embedPendingCodebase } from './codebase.js';
 import { handleBench } from './bench.js';
@@ -312,7 +312,15 @@ async function handleStatus(globalOpts: GlobalOptions): Promise<void> {
   console.log(`  URL:       ${ollamaUrl}`);
   console.log(`  Model:     ${ollamaModel}`);
   
-  if (provider !== 'local') {
+  if (provider === 'openai') {
+    const openAiHealth = await checkOpenAIHealth(ollamaUrl, embeddingConfig?.apiKey || '', ollamaModel);
+    if (openAiHealth.reachable) {
+      console.log(`  Status:    ✅ connected`);
+      console.log(`  Model:     ✅ ${openAiHealth.model}`);
+    } else {
+      console.log(`  Status:    ❌ unreachable (${openAiHealth.error})`);
+    }
+  } else if (provider !== 'local') {
     const ollamaHealth = await checkOllamaHealth(ollamaUrl);
     if (ollamaHealth.reachable) {
       const hasModel = ollamaHealth.models?.some(m => m.startsWith(ollamaModel));
@@ -399,13 +407,15 @@ async function handleInit(globalOpts: GlobalOptions, commandArgs: string[]): Pro
     console.log(`ℹ️  Config exists: ${configPath}`);
   }
   
-  const ollamaUrl = config.embedding?.url || detectOllamaUrl();
-  const ollamaHealth = await checkOllamaHealth(ollamaUrl);
-  
-  if (ollamaHealth.reachable) {
-    console.log(`✅ Ollama reachable at ${ollamaUrl}`);
-  } else {
-    console.log(`⚠️  Ollama not reachable at ${ollamaUrl} — will use local GGUF fallback`);
+  if (config.embedding?.provider !== 'openai') {
+    const ollamaUrl = config.embedding?.url || detectOllamaUrl();
+    const ollamaHealth = await checkOllamaHealth(ollamaUrl);
+    
+    if (ollamaHealth.reachable) {
+      console.log(`✅ Ollama reachable at ${ollamaUrl}`);
+    } else {
+      console.log(`⚠️  Ollama not reachable at ${ollamaUrl} — will use local GGUF fallback`);
+    }
   }
 
   if (all && !force) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1.19] - 2026-03-04
+
+### Fixed
+
+- **Status/init health check for OpenAI provider**: `nano-brain status` and `init` no longer use the Ollama health check (`/api/tags`) for OpenAI-compatible providers. Now tests the actual embedding endpoint, showing correct ✅/❌ status.
+
 ## [2026.1.18] - 2026-03-04
 
 ### Added
