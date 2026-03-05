@@ -7,11 +7,16 @@ import { hybridSearch, parseSearchConfig } from './search.js';
 import { indexCodebase, embedPendingCodebase } from './codebase.js';
 import { findCycles } from './graph.js';
 import { handleBench } from './bench.js';
+import { resolveHostUrl } from './host.js';
+import { QdrantVecStore } from './providers/qdrant.js';
+import { createVectorStore } from './vector-store.js';
 import type { SearchResult } from './types.js';
+import type { VectorPoint } from './vector-store.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import { execSync } from 'child_process';
 import { log, initLogger } from './logger.js';
 
 function resolveOpenCodeStorageDir(): string {
@@ -150,6 +155,14 @@ nano-brain - Memory system with hybrid search
     --json          Output as JSON
     --save          Save results as baseline
     --compare       Compare with last saved baseline
+  qdrant            Manage Qdrant vector store
+    up              Start Qdrant via Docker, configure as vector provider
+    down            Stop Qdrant, switch back to sqlite-vec
+    status          Show Qdrant container and collection health
+    migrate         Migrate vectors from SQLite to Qdrant
+      --workspace=<path>  Migrate specific workspace only
+      --batch-size=<n>    Vectors per batch (default: 500)
+      --dry-run           Show counts without migrating
 Logging Config (~/.nano-brain/config.yml):
   logging:
     enabled: true               # enable file logging (or use NANO_BRAIN_LOG=1 env)
@@ -744,6 +757,10 @@ async function handleSearch(
     results = store.searchFTS(query, { limit, collection, projectHash, tags, since, until });
   } else if (mode === 'vec') {
     const searchConfig = loadCollectionConfig(globalOpts.configPath);
+    if (searchConfig?.vector?.provider === 'qdrant' && searchConfig.vector.url) {
+      const vs = createVectorStore(searchConfig.vector);
+      store.setVectorStore(vs);
+    }
     const provider = await createEmbeddingProvider({ embeddingConfig: searchConfig?.embedding });
     if (!provider) {
       console.error('Vector search requires embedding model');
@@ -752,10 +769,14 @@ async function handleSearch(
     }
     
     const { embedding } = await provider.embed(query);
-    results = store.searchVec(query, embedding, { limit, collection, projectHash, tags, since, until });
+    results = await store.searchVecAsync(query, embedding, { limit, collection, projectHash, tags, since, until });
     provider.dispose();
   } else {
     const searchConfig = loadCollectionConfig(globalOpts.configPath);
+    if (searchConfig?.vector?.provider === 'qdrant' && searchConfig.vector.url) {
+      const vs = createVectorStore(searchConfig.vector);
+      store.setVectorStore(vs);
+    }
     const provider = await createEmbeddingProvider({ embeddingConfig: searchConfig?.embedding });
     results = await hybridSearch(
       store,
@@ -1301,6 +1322,345 @@ function printLastLines(filePath: string, n: number): void {
   }
 }
 
+interface VectorConfigSection {
+  provider: 'sqlite-vec' | 'qdrant';
+  url?: string;
+  apiKey?: string;
+  collection?: string;
+}
+
+async function handleQdrant(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
+  const subcommand = commandArgs[0];
+
+  if (!subcommand) {
+    console.error('Missing qdrant subcommand (up, down, status, migrate)');
+    process.exit(1);
+  }
+
+  log('cli', 'qdrant subcommand=' + subcommand);
+
+  const composeSource = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'docker-compose.qdrant.yml');
+  const composeTarget = path.join(NANO_BRAIN_HOME, 'docker-compose.qdrant.yml');
+
+  switch (subcommand) {
+    case 'up': {
+      if (!fs.existsSync(composeTarget)) {
+        if (!fs.existsSync(composeSource)) {
+          console.error('❌ docker-compose.qdrant.yml not found in package');
+          process.exit(1);
+        }
+        fs.mkdirSync(path.dirname(composeTarget), { recursive: true });
+        fs.copyFileSync(composeSource, composeTarget);
+      }
+
+      console.log('Starting Qdrant...');
+      try {
+        execSync(`docker compose -f "${composeTarget}" up -d`, { stdio: 'inherit' });
+      } catch {
+        console.error('❌ Failed to start Qdrant. Is Docker running?');
+        process.exit(1);
+      }
+
+      const healthUrl = resolveHostUrl('http://localhost:6333/healthz');
+      let healthy = false;
+      for (let i = 0; i < 5; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const res = await fetch(healthUrl);
+          if (res.ok) {
+            healthy = true;
+            break;
+          }
+        } catch {
+        }
+        console.log(`Waiting for Qdrant... (${i + 1}/5)`);
+      }
+
+      if (!healthy) {
+        console.error('❌ Qdrant failed to start. Check: docker logs nano-brain-qdrant');
+        process.exit(1);
+      }
+
+      let config = loadCollectionConfig(globalOpts.configPath);
+      if (!config) {
+        config = { collections: {} };
+      }
+      const vectorConfig: VectorConfigSection = {
+        provider: 'qdrant',
+        url: 'http://localhost:6333',
+        collection: 'nano-brain',
+      };
+      config.vector = vectorConfig;
+      saveCollectionConfig(globalOpts.configPath, config);
+
+      console.log('✅ Qdrant is running. Dashboard: http://localhost:6333/dashboard');
+      break;
+    }
+
+    case 'down': {
+      console.log('Stopping Qdrant...');
+      try {
+        execSync(`docker compose -f "${composeTarget}" down`, { stdio: 'inherit' });
+      } catch {
+        console.error('❌ Failed to stop Qdrant');
+        process.exit(1);
+      }
+
+      let config = loadCollectionConfig(globalOpts.configPath);
+      if (config) {
+        const vectorConfig: VectorConfigSection = { provider: 'sqlite-vec' };
+        config.vector = vectorConfig;
+        saveCollectionConfig(globalOpts.configPath, config);
+      }
+
+      console.log('✅ Qdrant stopped. Vector provider switched to sqlite-vec. Data persists in Docker volume.');
+      break;
+    }
+
+    case 'status': {
+      let containerStatus = 'unknown';
+      try {
+        const output = execSync(`docker compose -f "${composeTarget}" ps --format json`, { encoding: 'utf-8' });
+        const lines = output.trim().split('\n').filter(l => l.trim());
+        for (const line of lines) {
+          try {
+            const info = JSON.parse(line);
+            if (info.Name === 'nano-brain-qdrant' || info.Service === 'qdrant') {
+              containerStatus = info.State || info.Status || 'running';
+              break;
+            }
+          } catch {
+          }
+        }
+      } catch {
+        containerStatus = 'not running';
+      }
+
+      console.log('Qdrant Status');
+      console.log('═══════════════════════════════════════════════════');
+      console.log(`Container: ${containerStatus}`);
+
+      const config = loadCollectionConfig(globalOpts.configPath);
+      const vectorConfig = config?.vector;
+      const qdrantUrl = vectorConfig?.url || 'http://localhost:6333';
+      const resolvedUrl = resolveHostUrl(qdrantUrl);
+
+      try {
+        const healthRes = await fetch(`${resolvedUrl}/healthz`);
+        if (!healthRes.ok) {
+          throw new Error(`HTTP ${healthRes.status}`);
+        }
+        console.log(`Health: ✅ reachable at ${resolvedUrl}`);
+
+        try {
+          const collectionRes = await fetch(`${resolvedUrl}/collections/nano-brain`);
+          if (collectionRes.ok) {
+            const collectionData = await collectionRes.json();
+            const result = collectionData.result || collectionData;
+            console.log(`Collection: nano-brain`);
+            console.log(`  Vectors: ${result.points_count ?? result.vectors_count ?? 'unknown'}`);
+            console.log(`  Dimensions: ${result.config?.params?.vectors?.size ?? 'unknown'}`);
+          } else {
+            console.log('Collection: nano-brain (not created yet)');
+          }
+        } catch {
+          console.log('Collection: nano-brain (not created yet)');
+        }
+      } catch {
+        console.log(`Health: ❌ Qdrant is not reachable at ${resolvedUrl}`);
+        if (resolvedUrl !== qdrantUrl) {
+          console.log(`   (config URL ${qdrantUrl} resolved to ${resolvedUrl} inside container)`);
+        }
+        console.log('   Run `npx nano-brain qdrant up` to start.');
+      }
+
+      console.log('');
+      console.log(`Config provider: ${vectorConfig?.provider || 'sqlite-vec (default)'}`);
+      break;
+    }
+
+    case 'migrate': {
+      let workspaceFilter: string | undefined;
+      let batchSize = 500;
+      let dryRun = false;
+
+      for (const arg of commandArgs.slice(1)) {
+        if (arg.startsWith('--workspace=')) {
+          workspaceFilter = arg.substring(12);
+        } else if (arg.startsWith('--batch-size=')) {
+          batchSize = parseInt(arg.substring(13), 10);
+        } else if (arg === '--dry-run') {
+          dryRun = true;
+        }
+      }
+
+      const config = loadCollectionConfig(globalOpts.configPath);
+      const vectorConfig = config?.vector;
+      const qdrantUrl = vectorConfig?.url || 'http://localhost:6333';
+      const resolvedUrl = resolveHostUrl(qdrantUrl);
+
+      try {
+        const healthRes = await fetch(`${resolvedUrl}/healthz`);
+        if (!healthRes.ok) {
+          throw new Error(`HTTP ${healthRes.status}`);
+        }
+      } catch {
+        console.error(`❌ Qdrant is not reachable at ${resolvedUrl}.`);
+        console.error('   Run `npx nano-brain qdrant up` first.');
+        console.error('   If running inside a container, Qdrant must be accessible at host.docker.internal:6333.');
+        process.exit(1);
+      }
+
+      const dataDir = DEFAULT_DB_DIR;
+      if (!fs.existsSync(dataDir)) {
+        console.log('No databases found in ' + dataDir);
+        return;
+      }
+
+      let sqliteFiles = fs.readdirSync(dataDir).filter(f => f.endsWith('.sqlite'));
+      if (workspaceFilter) {
+        sqliteFiles = sqliteFiles.filter(f => f.includes(workspaceFilter));
+      }
+
+      if (sqliteFiles.length === 0) {
+        console.log('No matching databases found');
+        return;
+      }
+
+      console.log(`Found ${sqliteFiles.length} database(s) to migrate`);
+      if (dryRun) {
+        console.log('(dry-run mode - no vectors will be written)');
+      }
+
+      const startTime = Date.now();
+      let totalVectors = 0;
+      let dbCount = 0;
+
+      const Database = (await import('better-sqlite3')).default;
+      const sqliteVec = await import('sqlite-vec');
+
+      for (const sqliteFile of sqliteFiles) {
+        const dbPath = path.join(dataDir, sqliteFile);
+        const db = new Database(dbPath);
+
+        try {
+          sqliteVec.load(db);
+        } catch {
+          console.log(`[${sqliteFile}] sqlite-vec not available, skipping`);
+          db.close();
+          continue;
+        }
+
+        let vectorCount = 0;
+        try {
+          const countStmt = db.prepare(`
+            SELECT COUNT(*) as cnt FROM content_vectors cv
+            JOIN vectors_vec vv ON cv.hash || ':' || cv.seq = vv.hash_seq
+          `);
+          const countRow = countStmt.get() as { cnt: number };
+          vectorCount = countRow.cnt;
+        } catch {
+          console.log(`[${sqliteFile}] no vector tables, skipping`);
+          db.close();
+          continue;
+        }
+
+        if (vectorCount === 0) {
+          console.log(`[${sqliteFile}] 0 vectors, skipping`);
+          db.close();
+          continue;
+        }
+
+        if (dryRun) {
+          console.log(`[${sqliteFile}] ${vectorCount} vectors (dry-run)`);
+          totalVectors += vectorCount;
+          dbCount++;
+          db.close();
+          continue;
+        }
+
+        const qdrantStore = new QdrantVecStore({
+          url: resolvedUrl,
+          collection: vectorConfig?.collection || 'nano-brain',
+        });
+
+        const selectStmt = db.prepare(`
+          SELECT cv.hash, cv.seq, cv.pos, cv.model, vv.embedding,
+                 MIN(d.collection) as collection, MIN(d.project_hash) as project_hash
+          FROM content_vectors cv
+          JOIN vectors_vec vv ON cv.hash || ':' || cv.seq = vv.hash_seq
+          LEFT JOIN documents d ON cv.hash = d.hash AND d.active = 1
+          GROUP BY cv.hash, cv.seq
+        `);
+
+        const rows = selectStmt.all() as Array<{
+          hash: string;
+          seq: number;
+          pos: number;
+          model: string;
+          project_hash: string | null;
+          embedding: Buffer;
+          collection: string | null;
+        }>;
+
+        let migrated = 0;
+        const batch: VectorPoint[] = [];
+
+        for (const row of rows) {
+          const embeddingArray = Array.from(new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4));
+
+          const point: VectorPoint = {
+            id: `${row.hash}:${row.seq}`,
+            embedding: embeddingArray,
+            metadata: {
+              hash: row.hash,
+              seq: row.seq,
+              pos: row.pos,
+              model: row.model,
+              collection: row.collection || undefined,
+              projectHash: row.project_hash || undefined,
+            },
+          };
+
+          batch.push(point);
+
+          if (batch.length >= batchSize) {
+            await qdrantStore.batchUpsert(batch);
+            migrated += batch.length;
+            console.log(`[${sqliteFile}] ${migrated}/${vectorCount} vectors migrated...`);
+            batch.length = 0;
+          }
+        }
+
+        if (batch.length > 0) {
+          await qdrantStore.batchUpsert(batch);
+          migrated += batch.length;
+        }
+
+        console.log(`[${sqliteFile}] ${migrated}/${vectorCount} vectors migrated`);
+        totalVectors += migrated;
+        dbCount++;
+
+        await qdrantStore.close();
+        db.close();
+      }
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      if (dryRun) {
+        console.log(`\n📊 Dry-run complete: ${totalVectors} vectors in ${dbCount} database(s)`);
+      } else {
+        console.log(`\n✅ Migrated ${totalVectors} vectors from ${dbCount} database(s) in ${elapsed}s`);
+      }
+      break;
+    }
+
+    default:
+      console.error(`Unknown qdrant subcommand: ${subcommand}`);
+      console.error('Available: up, down, status, migrate');
+      process.exit(1);
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   
@@ -1360,6 +1720,8 @@ async function main() {
       return handleImpact(globalOpts, commandArgs);
     case 'logs':
       return handleLogs(commandArgs);
+    case 'qdrant':
+      return handleQdrant(globalOpts, commandArgs);
     default:
       console.error(`Unknown command: ${command}`);
       showHelp();
