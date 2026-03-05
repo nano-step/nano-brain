@@ -1,52 +1,48 @@
-# Spec: VectorStore Interface
+# Vector Store Interface Specification
 
-## Overview
+## Purpose
 
 Provider-agnostic interface for vector storage operations, enabling nano-brain to swap between sqlite-vec, Qdrant, and future vector databases without changing search or indexing logic.
 
-## Interface Contract
+## ADDED Requirements
 
-### search(embedding, options?) → VectorSearchResult[]
-- Input: float32 embedding array, optional filters (limit, collection, projectHash)
-- Output: array of { hashSeq, score, hash, seq } sorted by descending score
-- Score: 0-1 normalized (1 = identical, 0 = orthogonal)
-- Filters: collection and projectHash applied as payload filters (Qdrant) or WHERE clauses (SQLite)
+### Requirement: VectorStore interface contract
 
-### upsert(point) → void
-- Input: VectorPoint with id ("hash:seq"), embedding, and metadata
-- Behavior: Insert or replace. Idempotent.
+All vector store providers SHALL implement the VectorStore interface with search, upsert, batchUpsert, delete, deleteByHash, health, and close methods.
 
-### batchUpsert(points[]) → void
-- Input: array of VectorPoints
-- Behavior: Chunked upload (max 500 per batch for Qdrant, unbounded for SQLite)
-- Error handling: fail entire batch on error (no partial writes)
+#### Scenario: Search returns ranked results
+- **WHEN** search is called with a 1024-dim embedding and limit=10
+- **THEN** up to 10 VectorSearchResult objects are returned
+- **THEN** results are sorted by descending cosine similarity score (0-1 normalized)
 
-### delete(id) → void
-- Input: point ID ("hash:seq")
-- Behavior: Remove single vector. No-op if not found.
+#### Scenario: Upsert inserts or replaces a vector
+- **WHEN** upsert is called with id "abc123:0" and a 1024-dim embedding
+- **THEN** the vector is stored with its metadata (hash, seq, pos, model, collection, projectHash)
+- **THEN** calling upsert again with the same id replaces the previous vector
 
-### deleteByHash(hash) → void
-- Input: document hash
-- Behavior: Remove ALL vectors for that document (all seq values)
+#### Scenario: BatchUpsert handles chunked uploads
+- **WHEN** batchUpsert is called with 1200 points
+- **THEN** points are uploaded in chunks (max 500 per batch for Qdrant, unbounded for SQLite)
+- **THEN** all 1200 points are stored after completion
 
-### health() → VectorStoreHealth
-- Output: { ok, provider, vectorCount, dimensions?, error? }
-- Used by: `npx nano-brain status` and MCP `memory_status`
+#### Scenario: DeleteByHash removes all chunks for a document
+- **WHEN** deleteByHash is called with hash "abc123"
+- **THEN** all vectors with that hash are removed (abc123:0, abc123:1, abc123:2, etc.)
 
-### close() → void
-- Cleanup: close connections, flush buffers
-- Called on process exit
+#### Scenario: Health returns provider status
+- **WHEN** health is called
+- **THEN** returns ok=true/false, provider name, vector count, and dimensions
 
-## Provider Requirements
+### Requirement: Provider factory creates correct implementation
 
-Each provider MUST:
-1. Implement all 7 methods
-2. Use cosine distance for similarity
-3. Return scores normalized to 0-1 range
-4. Support concurrent reads (search while upserting)
-5. Handle connection failures gracefully (throw, don't crash)
+The createVectorStore factory SHALL return the correct provider based on config.vector.provider value.
 
-Each provider MAY:
-1. Batch internally (chunking strategy is provider-specific)
-2. Cache connections (connection pooling)
-3. Support additional metadata fields beyond the required set
+#### Scenario: Default provider is sqlite-vec
+- **WHEN** config has no vector section or vector.provider is "sqlite-vec"
+- **THEN** SqliteVecStore is returned
+- **THEN** existing behavior is preserved with zero changes
+
+#### Scenario: Qdrant provider selected
+- **WHEN** config has vector.provider set to "qdrant"
+- **THEN** QdrantVecStore is returned with url and apiKey from config
+- **THEN** collection is created if it does not exist

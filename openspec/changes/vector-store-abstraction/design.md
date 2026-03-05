@@ -221,8 +221,87 @@ export function createVectorStore(config: VectorConfig, db?: Database): VectorSt
 ### embeddings.ts
 - `detectOllamaUrl()` refactored to: `resolveHostUrl('http://localhost:11434')`
 
+## Docker Compose
+
+```yaml
+# docker-compose.qdrant.yml
+# Shipped with nano-brain, stored at ~/.nano-brain/docker-compose.qdrant.yml
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: nano-brain-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC (optional, for future use)
+    volumes:
+      - nano-brain-qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+
+volumes:
+  nano-brain-qdrant-data:
+    driver: local
+```
+
+## CLI: `qdrant` Subcommand
+
+```
+npx nano-brain qdrant <subcommand>
+
+  up        Start Qdrant container (docker compose up -d)
+  down      Stop Qdrant container (docker compose down)
+  status    Show Qdrant health, collection info, vector count
+  migrate   Export vectors from SQLite → Qdrant (zero API cost)
+              --workspace=<path>  Migrate specific workspace (default: all)
+              --batch-size=<n>    Points per batch (default: 500)
+              --dry-run           Show what would be migrated without writing
+```
+
+### `qdrant up` Flow
+1. Copy `docker-compose.qdrant.yml` to `~/.nano-brain/` if not exists
+2. Run `docker compose -f ~/.nano-brain/docker-compose.qdrant.yml up -d`
+3. Wait for health check: `GET http://localhost:6333/healthz`
+4. Auto-update config.yml: set `vector.provider: qdrant`
+
+### `qdrant down` Flow
+1. Run `docker compose -f ~/.nano-brain/docker-compose.qdrant.yml down`
+2. Auto-update config.yml: set `vector.provider: sqlite-vec` (fallback)
+3. Data persists in Docker volume `nano-brain-qdrant-data`
+
+### `qdrant migrate` Flow
+1. Verify Qdrant is running (health check)
+2. Create collection if not exists (1024-dim, cosine distance)
+3. For each workspace SQLite DB:
+   a. Load sqlite-vec extension
+   b. Read vectors from `vectors_vec` JOIN `content_vectors` (hash, seq, pos, model, embedding)
+   c. Batch upsert into Qdrant (500 points/batch) with metadata payload
+   d. Report progress: `[workspace] 21714/21714 vectors migrated`
+4. Total: ~49K vectors across 4 DBs, ~100 batches, takes ~30 seconds
+
+### Migration Data Flow
+```
+SQLite (per workspace DB)                    Qdrant
+┌─────────────────────────┐                  ┌──────────────────────────┐
+│ vectors_vec             │                  │ Collection: nano-brain   │
+│   hash_seq (PK)         │──→ point.id      │   id: "hash:seq"         │
+│   embedding float[1024] │──→ point.vector   │   vector: [1024 floats]  │
+├─────────────────────────┤                  │   payload:               │
+│ content_vectors         │                  │     hash: string         │
+│   hash                  │──→ payload.hash   │     seq: number          │
+│   seq                   │──→ payload.seq    │     pos: number          │
+│   pos                   │──→ payload.pos    │     model: string        │
+│   model                 │──→ payload.model  │     projectHash: string  │
+│   project_hash          │──→ payload.pHash  │     collection: string   │
+└─────────────────────────┘                  └──────────────────────────┘
+```
+
 ## Migration Path
 
-1. **Default**: `provider: sqlite-vec` — zero behavior change, zero new dependencies
-2. **Opt-in Qdrant**: Change config, run `npx nano-brain embed` to populate Qdrant
-3. **Future providers**: Implement `VectorStore` interface, add to factory switch
+1. **Start**: `npx nano-brain qdrant up` — starts Qdrant Docker container
+2. **Migrate**: `npx nano-brain qdrant migrate` — exports 49K vectors from SQLite → Qdrant (zero API cost, ~30s)
+3. **Verify**: `npx nano-brain qdrant status` — shows vector count, health
+4. **Use**: Config auto-updated to `vector.provider: qdrant` — search now uses Qdrant
+5. **Fallback**: `npx nano-brain qdrant down` — stops Qdrant, auto-falls back to sqlite-vec
+6. **Future providers**: Implement `VectorStore` interface, add to factory switch
