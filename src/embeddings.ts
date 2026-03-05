@@ -1,9 +1,10 @@
 import { getLlama } from 'node-llama-cpp';
-import { promises as fs, accessSync, readFileSync } from 'fs';
+import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
 import { homedir, cpus } from 'os';
 import type { EmbeddingResult, EmbeddingConfig } from './types.js';
 import { log } from './logger.js';
+import { resolveHostUrl } from './host.js';
 
 export interface EmbeddingProvider {
   embed(text: string): Promise<EmbeddingResult>;
@@ -113,20 +114,7 @@ function formatDocumentPrompt(title: string, content: string): string {
 
 
 export function detectOllamaUrl(): string {
-  const isDocker = (() => {
-    try {
-      accessSync('/.dockerenv');
-      return true;
-    } catch {
-      try {
-        const cgroup = readFileSync('/proc/1/cgroup', 'utf-8');
-        return cgroup.includes('docker') || cgroup.includes('containerd');
-      } catch {
-        return false;
-      }
-    }
-  })();
-  return isDocker ? 'http://host.docker.internal:11434' : 'http://localhost:11434';
+  return resolveHostUrl('http://localhost:11434');
 }
 
 export async function checkOllamaHealth(url: string): Promise<{ reachable: boolean; models?: string[]; error?: string }> {
