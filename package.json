@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@qdrant/js-client-rest": "^1.17.0",
     "better-sqlite3": "^12.6.2",
     "chokidar": "^5.0.0",
     "fast-glob": "^3.3.3",
