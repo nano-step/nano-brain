@@ -144,6 +144,10 @@ export function chunkMarkdown(
   const overlap = options?.overlap ?? 540;
   const windowSize = 800;
 
+  if (content.trim().length === 0) {
+    return [];
+  }
+
   if (content.length <= maxChunkSize) {
     return [{
       hash,
@@ -330,6 +334,10 @@ export function chunkSourceCode(
   const maxChunkSize = options?.maxChunkSize ?? 3600
   const overlap = options?.overlap ?? 540
   const windowSize = 800
+
+  if (content.trim().length === 0) {
+    return []
+  }
 
   const relativePath = path.relative(workspaceRoot, filePath)
   const language = inferLanguage(filePath)

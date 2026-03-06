@@ -258,10 +258,7 @@ describe('chunkMarkdown - basic', () => {
     const hash = 'test-hash';
     const chunks = chunkMarkdown(content, hash);
     
-    expect(chunks.length).toBe(1);
-    expect(chunks[0].text).toBe('');
-    expect(chunks[0].startLine).toBe(1);
-    expect(chunks[0].endLine).toBe(1);
+    expect(chunks.length).toBe(0);
   });
 
   it('handles single line', () => {
@@ -432,8 +429,7 @@ describe('chunkMarkdown - edge cases', () => {
     const hash = 'test-hash';
     const chunks = chunkMarkdown(content, hash);
     
-    expect(chunks.length).toBe(1);
-    expect(chunks[0].text).toBe(content);
+    expect(chunks.length).toBe(0);
   });
 
   it('handles content with no break points', () => {

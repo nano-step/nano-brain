@@ -393,8 +393,7 @@ describe('chunkSourceCode', () => {
     const hash = 'test-hash';
     const chunks = chunkSourceCode(content, hash, '/workspace/file.ts', '/workspace');
     
-    expect(chunks.length).toBe(1);
-    expect(chunks[0].text).toContain('File:');
+    expect(chunks.length).toBe(0);
   });
 
   it('should handle single line content', () => {
@@ -411,7 +410,7 @@ describe('chunkSourceCode', () => {
     const hash = 'test-hash';
     const chunks = chunkSourceCode(content, hash, '/workspace/file.ts', '/workspace');
     
-    expect(chunks.length).toBe(1);
+    expect(chunks.length).toBe(0);
   });
 
   it('should handle file at workspace root', () => {
