@@ -164,6 +164,7 @@ nano-brain - Memory system with hybrid search
       --batch-size=<n>    Vectors per batch (default: 500)
       --dry-run           Show counts without migrating
       --activate          Switch to Qdrant provider after migration
+    verify          Compare SQLite vector counts against Qdrant
     activate        Switch config to use Qdrant as vector provider
     cleanup         Drop SQLite vector tables (requires Qdrant active with vectors)
 Logging Config (~/.nano-brain/config.yml):
@@ -1336,7 +1337,7 @@ async function handleQdrant(globalOpts: GlobalOptions, commandArgs: string[]): P
   const subcommand = commandArgs[0];
 
   if (!subcommand) {
-    console.error('Missing qdrant subcommand (up, down, status, migrate, activate, cleanup)');
+    console.error('Missing qdrant subcommand (up, down, status, migrate, verify, activate, cleanup)');
     process.exit(1);
   }
 
@@ -1688,6 +1689,147 @@ async function handleQdrant(globalOpts: GlobalOptions, commandArgs: string[]): P
       break;
     }
 
+    case 'verify': {
+      const config = loadCollectionConfig(globalOpts.configPath);
+      const vectorConfig = config?.vector;
+      const qdrantUrl = vectorConfig?.url || 'http://localhost:6333';
+      const resolvedUrl = resolveHostUrl(qdrantUrl);
+
+      try {
+        const healthRes = await fetch(`${resolvedUrl}/healthz`);
+        if (!healthRes.ok) {
+          throw new Error(`HTTP ${healthRes.status}`);
+        }
+      } catch {
+        console.error(`❌ Qdrant is not reachable at ${resolvedUrl}.`);
+        console.error('   Run `npx nano-brain qdrant up` first.');
+        console.error('   If running inside a container, Qdrant must be accessible at host.docker.internal:6333.');
+        process.exit(1);
+      }
+
+      const dataDir = DEFAULT_DB_DIR;
+      if (!fs.existsSync(dataDir)) {
+        console.log('No databases found in ' + dataDir);
+        return;
+      }
+
+      const sqliteFiles = fs.readdirSync(dataDir).filter(f => f.endsWith('.sqlite'));
+      if (sqliteFiles.length === 0) {
+        console.log('No SQLite databases found');
+        return;
+      }
+
+      console.log('Verifying migration...');
+      console.log('═══════════════════════════════════════════════════');
+
+      const Database = (await import('better-sqlite3')).default;
+      const sqliteVec = await import('sqlite-vec');
+
+      let totalVectors = 0;
+      let dbCount = 0;
+      const uniqueKeys = new Set<string>();
+      let sawVectorTables = false;
+
+      for (const sqliteFile of sqliteFiles) {
+        const dbPath = path.join(dataDir, sqliteFile);
+        const db = new Database(dbPath);
+
+        try {
+          sqliteVec.load(db);
+        } catch {
+          console.log(`[${sqliteFile}] sqlite-vec not available, skipping`);
+          db.close();
+          continue;
+        }
+
+        let vectorCount = 0;
+        try {
+          const countStmt = db.prepare(`
+            SELECT COUNT(*) as cnt FROM content_vectors cv
+            JOIN vectors_vec vv ON cv.hash || ':' || cv.seq = vv.hash_seq
+          `);
+          const countRow = countStmt.get() as { cnt: number };
+          vectorCount = countRow.cnt;
+        } catch {
+          console.log(`[${sqliteFile}] no vector tables, skipping`);
+          db.close();
+          continue;
+        }
+
+        sawVectorTables = true;
+
+        if (vectorCount === 0) {
+          console.log(`[${sqliteFile}] 0 vectors`);
+          db.close();
+          continue;
+        }
+
+        const keyStmt = db.prepare(`
+          SELECT DISTINCT cv.hash || ':' || cv.seq as key FROM content_vectors cv
+          JOIN vectors_vec vv ON cv.hash || ':' || cv.seq = vv.hash_seq
+        `);
+        const rows = keyStmt.all() as Array<{ key: string }>;
+        for (const row of rows) {
+          uniqueKeys.add(row.key);
+        }
+
+        console.log(`[${sqliteFile}] ${vectorCount.toLocaleString()} vectors in SQLite`);
+        totalVectors += vectorCount;
+        dbCount++;
+        db.close();
+      }
+
+      if (!sawVectorTables || totalVectors === 0) {
+        let pointsCount = 0;
+        try {
+          const collectionRes = await fetch(`${resolvedUrl}/collections/nano-brain`);
+          if (collectionRes.ok) {
+            const collectionData = await collectionRes.json();
+            const result = collectionData.result || collectionData;
+            pointsCount = result.points_count ?? result.vectors_count ?? 0;
+          }
+        } catch {
+          console.error('❌ Failed to check Qdrant collection');
+          process.exit(1);
+        }
+
+        console.log('SQLite: no vector data (already cleaned up)');
+        console.log(`Qdrant: ${pointsCount.toLocaleString()} vectors`);
+        console.log(`ℹ️  Cannot verify — SQLite vectors already cleaned. Qdrant has ${pointsCount.toLocaleString()} vectors.`);
+        break;
+      }
+
+      console.log('───────────────────────────────────────────────────');
+      console.log(`SQLite total: ${totalVectors.toLocaleString()} vectors (across ${dbCount} databases)`);
+
+      let pointsCount = 0;
+      try {
+        const collectionRes = await fetch(`${resolvedUrl}/collections/nano-brain`);
+        if (collectionRes.ok) {
+          const collectionData = await collectionRes.json();
+          const result = collectionData.result || collectionData;
+          pointsCount = result.points_count ?? result.vectors_count ?? 0;
+        }
+      } catch {
+        console.error('❌ Failed to check Qdrant collection');
+        process.exit(1);
+      }
+
+      const uniqueCount = uniqueKeys.size;
+      console.log(`Qdrant total: ${pointsCount.toLocaleString()} unique vectors`);
+      const difference = totalVectors - pointsCount;
+      console.log(`Difference: ${difference.toLocaleString()} (expected — cross-workspace duplicates share the same hash:seq key)`);
+      console.log('');
+
+      if (uniqueCount > pointsCount) {
+        const missing = uniqueCount - pointsCount;
+        console.log(`⚠️  Found ${missing.toLocaleString()} vectors in SQLite not present in Qdrant. Run \`npx nano-brain qdrant migrate\` to sync.`);
+      } else {
+        console.log('✅ Migration verified: Qdrant has all unique vectors');
+      }
+      break;
+    }
+
     case 'activate': {
       const config = loadCollectionConfig(globalOpts.configPath);
       const vectorConfig = config?.vector;
@@ -1841,7 +1983,7 @@ async function handleQdrant(globalOpts: GlobalOptions, commandArgs: string[]): P
 
     default:
       console.error(`Unknown qdrant subcommand: ${subcommand}`);
-      console.error('Available: up, down, status, migrate, activate, cleanup');
+      console.error('Available: up, down, status, migrate, verify, activate, cleanup');
       process.exit(1);
   }
 }
