@@ -1,10 +1,10 @@
 import { startServer } from './server.js';
 import { createStore, computeHash, indexDocument, extractProjectHashFromPath } from './store.js';
-import { loadCollectionConfig, addCollection, removeCollection, renameCollection, listCollections, getCollections, scanCollectionFiles, saveCollectionConfig } from './collections.js';
+import { loadCollectionConfig, addCollection, removeCollection, renameCollection, listCollections, getCollections, scanCollectionFiles, saveCollectionConfig, getWorkspaceConfig } from './collections.js';
 import { harvestSessions } from './harvester.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth, checkOpenAIHealth } from './embeddings.js';
 import { hybridSearch, parseSearchConfig } from './search.js';
-import { indexCodebase, embedPendingCodebase } from './codebase.js';
+import { indexCodebase, embedPendingCodebase, getCodebaseStats } from './codebase.js';
 import { findCycles } from './graph.js';
 import { handleBench } from './bench.js';
 import { resolveHostUrl } from './host.js';
@@ -12,6 +12,7 @@ import { QdrantVecStore } from './providers/qdrant.js';
 import { createVectorStore } from './vector-store.js';
 import type { SearchResult } from './types.js';
 import type { VectorPoint } from './vector-store.js';
+import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -102,6 +103,7 @@ nano-brain - Memory system with hybrid search
     --daemon        Run as background daemon
     stop            Stop running daemon
   status            Show index health, embedding server status, and stats
+    --all           Show status for all workspaces
   collection        Manage collections
     add <name> <path> [--pattern=<glob>]
     remove <name>
@@ -329,69 +331,181 @@ async function handleCollection(globalOpts: GlobalOptions, commandArgs: string[]
   }
 }
 
-async function handleStatus(globalOpts: GlobalOptions): Promise<void> {
-  log('cli', 'status command invoked');
-  const store = createStore(globalOpts.dbPath);
-  const config = loadCollectionConfig(globalOpts.configPath);
-  const health = store.getIndexHealth();
-  console.log('nano-brain Status');
-  console.log('═══════════════════════════════════════════════════');
-  console.log('');
-  console.log('Index:');
-  console.log(`  Documents:          ${health.documentCount}`);
-  console.log(`  Embedded:           ${health.embeddedCount}`);
-  console.log(`  Pending embeddings: ${health.pendingEmbeddings}`);
-  console.log(`  Database size:      ${(health.databaseSize / 1024 / 1024).toFixed(2)} MB`);
-  console.log('');
-  
-  if (health.collections.length > 0) {
-    console.log('Collections:');
-    for (const coll of health.collections) {
-      console.log(`  ${coll.name}: ${coll.documentCount} documents`);
-    }
-    console.log('');
+function extractWorkspaceName(dbFilename: string): string {
+  const base = path.basename(dbFilename, '.sqlite');
+  const parts = base.split('-');
+  if (parts.length > 1 && parts[parts.length - 1].length === 12) {
+    return parts.slice(0, -1).join('-');
   }
-  
+  return base;
+}
+
+function formatBytes(bytes: number): string {
+  const mb = bytes / 1024 / 1024;
+  return `${mb.toFixed(1)} MB`;
+}
+
+async function printEmbeddingServerStatus(config: ReturnType<typeof loadCollectionConfig>): Promise<void> {
   const embeddingConfig = config?.embedding;
-  const ollamaUrl = embeddingConfig?.url || detectOllamaUrl();
-  const ollamaModel = embeddingConfig?.model || 'nomic-embed-text';
+  const url = embeddingConfig?.url || detectOllamaUrl();
+  const model = embeddingConfig?.model || 'nomic-embed-text';
   const provider = embeddingConfig?.provider || 'ollama';
-  
+
   console.log('Embedding Server:');
   console.log(`  Provider:  ${provider}`);
-  console.log(`  URL:       ${ollamaUrl}`);
-  console.log(`  Model:     ${ollamaModel}`);
-  
+  console.log(`  URL:       ${url}`);
+  console.log(`  Model:     ${model}`);
+
   if (provider === 'openai') {
-    const openAiHealth = await checkOpenAIHealth(ollamaUrl, embeddingConfig?.apiKey || '', ollamaModel);
+    const openAiHealth = await checkOpenAIHealth(url, embeddingConfig?.apiKey || '', model);
     if (openAiHealth.reachable) {
       console.log(`  Status:    ✅ connected`);
-      console.log(`  Model:     ✅ ${openAiHealth.model}`);
     } else {
       console.log(`  Status:    ❌ unreachable (${openAiHealth.error})`);
     }
   } else if (provider !== 'local') {
-    const ollamaHealth = await checkOllamaHealth(ollamaUrl);
+    const ollamaHealth = await checkOllamaHealth(url);
     if (ollamaHealth.reachable) {
-      const hasModel = ollamaHealth.models?.some(m => m.startsWith(ollamaModel));
       console.log(`  Status:    ✅ connected`);
-      console.log(`  Model:     ${hasModel ? '✅ available' : '❌ not found — run: ollama pull ' + ollamaModel}`);
-      if (ollamaHealth.models && ollamaHealth.models.length > 0) {
-        console.log(`  Available: ${ollamaHealth.models.join(', ')}`);
-      }
     } else {
       console.log(`  Status:    ❌ unreachable (${ollamaHealth.error})`);
-      console.log(`  Fallback:  local GGUF (node-llama-cpp)`);
     }
   } else {
     console.log(`  Status:    local GGUF mode`);
   }
+}
+
+async function handleStatus(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
+  log('cli', 'status command invoked');
+  const showAll = commandArgs.includes('--all');
+  const config = loadCollectionConfig(globalOpts.configPath);
+  const dataDir = path.dirname(globalOpts.dbPath);
+
+  if (showAll) {
+    let dbFiles: string[] = [];
+    try {
+      const files = fs.readdirSync(dataDir);
+      dbFiles = files.filter(f => f.endsWith('.sqlite')).map(f => path.join(dataDir, f));
+    } catch {
+      console.error(`Cannot read data directory: ${dataDir}`);
+      return;
+    }
+
+    if (dbFiles.length === 0) {
+      console.log('No workspaces found.');
+      return;
+    }
+
+    console.log('nano-brain Status — All Workspaces');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('');
+
+    const header = '  Workspace              Documents  Embedded  Pending  DB Size';
+    const divider = '  ─────────────────────  ─────────  ────────  ───────  ───────';
+    console.log(header);
+    console.log(divider);
+
+    let totalDocs = 0;
+    let totalEmbedded = 0;
+    let totalPending = 0;
+    let totalSize = 0;
+
+    for (const dbFile of dbFiles) {
+      const workspaceName = extractWorkspaceName(dbFile);
+      let fileSize = 0;
+      try {
+        fileSize = fs.statSync(dbFile).size;
+      } catch { /* ignore */ }
+
+      let docs = 0;
+      let embedded = 0;
+      let pending = 0;
+      try {
+        const readDb = new Database(dbFile, { readonly: true });
+        try {
+          docs = (readDb.prepare('SELECT COUNT(*) as count FROM documents WHERE active = 1').get() as { count: number }).count;
+          embedded = (readDb.prepare('SELECT COUNT(*) as count FROM content_vectors').get() as { count: number }).count;
+          pending = docs - embedded;
+          if (pending < 0) pending = 0;
+        } catch {
+        }
+        readDb.close();
+      } catch { /* ignore */ }
+
+      totalDocs += docs;
+      totalEmbedded += embedded;
+      totalPending += pending;
+      totalSize += fileSize;
+
+      const name = workspaceName.padEnd(21);
+      const docsStr = docs.toLocaleString().padStart(9);
+      const embeddedStr = embedded.toLocaleString().padStart(8);
+      const pendingStr = pending.toLocaleString().padStart(7);
+      const sizeStr = formatBytes(fileSize).padStart(9);
+      console.log(`  ${name}  ${docsStr}  ${embeddedStr}  ${pendingStr}  ${sizeStr}`);
+    }
+
+    console.log('');
+    console.log(`  Total: ${dbFiles.length} workspaces, ${totalDocs.toLocaleString()} documents, ${totalPending.toLocaleString()} pending embeddings, ${formatBytes(totalSize)}`);
+    console.log('');
+
+    await printEmbeddingServerStatus(config);
+    return;
+  }
+
+  const workspaceRoot = process.cwd();
+  const resolvedDbPath = resolveDbPath(globalOpts.dbPath, workspaceRoot);
+  const workspaceName = extractWorkspaceName(resolvedDbPath);
+
+  let dbSize = 0;
+  try {
+    dbSize = fs.statSync(resolvedDbPath).size;
+  } catch { /* ignore */ }
+
+  const store = createStore(resolvedDbPath);
+  const health = store.getIndexHealth();
+
+  console.log(`nano-brain Status — ${workspaceName}`);
+  console.log('═══════════════════════════════════════════════════');
   console.log('');
-  
+
+  console.log('Database:');
+  console.log(`  Path:     ${resolvedDbPath.replace(os.homedir(), '~')}`);
+  console.log(`  Size:     ${formatBytes(dbSize)} (on disk)`);
+  console.log('');
+
+  console.log('Index:');
+  console.log(`  Documents:          ${health.documentCount.toLocaleString()}`);
+  console.log(`  Embedded:           ${health.embeddedCount.toLocaleString()}`);
+  console.log(`  Pending embeddings: ${health.pendingEmbeddings.toLocaleString()}`);
+  console.log('');
+
+  if (health.collections.length > 0) {
+    console.log('Collections:');
+    for (const coll of health.collections) {
+      console.log(`  ${coll.name.padEnd(10)} ${coll.documentCount.toLocaleString()} documents`);
+    }
+    console.log('');
+  }
+
+  const wsConfig = getWorkspaceConfig(config, workspaceRoot);
+  const codebaseStats = getCodebaseStats(store, wsConfig?.codebase, workspaceRoot);
+  if (codebaseStats) {
+    console.log('Codebase:');
+    console.log(`  Enabled:    ${codebaseStats.enabled}`);
+    console.log(`  Storage:    ${formatBytes(codebaseStats.storageUsed)} / ${formatBytes(codebaseStats.maxSize)}`);
+    console.log(`  Extensions: ${codebaseStats.extensions.join(', ') || 'auto-detect'}`);
+    console.log(`  Excludes:   ${codebaseStats.excludeCount} patterns`);
+    console.log('');
+  }
+
+  await printEmbeddingServerStatus(config);
+  console.log('');
+
   console.log('Models:');
   console.log(`  Embedding: ${health.modelStatus.embedding}`);
   console.log(`  Reranker:  ${health.modelStatus.reranker}`);
-  console.log(`  Expander: ${health.modelStatus.expander}`);
+  console.log(`  Expander:  ${health.modelStatus.expander}`);
   store.close();
 }
 
@@ -2014,7 +2128,7 @@ async function main() {
     case 'collection':
       return handleCollection(globalOpts, commandArgs);
     case 'status':
-      return handleStatus(globalOpts);
+      return handleStatus(globalOpts, commandArgs);
     case 'update':
       return handleUpdate(globalOpts);
     case 'embed':
