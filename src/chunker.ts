@@ -141,7 +141,7 @@ export function chunkMarkdown(
 ): MemoryChunk[] {
   const maxChunkSize = options?.maxChunkSize ?? 3600;
   const minChunkSize = options?.minChunkSize ?? 200;
-  const overlap = options?.overlap ?? 540;
+  const overlap = options?.overlap ?? 200;
   const windowSize = 800;
 
   if (content.trim().length === 0) {

@@ -22,7 +22,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import fg from 'fast-glob'
 
-const DEFAULT_MAX_FILE_SIZE = 5 * 1024 * 1024
+const DEFAULT_MAX_FILE_SIZE = 300 * 1024
 const DEFAULT_CODEBASE_MAX_SIZE = 2 * 1024 * 1024 * 1024
 
 const BUILTIN_EXCLUDE_PATTERNS = [
@@ -133,6 +133,27 @@ const BUILTIN_EXCLUDE_PATTERNS = [
   '**/*.sum',
   '**/*.snap',
   '**/docker-data/**',
+
+  // Lock files (zero search value, massive token waste)
+  '**/package-lock.json',
+  '**/yarn.lock',
+  '**/pnpm-lock.yaml',
+  '**/Pipfile.lock',
+  '**/poetry.lock',
+  '**/composer.lock',
+  '**/Gemfile.lock',
+  '**/Cargo.lock',
+  '**/go.sum',
+
+  // Bundled/minified assets (already built, not source)
+  '**/public/vs/**',
+  '**/assets/index-*.js',
+  '**/*.bundle.js',
+  '**/*.chunk.js',
+
+  // i18n/locale data (large, repetitive, low search value)
+  '**/nls.messages.*.js',
+  '**/locales/*.json',
 ]
 
 const PROJECT_TYPE_MARKERS: Record<string, string[]> = {
