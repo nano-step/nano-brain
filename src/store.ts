@@ -550,6 +550,11 @@ export function createStore(dbPath: string): Store {
       return result.changes;
     },
     
+    insertEmbeddingLocal(hash: string, seq: number, pos: number, model: string) {
+      log('store', 'insertEmbeddingLocal hash=' + hash.substring(0, 8) + ' seq=' + seq);
+      insertEmbeddingStmt.run(hash, seq, pos, model);
+    },
+
     insertEmbedding(hash: string, seq: number, pos: number, embedding: number[], model: string, externalVectorStore?: VectorStore) {
       log('store', 'insertEmbedding hash=' + hash.substring(0, 8) + ' seq=' + seq);
       insertEmbeddingStmt.run(hash, seq, pos, model);

@@ -131,45 +131,77 @@ export class QdrantVecStore implements VectorStore {
     });
   }
 
+  private async retryOnSocketError<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const cause = (err as any)?.cause;
+        const causeCode = cause?.code;
+        const isSocketError = causeCode === 'UND_ERR_SOCKET' ||
+          causeCode === 'ECONNRESET' ||
+          causeCode === 'ECONNREFUSED' ||
+          msg.includes('other side closed') ||
+          msg.includes('fetch failed') ||
+          msg.includes('socket hang up');
+        
+        if (isSocketError && attempt < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+          console.warn(`[qdrant] Socket error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error('unreachable');
+  }
+
   async upsert(point: VectorPoint): Promise<void> {
     await this.ensureCollection();
 
     const uuid = stringToUuid(point.id);
 
-    await this.client.upsert(this.collectionName, {
-      wait: true,
-      points: [
-        {
-          id: uuid,
-          vector: point.embedding,
-          payload: {
-            ...point.metadata,
-            hashSeq: point.id,
+    await this.retryOnSocketError(() =>
+      this.client.upsert(this.collectionName, {
+        wait: true,
+        points: [
+          {
+            id: uuid,
+            vector: point.embedding,
+            payload: {
+              ...point.metadata,
+              hashSeq: point.id,
+            },
           },
-        },
-      ],
-    });
+        ],
+      })
+    );
   }
 
   async batchUpsert(points: VectorPoint[]): Promise<void> {
+    if (points.length === 0) return;
     await this.ensureCollection();
 
-    const BATCH_SIZE = 500;
+    const BATCH_SIZE = 100;
     
     for (let i = 0; i < points.length; i += BATCH_SIZE) {
       const batch = points.slice(i, i + BATCH_SIZE);
       
-      await this.client.upsert(this.collectionName, {
-        wait: true,
-        points: batch.map((point) => ({
-          id: stringToUuid(point.id),
-          vector: point.embedding,
-          payload: {
-            ...point.metadata,
-            hashSeq: point.id,
-          },
-        })),
-      });
+      await this.retryOnSocketError(() =>
+        this.client.upsert(this.collectionName, {
+          wait: true,
+          points: batch.map((point) => ({
+            id: stringToUuid(point.id),
+            vector: point.embedding,
+            payload: {
+              ...point.metadata,
+              hashSeq: point.id,
+            },
+          })),
+        })
+      );
     }
   }
 

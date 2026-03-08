@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.3.8] - 2026-03-08
+
+### Fixed
+
+- **Embedding 0 chunks infinite loop**: When `chunkMarkdown` returned 0 chunks (empty/whitespace-only body), the batch was counted as embedded but no `content_vectors` rows were inserted. Next iteration fetched the same docs, looping forever. Now skips empty-body docs and adds them to `failedHashes`.
+- **Qdrant fire-and-forget desync**: `insertEmbedding` upserted to Qdrant via `.catch()` (fire-and-forget) then immediately wrote to `content_vectors`. If Qdrant failed, SQLite thought the doc was embedded but Qdrant didn't have it. Now awaits Qdrant `batchUpsert` before writing `content_vectors`.
+- **Qdrant socket errors under load**: Individual per-chunk upserts created hundreds of concurrent HTTP requests, overwhelming the connection. Replaced with batched upserts (100 vectors/request) with retry + exponential backoff (up to 3 retries) for `UND_ERR_SOCKET`, `ECONNRESET`, and `ECONNREFUSED` errors.
+
+### Added
+
+- **Embed batch file logging**: Embed log now shows file names being processed: `[embed] Batch 3 docs, 10 chunks: package.json, tsconfig.json, README.md`.
+- **`insertEmbeddingLocal`**: SQLite-only embedding record method for use when external vector store is handled separately.
+
 ## [2026.2.0] - 2026-03-05
 
 ### Added

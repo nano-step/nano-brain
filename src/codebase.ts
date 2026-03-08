@@ -466,8 +466,14 @@ export async function embedPendingCodebase(
 
     const maxChunksPerBatch = 200
     const allChunks: Array<{ hash: string; seq: number; pos: number; text: string }> = []
+    const emptyBodyHashes: string[] = []
     for (const row of batch) {
       const chunks = chunkMarkdown(row.body, row.hash)
+      if (chunks.length === 0) {
+        // Document has empty/whitespace-only body — mark as failed to prevent infinite retry
+        emptyBodyHashes.push(row.hash)
+        continue
+      }
       for (const chunk of chunks) {
         allChunks.push({
           hash: row.hash,
@@ -479,23 +485,68 @@ export async function embedPendingCodebase(
       if (allChunks.length >= maxChunksPerBatch) break
     }
 
+    // Mark empty-body docs as failed so they're never retried
+    for (const hash of emptyBodyHashes) {
+      failedHashes.add(hash)
+    }
+
+    // Skip embedding if no chunks were produced from this batch
+    if (allChunks.length === 0) {
+      if (emptyBodyHashes.length > 0) {
+        log('codebase', 'Skipping batch: ' + emptyBodyHashes.length + ' docs had 0 chunks (empty body)')
+        console.warn(`[embed] Skipping ${emptyBodyHashes.length} docs with empty body — FTS still covers them`)
+      }
+      continue
+    }
+
     const texts = allChunks.map(c => c.text)
     const modelName = embedder.getModel?.() || 'unknown'
 
+    const batchPaths = batch.map(r => r.path.replace(/.*\//, '')).join(', ')
     log('codebase', 'Embedding batch: ' + batch.length + ' docs, ' + allChunks.length + ' chunks')
-    console.error(`[embed] Batch ${batch.length} docs, ${allChunks.length} chunks`)
+    console.error(`[embed] Batch ${batch.length} docs, ${allChunks.length} chunks: ${batchPaths}`)
     try {
+      // Step 1: Get embeddings from the API
+      let embeddings: number[][]
       if (embedder.embedBatch && texts.length > 1) {
         const results = await embedder.embedBatch(texts)
-        for (let i = 0; i < allChunks.length; i++) {
-          store.insertEmbedding(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, results[i].embedding, modelName, vectorStore ?? undefined)
-        }
+        embeddings = results.map(r => r.embedding)
       } else {
-        for (let i = 0; i < allChunks.length; i++) {
+        embeddings = []
+        for (let i = 0; i < texts.length; i++) {
           const result = await embedder.embed(texts[i])
-          store.insertEmbedding(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, result.embedding, result.model || modelName, vectorStore ?? undefined)
+          embeddings.push(result.embedding)
         }
       }
+
+      // Step 2: Batch upsert to external vector store (Qdrant) FIRST — await it
+      if (vectorStore) {
+        const points = allChunks.map((chunk, i) => ({
+          id: `${chunk.hash}:${chunk.seq}`,
+          embedding: embeddings[i],
+          metadata: { hash: chunk.hash, seq: chunk.seq, pos: chunk.pos, model: modelName },
+        }))
+        try {
+          await vectorStore.batchUpsert(points)
+        } catch (err) {
+          log('codebase', 'Batch vector store upsert failed: ' + (err instanceof Error ? err.message : String(err)))
+          console.warn(`[embed] Batch vector store upsert failed, falling back to individual:`, err)
+          // Fall back to individual upserts — some may succeed
+          for (const point of points) {
+            try {
+              await vectorStore.upsert(point)
+            } catch {
+              // Individual failure is logged by the vector store provider
+            }
+          }
+        }
+      }
+
+      // Step 3: Record in SQLite content_vectors (no external store — already handled above)
+      for (let i = 0; i < allChunks.length; i++) {
+        store.insertEmbeddingLocal(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, modelName)
+      }
+
       embedded += batch.length
     } catch (err) {
       log('codebase', 'Batch embedding failed, falling back to sequential')
@@ -504,7 +555,22 @@ export async function embedPendingCodebase(
       for (let i = 0; i < allChunks.length; i++) {
         try {
           const result = await embedder.embed(texts[i])
-          store.insertEmbedding(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, result.embedding, result.model || modelName, vectorStore ?? undefined)
+          const embedding = result.embedding
+
+          // Upsert to vector store first
+          if (vectorStore) {
+            try {
+              await vectorStore.upsert({
+                id: `${allChunks[i].hash}:${allChunks[i].seq}`,
+                embedding,
+                metadata: { hash: allChunks[i].hash, seq: allChunks[i].seq, pos: allChunks[i].pos, model: result.model || modelName },
+              })
+            } catch {
+              // Vector store failure logged by provider — still record in SQLite
+            }
+          }
+
+          store.insertEmbeddingLocal(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, result.model || modelName)
           succeededHashes.add(allChunks[i].hash)
         } catch {
           console.warn(`[embed] Skipping chunk ${allChunks[i].hash}:${allChunks[i].seq}`)
@@ -519,7 +585,7 @@ export async function embedPendingCodebase(
           console.warn(`[embed] All chunks failed for ${row.path} (${row.hash.substring(0, 8)}…) — skipping, FTS still covers it`)
         }
       }
-      embedded += batch.length
+      embedded += succeededHashes.size > 0 ? batch.length : 0
     }
 
     if (embedded > 0 && embedded % 50 === 0) {

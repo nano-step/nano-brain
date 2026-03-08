@@ -260,6 +260,7 @@ export interface Store {
   
   insertContent(hash: string, body: string): void;
   
+  insertEmbeddingLocal(hash: string, seq: number, pos: number, model: string): void;
   insertEmbedding(hash: string, seq: number, pos: number, embedding: number[], model: string, vectorStore?: import('./vector-store.js').VectorStore): void;
   ensureVecTable(dimensions: number): void;
   
