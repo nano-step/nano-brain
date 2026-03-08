@@ -98,7 +98,6 @@ export function formatStatus(
       lines.push(`  - Model available: ${hasModel ? '✅ yes' : '❌ not found — run: ollama pull ' + embeddingHealth.model}`)
     } else {
       lines.push(`  - Status: ❌ unreachable (${embeddingHealth.error})`)
-      lines.push(`  - Fallback: local GGUF (node-llama-cpp)`)
     }
   }
   if (codebaseStats) {

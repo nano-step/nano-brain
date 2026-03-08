@@ -22,7 +22,6 @@
     "better-sqlite3": "^12.6.2",
     "chokidar": "^5.0.0",
     "fast-glob": "^3.3.3",
-    "node-llama-cpp": "^3.3.3",
     "sqlite-vec": "^0.1.7-alpha.2",
     "tree-sitter": "^0.22.4",
     "tree-sitter-javascript": "^0.23.1",

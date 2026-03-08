@@ -1,7 +1,6 @@
-import { getLlama } from 'node-llama-cpp';
 import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
-import { homedir, cpus } from 'os';
+import { homedir } from 'os';
 import type { EmbeddingResult, EmbeddingConfig } from './types.js';
 import { log } from './logger.js';
 import { resolveHostUrl } from './host.js';
@@ -16,92 +15,7 @@ export interface EmbeddingProvider {
 }
 
 export interface EmbeddingProviderOptions {
-  modelPath?: string;
-  cacheDir?: string;
   embeddingConfig?: EmbeddingConfig;
-}
-
-const DEFAULT_MODEL_URI = 'hf:nomic-ai/nomic-embed-text-v1.5-GGUF/nomic-embed-text-v1.5.Q4_K_M.gguf';
-const MODEL_NAME = 'nomic-embed-text-v1.5';
-const DIMENSIONS = 768;
-
-interface ParsedModelURI {
-  org: string;
-  repo: string;
-  file: string;
-}
-
-function parseModelURI(uri: string): ParsedModelURI | null {
-  const match = uri.match(/^hf:([^/]+)\/([^/]+)\/(.+\.gguf)$/);
-  if (!match) return null;
-  return {
-    org: match[1],
-    repo: match[2],
-    file: match[3],
-  };
-}
-
-async function downloadModel(url: string, destPath: string): Promise<void> {
-  console.log(`Downloading model from ${url}...`);
-  
-  await fs.mkdir(dirname(destPath), { recursive: true });
-  
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download model: ${response.statusText}`);
-  }
-  
-  const totalSize = parseInt(response.headers.get('content-length') || '0', 10);
-  let downloadedSize = 0;
-  
-  const tempPath = `${destPath}.tmp`;
-  const fileHandle = await fs.open(tempPath, 'w');
-  
-  try {
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-    
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      await fileHandle.write(value);
-      downloadedSize += value.length;
-      
-      if (totalSize > 0) {
-        const percent = ((downloadedSize / totalSize) * 100).toFixed(1);
-        process.stdout.write(`\rDownload progress: ${percent}%`);
-      }
-    }
-    
-    console.log('\nDownload complete');
-  } finally {
-    await fileHandle.close();
-  }
-  
-  await fs.rename(tempPath, destPath);
-}
-
-export async function resolveModelPath(
-  uri: string,
-  cacheDir?: string
-): Promise<string> {
-  const parsed = parseModelURI(uri);
-  if (!parsed) {
-    throw new Error(`Invalid model URI format: ${uri}`);
-  }
-  
-  const baseDir = cacheDir || join(homedir(), '.nano-brain', 'models');
-  const modelPath = join(baseDir, parsed.org, parsed.repo, parsed.file);
-  
-  try {
-    await fs.access(modelPath);
-    return modelPath;
-  } catch {
-    const url = `https://huggingface.co/${parsed.org}/${parsed.repo}/resolve/main/${parsed.file}`;
-    await downloadModel(url, modelPath);
-    return modelPath;
-  }
 }
 
 function formatQueryPrompt(query: string): string {
@@ -163,7 +77,7 @@ export async function checkOpenAIHealth(
 class OllamaEmbeddingProvider implements EmbeddingProvider {
   private url: string;
   private model: string;
-  private dimensions: number = DIMENSIONS;
+  private dimensions: number = 768;
   private maxChars: number = 6000;
   private contextTokens: number = 0;
 
@@ -455,75 +369,6 @@ class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
   }
 }
 
-class EmbeddingProviderImpl implements EmbeddingProvider {
-  private contexts: any[] = [];
-  private currentContextIndex = 0;
-  
-  constructor(
-    private model: any,
-    private parallelism: number
-  ) {}
-  
-  async initialize(): Promise<void> {
-    for (let i = 0; i < this.parallelism; i++) {
-      const context = await this.model.createEmbeddingContext();
-      this.contexts.push(context);
-    }
-  }
-  
-  async embed(text: string): Promise<EmbeddingResult> {
-    const context = this.contexts[0];
-    const result = await context.getEmbeddingFor(text);
-    
-    return {
-      embedding: Array.from(result.vector),
-      model: MODEL_NAME,
-      dimensions: DIMENSIONS,
-    };
-  }
-  
-  async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
-    const results: EmbeddingResult[] = [];
-    const batchSize = Math.min(4, this.parallelism);
-    
-    for (let i = 0; i < texts.length; i += batchSize) {
-      const batch = texts.slice(i, i + batchSize);
-      const batchPromises = batch.map(async (text, idx) => {
-        const contextIdx = idx % this.contexts.length;
-        const context = this.contexts[contextIdx];
-        const result = await context.getEmbeddingFor(text);
-        
-        return {
-          embedding: Array.from(result.vector) as number[],
-          model: MODEL_NAME,
-          dimensions: DIMENSIONS,
-        };
-      });
-      
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults);
-    }
-    
-    return results;
-  }
-  
-  getDimensions(): number {
-    return DIMENSIONS;
-  }
-  
-  getModel(): string {
-    return MODEL_NAME;
-  }
-
-  getMaxChars(): number {
-    return 6000;
-  }
-  
-  dispose(): void {
-    this.contexts = [];
-  }
-}
-
 export async function createEmbeddingProvider(
   options?: EmbeddingProviderOptions
 ): Promise<EmbeddingProvider | null> {
@@ -576,29 +421,14 @@ export async function createEmbeddingProvider(
         console.error('[embedding] Ollama explicitly configured but not reachable, no fallback');
         return null;
       }
-      log('embedding', 'createEmbeddingProvider ollama unreachable fallback=local');
-      console.warn('[embedding] Falling back to local node-llama-cpp...');
+      log('embedding', 'createEmbeddingProvider ollama unreachable no-fallback');
+      console.warn('[embedding] Ollama not reachable, no fallback available');
     }
   }
 
-  // Fallback to local node-llama-cpp
-  try {
-    const modelUri = options?.modelPath || DEFAULT_MODEL_URI;
-    const modelPath = await resolveModelPath(modelUri, options?.cacheDir);
-    const llama = await getLlama();
-    const model = await llama.loadModel({ modelPath });
-    const cpuCount = cpus().length;
-    const parallelism = Math.max(1, Math.min(4, Math.floor(cpuCount / 4)));
-    const provider = new EmbeddingProviderImpl(model, parallelism);
-    await provider.initialize();
-    log('embedding', 'createEmbeddingProvider selected=local model=' + MODEL_NAME);
-    console.error(`[embedding] Using local provider: ${MODEL_NAME}`);
-    return provider;
-  } catch (error) {
-    log('embedding', 'createEmbeddingProvider local failed');
-    console.warn('Failed to load embedding model:', error instanceof Error ? error.message : String(error));
-    return null;
-  }
+  log('embedding', 'createEmbeddingProvider no provider available');
+  console.error('[embedding] No embedding provider available. Configure openai or ollama in config.yml');
+  return null;
 }
 
-export { formatQueryPrompt, formatDocumentPrompt, parseModelURI };
+export { formatQueryPrompt, formatDocumentPrompt };
