@@ -1,7 +1,9 @@
 import type { Store, CodebaseConfig, CodebaseIndexResult } from './types.js'
+import type { VectorStore } from './vector-store.js'
 import type BetterSqlite3 from 'better-sqlite3'
 import { computeHash } from './store.js'
-import { chunkSourceCode, chunkMarkdown } from './chunker.js'
+import { chunkSourceCode, chunkMarkdown, chunkWithTreeSitter } from './chunker.js'
+import type { MemoryChunk } from './types.js'
 import { parseSize } from './storage.js'
 import { parseImports, detectLanguage, computePageRank, louvainClustering, computeEdgeSetHash, clusterSymbols, type SupportedLanguage } from './graph.js'
 import { extractSymbols } from './symbols.js'
@@ -18,12 +20,15 @@ import {
   type SymbolEdge,
 } from './treesitter.js'
 import { detectAndStoreFlows } from './flow-detection.js'
+import pLimit from 'p-limit'
 import * as fs from 'fs'
 import * as path from 'path'
 import fg from 'fast-glob'
 
 const DEFAULT_MAX_FILE_SIZE = 300 * 1024
 const DEFAULT_CODEBASE_MAX_SIZE = 2 * 1024 * 1024 * 1024
+const EMBEDDING_CONCURRENCY = parseInt(process.env.NANO_BRAIN_EMBEDDING_CONCURRENCY || '3', 10)
+const MAX_PENDING_BATCHES = 10
 
 const BUILTIN_EXCLUDE_PATTERNS = [
   // Version control
@@ -335,7 +340,14 @@ export async function indexCodebase(
         store.cleanupVectorsForHash(existingDoc.hash)
       }
       store.insertContent(hash, content)
-      const chunks = chunkSourceCode(content, hash, filePath, workspaceRoot)
+      const chunkLang = detectLanguage(filePath) as SupportedLanguage | null
+      let chunks: MemoryChunk[]
+      if (chunkLang && (chunkLang === 'ts' || chunkLang === 'js' || chunkLang === 'python')) {
+        const astChunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, chunkLang)
+        chunks = astChunks ?? chunkSourceCode(content, hash, filePath, workspaceRoot)
+      } else {
+        chunks = chunkSourceCode(content, hash, filePath, workspaceRoot)
+      }
       chunksCreated += chunks.length
       const title = path.basename(filePath)
       const now = new Date().toISOString()
@@ -444,6 +456,137 @@ export async function indexCodebase(
   }
 }
 
+async function processSingleBatch(
+  batch: Array<{ hash: string; body: string; path: string }>,
+  store: Store,
+  embedder: { embed(text: string): Promise<{ embedding: number[]; model?: string }>; embedBatch?(texts: string[]): Promise<Array<{ embedding: number[] }>>; getModel?(): string; getMaxChars?(): number },
+  vectorStore: VectorStore | null,
+  maxChars: number,
+  failedHashes: Set<string>
+): Promise<{ embedded: number; emptyBodyHashes: string[] }> {
+  const maxChunksPerBatch = 200
+  const allChunks: Array<{ hash: string; seq: number; pos: number; text: string; path: string }> = []
+  const emptyBodyHashes: string[] = []
+
+  for (const row of batch) {
+    const chunks = chunkMarkdown(row.body, row.hash)
+    if (chunks.length === 0) {
+      emptyBodyHashes.push(row.hash)
+      continue
+    }
+    for (const chunk of chunks) {
+      allChunks.push({
+        hash: row.hash,
+        seq: chunk.seq,
+        pos: chunk.pos,
+        text: chunk.text.length > maxChars ? chunk.text.substring(0, maxChars) : chunk.text,
+        path: row.path,
+      })
+    }
+    if (allChunks.length >= maxChunksPerBatch) break
+  }
+
+  for (const hash of emptyBodyHashes) {
+    failedHashes.add(hash)
+    store.insertEmbeddingLocal(hash, -1, 0, 'skipped:empty-body')
+  }
+
+  if (allChunks.length === 0) {
+    if (emptyBodyHashes.length > 0) {
+      log('codebase', 'Marked ' + emptyBodyHashes.length + ' empty-body docs with sentinel (seq=-1)')
+      console.warn(`[embed] Skipping ${emptyBodyHashes.length} docs with empty body — FTS still covers them`)
+    }
+    return { embedded: 0, emptyBodyHashes }
+  }
+
+  const texts = allChunks.map(c => c.text)
+  const modelName = embedder.getModel?.() || 'unknown'
+
+  const batchPaths = batch.map(r => r.path.replace(/.*\//, '')).join(', ')
+  log('codebase', 'Embedding batch: ' + batch.length + ' docs, ' + allChunks.length + ' chunks')
+  console.error(`[embed] Batch ${batch.length} docs, ${allChunks.length} chunks: ${batchPaths}`)
+
+  try {
+    let embeddings: number[][]
+    if (embedder.embedBatch && texts.length > 1) {
+      const results = await embedder.embedBatch(texts)
+      embeddings = results.map(r => r.embedding)
+    } else {
+      embeddings = []
+      for (let i = 0; i < texts.length; i++) {
+        const result = await embedder.embed(texts[i])
+        embeddings.push(result.embedding)
+      }
+    }
+
+    if (vectorStore) {
+      const points = allChunks.map((chunk, i) => ({
+        id: `${chunk.hash}:${chunk.seq}`,
+        embedding: embeddings[i],
+        metadata: { hash: chunk.hash, seq: chunk.seq, pos: chunk.pos, model: modelName },
+      }))
+      try {
+        await vectorStore.batchUpsert(points)
+      } catch (err) {
+        log('codebase', 'Batch vector store upsert failed: ' + (err instanceof Error ? err.message : String(err)))
+        console.warn(`[embed] Batch vector store upsert failed, falling back to individual:`, err)
+        for (const point of points) {
+          try {
+            await vectorStore.upsert(point)
+          } catch {
+            // Individual failure is logged by the vector store provider
+          }
+        }
+      }
+    }
+
+    for (let i = 0; i < allChunks.length; i++) {
+      store.insertEmbeddingLocal(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, modelName, allChunks[i].path)
+    }
+
+    return { embedded: batch.length, emptyBodyHashes }
+  } catch (err) {
+    log('codebase', 'Batch embedding failed, falling back to sequential')
+    console.warn('[embed] Batch failed, falling back to sequential:', err)
+    const succeededHashes = new Set<string>()
+
+    for (let i = 0; i < allChunks.length; i++) {
+      try {
+        const result = await embedder.embed(texts[i])
+        const embedding = result.embedding
+
+        if (vectorStore) {
+          try {
+            await vectorStore.upsert({
+              id: `${allChunks[i].hash}:${allChunks[i].seq}`,
+              embedding,
+              metadata: { hash: allChunks[i].hash, seq: allChunks[i].seq, pos: allChunks[i].pos, model: result.model || modelName },
+            })
+          } catch {
+            // Vector store failure logged by provider — still record in SQLite
+          }
+        }
+
+        store.insertEmbeddingLocal(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, result.model || modelName, allChunks[i].path)
+        succeededHashes.add(allChunks[i].hash)
+      } catch {
+        console.warn(`[embed] Skipping chunk ${allChunks[i].hash}:${allChunks[i].seq}`)
+        continue
+      }
+    }
+
+    for (const row of batch) {
+      if (!succeededHashes.has(row.hash)) {
+        failedHashes.add(row.hash)
+        log('codebase', 'All chunks failed for hash ' + row.hash.substring(0, 8))
+        console.warn(`[embed] All chunks failed for ${row.path} (${row.hash.substring(0, 8)}…) — skipping, FTS still covers it`)
+      }
+    }
+
+    return { embedded: succeededHashes.size > 0 ? batch.length : 0, emptyBodyHashes }
+  }
+}
+
 export async function embedPendingCodebase(
   store: Store,
   embedder: { embed(text: string): Promise<{ embedding: number[]; model?: string }>; embedBatch?(texts: string[]): Promise<Array<{ embedding: number[] }>>; getModel?(): string; getMaxChars?(): number },
@@ -454,140 +597,35 @@ export async function embedPendingCodebase(
   const vectorStore = store.getVectorStore?.() ?? null
   let embedded = 0
   const failedHashes = new Set<string>()
+  const limit = pLimit(EMBEDDING_CONCURRENCY)
+
   while (true) {
     const allPending = store.getHashesNeedingEmbedding(projectHash)
-    const batch: Array<{ hash: string; body: string; path: string }> = []
-    for (const row of allPending) {
-      if (batch.length >= batchSize) break
-      if (failedHashes.has(row.hash)) continue
-      batch.push(row)
-    }
-    if (batch.length === 0) break
+    if (allPending.length === 0) break
 
-    const maxChunksPerBatch = 200
-    const allChunks: Array<{ hash: string; seq: number; pos: number; text: string; path: string }> = []
-    const emptyBodyHashes: string[] = []
-    for (const row of batch) {
-      const chunks = chunkMarkdown(row.body, row.hash)
-      if (chunks.length === 0) {
-        // Document has empty/whitespace-only body — mark as failed to prevent infinite retry
-        emptyBodyHashes.push(row.hash)
-        continue
-      }
-      for (const chunk of chunks) {
-        allChunks.push({
-          hash: row.hash,
-          seq: chunk.seq,
-          pos: chunk.pos,
-          text: chunk.text.length > maxChars ? chunk.text.substring(0, maxChars) : chunk.text,
-          path: row.path,
-        })
-      }
-      if (allChunks.length >= maxChunksPerBatch) break
+    const batches: Array<Array<{ hash: string; body: string; path: string }>> = []
+    let remaining = allPending.filter(r => !failedHashes.has(r.hash))
+
+    while (remaining.length > 0 && batches.length < MAX_PENDING_BATCHES) {
+      const batch = remaining.slice(0, batchSize)
+      remaining = remaining.slice(batchSize)
+      batches.push(batch)
     }
 
-    // Mark empty-body docs as processed with sentinel row (seq=-1) to prevent infinite retry
-    for (const hash of emptyBodyHashes) {
-      failedHashes.add(hash)
-      store.insertEmbeddingLocal(hash, -1, 0, 'skipped:empty-body')
-    }
+    if (batches.length === 0) break
 
-    // Skip embedding if no chunks were produced from this batch
-    if (allChunks.length === 0) {
-      if (emptyBodyHashes.length > 0) {
-        log('codebase', 'Marked ' + emptyBodyHashes.length + ' empty-body docs with sentinel (seq=-1)')
-        console.warn(`[embed] Skipping ${emptyBodyHashes.length} docs with empty body — FTS still covers them`)
+    log('codebase', `Processing ${batches.length} batches concurrently (concurrency=${EMBEDDING_CONCURRENCY})`)
+
+    const results = await Promise.allSettled(
+      batches.map(batch => limit(async () => {
+        return processSingleBatch(batch, store, embedder, vectorStore, maxChars, failedHashes)
+      }))
+    )
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        embedded += result.value.embedded
       }
-      continue
-    }
-
-    const texts = allChunks.map(c => c.text)
-    const modelName = embedder.getModel?.() || 'unknown'
-
-    const batchPaths = batch.map(r => r.path.replace(/.*\//, '')).join(', ')
-    log('codebase', 'Embedding batch: ' + batch.length + ' docs, ' + allChunks.length + ' chunks')
-    console.error(`[embed] Batch ${batch.length} docs, ${allChunks.length} chunks: ${batchPaths}`)
-    try {
-      // Step 1: Get embeddings from the API
-      let embeddings: number[][]
-      if (embedder.embedBatch && texts.length > 1) {
-        const results = await embedder.embedBatch(texts)
-        embeddings = results.map(r => r.embedding)
-      } else {
-        embeddings = []
-        for (let i = 0; i < texts.length; i++) {
-          const result = await embedder.embed(texts[i])
-          embeddings.push(result.embedding)
-        }
-      }
-
-      // Step 2: Batch upsert to external vector store (Qdrant) FIRST — await it
-      if (vectorStore) {
-        const points = allChunks.map((chunk, i) => ({
-          id: `${chunk.hash}:${chunk.seq}`,
-          embedding: embeddings[i],
-          metadata: { hash: chunk.hash, seq: chunk.seq, pos: chunk.pos, model: modelName },
-        }))
-        try {
-          await vectorStore.batchUpsert(points)
-        } catch (err) {
-          log('codebase', 'Batch vector store upsert failed: ' + (err instanceof Error ? err.message : String(err)))
-          console.warn(`[embed] Batch vector store upsert failed, falling back to individual:`, err)
-          // Fall back to individual upserts — some may succeed
-          for (const point of points) {
-            try {
-              await vectorStore.upsert(point)
-            } catch {
-              // Individual failure is logged by the vector store provider
-            }
-          }
-        }
-      }
-
-      // Step 3: Record in SQLite content_vectors (no external store — already handled above)
-      for (let i = 0; i < allChunks.length; i++) {
-        store.insertEmbeddingLocal(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, modelName, allChunks[i].path)
-      }
-
-      embedded += batch.length
-    } catch (err) {
-      log('codebase', 'Batch embedding failed, falling back to sequential')
-      console.warn('[embed] Batch failed, falling back to sequential:', err)
-      const succeededHashes = new Set<string>()
-      for (let i = 0; i < allChunks.length; i++) {
-        try {
-          const result = await embedder.embed(texts[i])
-          const embedding = result.embedding
-
-          // Upsert to vector store first
-          if (vectorStore) {
-            try {
-              await vectorStore.upsert({
-                id: `${allChunks[i].hash}:${allChunks[i].seq}`,
-                embedding,
-                metadata: { hash: allChunks[i].hash, seq: allChunks[i].seq, pos: allChunks[i].pos, model: result.model || modelName },
-              })
-            } catch {
-              // Vector store failure logged by provider — still record in SQLite
-            }
-          }
-
-          store.insertEmbeddingLocal(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, result.model || modelName, allChunks[i].path)
-          succeededHashes.add(allChunks[i].hash)
-        } catch {
-          console.warn(`[embed] Skipping chunk ${allChunks[i].hash}:${allChunks[i].seq}`)
-          continue
-        }
-      }
-      // Track hashes where ALL chunks failed to prevent infinite retry
-      for (const row of batch) {
-        if (!succeededHashes.has(row.hash)) {
-          failedHashes.add(row.hash)
-          log('codebase', 'All chunks failed for hash ' + row.hash.substring(0, 8))
-          console.warn(`[embed] All chunks failed for ${row.path} (${row.hash.substring(0, 8)}…) — skipping, FTS still covers it`)
-        }
-      }
-      embedded += succeededHashes.size > 0 ? batch.length : 0
     }
 
     if (embedded > 0 && embedded % 50 === 0) {

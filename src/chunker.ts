@@ -1,4 +1,6 @@
 import type { MemoryChunk, BreakPoint, CodeFenceRegion } from './types.js';
+import { parseToAST, type TreeSitterNode } from './treesitter.js'
+import * as crypto from 'crypto'
 import * as path from 'path'
 
 export interface ChunkOptions {
@@ -432,4 +434,120 @@ function findBestSourceCodeCutoff(
   }
 
   return bestBreak.pos
+}
+
+const AST_MIN_BLOCK_CHARS = 50
+const AST_MAX_BLOCK_CHARS = 3600
+const AST_MAX_BLOCK_TOLERANCE = 1.15
+
+const TS_JS_CHUNK_TYPES = new Set([
+  'function_declaration', 'method_definition', 'class_declaration',
+  'interface_declaration', 'export_statement', 'lexical_declaration',
+])
+const PYTHON_CHUNK_TYPES = new Set([
+  'function_definition', 'class_definition',
+])
+
+export async function chunkWithTreeSitter(
+  content: string,
+  hash: string,
+  filePath: string,
+  workspaceRoot: string,
+  language: 'ts' | 'js' | 'python'
+): Promise<MemoryChunk[] | null> {
+  const root = await parseToAST(content, language)
+  if (!root) return null
+
+  const relativePath = path.relative(workspaceRoot, filePath)
+  const lang = inferLanguage(filePath)
+  const chunkTypes = language === 'python' ? PYTHON_CHUNK_TYPES : TS_JS_CHUNK_TYPES
+  const chunks: MemoryChunk[] = []
+  const seenHashes = new Set<string>()
+  let seq = 0
+
+  function collectChunkNodes(node: TreeSitterNode): TreeSitterNode[] {
+    const results: TreeSitterNode[] = []
+    if (!node.children) return results
+
+    for (const child of node.children) {
+      if (chunkTypes.has(child.type)) {
+        results.push(child)
+      } else if (child.type === 'export_statement' && child.children) {
+        for (const exportChild of child.children) {
+          if (chunkTypes.has(exportChild.type)) {
+            results.push(exportChild)
+          }
+        }
+      }
+    }
+    return results
+  }
+
+  function extractChunk(node: TreeSitterNode): void {
+    const startLine = node.startPosition.row + 1
+    const endLine = node.endPosition.row + 1
+    const nodeText = node.text
+    const charCount = nodeText.length
+
+    if (charCount < AST_MIN_BLOCK_CHARS) return
+
+    const segmentKey = `${filePath}:${startLine}:${endLine}:${charCount}`
+    const segmentHash = crypto.createHash('sha256').update(segmentKey).digest('hex').substring(0, 12)
+    if (seenHashes.has(segmentHash)) return
+    seenHashes.add(segmentHash)
+
+    if (charCount <= AST_MAX_BLOCK_CHARS * AST_MAX_BLOCK_TOLERANCE) {
+      const header = `File: ${relativePath}\nLanguage: ${lang}\nLines: ${startLine}-${endLine}\n\n`
+      chunks.push({ hash, seq, pos: node.startPosition.row, text: header + nodeText, startLine, endLine })
+      seq++
+      return
+    }
+
+    const childChunkNodes = node.children?.filter(c => {
+      const cLen = c.text.length
+      return cLen >= AST_MIN_BLOCK_CHARS && (chunkTypes.has(c.type) || c.type === 'method_definition' || c.type === 'function_definition')
+    }) || []
+
+    if (childChunkNodes.length > 0) {
+      for (const child of childChunkNodes) {
+        extractChunk(child)
+      }
+      return
+    }
+
+    const lines = nodeText.split('\n')
+    let currentChunk = ''
+    let chunkStartLine = startLine
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (currentChunk.length + line.length + 1 > AST_MAX_BLOCK_CHARS && currentChunk.length >= AST_MIN_BLOCK_CHARS) {
+        const chunkEndLine = startLine + i - 1
+        const header = `File: ${relativePath}\nLanguage: ${lang}\nLines: ${chunkStartLine}-${chunkEndLine}\n\n`
+        chunks.push({ hash, seq, pos: 0, text: header + currentChunk, startLine: chunkStartLine, endLine: chunkEndLine })
+        seq++
+        currentChunk = line + '\n'
+        chunkStartLine = startLine + i
+      } else {
+        currentChunk += line + '\n'
+      }
+    }
+    if (currentChunk.length >= AST_MIN_BLOCK_CHARS) {
+      const chunkEndLine = endLine
+      const header = `File: ${relativePath}\nLanguage: ${lang}\nLines: ${chunkStartLine}-${chunkEndLine}\n\n`
+      chunks.push({ hash, seq, pos: 0, text: header + currentChunk, startLine: chunkStartLine, endLine: chunkEndLine })
+      seq++
+    }
+  }
+
+  const topLevelNodes = collectChunkNodes(root)
+
+  if (topLevelNodes.length === 0) {
+    return null
+  }
+
+  for (const node of topLevelNodes) {
+    extractChunk(node)
+  }
+
+  return chunks.length > 0 ? chunks : null
 }

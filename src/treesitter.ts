@@ -56,6 +56,21 @@ export async function waitForInit(): Promise<void> {
   await initPromise
 }
 
+export async function parseToAST(code: string, language: 'ts' | 'js' | 'python'): Promise<TreeSitterNode | null> {
+  await initPromise
+  if (!treeSitterAvailable || !Parser) return null
+  const lang = getLanguageParser(language)
+  if (!lang) return null
+  try {
+    const parser = new Parser()
+    parser.setLanguage(lang)
+    const tree = parser.parse(code)
+    return tree.rootNode as unknown as TreeSitterNode
+  } catch {
+    return null
+  }
+}
+
 function getLanguageParser(language: SupportedLanguage): unknown | null {
   switch (language) {
     case 'ts':
@@ -93,7 +108,7 @@ function hasExportModifier(node: { parent?: { type: string; children?: Array<{ t
   return false
 }
 
-interface TreeSitterNode {
+export interface TreeSitterNode {
   type: string
   text: string
   startPosition: { row: number; column: number }

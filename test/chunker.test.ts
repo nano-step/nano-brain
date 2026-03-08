@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findBreakPoints, findCodeFences, findBestCutoff, chunkMarkdown } from '../src/chunker.js';
+import { findBreakPoints, findCodeFences, findBestCutoff, chunkMarkdown, chunkWithTreeSitter } from '../src/chunker.js';
 
 describe('findBreakPoints', () => {
   it('detects H1 headings with score 100', () => {
@@ -471,5 +471,151 @@ describe('chunkMarkdown - edge cases', () => {
     
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks[0].text).toContain('Line 1');
+  });
+});
+
+describe('chunkWithTreeSitter', () => {
+  const workspaceRoot = '/test/workspace';
+  const hash = 'test-hash';
+
+  it('extracts single function (TypeScript)', async () => {
+    const content = `
+export function greet(name: string): string {
+  return 'Hello, ' + name;
+}
+`.trim();
+    const filePath = '/test/workspace/src/greet.ts';
+    const chunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, 'ts');
+
+    expect(chunks).not.toBeNull();
+    expect(chunks!.length).toBe(1);
+    expect(chunks![0].text).toContain('function greet');
+    expect(chunks![0].startLine).toBe(1);
+    expect(chunks![0].endLine).toBe(3);
+  });
+
+  it('extracts class with methods (TypeScript)', async () => {
+    const content = `
+export class Calculator {
+  add(a: number, b: number): number {
+    return a + b;
+  }
+
+  subtract(a: number, b: number): number {
+    return a - b;
+  }
+}
+`.trim();
+    const filePath = '/test/workspace/src/calculator.ts';
+    const chunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, 'ts');
+
+    expect(chunks).not.toBeNull();
+    expect(chunks!.length).toBeGreaterThanOrEqual(1);
+    expect(chunks![0].text).toContain('class Calculator');
+  });
+
+  it('extracts Python function', async () => {
+    const content = `
+def greet(name: str) -> str:
+    return f"Hello, {name}"
+`.trim();
+    const filePath = '/test/workspace/src/greet.py';
+    const chunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, 'python');
+
+    expect(chunks).not.toBeNull();
+    expect(chunks!.length).toBe(1);
+    expect(chunks![0].text).toContain('def greet');
+  });
+
+  it('returns null for content without AST boundaries', async () => {
+    const content = `
+const x = 1;
+const y = 2;
+`.trim();
+    const filePath = '/test/workspace/src/constants.ts';
+    const chunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, 'ts');
+
+    expect(chunks).toBeNull();
+  });
+
+  it('includes metadata header with file path, language, and lines', async () => {
+    const content = `
+export function example(): void {
+  console.log('test');
+}
+`.trim();
+    const filePath = '/test/workspace/src/example.ts';
+    const chunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, 'ts');
+
+    expect(chunks).not.toBeNull();
+    expect(chunks![0].text).toContain('File: src/example.ts');
+    expect(chunks![0].text).toContain('Language: typescript');
+    expect(chunks![0].text).toContain('Lines:');
+  });
+
+  it('falls back to line-based chunking for oversized functions', async () => {
+    const longBody = Array(200).fill('  console.log("line");').join('\n');
+    const content = `
+export function oversizedFunction(): void {
+${longBody}
+}
+`.trim();
+    const filePath = '/test/workspace/src/oversized.ts';
+    const chunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, 'ts');
+
+    expect(chunks).not.toBeNull();
+    expect(chunks!.length).toBeGreaterThan(1);
+  });
+
+  it('extracts multiple functions', async () => {
+    const content = `
+export function foo(): void {
+  console.log('foo');
+}
+
+export function bar(): void {
+  console.log('bar');
+}
+
+export function baz(): void {
+  console.log('baz');
+}
+`.trim();
+    const filePath = '/test/workspace/src/funcs.ts';
+    const chunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, 'ts');
+
+    expect(chunks).not.toBeNull();
+    expect(chunks!.length).toBe(3);
+  });
+
+  it('handles JavaScript files', async () => {
+    const content = `
+export function greet(name) {
+  return 'Hello, ' + name;
+}
+`.trim();
+    const filePath = '/test/workspace/src/greet.js';
+    const chunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, 'js');
+
+    expect(chunks).not.toBeNull();
+    expect(chunks!.length).toBe(1);
+    expect(chunks![0].text).toContain('function greet');
+  });
+
+  it('extracts Python class with methods', async () => {
+    const content = `
+class Calculator:
+    def add(self, a: int, b: int) -> int:
+        return a + b
+
+    def subtract(self, a: int, b: int) -> int:
+        return a - b
+`.trim();
+    const filePath = '/test/workspace/src/calculator.py';
+    const chunks = await chunkWithTreeSitter(content, hash, filePath, workspaceRoot, 'python');
+
+    expect(chunks).not.toBeNull();
+    expect(chunks!.length).toBeGreaterThanOrEqual(1);
+    expect(chunks![0].text).toContain('class Calculator');
   });
 });
