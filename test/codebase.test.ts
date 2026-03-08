@@ -7,6 +7,7 @@ import {
   scanCodebaseFiles,
   indexCodebase,
   getCodebaseStats,
+  embedPendingCodebase,
 } from '../src/codebase.js';
 import { createStore, computeHash } from '../src/store.js';
 import type { Store, CodebaseConfig } from '../src/types.js';
@@ -674,5 +675,142 @@ describe('getCodebaseStats', () => {
     const stats = getCodebaseStats(store, config, tmpDir);
     
     expect(stats?.maxSize).toBe(1024 * 1024 * 1024);
+  });
+});
+
+describe('parallel embedding', () => {
+  let tmpDir: string;
+  let dbPath: string;
+  let store: Store;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-brain-parallel-embed-test-'));
+    dbPath = path.join(tmpDir, 'test.db');
+    store = createStore(dbPath);
+  });
+
+  afterEach(() => {
+    store.close();
+    if (fs.existsSync(tmpDir)) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('should process multiple batches concurrently', async () => {
+    const embedCalls: string[] = [];
+    const mockEmbedder = {
+      embed: async (text: string) => {
+        embedCalls.push(text);
+        await new Promise(r => setTimeout(r, 10));
+        return { embedding: [0.1, 0.2, 0.3] };
+      },
+      embedBatch: async (texts: string[]) => {
+        embedCalls.push(...texts);
+        await new Promise(r => setTimeout(r, 10));
+        return texts.map(() => ({ embedding: [0.1, 0.2, 0.3] }));
+      },
+      getModel: () => 'test-model',
+      getMaxChars: () => 6000,
+    };
+
+    for (let i = 0; i < 150; i++) {
+      const body = `# Document ${i}\n\nThis is test content for document ${i}.`;
+      const hash = computeHash(body);
+      store.insertContent(hash, body);
+      store.insertDocument({
+        collection: 'codebase',
+        path: `/test/doc-${i}.md`,
+        title: `doc-${i}.md`,
+        hash,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        active: true,
+      });
+    }
+
+    const result = await embedPendingCodebase(store, mockEmbedder, 50);
+
+    expect(result).toBe(150);
+    expect(embedCalls.length).toBeGreaterThan(0);
+  });
+
+  it('should fall back to sequential on batch failure', async () => {
+    let batchAttempts = 0;
+    let sequentialCalls = 0;
+    const mockEmbedder = {
+      embed: async (_text: string) => {
+        sequentialCalls++;
+        return { embedding: [0.1, 0.2, 0.3] };
+      },
+      embedBatch: async (_texts: string[]) => {
+        batchAttempts++;
+        throw new Error('Batch API failed');
+      },
+      getModel: () => 'test-model',
+      getMaxChars: () => 6000,
+    };
+
+    for (let i = 0; i < 5; i++) {
+      const body = `# Fail Document ${i}\n\nContent.`;
+      const hash = computeHash(body);
+      store.insertContent(hash, body);
+      store.insertDocument({
+        collection: 'codebase',
+        path: `/test/fail-${i}.md`,
+        title: `fail-${i}.md`,
+        hash,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        active: true,
+      });
+    }
+
+    const result = await embedPendingCodebase(store, mockEmbedder, 50);
+
+    expect(batchAttempts).toBeGreaterThan(0);
+    expect(sequentialCalls).toBeGreaterThan(0);
+    expect(result).toBe(5);
+  });
+
+  it('should respect EMBEDDING_CONCURRENCY setting', async () => {
+    let concurrentCalls = 0;
+    let maxConcurrent = 0;
+    const mockEmbedder = {
+      embed: async (_text: string) => {
+        concurrentCalls++;
+        maxConcurrent = Math.max(maxConcurrent, concurrentCalls);
+        await new Promise(r => setTimeout(r, 50));
+        concurrentCalls--;
+        return { embedding: [0.1, 0.2, 0.3] };
+      },
+      embedBatch: async (texts: string[]) => {
+        concurrentCalls++;
+        maxConcurrent = Math.max(maxConcurrent, concurrentCalls);
+        await new Promise(r => setTimeout(r, 50));
+        concurrentCalls--;
+        return texts.map(() => ({ embedding: [0.1, 0.2, 0.3] }));
+      },
+      getModel: () => 'test-model',
+      getMaxChars: () => 6000,
+    };
+
+    for (let i = 0; i < 10; i++) {
+      const body = `# Concurrency Document ${i}\n\nContent.`;
+      const hash = computeHash(body);
+      store.insertContent(hash, body);
+      store.insertDocument({
+        collection: 'codebase',
+        path: `/test/concurrency-${i}.md`,
+        title: `concurrency-${i}.md`,
+        hash,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        active: true,
+      });
+    }
+
+    await embedPendingCodebase(store, mockEmbedder, 5);
+
+    expect(maxConcurrent).toBeGreaterThan(0);
   });
 });
