@@ -224,6 +224,12 @@ nano-brain query "query"    # Hybrid search
 nano-brain collection add <name> <path>     # Add collection
 nano-brain collection remove <name>         # Remove collection
 nano-brain collection list                  # List collections
+
+# Workspace management
+nano-brain rm --list                        # List all workspaces
+nano-brain rm <workspace> --dry-run         # Preview what would be deleted
+nano-brain rm <workspace>                   # Remove workspace and all its data
+# <workspace> can be: absolute path, hash prefix, or workspace name
 ```
 
 ## Project Structure

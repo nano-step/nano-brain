@@ -249,6 +249,18 @@ export const DEFAULT_SEARCH_CONFIG: SearchConfig = {
   supersede_demotion: 0.3,
 };
 
+export interface RemoveWorkspaceResult {
+  documentsDeleted: number;
+  embeddingsDeleted: number;
+  contentDeleted: number;
+  cacheDeleted: number;
+  fileEdgesDeleted: number;
+  symbolsDeleted: number;
+  codeSymbolsDeleted: number;
+  symbolEdgesDeleted: number;
+  executionFlowsDeleted: number;
+}
+
 export interface Store {
   close(): void;
   
@@ -286,6 +298,7 @@ export interface Store {
   
   deleteDocumentsByPath(filePath: string): number;
   clearWorkspace(projectHash: string): { documentsDeleted: number; embeddingsDeleted: number };
+  removeWorkspace(projectHash: string): RemoveWorkspaceResult;
   cleanOrphanedEmbeddings(): number;
   getCollectionStorageSize(collection: string): number;
   

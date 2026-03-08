@@ -11,6 +11,7 @@ import {
   findContextForPath,
   listAllContexts,
   scanCollectionFiles,
+  removeWorkspaceConfig,
 } from '../src/collections.js';
 import type { CollectionConfig, Collection } from '../src/types.js';
 import * as fs from 'fs';
@@ -566,6 +567,49 @@ describe('Collections', () => {
 
       expect(files).toHaveLength(1);
       expect(files[0].endsWith('file.txt')).toBe(true);
+    });
+  });
+
+  describe('removeWorkspaceConfig', () => {
+    it('should remove workspace entry from config', () => {
+      const config: CollectionConfig = {
+        collections: { test: { path: '/tmp/test', pattern: '**/*.md' } },
+        workspaces: {
+          '/projects/app-a': { codebase: { enabled: true } },
+          '/projects/app-b': { codebase: { enabled: true } },
+        },
+      };
+      saveCollectionConfig(configPath, config);
+
+      const removed = removeWorkspaceConfig(configPath, '/projects/app-a');
+
+      expect(removed).toBe(true);
+      const loaded = loadCollectionConfig(configPath);
+      expect(loaded?.workspaces).not.toHaveProperty('/projects/app-a');
+      expect(loaded?.workspaces).toHaveProperty('/projects/app-b');
+    });
+
+    it('should return false when workspace not in config', () => {
+      const config: CollectionConfig = {
+        collections: {},
+        workspaces: { '/projects/app-a': { codebase: { enabled: true } } },
+      };
+      saveCollectionConfig(configPath, config);
+
+      const removed = removeWorkspaceConfig(configPath, '/projects/nonexistent');
+
+      expect(removed).toBe(false);
+      const loaded = loadCollectionConfig(configPath);
+      expect(loaded?.workspaces).toHaveProperty('/projects/app-a');
+    });
+
+    it('should return false when config has no workspaces section', () => {
+      const config: CollectionConfig = { collections: {} };
+      saveCollectionConfig(configPath, config);
+
+      const removed = removeWorkspaceConfig(configPath, '/projects/anything');
+
+      expect(removed).toBe(false);
     });
   });
 });

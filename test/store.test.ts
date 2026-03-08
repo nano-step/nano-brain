@@ -867,6 +867,274 @@ describe('Store', () => {
     });
   });
 
+  describe('removeWorkspace', () => {
+    it('should delete from all workspace-scoped tables', () => {
+      const projectHash = 'workspace_remove_all';
+      const body = '# Workspace Doc';
+      const hash = computeHash(body);
+
+      store.insertContent(hash, body);
+      store.insertDocument({
+        collection: 'test',
+        path: 'ws/remove-all.md',
+        title: 'Remove All',
+        hash,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        active: true,
+        projectHash,
+      });
+
+      store.insertFileEdge('src/a.ts', 'src/b.ts', projectHash, 'import');
+      store.insertSymbol({
+        type: 'function',
+        pattern: 'removeWorkspace',
+        operation: 'definition',
+        repo: 'test-repo',
+        filePath: 'src/remove.ts',
+        lineNumber: 12,
+        rawExpression: 'function removeWorkspace() {}',
+        projectHash,
+      });
+
+      store.setCachedResult('remove-cache', '{"ok":true}', projectHash);
+
+      const db = new Database(dbPath);
+      const contentHash = computeHash('code-symbol');
+      const codeSymbolStmt = db.prepare(`
+        INSERT INTO code_symbols (name, kind, file_path, start_line, end_line, exported, content_hash, project_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const codeSymbolResult = codeSymbolStmt.run('removeSymbolA', 'function', 'src/remove.ts', 1, 3, 1, contentHash, projectHash);
+      const codeSymbolResultB = codeSymbolStmt.run('removeSymbolB', 'function', 'src/remove.ts', 5, 7, 0, contentHash, projectHash);
+      const sourceId = Number(codeSymbolResult.lastInsertRowid);
+      const targetId = Number(codeSymbolResultB.lastInsertRowid);
+
+      db.prepare(`
+        INSERT INTO symbol_edges (source_id, target_id, edge_type, confidence, project_hash)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(sourceId, targetId, 'calls', 0.8, projectHash);
+
+      const flowResult = db.prepare(`
+        INSERT INTO execution_flows (label, flow_type, entry_symbol_id, terminal_symbol_id, step_count, project_hash)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run('remove-flow', 'test', sourceId, targetId, 2, projectHash);
+      const flowId = Number(flowResult.lastInsertRowid);
+
+      db.prepare(`
+        INSERT INTO flow_steps (flow_id, symbol_id, step_index)
+        VALUES (?, ?, ?)
+      `).run(flowId, sourceId, 0);
+      db.prepare(`
+        INSERT INTO flow_steps (flow_id, symbol_id, step_index)
+        VALUES (?, ?, ?)
+      `).run(flowId, targetId, 1);
+      db.close();
+
+      store.removeWorkspace(projectHash);
+
+      const dbCheck = new Database(dbPath);
+      const tableCounts = {
+        documents: dbCheck.prepare('SELECT COUNT(*) as count FROM documents WHERE project_hash = ?').get(projectHash) as { count: number },
+        fileEdges: dbCheck.prepare('SELECT COUNT(*) as count FROM file_edges WHERE project_hash = ?').get(projectHash) as { count: number },
+        symbols: dbCheck.prepare('SELECT COUNT(*) as count FROM symbols WHERE project_hash = ?').get(projectHash) as { count: number },
+        codeSymbols: dbCheck.prepare('SELECT COUNT(*) as count FROM code_symbols WHERE project_hash = ?').get(projectHash) as { count: number },
+        symbolEdges: dbCheck.prepare('SELECT COUNT(*) as count FROM symbol_edges WHERE project_hash = ?').get(projectHash) as { count: number },
+        executionFlows: dbCheck.prepare('SELECT COUNT(*) as count FROM execution_flows WHERE project_hash = ?').get(projectHash) as { count: number },
+        cache: dbCheck.prepare('SELECT COUNT(*) as count FROM llm_cache WHERE project_hash = ?').get(projectHash) as { count: number },
+      };
+      const flowSteps = dbCheck.prepare('SELECT COUNT(*) as count FROM flow_steps').get() as { count: number };
+      dbCheck.close();
+
+      expect(tableCounts.documents.count).toBe(0);
+      expect(tableCounts.fileEdges.count).toBe(0);
+      expect(tableCounts.symbols.count).toBe(0);
+      expect(tableCounts.codeSymbols.count).toBe(0);
+      expect(tableCounts.symbolEdges.count).toBe(0);
+      expect(tableCounts.executionFlows.count).toBe(0);
+      expect(tableCounts.cache.count).toBe(0);
+      expect(flowSteps.count).toBe(0);
+    });
+
+    it('should preserve shared content hashes used by other workspaces', () => {
+      const sharedBody = '# Shared Content';
+      const sharedHash = computeHash(sharedBody);
+
+      store.insertContent(sharedHash, sharedBody);
+      store.insertDocument({
+        collection: 'test',
+        path: 'shared/a.md',
+        title: 'Shared A',
+        hash: sharedHash,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        active: true,
+        projectHash: 'workspace_a',
+      });
+      store.insertDocument({
+        collection: 'test',
+        path: 'shared/b.md',
+        title: 'Shared B',
+        hash: sharedHash,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        active: true,
+        projectHash: 'workspace_b',
+      });
+
+      store.removeWorkspace('workspace_a');
+
+      expect(store.findDocument('shared/a.md')).toBeNull();
+      expect(store.findDocument('shared/b.md')).not.toBeNull();
+      expect(store.getDocumentBody(sharedHash)).toBe(sharedBody);
+    });
+
+    it('should delete orphaned content', () => {
+      const body = '# Orphaned Content';
+      const hash = computeHash(body);
+
+      store.insertContent(hash, body);
+      store.insertDocument({
+        collection: 'test',
+        path: 'orphan/remove.md',
+        title: 'Orphaned Content',
+        hash,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        active: true,
+        projectHash: 'workspace_a',
+      });
+
+      store.removeWorkspace('workspace_a');
+
+      expect(store.findDocument('orphan/remove.md')).toBeNull();
+      expect(store.getDocumentBody(hash)).toBeNull();
+    });
+
+    it('should return accurate deletion counts', () => {
+      const projectHash = 'workspace_counts';
+      const bodyA = '# Count A';
+      const bodyB = '# Count B';
+      const hashA = computeHash(bodyA);
+      const hashB = computeHash(bodyB);
+
+      store.insertContent(hashA, bodyA);
+      store.insertDocument({
+        collection: 'test',
+        path: 'counts/a.md',
+        title: 'Count A',
+        hash: hashA,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        active: true,
+        projectHash,
+      });
+
+      store.insertContent(hashB, bodyB);
+      store.insertDocument({
+        collection: 'test',
+        path: 'counts/b.md',
+        title: 'Count B',
+        hash: hashB,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        active: true,
+        projectHash,
+      });
+
+      store.insertEmbeddingLocal(hashA, 0, 0, 'test-model');
+      store.insertEmbeddingLocal(hashB, 0, 0, 'test-model');
+
+      store.insertFileEdge('src/counts-a.ts', 'src/counts-b.ts', projectHash, 'import');
+      store.insertFileEdge('src/counts-b.ts', 'src/counts-c.ts', projectHash, 'import');
+
+      store.insertSymbol({
+        type: 'function',
+        pattern: 'countA',
+        operation: 'definition',
+        repo: 'test-repo',
+        filePath: 'src/counts-a.ts',
+        lineNumber: 3,
+        rawExpression: 'function countA() {}',
+        projectHash,
+      });
+      store.insertSymbol({
+        type: 'function',
+        pattern: 'countB',
+        operation: 'definition',
+        repo: 'test-repo',
+        filePath: 'src/counts-b.ts',
+        lineNumber: 7,
+        rawExpression: 'function countB() {}',
+        projectHash,
+      });
+
+      store.setCachedResult('count-cache-a', '{"ok":true}', projectHash);
+      store.setCachedResult('count-cache-b', '{"ok":false}', projectHash);
+
+      const db = new Database(dbPath);
+      const codeHash = computeHash('count-symbols');
+      const codeSymbolStmt = db.prepare(`
+        INSERT INTO code_symbols (name, kind, file_path, start_line, end_line, exported, content_hash, project_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const codeSymbolA = codeSymbolStmt.run('countSymbolA', 'function', 'src/counts-a.ts', 1, 2, 1, codeHash, projectHash);
+      const codeSymbolB = codeSymbolStmt.run('countSymbolB', 'function', 'src/counts-b.ts', 4, 6, 0, codeHash, projectHash);
+      const symbolIdA = Number(codeSymbolA.lastInsertRowid);
+      const symbolIdB = Number(codeSymbolB.lastInsertRowid);
+
+      db.prepare(`
+        INSERT INTO symbol_edges (source_id, target_id, edge_type, confidence, project_hash)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(symbolIdA, symbolIdB, 'calls', 0.9, projectHash);
+
+      const flowInsert = db.prepare(`
+        INSERT INTO execution_flows (label, flow_type, entry_symbol_id, terminal_symbol_id, step_count, project_hash)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run('count-flow', 'test', symbolIdA, symbolIdB, 2, projectHash);
+      const flowId = Number(flowInsert.lastInsertRowid);
+
+      db.prepare(`
+        INSERT INTO flow_steps (flow_id, symbol_id, step_index)
+        VALUES (?, ?, ?)
+      `).run(flowId, symbolIdA, 0);
+      db.prepare(`
+        INSERT INTO flow_steps (flow_id, symbol_id, step_index)
+        VALUES (?, ?, ?)
+      `).run(flowId, symbolIdB, 1);
+
+      const documentsCount = (db.prepare('SELECT COUNT(*) as count FROM documents WHERE project_hash = ?').get(projectHash) as { count: number }).count;
+      const fileEdgesCount = (db.prepare('SELECT COUNT(*) as count FROM file_edges WHERE project_hash = ?').get(projectHash) as { count: number }).count;
+      const symbolsCount = (db.prepare('SELECT COUNT(*) as count FROM symbols WHERE project_hash = ?').get(projectHash) as { count: number }).count;
+      const codeSymbolsCount = (db.prepare('SELECT COUNT(*) as count FROM code_symbols WHERE project_hash = ?').get(projectHash) as { count: number }).count;
+      const symbolEdgesCount = (db.prepare('SELECT COUNT(*) as count FROM symbol_edges WHERE project_hash = ?').get(projectHash) as { count: number }).count;
+      const executionFlowsCount = (db.prepare('SELECT COUNT(*) as count FROM execution_flows WHERE project_hash = ?').get(projectHash) as { count: number }).count;
+      const cacheCount = (db.prepare('SELECT COUNT(*) as count FROM llm_cache WHERE project_hash = ?').get(projectHash) as { count: number }).count;
+      const orphanedHashes = db.prepare(
+        'SELECT DISTINCT hash FROM documents WHERE project_hash = ? AND hash NOT IN (SELECT DISTINCT hash FROM documents WHERE project_hash != ?)'
+      ).all(projectHash, projectHash) as Array<{ hash: string }>;
+
+      let embeddingsCount = 0;
+      if (orphanedHashes.length > 0) {
+        const placeholders = orphanedHashes.map(() => '?').join(',');
+        embeddingsCount = (db.prepare(`SELECT COUNT(*) as count FROM content_vectors WHERE hash IN (${placeholders})`).get(...orphanedHashes.map(row => row.hash)) as { count: number }).count;
+      }
+      db.close();
+
+      const result = store.removeWorkspace(projectHash);
+
+      expect(result.documentsDeleted).toBe(documentsCount);
+      expect(result.fileEdgesDeleted).toBe(fileEdgesCount);
+      expect(result.symbolsDeleted).toBe(symbolsCount);
+      expect(result.codeSymbolsDeleted).toBe(codeSymbolsCount);
+      expect(result.symbolEdgesDeleted).toBe(symbolEdgesCount);
+      expect(result.executionFlowsDeleted).toBe(executionFlowsCount);
+      expect(result.cacheDeleted).toBe(cacheCount);
+      expect(result.embeddingsDeleted).toBe(embeddingsCount);
+      expect(result.contentDeleted).toBe(orphanedHashes.length);
+    });
+  });
+
   describe('Qdrant migration features', () => {
     describe('getVectorStore/setVectorStore', () => {
       it('should return null when no vector store is set', () => {

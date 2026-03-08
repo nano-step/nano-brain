@@ -1,6 +1,6 @@
 import { startServer } from './server.js';
 import { createStore, computeHash, indexDocument, extractProjectHashFromPath } from './store.js';
-import { loadCollectionConfig, addCollection, removeCollection, renameCollection, listCollections, getCollections, scanCollectionFiles, saveCollectionConfig, getWorkspaceConfig } from './collections.js';
+import { loadCollectionConfig, addCollection, removeCollection, renameCollection, listCollections, getCollections, scanCollectionFiles, saveCollectionConfig, getWorkspaceConfig, removeWorkspaceConfig } from './collections.js';
 import { harvestSessions } from './harvester.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth, checkOpenAIHealth } from './embeddings.js';
 import { hybridSearch, parseSearchConfig } from './search.js';
@@ -10,7 +10,7 @@ import { handleBench } from './bench.js';
 import { resolveHostUrl } from './host.js';
 import { QdrantVecStore } from './providers/qdrant.js';
 import { createVectorStore } from './vector-store.js';
-import type { SearchResult } from './types.js';
+import type { SearchResult, CollectionConfig, Store } from './types.js';
 import type { VectorPoint } from './vector-store.js';
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
@@ -142,6 +142,10 @@ nano-brain - Memory system with hybrid search
     --type=<type>   Symbol type (required)
     --pattern=<pat> Pattern to analyze (required)
     --json          Output as JSON
+  rm <workspace>    Remove a workspace and all its data
+    --list          List all known workspaces
+    --dry-run       Preview what would be deleted without deleting
+    <workspace> can be: absolute path, hash prefix, or workspace name
   harvest           Manually trigger session harvesting
   cache             Manage LLM cache
     clear           Clear cache for current workspace
@@ -2205,6 +2209,220 @@ async function handleQdrant(globalOpts: GlobalOptions, commandArgs: string[]): P
   }
 }
 
+export function resolveWorkspaceIdentifier(
+  identifier: string,
+  config: CollectionConfig | null,
+  store: Store
+): { projectHash: string; workspacePath: string | null } {
+  const hexPrefixRegex = /^[a-f0-9]{4,12}$/;
+
+  if (path.isAbsolute(identifier)) {
+    const projectHash = crypto.createHash('sha256').update(identifier).digest('hex').substring(0, 12);
+    return { projectHash, workspacePath: identifier };
+  }
+
+  if (hexPrefixRegex.test(identifier)) {
+    const stats = store.getWorkspaceStats();
+    const matches = stats.filter(s => s.projectHash.startsWith(identifier));
+
+    if (matches.length === 1) {
+      let workspacePath: string | null = null;
+      if (config?.workspaces) {
+        for (const [wsPath] of Object.entries(config.workspaces)) {
+          const hash = crypto.createHash('sha256').update(wsPath).digest('hex').substring(0, 12);
+          if (hash === matches[0].projectHash) {
+            workspacePath = wsPath;
+            break;
+          }
+        }
+      }
+      return { projectHash: matches[0].projectHash, workspacePath };
+    }
+
+    if (matches.length > 1) {
+      const details = matches.map(m => `  ${m.projectHash} (${m.count} docs)`).join('\n');
+      throw new Error(`Ambiguous hash prefix "${identifier}" matches ${matches.length} workspaces:\n${details}\nUse a longer prefix or the full workspace path.`);
+    }
+  }
+
+  if (config?.workspaces) {
+    const nameMatches: Array<{ wsPath: string; projectHash: string }> = [];
+    for (const wsPath of Object.keys(config.workspaces)) {
+      if (path.basename(wsPath) === identifier) {
+        const projectHash = crypto.createHash('sha256').update(wsPath).digest('hex').substring(0, 12);
+        nameMatches.push({ wsPath, projectHash });
+      }
+    }
+
+    if (nameMatches.length === 1) {
+      return { projectHash: nameMatches[0].projectHash, workspacePath: nameMatches[0].wsPath };
+    }
+
+    if (nameMatches.length > 1) {
+      const details = nameMatches.map(m => `  ${m.wsPath} (${m.projectHash})`).join('\n');
+      throw new Error(`Ambiguous name "${identifier}" matches ${nameMatches.length} workspaces:\n${details}\nUse the full path or hash prefix instead.`);
+    }
+  }
+
+  throw new Error(`No workspace found matching "${identifier}". Run "nano-brain rm --list" to see available workspaces.`);
+}
+
+async function handleRm(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
+  log('cli', 'rm command invoked');
+  const config = loadCollectionConfig(globalOpts.configPath);
+  let dryRun = false;
+  let listMode = false;
+  let identifier: string | null = null;
+
+  for (const arg of commandArgs) {
+    if (arg === '--dry-run') {
+      dryRun = true;
+    } else if (arg === '--list') {
+      listMode = true;
+    } else if (!arg.startsWith('-')) {
+      identifier = arg;
+    }
+  }
+
+  if (listMode) {
+    const dataDir = path.dirname(globalOpts.dbPath);
+    let dbFiles: string[] = [];
+    try {
+      dbFiles = fs.readdirSync(dataDir).filter(f => f.endsWith('.sqlite')).map(f => path.join(dataDir, f));
+    } catch {
+      console.error(`Cannot read data directory: ${dataDir}`);
+      process.exit(1);
+    }
+
+    if (dbFiles.length === 0) {
+      console.log('No workspaces found.');
+      return;
+    }
+
+    console.log('Known workspaces:');
+    console.log('');
+    console.log('  Name                 Hash          Path                                           Docs');
+    console.log('  ───────────────────  ────────────  ─────────────────────────────────────────────  ────');
+
+    for (const dbFile of dbFiles) {
+      const wsName = extractWorkspaceName(dbFile);
+      let docs = 0;
+      try {
+        const readDb = new Database(dbFile, { readonly: true });
+        try {
+          docs = (readDb.prepare('SELECT COUNT(*) as count FROM documents WHERE active = 1').get() as { count: number }).count;
+        } catch { /* ignore */ }
+        readDb.close();
+      } catch { /* ignore */ }
+
+      let wsPath = '';
+      const fileHash = path.basename(dbFile, '.sqlite').split('-').pop() || '';
+      if (config?.workspaces) {
+        for (const [p] of Object.entries(config.workspaces)) {
+          const h = crypto.createHash('sha256').update(p).digest('hex').substring(0, 12);
+          if (h === fileHash) {
+            wsPath = p;
+            break;
+          }
+        }
+      }
+
+      console.log(`  ${wsName.padEnd(21)}  ${fileHash.padEnd(12)}  ${(wsPath || '(unknown)').padEnd(45)}  ${docs}`);
+    }
+    return;
+  }
+
+  if (!identifier) {
+    console.error('Usage: nano-brain rm <workspace> [--dry-run]');
+    console.error('       nano-brain rm --list');
+    console.error('');
+    console.error('<workspace> can be: absolute path, hash prefix, or workspace name');
+    process.exit(1);
+  }
+
+  const store = createStore(globalOpts.dbPath);
+  try {
+    const resolved = resolveWorkspaceIdentifier(identifier, config, store);
+    const { projectHash, workspacePath } = resolved;
+
+    if (dryRun) {
+      const db = new Database(globalOpts.dbPath, { readonly: true });
+      const count = (table: string, col: string = 'project_hash') => {
+        try {
+          return (db.prepare(`SELECT COUNT(*) as cnt FROM ${table} WHERE ${col} = ?`).get(projectHash) as { cnt: number }).cnt;
+        } catch { return 0; }
+      };
+
+      console.log(`Dry run — would remove workspace ${projectHash}${workspacePath ? ` (${workspacePath})` : ''}:`);
+      console.log('');
+      console.log(`  documents:        ${count('documents')}`);
+      console.log(`  file_edges:       ${count('file_edges')}`);
+      console.log(`  symbols:          ${count('symbols')}`);
+      console.log(`  code_symbols:     ${count('code_symbols')}`);
+      console.log(`  symbol_edges:     ${count('symbol_edges')}`);
+      console.log(`  execution_flows:  ${count('execution_flows')}`);
+      console.log(`  llm_cache:        ${count('llm_cache')}`);
+      if (workspacePath && config?.workspaces?.[workspacePath]) {
+        console.log(`  config entry:     ${workspacePath}`);
+      }
+      console.log('');
+      console.log('Run without --dry-run to execute.');
+      db.close();
+      return;
+    }
+
+    console.log(`Removing workspace ${projectHash}${workspacePath ? ` (${workspacePath})` : ''}...`);
+    const result = store.removeWorkspace(projectHash);
+
+    let configRemoved = false;
+    if (workspacePath) {
+      configRemoved = removeWorkspaceConfig(globalOpts.configPath, workspacePath);
+    }
+
+    const totalDeleted = result.documentsDeleted + result.embeddingsDeleted + result.contentDeleted
+      + result.cacheDeleted + result.fileEdgesDeleted + result.symbolsDeleted
+      + result.codeSymbolsDeleted + result.symbolEdgesDeleted + result.executionFlowsDeleted;
+
+    console.log('');
+    console.log('Removed:');
+    console.log(`  documents:        ${result.documentsDeleted}`);
+    console.log(`  embeddings:       ${result.embeddingsDeleted}`);
+    console.log(`  content:          ${result.contentDeleted}`);
+    console.log(`  cache:            ${result.cacheDeleted}`);
+    console.log(`  file_edges:       ${result.fileEdgesDeleted}`);
+    console.log(`  symbols:          ${result.symbolsDeleted}`);
+    console.log(`  code_symbols:     ${result.codeSymbolsDeleted}`);
+    console.log(`  symbol_edges:     ${result.symbolEdgesDeleted}`);
+    console.log(`  execution_flows:  ${result.executionFlowsDeleted}`);
+    if (configRemoved) {
+      console.log(`  config entry:     ${workspacePath}`);
+    }
+    console.log(`  total rows:       ${totalDeleted}`);
+
+    const db = new Database(globalOpts.dbPath, { readonly: true });
+    const tables = ['documents', 'file_edges', 'symbols', 'code_symbols', 'symbol_edges', 'execution_flows', 'llm_cache'];
+    let remaining = 0;
+    for (const table of tables) {
+      try {
+        remaining += (db.prepare(`SELECT COUNT(*) as cnt FROM ${table} WHERE project_hash = ?`).get(projectHash) as { cnt: number }).cnt;
+      } catch { /* table may not exist */ }
+    }
+    db.close();
+
+    console.log('');
+    if (remaining === 0) {
+      console.log('✅ Verified: zero rows remain for this workspace.');
+    } else {
+      console.log(`⚠️  Warning: ${remaining} rows still found for ${projectHash}. Partial removal.`);
+    }
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+  } finally {
+    store.close();
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   
@@ -2268,6 +2486,8 @@ async function main() {
       return handleLogs(commandArgs);
     case 'qdrant':
       return handleQdrant(globalOpts, commandArgs);
+    case 'rm':
+      return handleRm(globalOpts, commandArgs);
     default:
       console.error(`Unknown command: ${command}`);
       showHelp();

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseGlobalOptions, showHelp, showVersion, formatSearchOutput } from '../src/index.js';
-import type { SearchResult } from '../src/types.js';
+import { parseGlobalOptions, showHelp, showVersion, formatSearchOutput, resolveWorkspaceIdentifier } from '../src/index.js';
+import type { SearchResult, CollectionConfig, Store } from '../src/types.js';
+import * as crypto from 'crypto';
 
 function createMockResult(id: string, score: number, snippet: string = 'test snippet'): SearchResult {
   return {
@@ -303,5 +304,78 @@ describe('Command Dispatch', () => {
     const result = parseGlobalOptions(args);
     
     expect(result.remaining[0]).toBe('harvest');
+  });
+});
+
+describe('resolveWorkspaceIdentifier', () => {
+  function hashPath(p: string): string {
+    return crypto.createHash('sha256').update(p).digest('hex').substring(0, 12);
+  }
+
+  function createMockStore(stats: Array<{ projectHash: string; count: number }> = []): Store {
+    return { getWorkspaceStats: vi.fn().mockReturnValue(stats) } as unknown as Store;
+  }
+
+  it('should resolve absolute path to project hash', () => {
+    const wsPath = '/Users/me/projects/my-app';
+    const expected = hashPath(wsPath);
+    const store = createMockStore();
+
+    const result = resolveWorkspaceIdentifier(wsPath, null, store);
+
+    expect(result.projectHash).toBe(expected);
+    expect(result.workspacePath).toBe(wsPath);
+  });
+
+  it('should resolve hash prefix from workspace stats', () => {
+    const wsPath = '/Users/me/projects/my-app';
+    const fullHash = hashPath(wsPath);
+    const store = createMockStore([{ projectHash: fullHash, count: 10 }]);
+    const config: CollectionConfig = {
+      collections: {},
+      workspaces: { [wsPath]: { codebase: { enabled: true } } },
+    };
+
+    const result = resolveWorkspaceIdentifier(fullHash.substring(0, 6), config, store);
+
+    expect(result.projectHash).toBe(fullHash);
+    expect(result.workspacePath).toBe(wsPath);
+  });
+
+  it('should resolve workspace name from config', () => {
+    const wsPath = '/Users/me/projects/my-app';
+    const expected = hashPath(wsPath);
+    const store = createMockStore();
+    const config: CollectionConfig = {
+      collections: {},
+      workspaces: { [wsPath]: { codebase: { enabled: true } } },
+    };
+
+    const result = resolveWorkspaceIdentifier('my-app', config, store);
+
+    expect(result.projectHash).toBe(expected);
+    expect(result.workspacePath).toBe(wsPath);
+  });
+
+  it('should throw on ambiguous name', () => {
+    const wsPath1 = '/Users/me/projects/api';
+    const wsPath2 = '/Users/me/other/api';
+    const store = createMockStore();
+    const config: CollectionConfig = {
+      collections: {},
+      workspaces: {
+        [wsPath1]: { codebase: { enabled: true } },
+        [wsPath2]: { codebase: { enabled: true } },
+      },
+    };
+
+    expect(() => resolveWorkspaceIdentifier('api', config, store)).toThrow(/Ambiguous name/);
+  });
+
+  it('should throw when no workspace found', () => {
+    const store = createMockStore();
+    const config: CollectionConfig = { collections: {} };
+
+    expect(() => resolveWorkspaceIdentifier('nonexistent', config, store)).toThrow(/No workspace found/);
   });
 });

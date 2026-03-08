@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026.3.12] - 2026-03-08
+
+### Added
+
+- **`rm` command**: `nano-brain rm <workspace>` completely removes a workspace and all its data — documents, embeddings, content, cache, file edges, symbols, code symbols, symbol edges, execution flows, and config entry. Accepts workspace identifier as absolute path (`rm /path/to/project`), hash prefix (`rm 0ac58c`), or workspace name (`rm my-app`).
+- **`rm --list`**: Lists all known workspaces with name, hash, path, and document count.
+- **`rm --dry-run`**: Previews row counts per table without deleting anything.
+- **Post-removal verification**: After deletion, re-queries the database to confirm zero rows remain for the workspace. Shows warning if partial removal detected.
+- **`store.removeWorkspace()`**: New store method that deletes from all 11 workspace-scoped tables (execution_flows, symbol_edges, code_symbols, symbols, file_edges, documents, content_vectors, vectors_vec, content, llm_cache, document_tags) in a single atomic transaction. Returns per-table deletion counts. Preserves shared content hashes used by other workspaces.
+- **`removeWorkspaceConfig()`**: Removes workspace entry from `config.yml` after database cleanup.
+- **12 new tests**: Coverage for `removeWorkspace()` (all tables cleaned, shared content preserved, orphaned content deleted, accurate counts), `resolveWorkspaceIdentifier()` (path/hash/name resolution, ambiguous/not-found errors), and `removeWorkspaceConfig()`.
+
 ## [2026.3.10] - 2026-03-08
 
 ### Added

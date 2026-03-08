@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
-import type { Store, Document, SearchResult, IndexHealth, StoreSearchOptions } from './types.js';
+import type { Store, Document, SearchResult, IndexHealth, StoreSearchOptions, RemoveWorkspaceResult } from './types.js';
 import type { VectorStore, VectorPoint } from './vector-store.js';
 import { SqliteVecStore } from './providers/sqlite-vec.js';
 import * as fs from 'fs';
@@ -979,6 +979,87 @@ export function createStore(dbPath: string): Store {
 
         log('store', 'clearWorkspace result docs=' + deleteResult.changes + ' embeddings=' + embeddingsDeleted);
         return { documentsDeleted: deleteResult.changes, embeddingsDeleted };
+      });
+      return transaction();
+    },
+
+    removeWorkspace(projectHash: string): RemoveWorkspaceResult {
+      log('store', 'removeWorkspace projectHash=' + projectHash);
+      const transaction = db.transaction(() => {
+        // 1. Delete execution_flows (flow_steps cascade via FK)
+        const flowsResult = db.prepare('DELETE FROM execution_flows WHERE project_hash = ?').run(projectHash);
+
+        // 2. Delete symbol_edges
+        const symbolEdgesResult = db.prepare('DELETE FROM symbol_edges WHERE project_hash = ?').run(projectHash);
+
+        // 3. Delete code_symbols
+        const codeSymbolsResult = db.prepare('DELETE FROM code_symbols WHERE project_hash = ?').run(projectHash);
+
+        // 4. Delete symbols
+        const symbolsResult = db.prepare('DELETE FROM symbols WHERE project_hash = ?').run(projectHash);
+
+        // 5. Delete file_edges
+        const fileEdgesResult = db.prepare('DELETE FROM file_edges WHERE project_hash = ?').run(projectHash);
+
+        // 6. Collect all documents for this workspace
+        const docs = db.prepare(
+          'SELECT id, hash, collection, path FROM documents WHERE project_hash = ?'
+        ).all(projectHash) as Array<{ id: number; hash: string; collection: string; path: string }>;
+
+        let embeddingsDeleted = 0;
+        let contentDeleted = 0;
+
+        if (docs.length > 0) {
+          // 7. Find hashes that are ONLY used by this workspace (orphaned after delete)
+          const uniqueHashes = [...new Set(docs.map(d => d.hash))];
+          const orphanedHashes: string[] = [];
+          for (const hash of uniqueHashes) {
+            const otherUses = db.prepare(
+              'SELECT COUNT(*) as count FROM documents WHERE hash = ? AND project_hash != ?'
+            ).get(hash, projectHash) as { count: number };
+            if (otherUses.count === 0) {
+              orphanedHashes.push(hash);
+            }
+          }
+
+          // 8. Delete embeddings for orphaned hashes
+          for (const hash of orphanedHashes) {
+            const cvResult = db.prepare('DELETE FROM content_vectors WHERE hash = ?').run(hash);
+            embeddingsDeleted += cvResult.changes;
+            if (vecAvailable) {
+              try {
+                db.prepare("DELETE FROM vectors_vec WHERE hash_seq LIKE ? || ':%'").run(hash);
+              } catch { /* vec table may not exist */ }
+            }
+          }
+
+          // 9. Delete the documents (AFTER DELETE trigger handles FTS cleanup)
+          db.prepare('DELETE FROM documents WHERE project_hash = ?').run(projectHash);
+
+          // 10. Delete orphaned content
+          for (const hash of orphanedHashes) {
+            db.prepare('DELETE FROM content WHERE hash = ?').run(hash);
+            contentDeleted++;
+          }
+        }
+
+        // 11. Delete cache entries for this workspace
+        const cacheResult = db.prepare('DELETE FROM llm_cache WHERE project_hash = ?').run(projectHash);
+
+        const result: RemoveWorkspaceResult = {
+          documentsDeleted: docs.length,
+          embeddingsDeleted,
+          contentDeleted,
+          cacheDeleted: cacheResult.changes,
+          fileEdgesDeleted: fileEdgesResult.changes,
+          symbolsDeleted: symbolsResult.changes,
+          codeSymbolsDeleted: codeSymbolsResult.changes,
+          symbolEdgesDeleted: symbolEdgesResult.changes,
+          executionFlowsDeleted: flowsResult.changes,
+        };
+
+        log('store', 'removeWorkspace result=' + JSON.stringify(result));
+        return result;
       });
       return transaction();
     },

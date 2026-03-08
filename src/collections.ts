@@ -213,6 +213,16 @@ export function getWorkspaceConfig(config: CollectionConfig | null, workspaceRoo
   return { codebase: { enabled: true } }
 }
 
+export function removeWorkspaceConfig(configPath: string, workspaceRoot: string): boolean {
+  const config = loadCollectionConfig(configPath);
+  if (!config?.workspaces?.[workspaceRoot]) {
+    return false;
+  }
+  delete config.workspaces[workspaceRoot];
+  saveCollectionConfig(configPath, config);
+  return true;
+}
+
 export function setWorkspaceConfig(configPath: string, workspaceRoot: string, wsConfig: WorkspaceConfig): void {
   let config = loadCollectionConfig(configPath)
   if (!config) {
