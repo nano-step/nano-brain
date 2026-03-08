@@ -76,6 +76,7 @@ export interface CollectionConfig {
   workspaces?: Record<string, WorkspaceConfig>
   logging?: { enabled?: boolean }
   embedding?: EmbeddingConfig
+  reranker?: RerankerConfig
   watcher?: WatcherConfig
   search?: Partial<SearchConfig>
   vector?: {
@@ -113,6 +114,11 @@ export interface EmbeddingConfig {
   apiKey?: string
   maxChars?: number
   rpmLimit?: number
+}
+
+export interface RerankerConfig {
+  model?: string
+  apiKey?: string
 }
 
 export interface WatcherConfig {

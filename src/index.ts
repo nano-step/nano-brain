@@ -4,6 +4,7 @@ import { loadCollectionConfig, addCollection, removeCollection, renameCollection
 import { harvestSessions } from './harvester.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth, checkOpenAIHealth } from './embeddings.js';
 import { hybridSearch, parseSearchConfig } from './search.js';
+import { createReranker } from './reranker.js';
 import { indexCodebase, embedPendingCodebase, getCodebaseStats } from './codebase.js';
 import { findCycles } from './graph.js';
 import { handleBench } from './bench.js';
@@ -1090,11 +1091,16 @@ async function handleSearch(
       store.setVectorStore(vs);
     }
     const provider = await createEmbeddingProvider({ embeddingConfig: searchConfig?.embedding });
+    const reranker = await createReranker({
+      apiKey: searchConfig?.reranker?.apiKey || searchConfig?.embedding?.apiKey,
+      model: searchConfig?.reranker?.model,
+    });
     results = await hybridSearch(
       store,
       { query, limit, collection, minScore, projectHash, tags, since, until },
-      { embedder: provider }
+      { embedder: provider, reranker }
     );
+    reranker?.dispose();
     provider?.dispose();
   }
   

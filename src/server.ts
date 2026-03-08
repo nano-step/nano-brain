@@ -1521,10 +1521,14 @@ export async function startServer(options: ServerOptions): Promise<void> {
         console.error('[memory] Embedding model failed:', err);
         startFileWatcher();
       }),
-    createReranker()
+    createReranker({
+      apiKey: config?.reranker?.apiKey || config?.embedding?.apiKey,
+      model: config?.reranker?.model,
+      onTokenUsage: (model, tokens) => store.recordTokenUsage(model, tokens),
+    })
       .then((loadedReranker) => {
         providers.reranker = loadedReranker;
-        store.modelStatus.reranker = loadedReranker ? 'bge-reranker-v2-m3' : 'missing';
+        store.modelStatus.reranker = loadedReranker ? (config?.reranker?.model || 'rerank-2.5-lite') : 'disabled';
         log('server', 'Reranker initialized model=' + store.modelStatus.reranker);
         console.error(`[memory] Reranker model: ${store.modelStatus.reranker}`);
       })

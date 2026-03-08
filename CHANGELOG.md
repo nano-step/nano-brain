@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.3.21] - 2026-03-08
+
+### Added
+
+- **VoyageAI reranker**: Restores the reranking pipeline with VoyageAI's rerank API (default model: `rerank-2.5-lite`). The full reranking infrastructure (position-aware score blending, result caching, tiered weights) was already built but had no working provider since the local model was removed. Now activated when `reranker.apiKey` (or `embedding.apiKey`) is configured in `config.yml`. On API failure, gracefully falls back to RRF-only search. Token usage tracked via existing token accounting. Configurable model via `reranker.model` — supports `rerank-2.5`, `rerank-2.5-lite`, `rerank-2`, `rerank-2-lite`.
+
 ## [2026.3.20] - 2026-03-08
 
 ### Fixed
