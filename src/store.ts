@@ -384,7 +384,7 @@ export function createStore(dbPath: string): Store {
     FROM content c
     JOIN documents d ON d.hash = c.hash AND d.active = 1
     LEFT JOIN content_vectors cv ON cv.hash = c.hash
-    WHERE cv.hash IS NULL
+    WHERE cv.hash IS NULL AND d.collection != 'sessions'
     LIMIT ?
   `);
 
@@ -393,7 +393,7 @@ export function createStore(dbPath: string): Store {
     FROM content c
     JOIN documents d ON d.hash = c.hash AND d.active = 1
     LEFT JOIN content_vectors cv ON cv.hash = c.hash
-    WHERE cv.hash IS NULL AND d.project_hash IN (?, 'global')
+    WHERE cv.hash IS NULL AND d.collection != 'sessions' AND d.project_hash IN (?, 'global')
     LIMIT ?
   `);
   const getNextHashNeedingEmbeddingStmt = db.prepare(`
@@ -401,7 +401,7 @@ export function createStore(dbPath: string): Store {
     FROM content c
     JOIN documents d ON d.hash = c.hash AND d.active = 1
     LEFT JOIN content_vectors cv ON cv.hash = c.hash
-    WHERE cv.hash IS NULL
+    WHERE cv.hash IS NULL AND d.collection != 'sessions'
     LIMIT 1
   `);
 
@@ -410,7 +410,7 @@ export function createStore(dbPath: string): Store {
     FROM content c
     JOIN documents d ON d.hash = c.hash AND d.active = 1
     LEFT JOIN content_vectors cv ON cv.hash = c.hash
-    WHERE cv.hash IS NULL AND d.project_hash IN (?, 'global')
+    WHERE cv.hash IS NULL AND d.collection != 'sessions' AND d.project_hash IN (?, 'global')
     LIMIT 1
   `);
 
@@ -570,12 +570,12 @@ export function createStore(dbPath: string): Store {
     
     insertEmbeddingLocal(hash: string, seq: number, pos: number, model: string, filePath?: string) {
       const pathSuffix = filePath ? ' path=' + filePath.replace(/.*\//, '') : '';
-      log('store', 'insertEmbeddingLocal hash=' + hash.substring(0, 8) + ' seq=' + seq + pathSuffix);
+      log('store', 'insertEmbeddingLocal hash=' + hash.substring(0, 8) + ' seq=' + seq + pathSuffix, 'debug');
       insertEmbeddingStmt.run(hash, seq, pos, model);
     },
 
     insertEmbedding(hash: string, seq: number, pos: number, embedding: number[], model: string, externalVectorStore?: VectorStore) {
-      log('store', 'insertEmbedding hash=' + hash.substring(0, 8) + ' seq=' + seq);
+      log('store', 'insertEmbedding hash=' + hash.substring(0, 8) + ' seq=' + seq, 'debug');
       insertEmbeddingStmt.run(hash, seq, pos, model);
       
       const useExternalStore = externalVectorStore && !(externalVectorStore instanceof SqliteVecStore);
@@ -698,7 +698,7 @@ export function createStore(dbPath: string): Store {
       params.push(limit);
       
       const rows = db.prepare(sql).all(...params) as Array<Record<string, unknown>>;
-      log('store', 'searchFTS query=' + query + ' results=' + rows.length);
+      log('store', 'searchFTS query=' + query + ' results=' + rows.length, 'debug');
       
       return rows.map(row => ({
         id: String(row.id),
@@ -768,7 +768,7 @@ export function createStore(dbPath: string): Store {
         
         const stmt = db.prepare(sql);
         const rows = stmt.all(...params) as Array<Record<string, unknown>>;
-        log('store', 'searchVec query=' + query + ' results=' + rows.length);
+        log('store', 'searchVec query=' + query + ' results=' + rows.length, 'debug');
         
         return rows.map(row => ({
           id: String(row.id),
@@ -861,7 +861,7 @@ export function createStore(dbPath: string): Store {
             });
           }
           
-          log('store', 'searchVecAsync(qdrant) query=' + query + ' results=' + results.length);
+          log('store', 'searchVecAsync(qdrant) query=' + query + ' results=' + results.length, 'debug');
           return results;
         } catch (err) {
           console.warn('Qdrant vector search failed, falling back to SQLite:', err);

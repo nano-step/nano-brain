@@ -47,6 +47,20 @@ npx nano-brain update
 
 
 
+## File Writing Rules (MANDATORY)
+
+**NEVER write an entire file at once.** Always use chunk-by-chunk editing:
+
+1. **Use the Edit tool** (find-and-replace) for all file modifications — insert, update, or delete content in targeted chunks
+2. **Only use the Write tool** for brand-new files that don't exist yet, AND only if the file is small (< 50 lines)
+3. **For new large files (50+ lines):** Write a skeleton first (headers/structure only), then use Edit to fill in each section chunk by chunk
+4. **Why:** Writing entire files at once causes truncation, context window overflow, and silent data loss on large files
+
+**Anti-patterns (NEVER do these):**
+- `Write` tool to overwrite an existing file with full content
+- `Write` tool to create a file with 100+ lines in one shot
+- Regenerating an entire file to change a few lines
+
 ## Development Workflow
 
 ### OpenSpec-First (MANDATORY)

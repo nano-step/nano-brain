@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, statSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, appendFileSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
 import type { HarvestedSession } from './types.js';
@@ -25,6 +25,15 @@ interface ParsedMessage {
   agent?: string;
   created: number;
 }
+
+interface HarvestStateEntry {
+  mtime: number;
+  retries?: number;
+  skipped?: boolean;
+  messageCount?: number;
+}
+
+type HarvestState = Record<string, HarvestStateEntry>;
 
 export function parseSession(sessionPath: string): SessionMetadata | null {
   try {
@@ -137,6 +146,24 @@ export function sessionToMarkdown(session: HarvestedSession): string {
   return lines.join('\n');
 }
 
+export function messagesToMarkdown(messages: Array<{ role: string; agent?: string; text: string }>): string {
+  const lines: string[] = [];
+  
+  for (const message of messages) {
+    if (message.role === 'user') {
+      lines.push('## User');
+    } else {
+      const agentName = message.agent || 'assistant';
+      lines.push(`## Assistant (${agentName})`);
+    }
+    lines.push('');
+    lines.push(message.text);
+    lines.push('');
+  }
+  
+  return lines.join('\n');
+}
+
 export function getOutputPath(outputDir: string, projectPath: string, date: string, slug: string): string {
   const hash = createHash('sha256').update(projectPath).digest('hex');
   const projectHash = hash.substring(0, 12);
@@ -150,20 +177,29 @@ export function getOutputPath(outputDir: string, projectPath: string, date: stri
   return join(outputDir, projectHash, `${date}-${sanitizedSlug}.md`);
 }
 
-export function loadHarvestState(stateFile: string): Record<string, number> {
+export function loadHarvestState(stateFile: string): HarvestState {
   try {
     if (!existsSync(stateFile)) {
       return {};
     }
     
     const content = readFileSync(stateFile, 'utf-8');
-    return JSON.parse(content);
+    const raw = JSON.parse(content);
+    const state: HarvestState = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (typeof value === 'number') {
+        state[key] = { mtime: value };
+      } else {
+        state[key] = value as HarvestStateEntry;
+      }
+    }
+    return state;
   } catch {
     return {};
   }
 }
 
-export function saveHarvestState(stateFile: string, state: Record<string, number>): void {
+export function saveHarvestState(stateFile: string, state: HarvestState): void {
   const dir = dirname(stateFile);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
@@ -203,9 +239,11 @@ export async function harvestSessions(options: HarvesterOptions): Promise<Harves
       const stat = statSync(sessionPath);
       const lastMtime = stat.mtimeMs;
       
-      // Check if already harvested AND output file still exists
-      if (state[sessionFile] && state[sessionFile] >= lastMtime) {
-        // Verify the output file actually exists — if not, re-harvest
+      if (state[sessionFile]?.skipped) {
+        continue;
+      }
+      
+      if (state[sessionFile] && state[sessionFile].mtime >= lastMtime) {
         const session = parseSession(sessionPath);
         if (session) {
           const date = new Date(session.created);
@@ -214,8 +252,17 @@ export async function harvestSessions(options: HarvesterOptions): Promise<Harves
           if (existsSync(outputPath)) {
             continue;
           }
-          // Output file missing — fall through to re-harvest
-          log('harvester', 'Re-harvest triggered: ' + sessionFile + ' (output file missing)')
+          const entry = state[sessionFile] || { mtime: 0 };
+          entry.retries = (entry.retries || 0) + 1;
+          if (entry.retries >= 3) {
+            entry.skipped = true;
+            log('harvester', 'Permanently skipping ' + sessionFile + ' after 3 retries');
+            state[sessionFile] = entry;
+            stateChanged = true;
+            continue;
+          }
+          state[sessionFile] = entry;
+          log('harvester', 'Re-harvest triggered: ' + sessionFile + ' (output file missing, retry ' + entry.retries + ')');
           console.log(`[harvester] Re-harvesting ${sessionFile}: output file missing`);
         } else {
           continue;
@@ -230,71 +277,93 @@ export async function harvestSessions(options: HarvesterOptions): Promise<Harves
       
       const messages = parseMessages(session.id, sessionDir);
       
-      // Skip sessions with no messages (nothing useful to index)
-      if (messages.length === 0) {
-        state[sessionFile] = lastMtime;
-        stateChanged = true;
+      const previousMessageCount = state[sessionFile]?.messageCount;
+      if (previousMessageCount !== undefined && previousMessageCount >= messages.length) {
+        // messageCount unchanged or messages were deleted — skip
         continue;
       }
       
-      const parsedMessages = messages.map(msg => ({
-        role: msg.role,
-        agent: msg.agent,
-        text: parseParts(msg.id, sessionDir)
-      }));
-      
-      // Skip sessions where all messages have empty text
-      const hasContent = parsedMessages.some(m => m.text.trim().length > 0);
-      if (!hasContent) {
-        state[sessionFile] = lastMtime;
+      if (messages.length === 0) {
+        state[sessionFile] = { mtime: lastMtime, skipped: true };
         stateChanged = true;
         continue;
       }
       
       const date = new Date(session.created);
       const dateStr = date.toISOString().split('T')[0];
+      const outputPath = getOutputPath(outputDir, session.directory, dateStr, session.slug);
+      const outputDirPath = dirname(outputPath);
+      
+      const effectivePreviousCount = previousMessageCount ?? 0;
+      const isIncremental = effectivePreviousCount > 0 && existsSync(outputPath);
+      
+      const messagesToProcess = isIncremental
+        ? messages.slice(effectivePreviousCount)
+        : messages;
+      
+      const parsedMessages = messagesToProcess.map(msg => ({
+        role: msg.role,
+        agent: msg.agent,
+        text: parseParts(msg.id, sessionDir)
+      }));
+      
+      const hasContent = parsedMessages.some(m => m.text.trim().length > 0);
+      if (!hasContent) {
+        state[sessionFile] = { mtime: lastMtime, skipped: true };
+        stateChanged = true;
+        continue;
+      }
       
       const hash = createHash('sha256').update(session.directory).digest('hex');
       const projectHashStr = hash.substring(0, 12);
-      
-      const harvestedSession: HarvestedSession = {
-        sessionId: session.id,
-        slug: session.slug,
-        title: session.title,
-        agent: messages.find(m => m.role === 'assistant')?.agent || 'assistant',
-        date: dateStr,
-        project: session.directory,
-        projectHash: projectHashStr,
-        messages: parsedMessages
-      };
-      
-      const outputPath = getOutputPath(outputDir, session.directory, dateStr, session.slug);
-      const outputDirPath = dirname(outputPath);
       
       if (!existsSync(outputDirPath)) {
         mkdirSync(outputDirPath, { recursive: true });
       }
       
-      const markdown = sessionToMarkdown(harvestedSession);
-      
       try {
-        writeFileSync(outputPath, markdown, 'utf-8');
+        if (isIncremental) {
+          const newMarkdown = messagesToMarkdown(parsedMessages);
+          appendFileSync(outputPath, newMarkdown, 'utf-8');
+        } else {
+          const fullSession: HarvestedSession = {
+            sessionId: session.id,
+            slug: session.slug,
+            title: session.title,
+            agent: messages.find(m => m.role === 'assistant')?.agent || 'assistant',
+            date: dateStr,
+            project: session.directory,
+            projectHash: projectHashStr,
+            messages: parsedMessages
+          };
+          const markdown = sessionToMarkdown(fullSession);
+          writeFileSync(outputPath, markdown, 'utf-8');
+        }
         
-        // Verify the file was actually written before updating state
         if (!existsSync(outputPath)) {
           log('harvester', 'Write failed: ' + outputPath + ' (file not found after write)')
           console.warn(`[harvester] Write succeeded but file not found: ${outputPath}`);
           continue;
         }
         
-        log('harvester', 'Processed session: ' + session.id)
+        const harvestedSession: HarvestedSession = {
+          sessionId: session.id,
+          slug: session.slug,
+          title: session.title,
+          agent: messages.find(m => m.role === 'assistant')?.agent || 'assistant',
+          date: dateStr,
+          project: session.directory,
+          projectHash: projectHashStr,
+          messages: parsedMessages
+        };
+        
+        log('harvester', 'Processed session: ' + session.id + (isIncremental ? ' (incremental)' : ''))
         harvested.push(harvestedSession);
-        state[sessionFile] = lastMtime;
+        state[sessionFile] = { mtime: lastMtime, messageCount: messages.length };
         stateChanged = true;
       } catch (err) {
         log('harvester', 'Write failed: ' + outputPath)
         console.warn(`[harvester] Failed to write ${outputPath}:`, err);
-        // Do NOT update state — will retry on next cycle
         continue;
       }
     }

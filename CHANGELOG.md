@@ -1,5 +1,34 @@
 # Changelog
 
+## [2026.3.16] - 2026-03-08
+
+### Fixed
+
+- **Embedding spin loop (critical)**: 296 empty-body documents (SHA-256 of empty string) were stuck in the pending embedding queue — fetched every cycle, producing 0 chunks, but never marked as embedded. Caused 2.9 million retry iterations per 8 hours and 214MB/day of log output. Fix: insert a sentinel row (`seq=-1`) in `content_vectors` for empty-body documents so they're permanently excluded from `getHashesNeedingEmbedding()`.
+- **Harvester re-harvest loop**: Sessions with missing output files were re-harvested every 2 minutes indefinitely (4,325 triggers/day). Now tracks retry count per session in the harvest state file. After 3 failed attempts, the session is permanently skipped. State format upgraded from `Record<string, number>` to `Record<string, {mtime, retries?, skipped?}>` with backward-compatible migration.
+
+### Added
+
+- **Log levels**: `log()` now accepts an optional third parameter (`'error' | 'warn' | 'info' | 'debug'`, default `'info'`). Configurable threshold via `logging.level` in config.yml. Messages below the threshold are suppressed — at `level: info`, the 26,820 daily `[store]` debug lines are eliminated.
+- **Log rotation**: Automatic rotation when a log file exceeds 50MB (renamed to `.1`). Files older than 7 days are deleted. Check interval throttled to once per 60 seconds to avoid stat overhead.
+- **MCP response limits**: All unbounded MCP tool responses now have sensible defaults with `... and N more` truncation indicators:
+
+  | Tool | Limit |
+  |---|---|
+  | `memory_get` | 200 lines (was unlimited — largest doc was 774KB / 24K lines) |
+  | `memory_multi_get` | 30KB (was 50KB) |
+  | `code_impact` | Max depth 3, max 50 entries |
+  | `code_context` | 20 callers + 20 callees + 10 flows |
+  | `memory_focus` | 30 deps + 30 dependents |
+  | `memory_symbols` | 50 results |
+  | `memory_impact` | 50 results |
+  | `code_detect_changes` | 20 flows |
+
+### Changed
+
+- **Noisy store logs demoted to debug**: `insertEmbeddingLocal`, `insertEmbedding`, `searchFTS`, `searchVec`, and `searchVecAsync` now log at `debug` level instead of `info`.
+- **npm package size reduced 75%**: Added `"files"` whitelist to package.json. Published package drops from 269 files / 1.7MB to 42 files / 496KB. Excludes test/, openspec/, site/, ai/, docs/.
+
 ## [2026.3.12] - 2026-03-08
 
 ### Added

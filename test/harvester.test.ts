@@ -404,8 +404,8 @@ describe('loadHarvestState and saveHarvestState', () => {
   it('round-trip test', () => {
     const stateFile = join(tmpDir, 'state.json');
     const state = {
-      'ses_abc123': 1770106366269,
-      'ses_xyz789': 1770223889563
+      'ses_abc123': { mtime: 1770106366269 },
+      'ses_xyz789': { mtime: 1770223889563 }
     };
 
     saveHarvestState(stateFile, state);
@@ -417,9 +417,24 @@ describe('loadHarvestState and saveHarvestState', () => {
     expect(loaded).toEqual(state);
   });
 
+  it('backward-compatible loading of old number format', () => {
+    const stateFile = join(tmpDir, 'old-state.json');
+    writeFileSync(stateFile, JSON.stringify({
+      'ses_abc123': 1770106366269,
+      'ses_xyz789': 1770223889563
+    }));
+
+    const loaded = loadHarvestState(stateFile);
+
+    expect(loaded).toEqual({
+      'ses_abc123': { mtime: 1770106366269 },
+      'ses_xyz789': { mtime: 1770223889563 }
+    });
+  });
+
   it('creates parent directories if needed', () => {
     const stateFile = join(tmpDir, 'nested', 'dir', 'state.json');
-    const state = { 'ses_test': 123456 };
+    const state = { 'ses_test': { mtime: 123456 } };
 
     saveHarvestState(stateFile, state);
 

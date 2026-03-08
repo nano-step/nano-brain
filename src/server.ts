@@ -326,12 +326,20 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         };
       }
       
-      const body = store.getDocumentBody(doc.hash, fromLine, maxLines);
+      const effectiveMaxLines = maxLines ?? 200;
+      const body = store.getDocumentBody(doc.hash, fromLine, effectiveMaxLines);
+      const fullBody = store.getDocumentBody(doc.hash);
+      const totalLines = fullBody ? fullBody.split('\n').length : 0;
+      const returnedLines = body ? body.split('\n').length : 0;
+      let text = body ?? '';
+      if (totalLines > returnedLines && !maxLines) {
+        text += '\n... (truncated, showing ' + effectiveMaxLines + ' of ' + totalLines + ' total lines. Use maxLines to see more)';
+      }
       return {
         content: [
           {
             type: 'text',
-            text: body ?? '',
+            text,
           },
         ],
       };
@@ -343,7 +351,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     'Batch retrieve documents by glob pattern or comma-separated list',
     {
       pattern: z.string().describe('Glob pattern or comma-separated docids/paths'),
-      maxBytes: z.number().optional().default(50000).describe('Maximum total bytes to return'),
+      maxBytes: z.number().optional().default(30000).describe('Maximum total bytes to return (default: 30000)'),
     },
     async ({ pattern, maxBytes }) => {
       log('mcp', 'memory_multi_get pattern="' + pattern + '" maxBytes=' + maxBytes);
@@ -685,14 +693,22 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       lines.push('');
       
       lines.push(`**Dependencies (imports):** ${dependencies.length}`);
-      for (const dep of dependencies) {
+      const maxDeps = 30;
+      for (const dep of dependencies.slice(0, maxDeps)) {
         lines.push(`  → ${dep}`);
+      }
+      if (dependencies.length > maxDeps) {
+        lines.push(`  ... and ${dependencies.length - maxDeps} more`);
       }
       lines.push('');
       
       lines.push(`**Dependents (imported by):** ${dependents.length}`);
-      for (const dep of dependents) {
+      const maxDependents = 30;
+      for (const dep of dependents.slice(0, maxDependents)) {
         lines.push(`  ← ${dep}`);
+      }
+      if (dependents.length > maxDependents) {
+        lines.push(`  ... and ${dependents.length - maxDependents} more`);
       }
       
       return {
@@ -796,13 +812,21 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       lines.push(`**Found ${results.length} symbol(s) across ${grouped.size} pattern(s)**`);
       lines.push('');
 
+      let symbolCount = 0;
+      const maxSymbols = 50;
       for (const [key, items] of grouped) {
+        if (symbolCount >= maxSymbols) break;
         const [symbolType, symbolPattern] = key.split(':');
         lines.push(`### ${symbolType}: \`${symbolPattern}\``);
         for (const item of items) {
+          if (symbolCount >= maxSymbols) break;
           lines.push(`  - [${item.operation}] ${item.repo}: ${item.filePath}:${item.lineNumber}`);
+          symbolCount++;
         }
         lines.push('');
+      }
+      if (results.length > maxSymbols) {
+        lines.push(`... and ${results.length - maxSymbols} more symbols`);
       }
 
       return {
@@ -859,13 +883,21 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         consume: '🔧 Consumers',
       };
 
+      let impactCount = 0;
+      const maxImpact = 50;
       for (const [op, items] of byOperation) {
+        if (impactCount >= maxImpact) break;
         const label = operationLabels[op] || op;
         lines.push(`### ${label} (${items.length})`);
         for (const item of items) {
+          if (impactCount >= maxImpact) break;
           lines.push(`  - ${item.repo}: ${item.filePath}:${item.lineNumber}`);
+          impactCount++;
         }
         lines.push('');
+      }
+      if (results.length > maxImpact) {
+        lines.push(`... and ${results.length - maxImpact} more`);
       }
 
       return {
@@ -926,25 +958,40 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       lines.push('');
 
       if (result.incoming && result.incoming.length > 0) {
+        const maxIncoming = 20;
+        const displayIncoming = result.incoming.slice(0, maxIncoming);
         lines.push(`### Callers (${result.incoming.length})`);
-        for (const e of result.incoming) {
+        for (const e of displayIncoming) {
           lines.push(`- ${e.name} (${e.kind}) — ${e.filePath} [${e.edgeType}, ${(e.confidence * 100).toFixed(0)}%]`);
+        }
+        if (result.incoming.length > maxIncoming) {
+          lines.push(`... and ${result.incoming.length - maxIncoming} more`);
         }
         lines.push('');
       }
 
       if (result.outgoing && result.outgoing.length > 0) {
+        const maxOutgoing = 20;
+        const displayOutgoing = result.outgoing.slice(0, maxOutgoing);
         lines.push(`### Callees (${result.outgoing.length})`);
-        for (const e of result.outgoing) {
+        for (const e of displayOutgoing) {
           lines.push(`- ${e.name} (${e.kind}) — ${e.filePath} [${e.edgeType}, ${(e.confidence * 100).toFixed(0)}%]`);
+        }
+        if (result.outgoing.length > maxOutgoing) {
+          lines.push(`... and ${result.outgoing.length - maxOutgoing} more`);
         }
         lines.push('');
       }
 
       if (result.flows && result.flows.length > 0) {
+        const maxFlows = 10;
+        const displayFlows = result.flows.slice(0, maxFlows);
         lines.push(`### Flows (${result.flows.length})`);
-        for (const f of result.flows) {
+        for (const f of displayFlows) {
           lines.push(`- ${f.label} (${f.flowType}) — step ${f.stepIndex}`);
+        }
+        if (result.flows.length > maxFlows) {
+          lines.push(`... and ${result.flows.length - maxFlows} more`);
         }
         lines.push('');
       }
@@ -1010,20 +1057,54 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       lines.push(`**Summary:** ${result.summary.directDeps} direct deps, ${result.summary.totalAffected} total affected, ${result.summary.flowsAffected} flows`);
       lines.push('');
 
-      for (const [depth, deps] of Object.entries(result.byDepth)) {
-        if (deps.length > 0) {
-          lines.push(`### Depth ${depth} (${deps.length})`);
-          for (const d of deps) {
+      let totalEntries = 0;
+      let truncatedEntries = 0;
+      const maxDepth = 3;
+      const maxEntries = 50;
+      const truncatedByDepth: Record<string, Array<{ name: string; kind: string; filePath: string; edgeType: string }>> = {};
+      for (const [depth, depItems] of Object.entries(result.byDepth as Record<string, Array<{ name: string; kind: string; filePath: string; edgeType: string; confidence: number }>>)) {
+        if (parseInt(depth) > maxDepth) {
+          truncatedEntries += depItems.length;
+          continue;
+        }
+        const remaining = maxEntries - totalEntries;
+        if (remaining <= 0) {
+          truncatedEntries += depItems.length;
+          continue;
+        }
+        if (depItems.length > remaining) {
+          truncatedByDepth[depth] = depItems.slice(0, remaining);
+          truncatedEntries += depItems.length - remaining;
+          totalEntries += remaining;
+        } else {
+          truncatedByDepth[depth] = depItems;
+          totalEntries += depItems.length;
+        }
+      }
+
+      for (const [depth, depItems] of Object.entries(truncatedByDepth)) {
+        if (depItems.length > 0) {
+          lines.push(`### Depth ${depth} (${depItems.length})`);
+          for (const d of depItems) {
             lines.push(`- ${d.name} (${d.kind}) — ${d.filePath} [${d.edgeType}]`);
           }
           lines.push('');
         }
       }
+      if (truncatedEntries > 0) {
+        lines.push(`... and ${truncatedEntries} more at deeper levels`);
+        lines.push('');
+      }
 
       if (result.affectedFlows.length > 0) {
+        const maxFlows = 20;
+        const displayFlows = result.affectedFlows.slice(0, maxFlows);
         lines.push(`### Affected Flows (${result.affectedFlows.length})`);
-        for (const f of result.affectedFlows) {
+        for (const f of displayFlows) {
           lines.push(`- ${f.label} (${f.flowType}) — step ${f.stepIndex}`);
+        }
+        if (result.affectedFlows.length > maxFlows) {
+          lines.push(`... and ${result.affectedFlows.length - maxFlows} more`);
         }
       }
 
@@ -1084,9 +1165,13 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       }
 
       if (result.affectedFlows.length > 0) {
+        const maxFlows = 20;
         lines.push(`### Affected Flows (${result.affectedFlows.length})`);
-        for (const f of result.affectedFlows) {
+        for (const f of result.affectedFlows.slice(0, maxFlows)) {
           lines.push(`- ${f.label} (${f.flowType})`);
+        }
+        if (result.affectedFlows.length > maxFlows) {
+          lines.push(`... and ${result.affectedFlows.length - maxFlows} more`);
         }
       }
 

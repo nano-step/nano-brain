@@ -486,15 +486,16 @@ export async function embedPendingCodebase(
       if (allChunks.length >= maxChunksPerBatch) break
     }
 
-    // Mark empty-body docs as failed so they're never retried
+    // Mark empty-body docs as processed with sentinel row (seq=-1) to prevent infinite retry
     for (const hash of emptyBodyHashes) {
       failedHashes.add(hash)
+      store.insertEmbeddingLocal(hash, -1, 0, 'skipped:empty-body')
     }
 
     // Skip embedding if no chunks were produced from this batch
     if (allChunks.length === 0) {
       if (emptyBodyHashes.length > 0) {
-        log('codebase', 'Skipping batch: ' + emptyBodyHashes.length + ' docs had 0 chunks (empty body)')
+        log('codebase', 'Marked ' + emptyBodyHashes.length + ' empty-body docs with sentinel (seq=-1)')
         console.warn(`[embed] Skipping ${emptyBodyHashes.length} docs with empty body — FTS still covers them`)
       }
       continue
