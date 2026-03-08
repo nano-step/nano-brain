@@ -1,6 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -26,6 +29,7 @@ export interface ServerOptions {
   dbPath: string;
   configPath?: string;
   httpPort?: number;
+  httpHost?: string;
   daemon?: boolean;
 }
 
@@ -1117,7 +1121,7 @@ function setupSingletonGuard(pidPath: string, store: Store, stopWatcher: () => v
 }
 
 export async function startServer(options: ServerOptions): Promise<void> {
-  const { dbPath, configPath, httpPort, daemon } = options;
+  const { dbPath, configPath, httpPort, httpHost = '127.0.0.1', daemon } = options;
   
   const homeDir = os.homedir();
   const nanoBrainHome = path.join(homeDir, '.nano-brain');
@@ -1269,38 +1273,101 @@ export async function startServer(options: ServerOptions): Promise<void> {
   process.on('SIGINT', cleanup);
   
   if (httpPort) {
-    const httpServer = http.createServer((req, res) => {
-      if (req.method === 'GET' && req.url === '/health') {
+    const sseSessions = new Map<string, { transport: SSEServerTransport; server: McpServer }>();
+    const streamableSessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
+
+    const httpServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+      const pathname = url.pathname;
+
+      if (req.method === 'GET' && pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
+        res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), sessions: { sse: sseSessions.size, streamable: streamableSessions.size } }));
         return;
       }
-      
-      if (req.method === 'POST' && req.url === '/mcp') {
-        let body = '';
-        req.on('data', chunk => {
-          body += chunk.toString();
-        });
-        req.on('end', async () => {
-          try {
-            const request = JSON.parse(body);
-            const response = await server.request(request, {});
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(response));
-          } catch (err) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
-          }
-        });
+
+      if (req.method === 'GET' && pathname === '/sse') {
+        const transport = new SSEServerTransport('/messages', res);
+        const clientServer = createMcpServer(deps);
+        
+        sseSessions.set(transport.sessionId, { transport, server: clientServer });
+        log('server', `SSE client connected sessionId=${transport.sessionId}`);
+        
+        transport.onclose = () => {
+          sseSessions.delete(transport.sessionId);
+          log('server', `SSE client disconnected sessionId=${transport.sessionId}`);
+        };
+        
+        await clientServer.connect(transport);
         return;
+      }
+
+      if (req.method === 'POST' && pathname === '/messages') {
+        const sessionId = url.searchParams.get('sessionId');
+        if (!sessionId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing sessionId parameter' }));
+          return;
+        }
+        
+        const session = sseSessions.get(sessionId);
+        if (!session) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Session not found' }));
+          return;
+        }
+        
+        await session.transport.handlePostMessage(req, res);
+        return;
+      }
+
+      if (pathname === '/mcp') {
+        const sessionId = req.headers['mcp-session-id'] as string | undefined;
+        
+        if (req.method === 'GET' || (req.method === 'POST' && !sessionId)) {
+          const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => randomUUID(),
+          });
+          const clientServer = createMcpServer(deps);
+          
+          await clientServer.connect(transport);
+          await transport.handleRequest(req, res);
+          
+          if (transport.sessionId) {
+            streamableSessions.set(transport.sessionId, { transport, server: clientServer });
+            log('server', `Streamable HTTP client connected sessionId=${transport.sessionId}`);
+            
+            transport.onclose = () => {
+              if (transport.sessionId) {
+                streamableSessions.delete(transport.sessionId);
+                log('server', `Streamable HTTP client disconnected sessionId=${transport.sessionId}`);
+              }
+            };
+          }
+          return;
+        }
+        
+        if (sessionId) {
+          const session = streamableSessions.get(sessionId);
+          if (!session) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Session not found' }));
+            return;
+          }
+          
+          await session.transport.handleRequest(req, res);
+          return;
+        }
       }
       
       res.writeHead(404);
       res.end('Not Found');
     });
     
-    httpServer.listen(httpPort, () => {
-      console.error(`MCP server listening on http://localhost:${httpPort}`);
+    httpServer.listen(httpPort, httpHost, () => {
+      console.error(`MCP server listening on http://${httpHost}:${httpPort}`);
+      console.error(`  SSE endpoint: GET /sse, POST /messages?sessionId=<id>`);
+      console.error(`  Streamable HTTP endpoint: /mcp`);
     });
   } else {
     const transport = new StdioServerTransport();

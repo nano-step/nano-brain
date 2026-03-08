@@ -17,7 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { log, initLogger } from './logger.js';
 
 function resolveOpenCodeStorageDir(): string {
@@ -100,8 +100,14 @@ nano-brain - Memory system with hybrid search
   mcp               Start MCP server (default command if no args)
     --http          Use HTTP transport instead of stdio
     --port=<n>      HTTP port (default: 8282)
+    --host=<addr>   Bind address (default: 127.0.0.1)
     --daemon        Run as background daemon
     stop            Stop running daemon
+  serve             Start SSE server as background daemon (shortcut)
+    --port=<n>      HTTP port (default: 3100)
+    --foreground    Run in foreground instead of detaching
+    stop            Stop running server
+    status          Show server status
   status            Show index health, embedding server status, and stats
     --all           Show status for all workspaces
   collection        Manage collections
@@ -227,6 +233,7 @@ export function formatSearchOutput(results: SearchResult[], format: 'text' | 'js
 async function handleMcp(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
   let useHttp = false;
   let port = 8282;
+  let host = '127.0.0.1';
   let daemon = false;
   
   for (const arg of commandArgs) {
@@ -234,6 +241,8 @@ async function handleMcp(globalOpts: GlobalOptions, commandArgs: string[]): Prom
       useHttp = true;
     } else if (arg.startsWith('--port=')) {
       port = parseInt(arg.substring(7), 10);
+    } else if (arg.startsWith('--host=')) {
+      host = arg.substring(7);
     } else if (arg === '--daemon') {
       daemon = true;
     } else if (arg === 'stop') {
@@ -242,11 +251,105 @@ async function handleMcp(globalOpts: GlobalOptions, commandArgs: string[]): Prom
     }
   }
   
-  log('cli', 'mcp server start transport=' + (useHttp ? 'http:' + port : 'stdio'));
+  log('cli', 'mcp server start transport=' + (useHttp ? `http:${host}:${port}` : 'stdio'));
   await startServer({
     dbPath: globalOpts.dbPath,
     configPath: globalOpts.configPath,
+    httpPort: useHttp ? port : undefined,
+    httpHost: useHttp ? host : undefined,
+    daemon,
   });
+}
+
+async function handleServe(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
+  const SERVE_PID_FILE = path.join(NANO_BRAIN_HOME, 'serve.pid');
+  const SERVE_LOG_FILE = path.join(NANO_BRAIN_HOME, 'logs', 'server.log');
+
+  let port = 3100;
+  let foreground = false;
+  let subcommand: string | undefined;
+
+  for (const arg of commandArgs) {
+    if (arg.startsWith('--port=')) {
+      port = parseInt(arg.substring(7), 10);
+    } else if (arg === '--foreground' || arg === '-f') {
+      foreground = true;
+    } else if (arg === 'stop' || arg === 'status') {
+      subcommand = arg;
+    }
+  }
+
+  // serve stop
+  if (subcommand === 'stop') {
+    try {
+      const pid = parseInt(fs.readFileSync(SERVE_PID_FILE, 'utf-8').trim(), 10);
+      process.kill(pid, 'SIGTERM');
+      fs.unlinkSync(SERVE_PID_FILE);
+      console.log(`Stopped nano-brain server (PID: ${pid})`);
+    } catch {
+      console.log('No running server found');
+    }
+    return;
+  }
+
+  // serve status
+  if (subcommand === 'status') {
+    try {
+      const pid = parseInt(fs.readFileSync(SERVE_PID_FILE, 'utf-8').trim(), 10);
+      process.kill(pid, 0); // check if alive
+      console.log(`nano-brain server is running (PID: ${pid}, port: ${port})`);
+    } catch {
+      console.log('nano-brain server is not running');
+    }
+    return;
+  }
+
+  // serve (start)
+  if (foreground) {
+    return handleMcp(globalOpts, ['--http', `--port=${port}`, '--host=0.0.0.0', '--daemon']);
+  }
+
+  // Check if already running
+  try {
+    const existingPid = parseInt(fs.readFileSync(SERVE_PID_FILE, 'utf-8').trim(), 10);
+    process.kill(existingPid, 0);
+    console.log(`Server already running (PID: ${existingPid}). Stop first: npx nano-brain serve stop`);
+    return;
+  } catch {
+    // Not running, proceed
+  }
+
+  // Spawn detached child
+  const logsDir = path.join(NANO_BRAIN_HOME, 'logs');
+  fs.mkdirSync(logsDir, { recursive: true });
+
+  const cliPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../bin/cli.js');
+  const args = [cliPath, 'mcp', '--http', `--port=${port}`, '--host=0.0.0.0', '--daemon'];
+  if (globalOpts.configPath !== DEFAULT_CONFIG) {
+    args.push(`--config=${globalOpts.configPath}`);
+  }
+
+  const logFd = fs.openSync(SERVE_LOG_FILE, 'a');
+  const child = spawn(process.argv[0], args, {
+    detached: true,
+    stdio: ['ignore', logFd, logFd],
+  });
+
+  if (child.pid) {
+    fs.writeFileSync(SERVE_PID_FILE, String(child.pid));
+    child.unref();
+    console.log(`nano-brain server started on http://0.0.0.0:${port} (PID: ${child.pid})`);
+    console.log(`  SSE endpoint: http://localhost:${port}/sse`);
+    console.log(`  Health check: http://localhost:${port}/health`);
+    console.log(`  Logs: ${SERVE_LOG_FILE}`);
+    console.log(`  Stop: npx nano-brain serve stop`);
+  } else {
+    console.error('Failed to start server');
+    process.exit(1);
+  }
+
+  fs.closeSync(logFd);
+  process.exit(0);
 }
 
 async function handleCollection(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
@@ -2123,6 +2226,8 @@ async function main() {
   switch (command) {
     case 'mcp':
       return handleMcp(globalOpts, commandArgs);
+    case 'serve':
+      return handleServe(globalOpts, commandArgs);
     case 'init':
       return handleInit(globalOpts, commandArgs);
     case 'collection':

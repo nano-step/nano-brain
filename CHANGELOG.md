@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.3.10] - 2026-03-08
+
+### Added
+
+- **SSE/HTTP transport**: `mcp --http --port=3100 --host=0.0.0.0` starts nano-brain as a remote MCP server over SSE. Enables running on the host while AI agents connect from Docker containers via `host.docker.internal`. Supports both SSE (`GET /sse`, `POST /messages`) and Streamable HTTP (`/mcp`) transports. Multiple concurrent clients supported — each gets its own MCP server instance sharing the same store.
+- **`serve` command**: `npx nano-brain serve` starts the SSE server as a background daemon and exits. Includes `serve stop`, `serve status`, `--port=N`, and `--foreground` options. PID tracked at `~/.nano-brain/serve.pid`, logs at `~/.nano-brain/logs/server.log`.
+- **`/health` endpoint**: Returns server status, uptime, and active session counts for SSE and Streamable HTTP clients.
+- **`--host` flag for `mcp` command**: Control bind address (default `127.0.0.1`, use `0.0.0.0` for remote access).
+
+### Fixed
+
+- **`--http` and `--port` flags ignored**: `handleMcp()` parsed these flags but never passed them to `startServer()`. Now correctly wired.
+
+### Removed
+
+- **`test/llm.test.ts`**: Removed dead test file for local GGUF models via `node-llama-cpp` — dependency was already removed, tests always failed.
+
 ## [2026.3.8] - 2026-03-08
 
 ### Fixed
