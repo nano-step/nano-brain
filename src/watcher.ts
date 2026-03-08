@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from 'chokidar';
 import type { Store, Collection, StorageConfig, CodebaseConfig } from './types.js'
 import { scanCollectionFiles } from './collections.js';
-import { indexDocument, computeHash, extractProjectHashFromPath } from './store.js';
+import { indexDocument, computeHash, extractProjectHashFromPath, openWorkspaceStore } from './store.js';
 import { harvestSessions } from './harvester.js';
 import { checkDiskSpace, evictExpiredSessions, evictBySize } from './storage.js';
 import { indexCodebase, mergeExcludePatterns, resolveExtensions, embedPendingCodebase } from './codebase.js'
@@ -9,6 +9,7 @@ import { log } from './logger.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
 
 export interface WatcherOptions {
   store: Store
@@ -26,6 +27,8 @@ export interface WatcherOptions {
   codebaseConfig?: CodebaseConfig
   workspaceRoot?: string
   projectHash?: string
+  allWorkspaces?: Record<string, { codebase?: CodebaseConfig }>
+  dataDir?: string
 }
 
 export interface Watcher {
@@ -59,6 +62,8 @@ export function startWatcher(options: WatcherOptions): Watcher {
     codebaseConfig,
     workspaceRoot = process.cwd(),
     projectHash = 'global',
+    allWorkspaces,
+    dataDir,
   } = options
 
   const codebaseExtensions = codebaseConfig?.enabled
@@ -308,10 +313,41 @@ export function startWatcher(options: WatcherOptions): Watcher {
           }
           isEmbedding = true;
           try {
-            const count = await embedPendingCodebase(store, embedder, 50, projectHash);
+            let count = await embedPendingCodebase(store, embedder, 50, projectHash);
             if (count > 0) {
               log('watcher', 'Embedding cycle: ' + count + ' document(s) embedded')
               console.log(`[embed] Embedded ${count} document(s)`);
+            }
+
+            if (allWorkspaces && dataDir) {
+              for (const [wsPath, wsConfig] of Object.entries(allWorkspaces)) {
+                if (!wsConfig.codebase?.enabled) continue;
+                if (wsPath === workspaceRoot) continue;
+                
+                try {
+                  const wsStore = openWorkspaceStore(dataDir, wsPath);
+                  if (!wsStore) {
+                    log('watcher', 'Skipping workspace (no DB): ' + wsPath);
+                    continue;
+                  }
+                  const wsHash = crypto.createHash('sha256').update(wsPath).digest('hex').substring(0, 12);
+                  try {
+                    const wsCount = await embedPendingCodebase(wsStore, embedder, 50, wsHash);
+                    if (wsCount > 0) {
+                      count += wsCount;
+                      log('watcher', `Embedded ${wsCount} doc(s) for workspace: ${path.basename(wsPath)}`);
+                      console.log(`[embed] Embedded ${wsCount} doc(s) for ${path.basename(wsPath)}`);
+                    }
+                  } finally {
+                    wsStore.close();
+                  }
+                } catch (err) {
+                  log('watcher', `Embed failed for workspace ${wsPath}: ${err}`);
+                }
+              }
+            }
+
+            if (count > 0) {
               consecutiveEmptyCycles = 0;
               currentEmbedInterval = embedIntervalMs;
             } else {

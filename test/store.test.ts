@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createStore, computeHash, indexDocument, extractProjectHashFromPath } from '../src/store.js';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { createStore, computeHash, indexDocument, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore } from '../src/store.js';
 import type { Store } from '../src/types.js';
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
@@ -1376,7 +1376,7 @@ describe('Store', () => {
       });
     });
 
-    describe('getHashesNeedingEmbedding', () => {
+  describe('getHashesNeedingEmbedding', () => {
       it('should respect LIMIT param', () => {
         for (let i = 0; i < 5; i++) {
           const body = `# Content ${i}`;
@@ -1437,6 +1437,94 @@ describe('Store', () => {
         expect(projectB.length).toBe(1);
         expect(projectB[0].hash).toBe(hash2);
       });
+    });
+  });
+
+  describe('resolveWorkspaceDbPath', () => {
+    it('should return correct path format', () => {
+      const result = resolveWorkspaceDbPath('/tmp/data', '/Users/alice/projects/my-app');
+      expect(result).toMatch(/^\/tmp\/data\/my-app-[a-f0-9]{12}\.sqlite$/);
+    });
+
+    it('should use first 12 chars of sha256 workspace path', () => {
+      const workspacePath = '/Users/alice/projects/my-app';
+      const hash = computeHash(workspacePath).substring(0, 12);
+      const result = resolveWorkspaceDbPath('/tmp/data', workspacePath);
+      expect(result).toBe(path.join('/tmp/data', `my-app-${hash}.sqlite`));
+    });
+
+    it('should sanitize directory name', () => {
+      const workspacePath = '/Users/alice/projects/my app!*';
+      const hash = computeHash(workspacePath).substring(0, 12);
+      const result = resolveWorkspaceDbPath('/tmp/data', workspacePath);
+      expect(result).toBe(path.join('/tmp/data', `my_app__-${hash}.sqlite`));
+    });
+
+    it('should handle paths with spaces', () => {
+      const workspacePath = '/Users/foo/My Projects/app';
+      const hash = computeHash(workspacePath).substring(0, 12);
+      const result = resolveWorkspaceDbPath('/tmp/data', workspacePath);
+      expect(result).toBe(path.join('/tmp/data', `app-${hash}.sqlite`));
+    });
+
+    it('should handle long directory names', () => {
+      const longName = 'long-directory-name-'.repeat(10) + 'end';
+      const workspacePath = `/Users/alice/projects/${longName}`;
+      const hash = computeHash(workspacePath).substring(0, 12);
+      const result = resolveWorkspaceDbPath('/tmp/data', workspacePath);
+      expect(result).toBe(path.join('/tmp/data', `${longName}-${hash}.sqlite`));
+    });
+
+    it('should return deterministic output for same input', () => {
+      const workspacePath = '/Users/alice/projects/my-app';
+      const resultA = resolveWorkspaceDbPath('/tmp/data', workspacePath);
+      const resultB = resolveWorkspaceDbPath('/tmp/data', workspacePath);
+      expect(resultA).toBe(resultB);
+    });
+  });
+
+  describe('openWorkspaceStore', () => {
+    const tmpDir = path.join(os.tmpdir(), `nb-test-ws-${Date.now()}`);
+    let openedStore: Store | null = null;
+
+    beforeAll(() => {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    });
+
+    afterEach(() => {
+      openedStore?.close();
+      openedStore = null;
+    });
+
+    afterAll(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should return null for non-existent DB', () => {
+      const result = openWorkspaceStore(tmpDir, '/nonexistent/workspace');
+      expect(result).toBeNull();
+    });
+
+    it('should return Store when DB exists', () => {
+      const workspacePath = '/Users/alice/projects/existing';
+      const dbPath = resolveWorkspaceDbPath(tmpDir, workspacePath);
+      const store = createStore(dbPath);
+      store.close();
+
+      openedStore = openWorkspaceStore(tmpDir, workspacePath);
+      expect(openedStore).not.toBeNull();
+    });
+
+    it('should expose expected store methods', () => {
+      const workspacePath = '/Users/alice/projects/methods';
+      const dbPath = resolveWorkspaceDbPath(tmpDir, workspacePath);
+      const store = createStore(dbPath);
+      store.close();
+
+      openedStore = openWorkspaceStore(tmpDir, workspacePath);
+      expect(openedStore?.getIndexHealth).toBeDefined();
+      expect(openedStore?.close).toBeDefined();
+      expect(openedStore?.findDocument).toBeDefined();
     });
   });
 

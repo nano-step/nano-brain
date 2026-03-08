@@ -13,7 +13,7 @@ import type { Store, SearchResult, IndexHealth, Collection, StorageConfig, Codeb
 import type { SearchProviders } from './search.js';
 import { hybridSearch, parseSearchConfig } from './search.js';
 import { findCycles } from './graph.js';
-import { createStore, extractProjectHashFromPath } from './store.js';
+import { createStore, extractProjectHashFromPath, resolveWorkspaceDbPath } from './store.js';
 import { log, initLogger } from './logger.js';
 import { loadCollectionConfig, getCollections, scanCollectionFiles, getWorkspaceConfig } from './collections.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth } from './embeddings.js';
@@ -1140,8 +1140,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const currentProjectHash = crypto.createHash('sha256').update(resolvedWorkspaceRoot).digest('hex').substring(0, 12);
   // Use per-workspace database: {dirName}-{hash}.sqlite instead of default.sqlite
   const isDefaultDb = dbPath.endsWith('/default.sqlite') || dbPath.endsWith('\\default.sqlite');
-  const workspaceDirName = path.basename(resolvedWorkspaceRoot).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const effectiveDbPath = isDefaultDb ? path.join(path.dirname(dbPath), `${workspaceDirName}-${currentProjectHash}.sqlite`) : dbPath;
+  const effectiveDbPath = isDefaultDb ? resolveWorkspaceDbPath(path.dirname(dbPath), resolvedWorkspaceRoot) : dbPath;
   log('server', 'Workspace path=' + resolvedWorkspaceRoot + ' hash=' + currentProjectHash);
   console.error(`[memory] Workspace: ${resolvedWorkspaceRoot} (${currentProjectHash})`);
   log('server', 'Database path=' + effectiveDbPath);
@@ -1245,6 +1244,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
       outputDir: path.join(outputDir, 'sessions'),
       storageConfig,
       dbPath,
+      allWorkspaces: config?.workspaces,
+      dataDir: path.dirname(effectiveDbPath),
       onUpdate: (filePath) => {
         if (!daemon) {
           console.error(`[watcher] File changed: ${filePath}`);

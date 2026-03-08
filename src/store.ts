@@ -1391,6 +1391,20 @@ export function computeHash(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
+export function resolveWorkspaceDbPath(dataDir: string, workspacePath: string): string {
+  const dirName = path.basename(workspacePath).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const hash = crypto.createHash('sha256').update(workspacePath).digest('hex').substring(0, 12);
+  return path.join(dataDir, `${dirName}-${hash}.sqlite`);
+}
+
+export function openWorkspaceStore(dataDir: string, workspacePath: string): Store | null {
+  const dbPath = resolveWorkspaceDbPath(dataDir, workspacePath);
+  if (!fs.existsSync(dbPath)) {
+    return null;
+  }
+  return createStore(dbPath);
+}
+
 /**
  * Extract projectHash from a session file path.
  * Matches pattern: {sessionsDir}/{12-char-hex}/*.md
