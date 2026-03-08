@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026.3.18] - 2026-03-08
+
+### Fixed
+
+- **Session embedding token bomb**: All 4 embedding SQL queries (`getHashesNeedingEmbedding`, `getHashesNeedingEmbeddingByWorkspace`, `getNextHashNeedingEmbedding`, `getNextHashNeedingEmbeddingByWorkspace`) now exclude `d.collection != 'sessions'`. Prevents ~3.8M tokens of session documents from being sent to VoyageAI. Sessions are FTS-only — embedding them provides no value.
+- **Empty session infinite retry loop**: Sessions with 0 messages or no text content are now immediately marked `skipped: true` in harvest state. Previously, the retry counter was reset every cycle because the re-harvest path overwrote state without preserving retries.
+
+### Added
+
+- **Incremental session harvesting**: Harvester tracks `messageCount` per session in harvest state. When a session has new messages, only the new messages are read (`parseParts`) and appended to the existing markdown file via `appendFileSync`. When message count is unchanged, the session is skipped entirely — no file I/O, no state change. First harvest still writes full markdown. Backward compatible with existing state (missing `messageCount` treated as 0, triggers one full re-harvest).
+- **`messagesToMarkdown()` helper**: Extracted message formatting loop from `sessionToMarkdown` for use in incremental append path.
+
 ## [2026.3.16] - 2026-03-08
 
 ### Fixed
