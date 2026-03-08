@@ -1126,9 +1126,9 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const homeDir = os.homedir();
   const nanoBrainHome = path.join(homeDir, '.nano-brain');
   const outputDir = nanoBrainHome;
-  const pidPath = path.join(nanoBrainHome, 'mcp.pid');
-  
-  // PID file path — singleton guard set up after server starts
+  // Use separate PID files: serve.pid for daemon mode, mcp.pid for local stdio mode
+  // This prevents the serve daemon and local MCP instances from killing each other
+  const pidPath = path.join(nanoBrainHome, daemon ? 'serve.pid' : 'mcp.pid');
   const finalConfigPath = configPath || path.join(outputDir, 'collections.yaml');
   const config = loadCollectionConfig(finalConfigPath);
   initLogger(config ?? undefined);
