@@ -486,7 +486,14 @@ export function createStore(dbPath: string): Store {
         doc.active ? 1 : 0,
         doc.projectHash ?? 'global'
       );
-      return Number(result.lastInsertRowid);
+      // For UPSERT (ON CONFLICT DO UPDATE), lastInsertRowid returns a phantom
+      // autoincrement value that doesn't correspond to any actual row.
+      // Always verify via lookup to get the real id.
+      const existing = findDocumentByPathStmt.get(doc.path) as { id: number } | undefined;
+      if (existing) return existing.id;
+      const rowid = Number(result.lastInsertRowid);
+      if (rowid > 0) return rowid;
+      return 0;
     },
     
     findDocument(pathOrDocid: string): Document | null {
