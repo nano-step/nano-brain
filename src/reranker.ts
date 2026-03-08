@@ -63,6 +63,11 @@ class VoyageAIReranker implements Reranker {
         this.onTokenUsage(this.model, data.total_tokens);
       }
 
+      if (!data.results || !Array.isArray(data.results)) {
+        log('reranker', `VoyageAI rerank returned unexpected response: ${JSON.stringify(data).slice(0, 200)}`, 'warn');
+        return { results: [], model: this.model };
+      }
+
       const results = data.results.map(r => ({
         file: documents[r.index].file,
         score: r.relevance_score,
