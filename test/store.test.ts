@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
-import { createStore, computeHash, indexDocument, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore } from '../src/store.js';
+import { createStore, computeHash, indexDocument, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore, sanitizeFTS5Query } from '../src/store.js';
 import type { Store } from '../src/types.js';
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
@@ -1529,3 +1529,52 @@ describe('Store', () => {
   });
 
 });
+
+  describe('sanitizeFTS5Query', () => {
+    it('should wrap query in quotes', () => {
+      expect(sanitizeFTS5Query('test')).toBe('"test"');
+    });
+
+    it('should escape internal quotes', () => {
+      expect(sanitizeFTS5Query('test"query')).toBe('"test""query"');
+    });
+
+    it('should handle multiple quotes', () => {
+      expect(sanitizeFTS5Query('"a" "b"')).toBe('"""a"" ""b"""');
+    });
+
+    it('should trim whitespace', () => {
+      expect(sanitizeFTS5Query('  test  ')).toBe('"test"');
+    });
+
+    it('should return empty string for empty/whitespace-only input', () => {
+      expect(sanitizeFTS5Query('   ')).toBe('');
+      expect(sanitizeFTS5Query('')).toBe('');
+    });
+
+    it('should handle special FTS5 characters', () => {
+      expect(sanitizeFTS5Query('test AND OR NOT')).toBe('"test AND OR NOT"');
+    });
+
+    it('should preserve newlines and tabs within quotes', () => {
+      const result = sanitizeFTS5Query('test\nquery\ttab');
+      expect(result.startsWith('"')).toBe(true);
+      expect(result.endsWith('"')).toBe(true);
+      expect(result).toContain('test');
+      expect(result).toContain('query');
+    });
+
+    it('should handle complex escaping scenarios', () => {
+      expect(sanitizeFTS5Query('a"b"c')).toBe('"a""b""c"');
+      // Three quotes become six after escaping, then wrapped in one more pair
+      expect(sanitizeFTS5Query('"""')).toBe('""""""""');
+    });
+
+    it('should prevent FTS5 query injection via quotes', () => {
+      const malicious = 'test" OR "1"="1';
+      const result = sanitizeFTS5Query(malicious);
+      expect(result).toBe('"test"" OR ""1""=""1"');
+      // The entire result is wrapped in quotes, preventing FTS5 operator interpretation
+      // AND/OR/NOT operators within the quoted string are treated as literal text
+    });
+  });

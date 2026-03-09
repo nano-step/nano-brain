@@ -12,6 +12,9 @@ import {
   listAllContexts,
   scanCollectionFiles,
   removeWorkspaceConfig,
+  resolveCollectionPath,
+  getWorkspaceConfig,
+  setWorkspaceConfig,
 } from '../src/collections.js';
 import type { CollectionConfig, Collection } from '../src/types.js';
 import * as fs from 'fs';
@@ -612,4 +615,157 @@ describe('Collections', () => {
       expect(removed).toBe(false);
     });
   });
+  describe('Collection edge cases', () => {
+    it('should handle renaming collections with special characters', () => {
+      const config: CollectionConfig = {
+        collections: {
+          'old-name': { path: tmpDir }
+        }
+      };
+      saveCollectionConfig(configPath, config);
+
+      const renamed = renameCollection(configPath, 'old-name', 'new-name-123');
+      expect(renamed.collections).toHaveProperty('new-name-123');
+      expect(renamed.collections).not.toHaveProperty('old-name');
+    });
+
+    it('should add context to existing collection', () => {
+      const config: CollectionConfig = {
+        collections: {
+          'docs': { path: tmpDir }
+        }
+      };
+      saveCollectionConfig(configPath, config);
+
+      const updated = addContext(configPath, 'docs', '/src/**/*.ts', 'TypeScript files');
+      expect(updated.collections?.['docs']?.context).toBeDefined();
+      expect(updated.collections?.['docs']?.context?.['/src/**/*.ts']).toBe('TypeScript files');
+    });
+
+    it('should find context by longest prefix match', () => {
+      const config: CollectionConfig = {
+        collections: {
+          'src': {
+            path: tmpDir,
+            context: {
+              '/src': 'Sources',
+              '/src/utils': 'Utils'
+            }
+          }
+        }
+      };
+      saveCollectionConfig(configPath, config);
+
+      const contextForUtils = findContextForPath(config, '/src/utils/helpers.ts');
+      expect(contextForUtils).toBe('Utils');
+
+      const contextForSrc = findContextForPath(config, '/src/components/Button.ts');
+      expect(contextForSrc).toBe('Sources');
+    });
+
+    it('should list all contexts from all collections', () => {
+      const config: CollectionConfig = {
+        collections: {
+          'src': {
+            path: tmpDir,
+            context: {
+              '/src': 'Sources',
+              '/src/utils': 'Utils'
+            }
+          },
+          'docs': {
+            path: tmpDir,
+            context: {
+              '/docs': 'Docs'
+            }
+          },
+          'tests': {
+            path: tmpDir
+          }
+        }
+      };
+      saveCollectionConfig(configPath, config);
+
+      const contexts = listAllContexts(config);
+      expect(contexts).toHaveLength(3);
+      expect(contexts.some(c => c.prefix === '/src' && c.collection === 'src')).toBe(true);
+      expect(contexts.some(c => c.prefix === '/src/utils' && c.collection === 'src')).toBe(true);
+      expect(contexts.some(c => c.prefix === '/docs' && c.collection === 'docs')).toBe(true);
+    });
+
+    it('should resolve collection path to its stored path', () => {
+      const collection: Collection = {
+        name: 'docs',
+        path: './documents',
+        pattern: '**/*.md'
+      };
+
+      const resolved = resolveCollectionPath(collection, '/project/root');
+      expect(resolved).toBe('./documents');
+    });
+
+    it('should get default workspace config when none exists', () => {
+      const wsConfig = getWorkspaceConfig(null, '/workspace/a');
+      expect(wsConfig.codebase?.enabled).toBe(true);
+    });
+
+    it('should retrieve workspace-specific configuration', () => {
+      const config: CollectionConfig = {
+        collections: {},
+        workspaces: {
+          '/workspace/a': {
+            codebase: { enabled: true, maxSize: 10000 }
+          }
+        }
+      };
+      saveCollectionConfig(configPath, config);
+
+      const wsConfig = getWorkspaceConfig(config, '/workspace/a');
+      expect(wsConfig.codebase?.enabled).toBe(true);
+      expect(wsConfig.codebase?.maxSize).toBe(10000);
+    });
+
+    it('should fall back to top-level codebase config', () => {
+      const config: CollectionConfig = {
+        collections: {},
+        codebase: { enabled: true, maxSize: 5000 }
+      };
+      saveCollectionConfig(configPath, config);
+
+      const wsConfig = getWorkspaceConfig(config, '/workspace/unknown');
+      expect(wsConfig.codebase?.enabled).toBe(true);
+      expect(wsConfig.codebase?.maxSize).toBe(5000);
+    });
+
+    it('should set workspace configuration', () => {
+      const config: CollectionConfig = {
+        collections: {}
+      };
+      saveCollectionConfig(configPath, config);
+
+      setWorkspaceConfig(configPath, '/workspace/new', {
+        codebase: { enabled: true }
+      });
+
+      const loaded = loadCollectionConfig(configPath);
+      expect(loaded?.workspaces?.['/workspace/new']?.codebase?.enabled).toBe(true);
+    });
+
+    it('should remove workspace configuration', () => {
+      const config: CollectionConfig = {
+        collections: {},
+        workspaces: {
+          '/workspace/a': { codebase: { enabled: true } }
+        }
+      };
+      saveCollectionConfig(configPath, config);
+
+      const removed = removeWorkspaceConfig(configPath, '/workspace/a');
+      expect(removed).toBe(true);
+
+      const loaded = loadCollectionConfig(configPath);
+      expect(loaded?.workspaces?.['/workspace/a']).toBeUndefined();
+    });
+  });
+
 });
