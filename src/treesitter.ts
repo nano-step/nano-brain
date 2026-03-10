@@ -2,7 +2,7 @@ import type { SupportedLanguage } from './graph.js'
 
 export interface CodeSymbol {
   name: string
-  kind: 'function' | 'class' | 'method' | 'interface'
+  kind: 'function' | 'class' | 'method' | 'interface' | 'type' | 'enum' | 'variable' | 'property'
   filePath: string
   startLine: number
   endLine: number
@@ -157,6 +157,45 @@ function getEnclosingClassName(node: TreeSitterNode): string | null {
   return null
 }
 
+function extractObjectProperties(
+  objectNode: TreeSitterNode,
+  parentName: string,
+  filePath: string,
+  symbols: CodeSymbol[]
+): void {
+  if (!objectNode.children) return
+  
+  for (const child of objectNode.children) {
+    if (child.type === 'pair') {
+      const keyNode = child.children?.[0]
+      if (keyNode && (keyNode.type === 'property_identifier' || keyNode.type === 'string')) {
+        let keyName = getNodeText(keyNode)
+        if (keyNode.type === 'string') {
+          keyName = keyName.replace(/^['"]|['"]$/g, '')
+        }
+        symbols.push({
+          name: `${parentName}.${keyName}`,
+          kind: 'property',
+          filePath,
+          startLine: child.startPosition.row + 1,
+          endLine: child.endPosition.row + 1,
+          exported: true,
+        })
+      }
+    } else if (child.type === 'shorthand_property_identifier') {
+      const keyName = getNodeText(child)
+      symbols.push({
+        name: `${parentName}.${keyName}`,
+        kind: 'property',
+        filePath,
+        startLine: child.startPosition.row + 1,
+        endLine: child.endPosition.row + 1,
+        exported: true,
+      })
+    }
+  }
+}
+
 function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSymbol[] {
   const symbols: CodeSymbol[] = []
   
@@ -178,20 +217,36 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
     if (node.type === 'variable_declarator') {
       const nameNode = node.childForFieldName?.('name')
       const valueNode = node.childForFieldName?.('value')
-      if (nameNode && valueNode && (valueNode.type === 'arrow_function' || valueNode.type === 'function')) {
+      if (nameNode && valueNode) {
         const parent = node.parent
         const grandparent = parent?.parent
         const isExported = grandparent?.type === 'export_statement' || 
                           (parent?.parent?.type === 'export_statement')
         
-        symbols.push({
-          name: getNodeText(nameNode),
-          kind: 'function',
-          filePath,
-          startLine: node.startPosition.row + 1,
-          endLine: node.endPosition.row + 1,
-          exported: isExported,
-        })
+        if (valueNode.type === 'arrow_function' || valueNode.type === 'function') {
+          symbols.push({
+            name: getNodeText(nameNode),
+            kind: 'function',
+            filePath,
+            startLine: node.startPosition.row + 1,
+            endLine: node.endPosition.row + 1,
+            exported: isExported,
+          })
+        } else if (isExported) {
+          const varName = getNodeText(nameNode)
+          symbols.push({
+            name: varName,
+            kind: 'variable',
+            filePath,
+            startLine: node.startPosition.row + 1,
+            endLine: node.endPosition.row + 1,
+            exported: true,
+          })
+          
+          if (valueNode.type === 'object') {
+            extractObjectProperties(valueNode, varName, filePath, symbols)
+          }
+        }
       }
     }
     
@@ -237,6 +292,53 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
           endLine: node.endPosition.row + 1,
           exported: hasExportModifier(node),
         })
+      }
+    }
+    
+    if (node.type === 'type_alias_declaration') {
+      const nameNode = node.childForFieldName?.('name')
+      if (nameNode) {
+        symbols.push({
+          name: getNodeText(nameNode),
+          kind: 'type',
+          filePath,
+          startLine: node.startPosition.row + 1,
+          endLine: node.endPosition.row + 1,
+          exported: hasExportModifier(node),
+        })
+      }
+    }
+    
+    if (node.type === 'enum_declaration') {
+      const nameNode = node.childForFieldName?.('name')
+      if (nameNode) {
+        symbols.push({
+          name: getNodeText(nameNode),
+          kind: 'enum',
+          filePath,
+          startLine: node.startPosition.row + 1,
+          endLine: node.endPosition.row + 1,
+          exported: hasExportModifier(node),
+        })
+      }
+    }
+    
+    if (node.type === 'expression_statement') {
+      const exprNode = node.children?.[0]
+      if (exprNode?.type === 'assignment_expression') {
+        const leftNode = exprNode.childForFieldName?.('left')
+        const rightNode = exprNode.childForFieldName?.('right')
+        
+        if (leftNode?.type === 'member_expression') {
+          const objNode = leftNode.childForFieldName?.('object')
+          const propNode = leftNode.childForFieldName?.('property')
+          
+          if (objNode && propNode && getNodeText(objNode) === 'module' && getNodeText(propNode) === 'exports') {
+            if (rightNode?.type === 'object') {
+              extractObjectProperties(rightNode, 'module.exports', filePath, symbols)
+            }
+          }
+        }
       }
     }
   })

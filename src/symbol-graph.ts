@@ -127,7 +127,16 @@ export class SymbolGraph {
         FROM code_symbols 
         WHERE name = ? AND project_hash = ? AND file_path = ?
       `)
-      return stmt.all(name, projectHash, filePath) as SymbolRecord[]
+      const results = stmt.all(name, projectHash, filePath) as SymbolRecord[]
+      if (results.length > 0) return results
+      
+      const qualifiedStmt = this.db.prepare(`
+        SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine,
+               exported, cluster_id as clusterId
+        FROM code_symbols 
+        WHERE name LIKE '%.' || ? AND project_hash = ? AND file_path = ?
+      `)
+      return qualifiedStmt.all(name, projectHash, filePath) as SymbolRecord[]
     }
     const stmt = this.db.prepare(`
       SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine, 
@@ -135,7 +144,16 @@ export class SymbolGraph {
       FROM code_symbols 
       WHERE name = ? AND project_hash = ?
     `)
-    return stmt.all(name, projectHash) as SymbolRecord[]
+    const results = stmt.all(name, projectHash) as SymbolRecord[]
+    if (results.length > 0) return results
+    
+    const qualifiedStmt = this.db.prepare(`
+      SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine, 
+             exported, cluster_id as clusterId
+      FROM code_symbols 
+      WHERE name LIKE '%.' || ? AND project_hash = ?
+    `)
+    return qualifiedStmt.all(name, projectHash) as SymbolRecord[]
   }
 
   getSymbolEdges(

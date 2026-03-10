@@ -799,6 +799,22 @@ export async function indexSymbolGraph(
           const interfaceKey = `${edge.targetFilePath}:${edge.targetName}:interface`
           targetId = symbolIdMap.get(interfaceKey)
         }
+        if (!targetId) {
+          const typeKey = `${edge.targetFilePath}:${edge.targetName}:type`
+          targetId = symbolIdMap.get(typeKey)
+        }
+        if (!targetId) {
+          const enumKey = `${edge.targetFilePath}:${edge.targetName}:enum`
+          targetId = symbolIdMap.get(enumKey)
+        }
+        if (!targetId) {
+          const variableKey = `${edge.targetFilePath}:${edge.targetName}:variable`
+          targetId = symbolIdMap.get(variableKey)
+        }
+        if (!targetId) {
+          const propertyKey = `${edge.targetFilePath}:${edge.targetName}:property`
+          targetId = symbolIdMap.get(propertyKey)
+        }
       }
 
       if (!targetId) {
