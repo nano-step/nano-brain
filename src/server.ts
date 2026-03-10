@@ -95,6 +95,66 @@ export function resolveWorkspace(deps: ServerDeps, filePath?: string, workspaceP
   return null;
 }
 
+function formatAvailableWorkspaces(deps: ServerDeps): string {
+  const workspaces = Object.keys(deps.allWorkspaces || {})
+  return workspaces.map(p => {
+    const hash = crypto.createHash('sha256').update(p).digest('hex').substring(0, 12)
+    return `  - ${path.basename(p)} (${hash}) — ${p}`
+  }).join('\n')
+}
+
+function requireDaemonWorkspace(
+  deps: ServerDeps,
+  workspace: string | undefined,
+  filePath?: string
+): { error: string } | { projectHash: string; workspaceRoot: string; db: Database.Database | undefined; store: Store; needsClose: boolean } {
+  if (!deps.daemon) {
+    return {
+      projectHash: deps.currentProjectHash,
+      workspaceRoot: deps.workspaceRoot,
+      db: deps.db,
+      store: deps.store,
+      needsClose: false,
+    }
+  }
+
+  if (!workspace && !filePath) {
+    return { error: `workspace parameter is required in daemon mode.\n\nAvailable workspaces:\n${formatAvailableWorkspaces(deps)}` }
+  }
+
+  if (workspace === 'all') {
+    return {
+      projectHash: 'all',
+      workspaceRoot: '',
+      db: deps.db,
+      store: deps.store,
+      needsClose: false,
+    }
+  }
+
+  const resolved = resolveWorkspace(deps, filePath, workspace)
+  if (resolved) {
+    let db = deps.db
+    if (resolved.needsClose && deps.dataDir && resolved.workspaceRoot) {
+      const dbPath = resolveWorkspaceDbPath(deps.dataDir, resolved.workspaceRoot)
+      db = new Database(dbPath)
+    }
+    return {
+      projectHash: resolved.projectHash,
+      workspaceRoot: resolved.workspaceRoot,
+      db,
+      store: resolved.store,
+      needsClose: resolved.needsClose,
+    }
+  }
+
+  if (workspace) {
+    return { error: `Workspace not found: ${workspace}. Available workspaces:\n${formatAvailableWorkspaces(deps)}` }
+  }
+
+  return { error: `Could not resolve workspace from file_path: ${filePath}. Available workspaces:\n${formatAvailableWorkspaces(deps)}` }
+}
+
 export function formatSearchResults(results: SearchResult[]): string {
   if (results.length === 0) {
     return 'No results found.';
@@ -217,15 +277,20 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       query: z.string().describe('Search query'),
       limit: z.number().optional().default(10).describe('Max results'),
       collection: z.string().optional().describe('Filter by collection name'),
-      workspace: z.string().optional().describe('Filter by workspace hash. Omit for current workspace, "all" for cross-workspace search'),
+      workspace: z.string().optional().describe('Workspace path, hash, or "all". Required in daemon mode.'),
       tags: z.string().optional().describe('Comma-separated tags to filter by (AND logic)'),
       since: z.string().optional().describe('Filter documents modified on or after this date (ISO format)'),
       until: z.string().optional().describe('Filter documents modified on or before this date (ISO format)'),
     },
     async ({ query, limit, collection, workspace, tags, since, until }) => {
       log('mcp', 'memory_search query="' + query + '" limit=' + limit);
-      const defaultWorkspace = deps.daemon ? 'all' : currentProjectHash;
-      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || defaultWorkspace);
+      if (deps.daemon && !workspace) {
+        return {
+          content: [{ type: 'text', text: `workspace parameter is required in daemon mode.\n\nAvailable workspaces:\n${formatAvailableWorkspaces(deps)}` }],
+          isError: true,
+        }
+      }
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
       const parsedTags = tags ? tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0) : undefined;
       const results = store.searchFTS(query, {
         limit,
@@ -253,15 +318,20 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       query: z.string().describe('Search query'),
       limit: z.number().optional().default(10).describe('Max results'),
       collection: z.string().optional().describe('Filter by collection name'),
-      workspace: z.string().optional().describe('Filter by workspace hash. Omit for current workspace, "all" for cross-workspace search'),
+      workspace: z.string().optional().describe('Workspace path, hash, or "all". Required in daemon mode.'),
       tags: z.string().optional().describe('Comma-separated tags to filter by (AND logic)'),
       since: z.string().optional().describe('Filter documents modified on or after this date (ISO format)'),
       until: z.string().optional().describe('Filter documents modified on or before this date (ISO format)'),
     },
     async ({ query, limit, collection, workspace, tags, since, until }) => {
       log('mcp', 'memory_vsearch query="' + query + '" limit=' + limit);
-      const defaultWorkspace = deps.daemon ? 'all' : currentProjectHash;
-      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || defaultWorkspace);
+      if (deps.daemon && !workspace) {
+        return {
+          content: [{ type: 'text', text: `workspace parameter is required in daemon mode.\n\nAvailable workspaces:\n${formatAvailableWorkspaces(deps)}` }],
+          isError: true,
+        }
+      }
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
       const parsedTags = tags ? tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0) : undefined;
       const searchOpts = {
         limit,
@@ -324,15 +394,20 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       limit: z.number().optional().default(10).describe('Max results'),
       collection: z.string().optional().describe('Filter by collection name'),
       minScore: z.number().optional().default(0).describe('Minimum score threshold'),
-      workspace: z.string().optional().describe('Filter by workspace hash. Omit for current workspace, "all" for cross-workspace search'),
+      workspace: z.string().optional().describe('Workspace path, hash, or "all". Required in daemon mode.'),
       tags: z.string().optional().describe('Comma-separated tags to filter by (AND logic)'),
       since: z.string().optional().describe('Filter documents modified on or after this date (ISO format)'),
       until: z.string().optional().describe('Filter documents modified on or before this date (ISO format)'),
     },
     async ({ query, limit, collection, minScore, workspace, tags, since, until }) => {
       log('mcp', 'memory_query query="' + query + '" limit=' + limit);
-      const defaultWorkspace = deps.daemon ? 'all' : currentProjectHash;
-      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || defaultWorkspace);
+      if (deps.daemon && !workspace) {
+        return {
+          content: [{ type: 'text', text: `workspace parameter is required in daemon mode.\n\nAvailable workspaces:\n${formatAvailableWorkspaces(deps)}` }],
+          isError: true,
+        }
+      }
+      const effectiveWorkspace = workspace === 'all' ? 'all' : (workspace || currentProjectHash);
       const parsedTags = tags ? tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0) : undefined;
       const results = await hybridSearch(
         store,
@@ -454,61 +529,78 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       content: z.string().describe('Content to write'),
       supersedes: z.string().optional().describe('Path or docid of document this supersedes'),
       tags: z.string().optional().describe('Comma-separated tags to associate with this entry'),
+      workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
-    async ({ content, supersedes, tags }) => {
+    async ({ content, supersedes, tags, workspace }) => {
       log('mcp', 'memory_write content_length=' + content.length);
-      const date = new Date().toISOString().split('T')[0];
-      const memoryDir = path.join(outputDir, 'memory');
-      fs.mkdirSync(memoryDir, { recursive: true });
-      const targetPath = path.join(memoryDir, `${date}.md`);
-      const timestamp = new Date().toISOString();
-      const workspaceName = path.basename(workspaceRoot);
-      const entry = `\n## ${timestamp}\n\n**Workspace:** ${workspaceName} (${currentProjectHash})\n\n${content}\n`;
       
-      fs.appendFileSync(targetPath, entry, 'utf-8');
-      
-      let supersedeWarning = '';
-      if (supersedes) {
-        const targetDoc = store.findDocument(supersedes);
-        if (targetDoc) {
-          store.supersedeDocument(targetDoc.id, 0);
-        } else {
-          supersedeWarning = `\n⚠️ Supersede target not found: ${supersedes}`;
-        }
+      const wsResult = requireDaemonWorkspace(deps, workspace)
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true }
       }
       
-      let tagInfo = '';
-      if (tags) {
-        const fileContent = fs.readFileSync(targetPath, 'utf-8');
-        const title = path.basename(targetPath, path.extname(targetPath));
-        const hash = crypto.createHash('sha256').update(fileContent).digest('hex');
-        store.insertContent(hash, fileContent);
-        const stats = fs.statSync(targetPath);
-        const docId = store.insertDocument({
-          collection: 'memory',
-          path: targetPath,
-          title,
-          hash,
-          createdAt: stats.birthtime.toISOString(),
-          modifiedAt: stats.mtime.toISOString(),
-          active: true,
-          projectHash: currentProjectHash,
-        });
-        const parsedTags = tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
-        if (parsedTags.length > 0) {
-          store.insertTags(docId, parsedTags);
-          tagInfo = `\n📌 Tags: ${parsedTags.join(', ')}`;
+      const effectiveProjectHash = wsResult.projectHash
+      const effectiveWorkspaceRoot = wsResult.workspaceRoot
+      const effectiveStore = wsResult.store
+      
+      try {
+        const date = new Date().toISOString().split('T')[0];
+        const memoryDir = path.join(outputDir, 'memory');
+        fs.mkdirSync(memoryDir, { recursive: true });
+        const targetPath = path.join(memoryDir, `${date}.md`);
+        const timestamp = new Date().toISOString();
+        const workspaceName = path.basename(effectiveWorkspaceRoot);
+        const entry = `\n## ${timestamp}\n\n**Workspace:** ${workspaceName} (${effectiveProjectHash})\n\n${content}\n`;
+        
+        fs.appendFileSync(targetPath, entry, 'utf-8');
+        
+        let supersedeWarning = '';
+        if (supersedes) {
+          const targetDoc = effectiveStore.findDocument(supersedes);
+          if (targetDoc) {
+            effectiveStore.supersedeDocument(targetDoc.id, 0);
+          } else {
+            supersedeWarning = `\n⚠️ Supersede target not found: ${supersedes}`;
+          }
+        }
+        
+        let tagInfo = '';
+        if (tags) {
+          const fileContent = fs.readFileSync(targetPath, 'utf-8');
+          const title = path.basename(targetPath, path.extname(targetPath));
+          const hash = crypto.createHash('sha256').update(fileContent).digest('hex');
+          effectiveStore.insertContent(hash, fileContent);
+          const stats = fs.statSync(targetPath);
+          const docId = effectiveStore.insertDocument({
+            collection: 'memory',
+            path: targetPath,
+            title,
+            hash,
+            createdAt: stats.birthtime.toISOString(),
+            modifiedAt: stats.mtime.toISOString(),
+            active: true,
+            projectHash: effectiveProjectHash,
+          });
+          const parsedTags = tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+          if (parsedTags.length > 0) {
+            effectiveStore.insertTags(docId, parsedTags);
+            tagInfo = `\n📌 Tags: ${parsedTags.join(', ')}`;
+          }
+        }
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ Written to ${targetPath} [${workspaceName}]${supersedeWarning}${tagInfo}`,
+            },
+          ],
+        };
+      } finally {
+        if (wsResult.needsClose) {
+          wsResult.store.close()
         }
       }
-      
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ Written to ${targetPath} [${workspaceName}]${supersedeWarning}${tagInfo}`,
-          },
-        ],
-      };
     }
   );
   
@@ -658,6 +750,16 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       const storeToUse = effectiveStore;
       const configToUse = effectiveCodebaseConfig;
       
+      // Open the correct workspace's symbol graph DB (not deps.db which is the startup workspace)
+      let symbolGraphDb = deps.db;
+      let symbolGraphDbNeedsClose = false;
+      if (resolved?.needsClose && deps.dataDir && resolved.workspaceRoot) {
+        const wsDbPath = resolveWorkspaceDbPath(deps.dataDir, resolved.workspaceRoot);
+        symbolGraphDb = new Database(wsDbPath);
+        symbolGraphDbNeedsClose = true;
+      }
+      
+      console.error(`[codebase-debug] symbolGraphDb=${symbolGraphDbNeedsClose ? 'workspace-specific' : 'startup'} root=${effectiveRoot} hash=${effectiveProjectHash}`)
       ;(async () => {
         try {
           const result = await indexCodebase(
@@ -666,7 +768,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             configToUse,
             effectiveProjectHash,
             providers.embedder,
-            deps.db
+            symbolGraphDb
           )
           console.error(`[codebase] Indexing complete: ${result.filesScanned} scanned, ${result.filesIndexed} indexed, ${result.filesSkippedUnchanged} unchanged`)
           if (providers.embedder) {
@@ -676,6 +778,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         } catch (err) {
           console.error(`[codebase] Indexing failed:`, err)
         } finally {
+          if (symbolGraphDbNeedsClose && symbolGraphDb) { symbolGraphDb.close() }
           if (needsClose) storeToUse.close();
         }
       })()
@@ -829,81 +932,97 @@ export function createMcpServer(deps: ServerDeps): McpServer {
   server.tool(
     'memory_graph_stats',
     'Get statistics about the file dependency graph',
-    {},
-    async () => {
-      log('mcp', 'memory_graph_stats');
-      const lines: string[] = [];
+    {
+      workspace: z.string().optional().describe('Workspace path, hash, or "all". Required in daemon mode.'),
+    },
+    async ({ workspace }) => {
+      log('mcp', 'memory_graph_stats workspace="' + (workspace || '') + '"');
       
-      if (deps.daemon && deps.allWorkspaces && deps.dataDir) {
-        lines.push('**Graph Statistics (All Workspaces)**');
-        lines.push('');
-        let totalNodes = 0;
-        let totalEdges = 0;
-        let totalClusters = 0;
-        
-        for (const [wsPath, wsConfig] of Object.entries(deps.allWorkspaces)) {
-          if (!wsConfig.codebase?.enabled) continue;
-          try {
-            const wsStore = openWorkspaceStore(deps.dataDir, wsPath);
-            if (!wsStore) continue;
-            const wsHash = crypto.createHash('sha256').update(wsPath).digest('hex').substring(0, 12);
-            try {
-              const wsStats = wsStore.getGraphStats(wsHash);
-              if (wsStats.nodeCount > 0) {
-                lines.push(`**${path.basename(wsPath)}:** ${wsStats.nodeCount} nodes, ${wsStats.edgeCount} edges, ${wsStats.clusterCount} clusters`);
-                totalNodes += wsStats.nodeCount;
-                totalEdges += wsStats.edgeCount;
-                totalClusters += wsStats.clusterCount;
-              }
-            } finally {
-              wsStore.close();
-            }
-          } catch { }
-        }
-        
-        lines.push('');
-        lines.push(`**Total:** ${totalNodes} nodes, ${totalEdges} edges, ${totalClusters} clusters`);
-      } else {
-        const stats = store.getGraphStats(currentProjectHash);
-        const edges = store.getFileEdges(currentProjectHash);
-        const cycles = findCycles(edges.map(e => ({ source: e.source_path, target: e.target_path })), 5);
-        
-        lines.push('**Graph Statistics**');
-        lines.push('');
-        lines.push(`**Nodes:** ${stats.nodeCount}`);
-        lines.push(`**Edges:** ${stats.edgeCount}`);
-        lines.push(`**Clusters:** ${stats.clusterCount}`);
-        lines.push('');
-        
-        if (stats.topCentrality.length > 0) {
-          lines.push('**Top 10 by Centrality:**');
-          for (const { path: filePath, centrality } of stats.topCentrality) {
-            lines.push(`  ${centrality.toFixed(4)} - ${filePath}`);
-          }
-          lines.push('');
-        }
-        
-        if (cycles.length > 0) {
-          lines.push(`**Cycles (length ≤ 5):** ${cycles.length}`);
-          for (const cycle of cycles.slice(0, 5)) {
-            lines.push(`  ${cycle.join(' → ')} → ${cycle[0]}`);
-          }
-          if (cycles.length > 5) {
-            lines.push(`  ... and ${cycles.length - 5} more`);
-          }
-        } else {
-          lines.push('**Cycles:** None detected');
-        }
+      const wsResult = requireDaemonWorkspace(deps, workspace)
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true }
       }
       
-      return {
-        content: [
-          {
-            type: 'text',
-            text: lines.join('\n'),
-          },
-        ],
-      };
+      const lines: string[] = [];
+      
+      try {
+        if (wsResult.projectHash === 'all' && deps.allWorkspaces && deps.dataDir) {
+          lines.push('**Graph Statistics (All Workspaces)**');
+          lines.push('');
+          let totalNodes = 0;
+          let totalEdges = 0;
+          let totalClusters = 0;
+          
+          for (const [wsPath, wsConfig] of Object.entries(deps.allWorkspaces)) {
+            if (!wsConfig.codebase?.enabled) continue;
+            try {
+              const wsStore = openWorkspaceStore(deps.dataDir, wsPath);
+              if (!wsStore) continue;
+              const wsHash = crypto.createHash('sha256').update(wsPath).digest('hex').substring(0, 12);
+              try {
+                const wsStats = wsStore.getGraphStats(wsHash);
+                if (wsStats.nodeCount > 0) {
+                  lines.push(`**${path.basename(wsPath)}:** ${wsStats.nodeCount} nodes, ${wsStats.edgeCount} edges, ${wsStats.clusterCount} clusters`);
+                  totalNodes += wsStats.nodeCount;
+                  totalEdges += wsStats.edgeCount;
+                  totalClusters += wsStats.clusterCount;
+                }
+              } finally {
+                wsStore.close();
+              }
+            } catch { }
+          }
+          
+          lines.push('');
+          lines.push(`**Total:** ${totalNodes} nodes, ${totalEdges} edges, ${totalClusters} clusters`);
+        } else {
+          const effectiveStore = wsResult.store;
+          const effectiveProjectHash = wsResult.projectHash;
+          const stats = effectiveStore.getGraphStats(effectiveProjectHash);
+          const edges = effectiveStore.getFileEdges(effectiveProjectHash);
+          const cycles = findCycles(edges.map(e => ({ source: e.source_path, target: e.target_path })), 5);
+          
+          lines.push('**Graph Statistics**');
+          lines.push('');
+          lines.push(`**Nodes:** ${stats.nodeCount}`);
+          lines.push(`**Edges:** ${stats.edgeCount}`);
+          lines.push(`**Clusters:** ${stats.clusterCount}`);
+          lines.push('');
+          
+          if (stats.topCentrality.length > 0) {
+            lines.push('**Top 10 by Centrality:**');
+            for (const { path: filePath, centrality } of stats.topCentrality) {
+              lines.push(`  ${centrality.toFixed(4)} - ${filePath}`);
+            }
+            lines.push('');
+          }
+          
+          if (cycles.length > 0) {
+            lines.push(`**Cycles (length ≤ 5):** ${cycles.length}`);
+            for (const cycle of cycles.slice(0, 5)) {
+              lines.push(`  ${cycle.join(' → ')} → ${cycle[0]}`);
+            }
+            if (cycles.length > 5) {
+              lines.push(`  ... and ${cycles.length - 5} more`);
+            }
+          } else {
+            lines.push('**Cycles:** None detected');
+          }
+        }
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: lines.join('\n'),
+            },
+          ],
+        };
+      } finally {
+        if (wsResult.needsClose) {
+          wsResult.store.close()
+        }
+      }
     }
   );
 
@@ -915,64 +1034,78 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       pattern: z.string().optional().describe('Glob pattern to match (e.g., "sinv:*" matches "sinv:*:compressed")'),
       repo: z.string().optional().describe('Filter by repository name'),
       operation: z.string().optional().describe('Filter by operation: read, write, publish, subscribe, define, call, produce, consume'),
+      workspace: z.string().optional().describe('Workspace path, hash, or "all". Required in daemon mode.'),
     },
-    async ({ type, pattern, repo, operation }) => {
-      log('mcp', 'memory_symbols type="' + (type || '') + '" pattern="' + (pattern || '') + '"');
-      const results = store.querySymbols({
-        type,
-        pattern,
-        repo,
-        operation,
-        projectHash: currentProjectHash,
-      });
+    async ({ type, pattern, repo, operation, workspace }) => {
+      log('mcp', 'memory_symbols type="' + (type || '') + '" pattern="' + (pattern || '') + '" workspace="' + (workspace || '') + '"');
+      const wsResult = requireDaemonWorkspace(deps, workspace)
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true }
+      }
+      const effectiveProjectHash = wsResult.projectHash === 'all' ? undefined : wsResult.projectHash
+      const effectiveStore = wsResult.store
+      
+      try {
+        const results = effectiveStore.querySymbols({
+          type,
+          pattern,
+          repo,
+          operation,
+          projectHash: effectiveProjectHash as string,
+        });
 
-      if (results.length === 0) {
+        if (results.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No symbols found matching the criteria.',
+              },
+            ],
+          };
+        }
+
+        const grouped = new Map<string, Array<{ operation: string; repo: string; filePath: string; lineNumber: number }>>();
+        for (const r of results) {
+          const key = `${r.type}:${r.pattern}`;
+          if (!grouped.has(key)) grouped.set(key, []);
+          grouped.get(key)!.push({ operation: r.operation, repo: r.repo, filePath: r.filePath, lineNumber: r.lineNumber });
+        }
+
+        const lines: string[] = [];
+        lines.push(`**Found ${results.length} symbol(s) across ${grouped.size} pattern(s)**`);
+        lines.push('');
+
+        let symbolCount = 0;
+        const maxSymbols = 50;
+        for (const [key, items] of grouped) {
+          if (symbolCount >= maxSymbols) break;
+          const [symbolType, symbolPattern] = key.split(':');
+          lines.push(`### ${symbolType}: \`${symbolPattern}\``);
+          for (const item of items) {
+            if (symbolCount >= maxSymbols) break;
+            lines.push(`  - [${item.operation}] ${item.repo}: ${item.filePath}:${item.lineNumber}`);
+            symbolCount++;
+          }
+          lines.push('');
+        }
+        if (results.length > maxSymbols) {
+          lines.push(`... and ${results.length - maxSymbols} more symbols`);
+        }
+
         return {
           content: [
             {
               type: 'text',
-              text: 'No symbols found matching the criteria.',
+              text: lines.join('\n'),
             },
           ],
         };
-      }
-
-      const grouped = new Map<string, Array<{ operation: string; repo: string; filePath: string; lineNumber: number }>>();
-      for (const r of results) {
-        const key = `${r.type}:${r.pattern}`;
-        if (!grouped.has(key)) grouped.set(key, []);
-        grouped.get(key)!.push({ operation: r.operation, repo: r.repo, filePath: r.filePath, lineNumber: r.lineNumber });
-      }
-
-      const lines: string[] = [];
-      lines.push(`**Found ${results.length} symbol(s) across ${grouped.size} pattern(s)**`);
-      lines.push('');
-
-      let symbolCount = 0;
-      const maxSymbols = 50;
-      for (const [key, items] of grouped) {
-        if (symbolCount >= maxSymbols) break;
-        const [symbolType, symbolPattern] = key.split(':');
-        lines.push(`### ${symbolType}: \`${symbolPattern}\``);
-        for (const item of items) {
-          if (symbolCount >= maxSymbols) break;
-          lines.push(`  - [${item.operation}] ${item.repo}: ${item.filePath}:${item.lineNumber}`);
-          symbolCount++;
+      } finally {
+        if (wsResult.needsClose) {
+          wsResult.store.close()
         }
-        lines.push('');
       }
-      if (results.length > maxSymbols) {
-        lines.push(`... and ${results.length - maxSymbols} more symbols`);
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: lines.join('\n'),
-          },
-        ],
-      };
     }
   );
 
@@ -982,68 +1115,81 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     {
       type: z.string().describe('Symbol type: redis_key, pubsub_channel, mysql_table, api_endpoint, http_call, bull_queue'),
       pattern: z.string().describe('Pattern to analyze (e.g., "sinv:*:compressed")'),
+      workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
-    async ({ type, pattern }) => {
-      log('mcp', 'memory_impact type="' + type + '" pattern="' + pattern + '"');
-      const results = store.getSymbolImpact(type, pattern, currentProjectHash);
+    async ({ type, pattern, workspace }) => {
+      log('mcp', 'memory_impact type="' + type + '" pattern="' + pattern + '" workspace="' + (workspace || '') + '"');
+      const wsResult = requireDaemonWorkspace(deps, workspace)
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true }
+      }
+      const effectiveStore = wsResult.store
+      
+      try {
+        const results = effectiveStore.getSymbolImpact(type, pattern, wsResult.projectHash);
 
-      if (results.length === 0) {
+        if (results.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `No symbols found for ${type}: ${pattern}`,
+              },
+            ],
+          };
+        }
+
+        const byOperation = new Map<string, Array<{ repo: string; filePath: string; lineNumber: number }>>();
+        for (const r of results) {
+          if (!byOperation.has(r.operation)) byOperation.set(r.operation, []);
+          byOperation.get(r.operation)!.push({ repo: r.repo, filePath: r.filePath, lineNumber: r.lineNumber });
+        }
+
+        const lines: string[] = [];
+        lines.push(`**Impact Analysis: ${type} \`${pattern}\`**`);
+        lines.push('');
+
+        const operationLabels: Record<string, string> = {
+          read: '📖 Readers',
+          write: '✏️ Writers',
+          publish: '📤 Publishers',
+          subscribe: '📥 Subscribers',
+          define: '📋 Definitions',
+          call: '📞 Callers',
+          produce: '📦 Producers',
+          consume: '🔧 Consumers',
+        };
+
+        let impactCount = 0;
+        const maxImpact = 50;
+        for (const [op, items] of byOperation) {
+          if (impactCount >= maxImpact) break;
+          const label = operationLabels[op] || op;
+          lines.push(`### ${label} (${items.length})`);
+          for (const item of items) {
+            if (impactCount >= maxImpact) break;
+            lines.push(`  - ${item.repo}: ${item.filePath}:${item.lineNumber}`);
+            impactCount++;
+          }
+          lines.push('');
+        }
+        if (results.length > maxImpact) {
+          lines.push(`... and ${results.length - maxImpact} more`);
+        }
+
         return {
           content: [
             {
               type: 'text',
-              text: `No symbols found for ${type}: ${pattern}`,
+              text: lines.join('\n'),
             },
           ],
         };
-      }
-
-      const byOperation = new Map<string, Array<{ repo: string; filePath: string; lineNumber: number }>>();
-      for (const r of results) {
-        if (!byOperation.has(r.operation)) byOperation.set(r.operation, []);
-        byOperation.get(r.operation)!.push({ repo: r.repo, filePath: r.filePath, lineNumber: r.lineNumber });
-      }
-
-      const lines: string[] = [];
-      lines.push(`**Impact Analysis: ${type} \`${pattern}\`**`);
-      lines.push('');
-
-      const operationLabels: Record<string, string> = {
-        read: '📖 Readers',
-        write: '✏️ Writers',
-        publish: '📤 Publishers',
-        subscribe: '📥 Subscribers',
-        define: '📋 Definitions',
-        call: '📞 Callers',
-        produce: '📦 Producers',
-        consume: '🔧 Consumers',
-      };
-
-      let impactCount = 0;
-      const maxImpact = 50;
-      for (const [op, items] of byOperation) {
-        if (impactCount >= maxImpact) break;
-        const label = operationLabels[op] || op;
-        lines.push(`### ${label} (${items.length})`);
-        for (const item of items) {
-          if (impactCount >= maxImpact) break;
-          lines.push(`  - ${item.repo}: ${item.filePath}:${item.lineNumber}`);
-          impactCount++;
+      } finally {
+        if (wsResult.needsClose) {
+          wsResult.store.close()
         }
-        lines.push('');
       }
-      if (results.length > maxImpact) {
-        lines.push(`... and ${results.length - maxImpact} more`);
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: lines.join('\n'),
-          },
-        ],
-      };
     }
   );
 
@@ -1053,21 +1199,21 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     {
       name: z.string().describe('Symbol name (function, class, method, interface)'),
       file_path: z.string().optional().describe('File path to disambiguate common names'),
+      workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
-    async ({ name, file_path }) => {
-      log('mcp', 'code_context name="' + name + '" file_path="' + (file_path || '') + '"');
+    async ({ name, file_path, workspace }) => {
+      log('mcp', 'code_context name="' + name + '" file_path="' + (file_path || '') + '" workspace="' + (workspace || '') + '"');
 
-      const resolved = file_path ? resolveWorkspace(deps, file_path) : null;
-      const effectiveProjectHash = resolved?.projectHash || currentProjectHash;
-      
-      let effectiveDb = deps.db;
-      if (resolved?.needsClose && deps.dataDir && resolved.workspaceRoot) {
-        const dbPath = resolveWorkspaceDbPath(deps.dataDir, resolved.workspaceRoot);
-        effectiveDb = new Database(dbPath);
+      const wsResult = requireDaemonWorkspace(deps, workspace, file_path)
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true }
       }
 
+      const effectiveProjectHash = wsResult.projectHash
+      const effectiveDb = wsResult.db
+
       if (!effectiveDb) {
-        if (resolved?.needsClose) resolved.store.close();
+        if (wsResult.needsClose) wsResult.store.close()
         return {
           content: [{ type: 'text', text: 'Symbol graph database not available.' }],
           isError: true,
@@ -1152,9 +1298,9 @@ export function createMcpServer(deps: ServerDeps): McpServer {
 
         return { content: [{ type: 'text', text: lines.join('\n') }] };
       } finally {
-        if (resolved?.needsClose) {
-          resolved.store.close();
-          if (effectiveDb !== deps.db) effectiveDb.close();
+        if (wsResult.needsClose) {
+          wsResult.store.close()
+          if (effectiveDb !== deps.db) effectiveDb.close()
         }
       }
     }
@@ -1169,21 +1315,21 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       max_depth: z.number().optional().describe('Maximum traversal depth (default: 5)'),
       min_confidence: z.number().optional().describe('Minimum edge confidence (0-1, default: 0)'),
       file_path: z.string().optional().describe('File path to disambiguate common names'),
+      workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
-    async ({ target, direction, max_depth, min_confidence, file_path }) => {
-      log('mcp', 'code_impact target="' + target + '" direction="' + direction + '"');
+    async ({ target, direction, max_depth, min_confidence, file_path, workspace }) => {
+      log('mcp', 'code_impact target="' + target + '" direction="' + direction + '" workspace="' + (workspace || '') + '"');
 
-      const resolved = file_path ? resolveWorkspace(deps, file_path) : null;
-      const effectiveProjectHash = resolved?.projectHash || currentProjectHash;
-      
-      let effectiveDb = deps.db;
-      if (resolved?.needsClose && deps.dataDir && resolved.workspaceRoot) {
-        const dbPath = resolveWorkspaceDbPath(deps.dataDir, resolved.workspaceRoot);
-        effectiveDb = new Database(dbPath);
+      const wsResult = requireDaemonWorkspace(deps, workspace, file_path)
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true }
       }
 
+      const effectiveProjectHash = wsResult.projectHash
+      const effectiveDb = wsResult.db
+
       if (!effectiveDb) {
-        if (resolved?.needsClose) resolved.store.close();
+        if (wsResult.needsClose) wsResult.store.close()
         return {
           content: [{ type: 'text', text: 'Symbol graph database not available.' }],
           isError: true,
@@ -1274,9 +1420,9 @@ export function createMcpServer(deps: ServerDeps): McpServer {
 
         return { content: [{ type: 'text', text: lines.join('\n') }] };
       } finally {
-        if (resolved?.needsClose) {
-          resolved.store.close();
-          if (effectiveDb !== deps.db) effectiveDb.close();
+        if (wsResult.needsClose) {
+          wsResult.store.close()
+          if (effectiveDb !== deps.db) effectiveDb.close()
         }
       }
     }
@@ -1287,26 +1433,31 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     'Detect changed symbols and affected flows from git diff',
     {
       scope: z.enum(['unstaged', 'staged', 'all']).optional().describe('Git diff scope (default: all)'),
+      workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
-    async ({ scope }) => {
-      log('mcp', 'code_detect_changes scope="' + (scope || 'all') + '"');
+    async ({ scope, workspace }) => {
+      log('mcp', 'code_detect_changes scope="' + (scope || 'all') + '" workspace="' + (workspace || '') + '"');
 
-      if (!deps.db) {
+      const wsResult = requireDaemonWorkspace(deps, workspace)
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true }
+      }
+
+      const effectiveDb = wsResult.db
+      if (!effectiveDb) {
+        if (wsResult.needsClose) wsResult.store.close()
         return {
           content: [{ type: 'text', text: 'Symbol graph database not available.' }],
           isError: true,
         };
       }
 
-      const effectiveWorkspaceRoot = deps.daemon && deps.allWorkspaces && Object.keys(deps.allWorkspaces).length > 0
-        ? Object.keys(deps.allWorkspaces)[0]
-        : workspaceRoot;
-
-      const graph = new SymbolGraph(deps.db);
+      try {
+      const graph = new SymbolGraph(effectiveDb);
       const result = graph.handleDetectChanges({
         scope,
-        workspaceRoot: effectiveWorkspaceRoot,
-        projectHash: currentProjectHash,
+        workspaceRoot: wsResult.workspaceRoot,
+        projectHash: wsResult.projectHash,
       });
 
       if (result.changedFiles.length === 0) {
@@ -1350,6 +1501,12 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       }
 
       return { content: [{ type: 'text', text: lines.join('\n') }] };
+      } finally {
+        if (wsResult.needsClose) {
+          wsResult.store.close()
+          if (effectiveDb !== deps.db) effectiveDb.close()
+        }
+      }
     }
   );
   
@@ -1598,8 +1755,13 @@ export async function startServer(options: ServerOptions): Promise<void> {
       const pathname = url.pathname;
 
       if (req.method === 'GET' && pathname === '/health') {
+        let version = 'unknown';
+        try {
+          const pkgPath = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'package.json');
+          version = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version;
+        } catch {}
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), sessions: { sse: sseSessions.size, streamable: streamableSessions.size } }));
+        res.end(JSON.stringify({ status: 'ok', version, uptime: process.uptime(), sessions: { sse: sseSessions.size, streamable: streamableSessions.size } }));
         return;
       }
 

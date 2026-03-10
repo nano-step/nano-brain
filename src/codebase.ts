@@ -718,6 +718,9 @@ export async function indexSymbolGraph(
     graph.deleteSymbolsForFile(file.path, projectHash)
 
     const symbols = await parseSymbols(file.path, file.content, language)
+    if (symbols.length > 0 || filesProcessed < 5) {
+      console.error(`[SG-DBG] ${file.path.split('/').pop()} lang=${language} syms=${symbols.length} len=${file.content.length}`)
+    }
     const fileSymbols: Array<{ symbol: CodeSymbol; id: number }> = []
 
     for (const symbol of symbols) {

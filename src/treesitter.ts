@@ -302,12 +302,19 @@ export async function parseSymbols(
     const parser = new Parser()
     parser.setLanguage(lang)
     const tree = parser.parse(content)
-    const rootNode = tree.rootNode as unknown as TreeSitterNode
+    const rootNode = tree.rootNode
+    
+    if ((parseSymbols as any)._dbgCount === undefined) (parseSymbols as any)._dbgCount = 0;
+    if ((parseSymbols as any)._dbgCount++ < 3) {
+      console.error(`[TS-DBG] file=${filePath.split('/').pop()} type=${rootNode.type} childCount=${rootNode.childCount} children=${rootNode.children?.length ?? 'NO'} hasChildForField=${typeof rootNode.childForFieldName}`)
+    }
+    
+    const tsNode = rootNode as unknown as TreeSitterNode
     
     if (language === 'python') {
-      return extractPythonSymbols(rootNode, filePath)
+      return extractPythonSymbols(tsNode, filePath)
     } else {
-      return extractTsJsSymbols(rootNode, filePath)
+      return extractTsJsSymbols(tsNode, filePath)
     }
   } catch (e) {
     console.warn(`[treesitter] Failed to parse ${filePath}:`, e)
