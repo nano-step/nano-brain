@@ -1,5 +1,5 @@
 import { startServer } from './server.js';
-import { createStore, computeHash, indexDocument, extractProjectHashFromPath, resolveWorkspaceDbPath } from './store.js';
+import { createStore, computeHash, indexDocument, extractProjectHashFromPath, resolveWorkspaceDbPath, resolveProjectLabel, setProjectLabelDataDir } from './store.js';
 import { loadCollectionConfig, addCollection, removeCollection, renameCollection, listCollections, getCollections, scanCollectionFiles, saveCollectionConfig, getWorkspaceConfig, removeWorkspaceConfig } from './collections.js';
 import { harvestSessions } from './harvester.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth, checkOpenAIHealth } from './embeddings.js';
@@ -34,6 +34,7 @@ function resolveOpenCodeStorageDir(): string {
 
 const NANO_BRAIN_HOME = path.join(os.homedir(), '.nano-brain');
 const DEFAULT_DB_DIR = path.join(NANO_BRAIN_HOME, 'data');
+setProjectLabelDataDir(DEFAULT_DB_DIR);
 const DEFAULT_CONFIG = path.join(NANO_BRAIN_HOME, 'config.yml');
 const DEFAULT_OUTPUT_DIR = path.join(NANO_BRAIN_HOME, 'sessions');
 const DEFAULT_MEMORY_DIR = path.join(NANO_BRAIN_HOME, 'memory');
@@ -1885,7 +1886,7 @@ async function handleCache(globalOpts: GlobalOptions, commandArgs: string[]): Pr
       } else {
         const projectHash = crypto.createHash('sha256').update(process.cwd()).digest('hex').substring(0, 12);
         deleted = store.clearCache(projectHash, type);
-        console.log(`Cleared ${deleted} cache entries for workspace ${projectHash}${type ? ` (type: ${type})` : ''}`);
+        console.log(`Cleared ${deleted} cache entries for workspace ${resolveProjectLabel(projectHash)}${type ? ` (type: ${type})` : ''}`);
       }
       break;
     }
@@ -1896,10 +1897,10 @@ async function handleCache(globalOpts: GlobalOptions, commandArgs: string[]): Pr
         console.log('No cache entries');
       } else {
         console.log('Cache Statistics:');
-        console.log('  Type        Project Hash    Count');
-        console.log('  ──────────  ──────────────  ─────');
+        console.log('  Type        Project                         Count');
+        console.log('  ──────────  ──────────────────────────────  ─────');
         for (const row of stats) {
-          console.log(`  ${row.type.padEnd(10)}  ${row.projectHash.padEnd(14)}  ${row.count}`);
+          console.log(`  ${row.type.padEnd(10)}  ${resolveProjectLabel(row.projectHash).padEnd(30)}  ${row.count}`);
         }
       }
       break;
@@ -2947,7 +2948,7 @@ async function handleRm(globalOpts: GlobalOptions, commandArgs: string[]): Promi
         } catch { return 0; }
       };
 
-      console.log(`Dry run — would remove workspace ${projectHash}${workspacePath ? ` (${workspacePath})` : ''}:`);
+      console.log(`Dry run — would remove workspace ${resolveProjectLabel(projectHash)}${workspacePath ? ` (${workspacePath})` : ''}:`);
       console.log('');
       console.log(`  documents:        ${count('documents')}`);
       console.log(`  file_edges:       ${count('file_edges')}`);
@@ -2984,7 +2985,7 @@ async function handleRm(globalOpts: GlobalOptions, commandArgs: string[]): Promi
       return;
     }
 
-    console.log(`Removing workspace ${projectHash}${workspacePath ? ` (${workspacePath})` : ''}...`);
+    console.log(`Removing workspace ${resolveProjectLabel(projectHash)}${workspacePath ? ` (${workspacePath})` : ''}...`);
     const result = store.removeWorkspace(projectHash);
 
     let configRemoved = false;
@@ -3045,7 +3046,7 @@ async function handleRm(globalOpts: GlobalOptions, commandArgs: string[]): Promi
     if (remaining === 0) {
       console.log('✅ Verified: zero rows remain for this workspace.');
     } else {
-      console.log(`⚠️  Warning: ${remaining} rows still found for ${projectHash}. Partial removal.`);
+      console.log(`⚠️  Warning: ${remaining} rows still found for ${resolveProjectLabel(projectHash)}. Partial removal.`);
     }
 
     if (workspacePath) {

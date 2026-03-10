@@ -13,7 +13,7 @@ import type { Store, SearchResult, IndexHealth, Collection, StorageConfig, Codeb
 import type { SearchProviders } from './search.js';
 import { hybridSearch, parseSearchConfig } from './search.js';
 import { findCycles } from './graph.js';
-import { createStore, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore } from './store.js';
+import { createStore, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore, setProjectLabelDataDir, resolveProjectLabel } from './store.js';
 import { log, initLogger } from './logger.js';
 import { loadCollectionConfig, getCollections, scanCollectionFiles, getWorkspaceConfig } from './collections.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth, checkOpenAIHealth } from './embeddings.js';
@@ -1624,6 +1624,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const currentProjectHash = crypto.createHash('sha256').update(resolvedWorkspaceRoot).digest('hex').substring(0, 12);
   const isDefaultDb = dbPath.endsWith('/default.sqlite') || dbPath.endsWith('\\default.sqlite');
   const effectiveDbPath = isDefaultDb ? resolveWorkspaceDbPath(path.dirname(dbPath), resolvedWorkspaceRoot) : dbPath;
+  setProjectLabelDataDir(path.dirname(effectiveDbPath));
   log('server', 'Workspace path=' + resolvedWorkspaceRoot + ' hash=' + currentProjectHash);
   console.error(`[memory] Workspace: ${resolvedWorkspaceRoot} (${currentProjectHash})`);
   log('server', 'Database path=' + effectiveDbPath);

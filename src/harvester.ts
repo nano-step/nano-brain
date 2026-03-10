@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, appendFileSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
+import Database from 'better-sqlite3';
 import type { HarvestedSession } from './types.js';
 import { log } from './logger.js';
 
@@ -34,6 +35,34 @@ interface HarvestStateEntry {
 }
 
 type HarvestState = Record<string, HarvestStateEntry>;
+
+interface DbSession {
+  id: string;
+  slug: string;
+  directory: string;
+  title: string;
+  time_created: number;
+  time_updated: number;
+}
+
+interface DbMessage {
+  id: string;
+  time_created: number;
+  data: string;
+}
+
+interface DbPart {
+  data: string;
+}
+
+interface HarvestFromDbResult {
+  harvested: HarvestedSession[];
+  stateChanged: boolean;
+  processedCount: number;
+  skippedCount: number;
+  incrementalCount: number;
+  errorCount: number;
+}
 
 export function parseSession(sessionPath: string): SessionMetadata | null {
   try {
@@ -221,41 +250,264 @@ export function getMessageDirMtime(sessionId: string, storageDir: string): numbe
   }
 }
 
+function harvestFromDb(
+  dbPath: string,
+  outputDir: string,
+  stateFile: string,
+  state: HarvestState
+): HarvestFromDbResult {
+  const harvested: HarvestedSession[] = [];
+  let stateChanged = false;
+  let processedCount = 0;
+  let skippedCount = 0;
+  let incrementalCount = 0;
+  let errorCount = 0;
+
+  const db = new Database(dbPath, { readonly: true });
+
+  try {
+    const sessionsStmt = db.prepare<[], DbSession>(
+      'SELECT id, slug, directory, title, time_created, time_updated FROM session'
+    );
+    const messagesStmt = db.prepare<[string], DbMessage>(
+      'SELECT id, time_created, data FROM message WHERE session_id = ? ORDER BY time_created ASC'
+    );
+    const partsStmt = db.prepare<[string], DbPart>(
+      'SELECT data FROM part WHERE message_id = ? ORDER BY time_created ASC'
+    );
+    const messageCountStmt = db.prepare<[string], { count: number }>(
+      'SELECT count(*) as count FROM message WHERE session_id = ?'
+    );
+
+    const sessions = sessionsStmt.all();
+    const totalSessions = sessions.length;
+
+    for (const session of sessions) {
+      const sessionId = session.id;
+
+      if (state[sessionId]?.skipped) {
+        skippedCount++;
+        continue;
+      }
+
+      if (
+        state[sessionId] &&
+        state[sessionId].mtime >= session.time_updated &&
+        state[sessionId].messageCount !== undefined
+      ) {
+        const dbMsgCount = messageCountStmt.get(sessionId)?.count ?? 0;
+        if (dbMsgCount <= (state[sessionId].messageCount ?? 0)) {
+          skippedCount++;
+          continue;
+        }
+      }
+
+      const dbMessages = messagesStmt.all(sessionId);
+
+      if (dbMessages.length === 0) {
+        state[sessionId] = { mtime: session.time_updated, skipped: true };
+        stateChanged = true;
+        skippedCount++;
+        continue;
+      }
+
+      const previousMessageCount = state[sessionId]?.messageCount ?? 0;
+
+      const date = new Date(session.time_created);
+      const dateStr = date.toISOString().split('T')[0];
+      const outputPath = getOutputPath(outputDir, session.directory, dateStr, session.slug);
+      const outputDirPath = dirname(outputPath);
+
+      const isIncremental = previousMessageCount > 0 && existsSync(outputPath);
+      const messagesToProcess = isIncremental
+        ? dbMessages.slice(previousMessageCount)
+        : dbMessages;
+
+      if (messagesToProcess.length === 0) {
+        skippedCount++;
+        continue;
+      }
+
+      const parsedMessages: Array<{ role: 'user' | 'assistant'; agent?: string; text: string }> = [];
+
+      for (const msg of messagesToProcess) {
+        let role: 'user' | 'assistant' = 'assistant';
+        let agent: string | undefined;
+
+        try {
+          const msgData = JSON.parse(msg.data);
+          role = msgData.role === 'user' ? 'user' : 'assistant';
+          agent = msgData.agent;
+        } catch {
+        }
+
+        const parts = partsStmt.all(msg.id);
+        const textParts: string[] = [];
+
+        for (const part of parts) {
+          try {
+            const partData = JSON.parse(part.data);
+            if (partData.type === 'text' && !partData.synthetic && partData.text) {
+              textParts.push(partData.text);
+            }
+          } catch {
+          }
+        }
+
+        parsedMessages.push({
+          role,
+          agent,
+          text: textParts.join('\n')
+        });
+      }
+
+      const hasContent = parsedMessages.some(m => m.text.trim().length > 0);
+      if (!hasContent) {
+        state[sessionId] = { mtime: session.time_updated, skipped: true };
+        stateChanged = true;
+        skippedCount++;
+        continue;
+      }
+
+      const hash = createHash('sha256').update(session.directory).digest('hex');
+      const projectHashStr = hash.substring(0, 12);
+
+      if (!existsSync(outputDirPath)) {
+        mkdirSync(outputDirPath, { recursive: true });
+      }
+
+      try {
+        if (isIncremental) {
+          const newMarkdown = messagesToMarkdown(parsedMessages);
+          appendFileSync(outputPath, newMarkdown, 'utf-8');
+        } else {
+          const fullSession: HarvestedSession = {
+            sessionId: session.id,
+            slug: session.slug,
+            title: session.title || '',
+            agent: parsedMessages.find(m => m.role === 'assistant')?.agent || 'assistant',
+            date: dateStr,
+            project: session.directory,
+            projectHash: projectHashStr,
+            messages: parsedMessages
+          };
+          const markdown = sessionToMarkdown(fullSession);
+          writeFileSync(outputPath, markdown, 'utf-8');
+        }
+
+        if (!existsSync(outputPath)) {
+          log('harvester', 'Write failed: ' + outputPath + ' (file not found after write)');
+          errorCount++;
+          continue;
+        }
+
+        const harvestedSession: HarvestedSession = {
+          sessionId: session.id,
+          slug: session.slug,
+          title: session.title || '',
+          agent: parsedMessages.find(m => m.role === 'assistant')?.agent || 'assistant',
+          date: dateStr,
+          project: session.directory,
+          projectHash: projectHashStr,
+          messages: parsedMessages
+        };
+
+        processedCount++;
+        if (isIncremental) incrementalCount++;
+        log('harvester', `Processed session: ${session.id}${isIncremental ? ' (incremental)' : ''} [${processedCount}/${totalSessions}]`);
+        harvested.push(harvestedSession);
+        state[sessionId] = { mtime: session.time_updated, messageCount: dbMessages.length };
+        stateChanged = true;
+      } catch (err) {
+        errorCount++;
+        log('harvester', 'Write failed: ' + outputPath + ' - ' + String(err));
+        continue;
+      }
+    }
+  } finally {
+    db.close();
+  }
+
+  return { harvested, stateChanged, processedCount, skippedCount, incrementalCount, errorCount };
+}
+
 export async function harvestSessions(options: HarvesterOptions): Promise<HarvestedSession[]> {
   const { sessionDir, outputDir, stateFile: customStateFile } = options;
   const stateFile = customStateFile || join(outputDir, '.harvest-state.json');
   const state = loadHarvestState(stateFile);
+  
+  const startTime = Date.now();
+  const dbPath = join(dirname(sessionDir), 'opencode.db');
+
+  if (existsSync(dbPath)) {
+    let dbSessionCount = 0;
+    try {
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const row = db.prepare<[], { count: number }>('SELECT count(*) as count FROM session').get();
+        dbSessionCount = row?.count ?? 0;
+      } finally {
+        db.close();
+      }
+    } catch {
+    }
+
+    if (dbSessionCount > 0) {
+      log('harvester', `Starting harvest cycle: ${dbSessionCount} sessions (source: db)`);
+      const result = harvestFromDb(dbPath, outputDir, stateFile, state);
+
+      if (result.stateChanged) {
+        saveHarvestState(stateFile, state);
+      }
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      const stats = [
+        `${result.harvested.length} harvested`,
+        result.incrementalCount > 0 ? `${result.incrementalCount} incremental` : null,
+        `${result.skippedCount} skipped`,
+        result.errorCount > 0 ? `${result.errorCount} errors` : null,
+        `${elapsed}s`,
+      ].filter(Boolean).join(', ');
+
+      log('harvester', `Harvest complete: ${stats}`);
+      if (result.harvested.length > 0) {
+        console.log(`[harvester] Harvested ${result.harvested.length} session(s) in ${elapsed}s`);
+      }
+
+      return result.harvested;
+    }
+  }
+
   const harvested: HarvestedSession[] = [];
-  
-  const startTime = Date.now()
   const sessionRoot = join(sessionDir, 'session');
-  
+
   if (!existsSync(sessionRoot)) {
-    log('harvester', 'Harvest cycle: no session root found')
+    log('harvester', 'Harvest cycle: no session root found');
     return [];
   }
-  
+
   const projectDirs = readdirSync(sessionRoot);
-  
-  // Pre-scan: count total session files and size across all projects
-  let totalSessionFiles = 0
-  let totalSessionBytes = 0
+
+  let totalSessionFiles = 0;
+  let totalSessionBytes = 0;
   for (const projectHash of projectDirs) {
     const projectSessionDir = join(sessionRoot, projectHash);
-    if (!existsSync(projectSessionDir)) continue
+    if (!existsSync(projectSessionDir)) continue;
     try {
-      const files = readdirSync(projectSessionDir).filter(f => f.startsWith('ses_') && f.endsWith('.json'))
+      const files = readdirSync(projectSessionDir).filter(f => f.startsWith('ses_') && f.endsWith('.json'));
       for (const file of files) {
-        totalSessionFiles++
+        totalSessionFiles++;
         try {
-          totalSessionBytes += statSync(join(projectSessionDir, file)).size
-        } catch { /* skip */ }
+          totalSessionBytes += statSync(join(projectSessionDir, file)).size;
+        } catch {
+        }
       }
-    } catch { /* skip */ }
+    } catch {
+    }
   }
-  
-  const sizeKB = (totalSessionBytes / 1024).toFixed(1)
-  log('harvester', `Starting harvest cycle: ${totalSessionFiles} session files (${sizeKB} KB) across ${projectDirs.length} projects`)
+
+  const sizeKB = (totalSessionBytes / 1024).toFixed(1);
+  log('harvester', `Starting harvest cycle: ${totalSessionFiles} session files (${sizeKB} KB) across ${projectDirs.length} projects (source: json)`);
   
   let stateChanged = false;
   let processedCount = 0

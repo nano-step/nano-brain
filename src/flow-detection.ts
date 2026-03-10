@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import { log } from './logger.js'
+import { resolveProjectLabel } from './store.js'
 
 export interface FlowDetectionConfig {
   maxTraceDepth: number
@@ -54,7 +55,7 @@ export function detectEntryPoints(
   `)
 
   const rows = stmt.all(projectHash, projectHash) as EntryPoint[]
-  log('flow-detection', `Found ${rows.length} entry points for project ${projectHash}`)
+  log('flow-detection', `Found ${rows.length} entry points for project ${resolveProjectLabel(projectHash)}`)
   return rows
 }
 
@@ -229,7 +230,7 @@ export function storeFlows(
     flowsStored++
   }
 
-  log('flow-detection', `Stored ${flowsStored} flows for project ${projectHash}`)
+  log('flow-detection', `Stored ${flowsStored} flows for project ${resolveProjectLabel(projectHash)}`)
   return { flowsStored }
 }
 

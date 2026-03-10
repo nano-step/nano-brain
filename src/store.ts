@@ -962,7 +962,7 @@ export function createStore(dbPath: string): Store {
     },
 
     clearWorkspace(projectHash: string): { documentsDeleted: number; embeddingsDeleted: number } {
-      log('store', 'clearWorkspace projectHash=' + projectHash);
+      log('store', 'clearWorkspace project=' + resolveProjectLabel(projectHash));
       const transaction = db.transaction(() => {
         // 1. Collect all documents for this workspace
         const docs = db.prepare(
@@ -1013,7 +1013,7 @@ export function createStore(dbPath: string): Store {
     },
 
     removeWorkspace(projectHash: string): RemoveWorkspaceResult {
-      log('store', 'removeWorkspace projectHash=' + projectHash);
+      log('store', 'removeWorkspace project=' + resolveProjectLabel(projectHash));
       const transaction = db.transaction(() => {
         // 1. Delete execution_flows (flow_steps cascade via FK)
         const flowsResult = db.prepare('DELETE FROM execution_flows WHERE project_hash = ?').run(projectHash);
@@ -1444,6 +1444,33 @@ export function resolveWorkspaceDbPath(dataDir: string, workspacePath: string): 
   const dirName = path.basename(workspacePath).replace(/[^a-zA-Z0-9_-]/g, '_');
   const hash = crypto.createHash('sha256').update(workspacePath).digest('hex').substring(0, 12);
   return path.join(dataDir, `${dirName}-${hash}.sqlite`);
+}
+
+const projectLabelCache = new Map<string, string>()
+let projectLabelDataDir: string | null = null
+
+export function resolveProjectLabel(projectHash: string, dataDir?: string): string {
+  if (projectLabelCache.has(projectHash)) return projectLabelCache.get(projectHash)!
+  const dir = dataDir ?? projectLabelDataDir
+  if (!dir) return projectHash
+  try {
+    const files = fs.readdirSync(dir)
+    for (const file of files) {
+      if (!file.endsWith('.sqlite')) continue
+      const match = file.match(/^(.+)-([a-f0-9]{12})\.sqlite$/)
+      if (match && match[2] === projectHash) {
+        const label = `${match[1]}(${projectHash})`
+        projectLabelCache.set(projectHash, label)
+        return label
+      }
+    }
+  } catch { /* skip */ }
+  projectLabelCache.set(projectHash, projectHash)
+  return projectHash
+}
+
+export function setProjectLabelDataDir(dataDir: string): void {
+  projectLabelDataDir = dataDir
 }
 
 export function openWorkspaceStore(dataDir: string, workspacePath: string): Store | null {
