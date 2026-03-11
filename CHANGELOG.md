@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.4.14] - 2026-03-11
+
+### Fixed
+
+- **EPIPE crash in daemon mode**: Server no longer crashes when stdout/stderr pipe breaks (e.g., after parent process exits). Suppresses EPIPE at stream level and treats it as non-fatal in the uncaught exception handler.
+
+### Changed
+
+- **Log retention reduced to 2 days**: `nano-brain-*.log` files older than 2 days are now auto-deleted (was 7 days).
+
 ## [2026.4.13] - 2026-03-11
 
 ### Added

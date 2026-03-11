@@ -1702,9 +1702,18 @@ export function createRejectionThreshold(limit: number, windowMs: number): { han
 }
 
 export async function startServer(options: ServerOptions): Promise<void> {
+  // Suppress EPIPE on stdout/stderr — daemon may outlive its pipe
+  process.stdout?.on('error', () => {});
+  process.stderr?.on('error', () => {});
+
   process.on('uncaughtException', (err: Error) => {
-    console.error('[memory] Uncaught exception:', err.message);
-    if (err.stack) console.error(err.stack);
+    // EPIPE is non-fatal for daemons (broken stdout/stderr pipe)
+    if ('code' in err && (err as NodeJS.ErrnoException).code === 'EPIPE') {
+      log('server', `Ignoring EPIPE: ${err.message}`);
+      return;
+    }
+    try { console.error('[memory] Uncaught exception:', err.message); } catch {}
+    try { if (err.stack) console.error(err.stack); } catch {}
     log('server', `Uncaught exception: ${err.message}\n${err.stack || ''}`);
     process.exit(1);
   });

@@ -19,7 +19,7 @@ let logLevel: LogLevel = 'info';
 let lastRotateCheck = 0;
 const ROTATE_CHECK_INTERVAL = 60_000;
 const MAX_LOG_SIZE = 50 * 1024 * 1024;
-const MAX_LOG_AGE_DAYS = 7;
+const MAX_LOG_AGE_DAYS = 2;
 
 /**
  * Enable logging from config. Called after config is loaded.
