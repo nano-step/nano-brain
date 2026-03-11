@@ -4,6 +4,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
+import { SqliteEventStore } from './event-store.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -51,6 +52,7 @@ export interface ServerDeps {
   allWorkspaces?: Record<string, { codebase?: CodebaseConfig }>
   dataDir?: string
   daemon?: boolean
+  ready?: { value: boolean }
 }
 
 export interface ResolvedWorkspace {
@@ -275,8 +277,12 @@ export function formatStatus(
   return lines.join('\n')
 }
 
+const WARMUP_ERROR = { isError: true, content: [{ type: 'text' as const, text: 'Server warming up, try again in a few seconds' }] };
+
 export function createMcpServer(deps: ServerDeps): McpServer {
   const { store, providers, collections, configPath, outputDir, currentProjectHash, workspaceRoot } = deps;
+  
+  const checkReady = () => deps.ready && !deps.ready.value;
   
   const server = new McpServer(
     {
@@ -306,6 +312,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       compact: z.boolean().optional().default(false).describe('Return compact single-line results with caching. Defaults to verbose.'),
     },
     async ({ query, limit, collection, workspace, tags, since, until, compact }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_search query="' + query + '" limit=' + limit);
       if (deps.daemon && !workspace) {
         return {
@@ -354,6 +361,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       compact: z.boolean().optional().default(false).describe('Return compact single-line results with caching. Defaults to verbose.'),
     },
     async ({ query, limit, collection, workspace, tags, since, until, compact }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_vsearch query="' + query + '" limit=' + limit);
       if (deps.daemon && !workspace) {
         return {
@@ -443,6 +451,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       compact: z.boolean().optional().default(false).describe('Return compact single-line results with caching. Defaults to verbose.'),
     },
     async ({ query, limit, collection, minScore, workspace, tags, since, until, compact }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_query query="' + query + '" limit=' + limit);
       if (deps.daemon && !workspace) {
         return {
@@ -485,6 +494,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       docid: z.string().optional().describe('Document ID fallback if cache expired'),
     },
     async ({ cacheKey, index, indices, docid }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_expand cacheKey="' + cacheKey + '" index=' + index + ' indices=' + JSON.stringify(indices) + ' docid=' + (docid || ''));
       
       const cached = resultCache.get(cacheKey);
@@ -565,6 +575,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       maxLines: z.number().optional().describe('Maximum number of lines to return'),
     },
     async ({ id, fromLine, maxLines }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_get id="' + id + '"');
       const docid = id.startsWith('#') ? id.slice(1) : id;
       const doc = store.findDocument(docid);
@@ -609,6 +620,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       maxBytes: z.number().optional().default(30000).describe('Maximum total bytes to return (default: 30000)'),
     },
     async ({ pattern, maxBytes }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_multi_get pattern="' + pattern + '" maxBytes=' + maxBytes);
       const ids = pattern.split(',').map(s => s.trim());
       
@@ -662,6 +674,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
     async ({ content, supersedes, tags, workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_write content_length=' + content.length);
       
       const wsResult = requireDaemonWorkspace(deps, workspace)
@@ -739,6 +752,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     'List all tags with document counts',
     {},
     async () => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_tags');
       const tags = store.listAllTags();
       if (tags.length === 0) {
@@ -773,6 +787,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       root: z.string().optional().describe('Workspace root path for codebase stats'),
     },
     async ({ root }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_status root="' + (root || '') + '"');
       const health = store.getIndexHealth()
       const effectiveRoot = root || deps.workspaceRoot
@@ -862,6 +877,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       root: z.string().optional().describe('Workspace root path to index. Defaults to configured root or server cwd.'),
     },
     async ({ root }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_index_codebase root="' + (root || '') + '"');
       
       const resolved = root ? resolveWorkspace(deps, undefined, root) : null;
@@ -943,6 +959,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     'Trigger immediate reindex of all collections',
     {},
     async () => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_update');
       let totalAdded = 0;
       let totalUpdated = 0;
@@ -1006,6 +1023,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       filePath: z.string().describe('Absolute path to the file'),
     },
     async ({ filePath }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_focus filePath="' + filePath + '"');
       const resolved = resolveWorkspace(deps, filePath);
       const effectiveStore = resolved?.store || store;
@@ -1080,6 +1098,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       workspace: z.string().optional().describe('Workspace path, hash, or "all". Required in daemon mode.'),
     },
     async ({ workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_graph_stats workspace="' + (workspace || '') + '"');
       
       const wsResult = requireDaemonWorkspace(deps, workspace)
@@ -1181,6 +1200,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       workspace: z.string().optional().describe('Workspace path, hash, or "all". Required in daemon mode.'),
     },
     async ({ type, pattern, repo, operation, workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_symbols type="' + (type || '') + '" pattern="' + (pattern || '') + '" workspace="' + (workspace || '') + '"');
       const wsResult = requireDaemonWorkspace(deps, workspace)
       if ('error' in wsResult) {
@@ -1262,6 +1282,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
     async ({ type, pattern, workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_impact type="' + type + '" pattern="' + pattern + '" workspace="' + (workspace || '') + '"');
       const wsResult = requireDaemonWorkspace(deps, workspace)
       if ('error' in wsResult) {
@@ -1346,6 +1367,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
     async ({ name, file_path, workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'code_context name="' + name + '" file_path="' + (file_path || '') + '" workspace="' + (workspace || '') + '"');
 
       const wsResult = requireDaemonWorkspace(deps, workspace, file_path)
@@ -1462,6 +1484,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
     async ({ target, direction, max_depth, min_confidence, file_path, workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'code_impact target="' + target + '" direction="' + direction + '" workspace="' + (workspace || '') + '"');
 
       const wsResult = requireDaemonWorkspace(deps, workspace, file_path)
@@ -1580,6 +1603,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
     async ({ scope, workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'code_detect_changes scope="' + (scope || 'all') + '" workspace="' + (workspace || '') + '"');
 
       const wsResult = requireDaemonWorkspace(deps, workspace)
@@ -1657,76 +1681,42 @@ export function createMcpServer(deps: ServerDeps): McpServer {
   return server;
 }
 
-function writePidFile(pidPath: string): void {
-  const dir = path.dirname(pidPath);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(pidPath, String(process.pid), 'utf-8');
-}
 
-function removePidFile(pidPath: string): void {
-  try {
-    fs.unlinkSync(pidPath);
-  } catch {
-  }
-}
 
-/**
- * Singleton guard using PID file.
- * 1. Read old PID from file (if exists)
- * 2. Write our PID immediately
- * 3. After delay, kill the old PID if it's still alive
- * 4. Periodically check if someone overwrote our PID — if so, exit
- */
-function setupSingletonGuard(pidPath: string, store: Store, stopWatcher: () => void): void {
-  // Read previous PID before overwriting
-  let oldPid: number | null = null;
-  try {
-    const pidStr = fs.readFileSync(pidPath, 'utf-8').trim();
-    const pid = parseInt(pidStr, 10);
-    if (!isNaN(pid) && pid !== process.pid) oldPid = pid;
-  } catch { /* no previous PID file */ }
-  
-  // Write our PID
-  writePidFile(pidPath);
-  
-  // After startup settles, kill the old process
-  if (oldPid) {
-    setTimeout(() => {
-      try {
-        process.kill(oldPid!, 0); // Still alive?
-        log('server', 'Killing previous nano-brain process PID=' + oldPid);
-        console.error(`[memory] Killing previous nano-brain process (PID ${oldPid})`);
-        process.kill(oldPid!, 'SIGTERM');
-      } catch { /* already dead */ }
-    }, 2000);
-  }
-  
-  // Periodically check if a newer instance took over
-  const ownerCheck = setInterval(() => {
-    try {
-      const currentPid = parseInt(fs.readFileSync(pidPath, 'utf-8').trim(), 10);
-      if (currentPid !== process.pid) {
-        log('server', 'Newer instance detected PID=' + currentPid + ', shutting down');
-        console.error(`[memory] Newer instance detected (PID ${currentPid}), shutting down`);
-        clearInterval(ownerCheck);
-        stopWatcher();
-        store.close();
-        process.exit(0);
-      }
-    } catch { /* PID file gone — continue running */ }
-  }, 5000);
-  ownerCheck.unref();
+export function createRejectionThreshold(limit: number, windowMs: number): { handler: (err: unknown) => void; getCount: () => number } {
+  let count = 0;
+  const handler = (err: unknown) => {
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error('[memory] Unhandled rejection:', error.message);
+    if (error.stack) console.error(error.stack);
+    log('server', `Unhandled rejection: ${error.message}`);
+    count++;
+    setTimeout(() => { count = Math.max(0, count - 1); }, windowMs).unref();
+    if (count >= limit) {
+      console.error(`[memory] Rejection threshold exceeded (${count} in ${windowMs}ms) — exiting`);
+      log('server', `Rejection threshold exceeded (${count} in ${windowMs}ms) — exiting`);
+      process.exit(1);
+    }
+  };
+  return { handler, getCount: () => count };
 }
 
 export async function startServer(options: ServerOptions): Promise<void> {
+  process.on('uncaughtException', (err: Error) => {
+    console.error('[memory] Uncaught exception:', err.message);
+    if (err.stack) console.error(err.stack);
+    log('server', `Uncaught exception: ${err.message}\n${err.stack || ''}`);
+    process.exit(1);
+  });
+
+  const rejectionThreshold = createRejectionThreshold(3, 60000);
+  process.on('unhandledRejection', rejectionThreshold.handler);
+
   const { dbPath, configPath, httpPort, httpHost = '127.0.0.1', daemon, root } = options;
   
   const homeDir = os.homedir();
   const nanoBrainHome = path.join(homeDir, '.nano-brain');
   const outputDir = nanoBrainHome;
-  // Use separate PID files: serve.pid for daemon mode, mcp.pid for local stdio mode
-  // This prevents the serve daemon and local MCP instances from killing each other
-  const pidPath = path.join(nanoBrainHome, daemon ? 'serve.pid' : 'mcp.pid');
   const finalConfigPath = configPath || path.join(outputDir, 'collections.yaml');
   const config = loadCollectionConfig(finalConfigPath);
   initLogger(config ?? undefined);
@@ -1875,15 +1865,27 @@ export async function startServer(options: ServerOptions): Promise<void> {
     });
   };
   
-  // Cleanup on exit (all modes, not just daemon)
-  const cleanup = () => {
+  const sseSessions = new Map<string, { transport: SSEServerTransport; server: McpServer }>();
+  const streamableSessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
+  let httpServer: http.Server | null = null;
+  
+  const cleanup = async () => {
     log('server', 'Shutting down');
+    
+    if (httpServer) {
+      httpServer.close();
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    for (const [_id, session] of sseSessions) {
+      try { await session.transport.close(); } catch {}
+    }
+    for (const [_id, session] of streamableSessions) {
+      try { await session.transport.close(); } catch {}
+    }
+    
     if (watcher) watcher.stop();
-    // Only remove PID file if it's still ours
-    try {
-      const currentPid = parseInt(fs.readFileSync(pidPath, 'utf-8').trim(), 10);
-      if (currentPid === process.pid) removePidFile(pidPath);
-    } catch { }
     symbolGraphDb.close();
     store.close();
     process.exit(0);
@@ -1891,11 +1893,15 @@ export async function startServer(options: ServerOptions): Promise<void> {
   process.on('SIGTERM', cleanup);
   process.on('SIGINT', cleanup);
   
+  const readyState = { value: false };
+  deps.ready = readyState;
+  
   if (httpPort) {
-    const sseSessions = new Map<string, { transport: SSEServerTransport; server: McpServer }>();
-    const streamableSessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
+    const eventStore = new SqliteEventStore(symbolGraphDb, 300);
+    const eventStoreCleanupInterval = setInterval(() => eventStore.cleanup(), 60000);
+    eventStoreCleanupInterval.unref();
 
-    const httpServer = http.createServer(async (req, res) => {
+    httpServer = http.createServer(async (req, res) => {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       const pathname = url.pathname;
 
@@ -1906,7 +1912,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
           version = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version;
         } catch {}
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', version, uptime: process.uptime(), sessions: { sse: sseSessions.size, streamable: streamableSessions.size } }));
+        res.end(JSON.stringify({ status: 'ok', ready: readyState.value, version, uptime: process.uptime(), sessions: { sse: sseSessions.size, streamable: streamableSessions.size } }));
         return;
       }
 
@@ -1945,12 +1951,74 @@ export async function startServer(options: ServerOptions): Promise<void> {
         return;
       }
 
+      if (req.method === 'GET' && pathname === '/api/status') {
+        const indexHealth = store.getIndexHealth();
+        const modelStatus = store.modelStatus;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'ok',
+          uptime: process.uptime(),
+          ready: readyState.value,
+          models: modelStatus,
+          index: indexHealth,
+          workspace: { root: resolvedWorkspaceRoot, hash: currentProjectHash },
+        }));
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/query') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        try {
+          const { query, tags, scope, limit } = JSON.parse(body);
+          if (!query) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'query is required' }));
+            return;
+          }
+          const effectiveProjectHash = scope === 'all' ? 'all' : currentProjectHash;
+          const parsedTags = tags ? tags.split(',').map((t: string) => t.trim().toLowerCase()).filter((t: string) => t.length > 0) : undefined;
+          const results = await hybridSearch(
+            store,
+            { query, limit: limit || 10, projectHash: effectiveProjectHash, tags: parsedTags, searchConfig: deps.searchConfig, db: deps.db },
+            providers
+          );
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ results }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        }
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/search') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        try {
+          const { query, limit } = JSON.parse(body);
+          if (!query) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'query is required' }));
+            return;
+          }
+          const results = store.searchFTS(query, { limit: limit || 10, projectHash: currentProjectHash });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ results }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        }
+        return;
+      }
+
       if (pathname === '/mcp') {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         
         if (req.method === 'GET' || (req.method === 'POST' && !sessionId)) {
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
+            eventStore,
           });
           const clientServer = createMcpServer(deps);
           
@@ -1988,6 +2056,14 @@ export async function startServer(options: ServerOptions): Promise<void> {
       res.end('Not Found');
     });
     
+    httpServer.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`[memory] nano-brain already running on port ${httpPort}`);
+        process.exit(0);
+      }
+      throw err;
+    });
+    
     httpServer.listen(httpPort, httpHost, () => {
       console.error(`MCP server listening on http://${httpHost}:${httpPort}`);
       console.error(`  SSE endpoint: GET /sse, POST /messages?sessionId=<id>`);
@@ -1998,10 +2074,6 @@ export async function startServer(options: ServerOptions): Promise<void> {
     await server.connect(transport);
     console.error('MCP server started on stdio');
   }
-  
-  // Singleton guard: write PID, kill old process, monitor for newer instances
-  log('server', 'Setting up singleton guard pid=' + process.pid);
-  setupSingletonGuard(pidPath, store, () => { if (watcher) watcher.stop(); });
   
   Promise.all([
     createEmbeddingProvider({ embeddingConfig: config?.embedding, onTokenUsage: (model, tokens) => store.recordTokenUsage(model, tokens) })
@@ -2037,7 +2109,11 @@ export async function startServer(options: ServerOptions): Promise<void> {
         log('server', 'Reranker failed error=' + (err instanceof Error ? err.message : String(err)));
         console.error('[memory] Reranker model failed:', err);
       }),
-  ]);
+  ]).then(() => {
+    readyState.value = true;
+    log('server', 'Server ready (Phase 2 complete)');
+    console.error('[memory] Server ready');
+  });
 
   // Ollama reconnect — retry if fell back to local GGUF at startup
   const embeddingConfig = config?.embedding;

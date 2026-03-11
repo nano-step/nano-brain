@@ -10,6 +10,7 @@ import { findCycles } from './graph.js';
 import { handleBench } from './bench.js';
 import { resolveHostUrl } from './host.js';
 import { SymbolGraph } from './symbol-graph.js';
+import { installService, uninstallService } from './service-installer.js';
 import { isTreeSitterAvailable } from './treesitter.js';
 import { QdrantVecStore } from './providers/qdrant.js';
 import { createVectorStore } from './vector-store.js';
@@ -24,6 +25,34 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import { execSync, spawn } from 'child_process';
 import { log, initLogger } from './logger.js';
+
+const DEFAULT_HTTP_PORT = 3100;
+
+async function detectRunningServer(port: number = DEFAULT_HTTP_PORT): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1000);
+    const resp = await fetch(`http://localhost:${port}/health`, { signal: controller.signal });
+    clearTimeout(timeout);
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function proxyGet(port: number, path: string): Promise<any> {
+  const resp = await fetch(`http://localhost:${port}${path}`);
+  return resp.json();
+}
+
+async function proxyPost(port: number, path: string, body: any): Promise<any> {
+  const resp = await fetch(`http://localhost:${port}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return resp.json();
+}
 
 function resolveOpenCodeStorageDir(): string {
   // XDG path (Linux): ~/.local/share/opencode/storage
@@ -115,6 +144,9 @@ nano-brain - Memory system with hybrid search
     --foreground    Run in foreground instead of detaching
     stop            Stop running server
     status          Show server status
+    install         Install as system service (launchd on macOS, systemd on Linux)
+      --force       Overwrite existing service file
+    uninstall       Remove system service
   status            Show index health, embedding server status, and stats
     --all           Show status for all workspaces
   collection        Manage collections
@@ -308,6 +340,7 @@ async function handleServe(globalOpts: GlobalOptions, commandArgs: string[]): Pr
   let foreground = false;
   let subcommand: string | undefined;
   let root: string | undefined;
+  let force = false;
 
   for (const arg of commandArgs) {
     if (arg.startsWith('--port=')) {
@@ -316,7 +349,9 @@ async function handleServe(globalOpts: GlobalOptions, commandArgs: string[]): Pr
       root = arg.substring(7);
     } else if (arg === '--foreground' || arg === '-f') {
       foreground = true;
-    } else if (arg === 'stop' || arg === 'status') {
+    } else if (arg === '--force') {
+      force = true;
+    } else if (arg === 'stop' || arg === 'status' || arg === 'install' || arg === 'uninstall') {
       subcommand = arg;
     }
   }
@@ -342,6 +377,32 @@ async function handleServe(globalOpts: GlobalOptions, commandArgs: string[]): Pr
       console.log(`nano-brain server is running (PID: ${pid}, port: ${port})`);
     } catch {
       console.log('nano-brain server is not running');
+    }
+    return;
+  }
+
+  // serve install
+  if (subcommand === 'install') {
+    const result = installService({ force, port });
+    if (result.success) {
+      console.log(`✅ ${result.message}`);
+      console.log(`   The server will start automatically on login.`);
+      console.log(`   Port: ${port}`);
+    } else {
+      console.error(`❌ ${result.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  // serve uninstall
+  if (subcommand === 'uninstall') {
+    const result = uninstallService();
+    if (result.success) {
+      console.log(`✅ ${result.message}`);
+    } else {
+      console.error(`❌ ${result.message}`);
+      process.exit(1);
     }
     return;
   }
@@ -576,6 +637,16 @@ async function printEmbeddingServerStatus(config: ReturnType<typeof loadCollecti
 
 async function handleStatus(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
   log('cli', 'status command invoked');
+  const serverRunning = await detectRunningServer(DEFAULT_HTTP_PORT);
+  let serverInfo: { uptime: number; ready: boolean } | null = null;
+  if (serverRunning) {
+    try {
+      const data = await proxyGet(DEFAULT_HTTP_PORT, '/api/status') as { uptime?: number; ready?: boolean };
+      serverInfo = { uptime: data.uptime ?? 0, ready: data.ready ?? false };
+    } catch (err) {
+      log('cli', 'HTTP proxy failed for server info: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  }
   const showAll = commandArgs.includes('--all');
   const config = loadCollectionConfig(globalOpts.configPath);
   const dataDir = path.dirname(globalOpts.dbPath);
@@ -598,6 +669,19 @@ async function handleStatus(globalOpts: GlobalOptions, commandArgs: string[]): P
     console.log('nano-brain Status — All Workspaces');
     console.log('═══════════════════════════════════════════════════');
     console.log('');
+
+    if (serverInfo) {
+      const uptimeSec = Math.floor(serverInfo.uptime);
+      const hours = Math.floor(uptimeSec / 3600);
+      const mins = Math.floor((uptimeSec % 3600) / 60);
+      const secs = uptimeSec % 60;
+      const uptimeStr = hours > 0 ? `${hours}h ${mins}m ${secs}s` : mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      console.log('Server:');
+      console.log(`  Status:   running (port ${DEFAULT_HTTP_PORT})`);
+      console.log(`  Uptime:   ${uptimeStr}`);
+      console.log(`  Ready:    ${serverInfo.ready ? 'yes' : 'no'}`);
+      console.log('');
+    }
 
     const header = '  Workspace              Documents  Embedded  Pending  DB Size';
     const divider = '  ─────────────────────  ─────────  ────────  ───────  ───────';
@@ -696,6 +780,19 @@ async function handleStatus(globalOpts: GlobalOptions, commandArgs: string[]): P
   console.log(`nano-brain Status — ${workspaceName}`);
   console.log('═══════════════════════════════════════════════════');
   console.log('');
+
+  if (serverInfo) {
+    const uptimeSec = Math.floor(serverInfo.uptime);
+    const hours = Math.floor(uptimeSec / 3600);
+    const mins = Math.floor((uptimeSec % 3600) / 60);
+    const secs = uptimeSec % 60;
+    const uptimeStr = hours > 0 ? `${hours}h ${mins}m ${secs}s` : mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    console.log('Server:');
+    console.log(`  Status:   running (port ${DEFAULT_HTTP_PORT})`);
+    console.log(`  Uptime:   ${uptimeStr}`);
+    console.log(`  Ready:    ${serverInfo.ready ? 'yes' : 'no'}`);
+    console.log('');
+  }
 
   console.log('Database:');
   console.log(`  Path:     ${resolvedDbPath.replace(os.homedir(), '~')}`);
@@ -1121,6 +1218,28 @@ async function handleSearch(
       since = arg.substring(8);
     } else if (arg.startsWith('--until=')) {
       until = arg.substring(8);
+    }
+  }
+  
+  const serverRunning = await detectRunningServer(DEFAULT_HTTP_PORT);
+  if (serverRunning) {
+    try {
+      const endpoint = mode === 'fts' ? '/api/search' : '/api/query';
+      const data = await proxyPost(DEFAULT_HTTP_PORT, endpoint, { query, limit, tags: tags?.join(','), scope });
+      if (format === 'json') {
+        console.log(JSON.stringify(data, null, 2));
+      } else if (format === 'files') {
+        console.log(data.results?.map((r: any) => r.path).join('\n') || '');
+      } else if (compact) {
+        const cache = new ResultCache();
+        const cacheKey = cache.set(data.results || [], query);
+        console.log(formatCompactResults(data.results || [], cacheKey));
+      } else {
+        console.log(formatSearchOutput(data.results || [], 'text'));
+      }
+      return;
+    } catch (err) {
+      log('cli', 'HTTP proxy failed, falling back to local: ' + (err instanceof Error ? err.message : String(err)));
     }
   }
   

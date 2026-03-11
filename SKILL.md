@@ -28,6 +28,7 @@ All memory operations use the `npx nano-brain` CLI via the Bash tool.
 - `-n <limit>` — Max results (default: 10)
 - `-c <collection>` — Filter by collection (codebase, sessions, memory)
 - `--full` — Show full content of results
+- `--compact` — Return 1-line summaries (~70% fewer tokens). Use `get <docid>` to expand.
 - `--json` — Output as JSON
 - `--files` — Show file paths only
 - `--min-score=<n>` — Minimum score threshold
@@ -118,6 +119,21 @@ Available via the nano-brain MCP server:
 | `memory_tags` | List all tags with counts |
 | `memory_symbols` | Query cross-repo symbols (Redis keys, API endpoints, DB tables, etc.) |
 | `memory_impact` | Cross-repo impact analysis (writers vs readers, publishers vs subscribers) |
+| `memory_expand` | Expand compact search results to full content by cacheKey + indices |
+
+### Token-Saving: Compact Search Flow (CCR)
+
+For large result sets, use **compact mode** to save ~70% tokens:
+
+```
+1. memory_search/vsearch/query with compact: true
+   → Returns: cacheKey + 1-line summaries per result
+2. Pick relevant results by index
+3. memory_expand({ cacheKey: "search_1", indices: [0, 3] })
+   → Returns: full content for selected results
+```
+
+**CLI:** `npx nano-brain query "topic" --compact` then `npx nano-brain get <docid> --full`
 
 ## Troubleshooting
 

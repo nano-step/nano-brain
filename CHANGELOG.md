@@ -1,5 +1,25 @@
 # Changelog
 
+## [2026.4.13] - 2026-03-11
+
+### Added
+
+- **Server resilience**: MCP server now survives crashes and restarts automatically. Includes uncaught exception/rejection handlers with 1s grace period, SIGTERM/SIGINT graceful shutdown (closes transports, flushes DB, 5s timeout), and phased startup that defers heavy work (watcher, embedding, reindex) until after MCP is ready.
+- **SQLite EventStore**: Persistent MCP event storage backed by SQLite (`event-store.ts`). Enables Streamable HTTP session resumability — clients can reconnect after server restart and replay missed events. Auto-prunes events older than 24 hours.
+- **Service installer**: `npx nano-brain serve install` creates a launchd plist (macOS) or systemd unit (Linux) for auto-start on login. `serve uninstall` removes it. Uses `npx nano-brain` for correct path resolution.
+- **HTTP API endpoints**: `/api/status`, `/api/query`, `/api/search` — CLI commands proxy through these when the server is running, avoiding duplicate DB opens.
+- **CLI HTTP proxy**: `status`, `query`, `search`, and `vsearch` commands auto-detect a running server and proxy requests through the HTTP API. Falls back to local DB access on failure.
+- **33 new tests**: error-handlers (4), event-store (7), service-installer (22).
+
+### Fixed
+
+- **Status output formatting**: `nano-brain status` no longer dumps raw JSON when the server is running. Now shows the same formatted output (Database, Index, Collections, Codebase, Code Intelligence, Embedding Server, Vector Store, Token Usage, Models) with an additional **Server** section showing uptime and ready state.
+
+### Changed
+
+- **Removed singleton guard**: Server no longer refuses to start if another instance is detected. The service manager handles single-instance enforcement.
+- **Phased startup**: Heavy initialization (file watcher, embedding loop, codebase reindex) is deferred until after the MCP transport is ready, reducing time-to-first-response.
+
 ## [2026.3.21] - 2026-03-08
 
 ### Added
