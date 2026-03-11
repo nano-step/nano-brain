@@ -1140,37 +1140,66 @@ async function handleEmbed(globalOpts: GlobalOptions, commandArgs: string[]): Pr
   }
   
   log('cli', 'embed start force=' + force);
-  const store = createStore(globalOpts.dbPath);
-  const hashes = store.getHashesNeedingEmbedding();
-  
-  if (hashes.length === 0) {
-    console.log('No chunks need embedding');
-    store.close();
-    return;
-  }
-  
-  log('cli', 'embed pending count=' + hashes.length);
-  console.log(`Found ${hashes.length} chunks needing embeddings`);
-  console.log('Loading embedding model...');
-  
   const config = loadCollectionConfig(globalOpts.configPath);
   const provider = await createEmbeddingProvider({ embeddingConfig: config?.embedding });
   
   if (!provider) {
     console.error('Failed to load embedding provider');
-    store.close();
     process.exit(1);
   }
   
-  store.ensureVecTable(provider.getDimensions());
-  console.log('Generating embeddings...');
+  let totalEmbedded = 0;
+  const dataDir = path.dirname(globalOpts.dbPath);
   
-  const embedded = await embedPendingCodebase(store, provider, 50);
+  try {
+    const store = createStore(globalOpts.dbPath);
+    const hashes = store.getHashesNeedingEmbedding();
+    if (hashes.length > 0) {
+      store.ensureVecTable(provider.getDimensions());
+      console.log(`[${path.basename(process.cwd())}] ${hashes.length} chunks pending...`);
+      const embedded = await embedPendingCodebase(store, provider, 50);
+      totalEmbedded += embedded;
+      console.log(`[${path.basename(process.cwd())}] Embedded ${embedded} documents`);
+    }
+    store.close();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('malformed') || msg.includes('corrupt')) {
+      console.warn(`[${path.basename(process.cwd())}] Database corrupted — skipping (delete and re-init to fix)`);
+    } else {
+      throw err;
+    }
+  }
   
-  console.log(`✅ Embedded ${embedded} documents`);
+  if (config?.workspaces) {
+    for (const [wsPath, wsConfig] of Object.entries(config.workspaces)) {
+      if (!wsConfig.codebase?.enabled) continue;
+      const wsDbPath = resolveWorkspaceDbPath(dataDir, wsPath);
+      if (!fs.existsSync(wsDbPath)) continue;
+      try {
+        const wsStore = createStore(wsDbPath);
+        const wsHashes = wsStore.getHashesNeedingEmbedding();
+        if (wsHashes.length > 0) {
+          wsStore.ensureVecTable(provider.getDimensions());
+          console.log(`[${path.basename(wsPath)}] ${wsHashes.length} chunks pending...`);
+          const embedded = await embedPendingCodebase(wsStore, provider, 50);
+          totalEmbedded += embedded;
+          console.log(`[${path.basename(wsPath)}] Embedded ${embedded} documents`);
+        }
+        wsStore.close();
+      } catch (err) {
+        console.warn(`[${path.basename(wsPath)}] Embed failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  }
+  
+  if (totalEmbedded === 0) {
+    console.log('No chunks need embedding');
+  } else {
+    console.log(`✅ Embedded ${totalEmbedded} documents total`);
+  }
   
   provider.dispose();
-  store.close();
 }
 
 async function handleSearch(

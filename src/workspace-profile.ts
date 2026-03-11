@@ -38,4 +38,25 @@ export class WorkspaceProfile {
   isNewWorkspace(workspaceHash: string): boolean {
     return this.loadProfile(workspaceHash) === null;
   }
+
+  updateFromTelemetry(workspaceHash: string): void {
+    try {
+      const stats = this.store.getTelemetryStats(workspaceHash);
+      const topKeywords = this.store.getTelemetryTopKeywords(workspaceHash, 20);
+      const existingProfile = this.loadProfile(workspaceHash);
+      const expandRate = stats.queryCount > 0 ? stats.expandCount / stats.queryCount : 0;
+      const profileData: WorkspaceProfileData = {
+        topTopics: topKeywords.map(k => ({ topic: k.keyword, count: k.count })),
+        topCollections: existingProfile?.topCollections ?? [],
+        queryCount: stats.queryCount,
+        expandCount: stats.expandCount,
+        expandRate,
+        lastUpdated: new Date().toISOString(),
+      };
+      this.saveProfile(workspaceHash, profileData);
+      log('workspace-profile', `Updated profile for ${workspaceHash}: ${stats.queryCount} queries, ${topKeywords.length} topics`);
+    } catch (err) {
+      log('workspace-profile', 'Failed to update from telemetry: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  }
 }

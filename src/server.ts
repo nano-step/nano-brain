@@ -54,6 +54,7 @@ export interface ServerDeps {
   dataDir?: string
   daemon?: boolean
   ready?: { value: boolean }
+  sequenceAnalyzer?: import('./sequence-analyzer.js').SequenceAnalyzer
 }
 
 export interface ResolvedWorkspace {
@@ -883,6 +884,8 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         const latestConfig = store.getLatestConfigVersion();
         
         learningText = '\n\n## Learning\n';
+        learningText += '- PID: ' + process.pid + '\n';
+        learningText += '- Uptime: ' + Math.round(process.uptime()) + 's\n';
         learningText += '- Telemetry records: ' + telemetryCount + '\n';
         learningText += '- Bandit variants tracked: ' + banditStats.length + '\n';
         if (latestConfig) {
@@ -1784,6 +1787,8 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         const globalLearning = effectiveStore.getGlobalLearning();
         
         let text = '## Learning Status\n\n';
+        text += '**PID:** ' + process.pid + '\n';
+        text += '**Uptime:** ' + Math.round(process.uptime()) + 's\n';
         text += '**Telemetry:** ' + telemetryCount + ' queries logged\n';
         text += '**Bandit Stats:** ' + banditStats.length + ' variant records\n';
         
@@ -1812,7 +1817,93 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           }
         }
         
+        try {
+          const clusters = effectiveStore.getQueryClusters(effectiveProjectHash);
+          const transitions = effectiveStore.getClusterTransitions(effectiveProjectHash);
+          const accuracy = effectiveStore.getSuggestionAccuracy(effectiveProjectHash);
+          
+          text += '\n### Proactive Intelligence\n';
+          text += '- Clusters: ' + clusters.length + '\n';
+          text += '- Transitions: ' + transitions.length + '\n';
+          if (accuracy.total > 0) {
+            text += '- Prediction accuracy: ' + ((accuracy.exact + accuracy.partial) / accuracy.total * 100).toFixed(1) + '% (' + accuracy.exact + ' exact, ' + accuracy.partial + ' partial, ' + accuracy.none + ' miss out of ' + accuracy.total + ')\n';
+          }
+        } catch {
+        }
+        
         return { content: [{ type: 'text', text }] };
+      } finally {
+        if (wsResult.needsClose) wsResult.store.close();
+      }
+    }
+  );
+
+  server.tool(
+    'memory_suggestions',
+    'Get proactive suggestions for what the user might need next based on query patterns',
+    {
+      context: z.string().optional().describe('Current query or topic context'),
+      workspace: z.string().optional().describe('Workspace path or hash'),
+      limit: z.number().optional().default(3).describe('Max suggestions to return'),
+    },
+    async ({ context, workspace, limit }) => {
+      if (checkReady()) return WARMUP_ERROR;
+      log('mcp', 'memory_suggestions context="' + (context || '') + '" workspace="' + (workspace || '') + '"');
+      
+      const wsResult = requireDaemonWorkspace(deps, workspace);
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true };
+      }
+      
+      try {
+        const effectiveStore = wsResult.store;
+        const effectiveProjectHash = wsResult.projectHash;
+        
+        if (!deps.sequenceAnalyzer) {
+          return {
+            content: [{ type: 'text', text: 'Proactive intelligence is not configured. Set proactive.enabled=true in config.yml.' }],
+            isError: true,
+          };
+        }
+        
+        if (!context) {
+          const profile = effectiveStore.getWorkspaceProfile(effectiveProjectHash);
+          const telemetryStats = effectiveStore.getTelemetryStats(effectiveProjectHash);
+          if (telemetryStats.queryCount < 50) {
+            return { content: [{ type: 'text', text: 'Not enough data for suggestions. Need at least 50 queries (current: ' + telemetryStats.queryCount + ').' }] };
+          }
+          const topKeywords = effectiveStore.getTelemetryTopKeywords(effectiveProjectHash, 5);
+          const expandRate = telemetryStats.queryCount > 0 ? (telemetryStats.expandCount / telemetryStats.queryCount) : 0;
+          return {
+            content: [{ type: 'text', text: '## Workspace Insights\n\n**Top topics:** ' + topKeywords.map(k => k.keyword).join(', ') + '\n**Queries logged:** ' + telemetryStats.queryCount + '\n**Expand rate:** ' + (expandRate * 100).toFixed(1) + '%' }],
+          };
+        }
+        
+        const suggestions = await deps.sequenceAnalyzer.predictNext(context, effectiveProjectHash, limit ?? 3);
+        
+        if (suggestions.length === 0) {
+          return { content: [{ type: 'text', text: 'No predictions available for this context. The system needs more query data to learn patterns.' }] };
+        }
+        
+        const dataFreshness = new Date().toISOString();
+        
+        let text = '## Predicted Next Queries\n\n';
+        for (const s of suggestions) {
+          text += '- **' + s.query + '** (confidence: ' + (s.confidence * 100).toFixed(0) + '%)\n';
+          text += '  ' + s.reasoning + '\n';
+          if (s.relatedDocids.length > 0) {
+            text += '  Related docs: ' + s.relatedDocids.join(', ') + '\n';
+          }
+          text += '\n';
+        }
+        text += '_Data freshness: ' + dataFreshness + '_';
+        
+        return { content: [{ type: 'text', text }] };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: 'Prediction failed: ' + (err instanceof Error ? err.message : String(err)) }],
+          isError: true,
+        };
       } finally {
         if (wsResult.needsClose) wsResult.store.close();
       }
@@ -1988,6 +2079,24 @@ export async function startServer(options: ServerOptions): Promise<void> {
       return;
     }
     log('server', 'Starting file watcher');
+    
+    // Detect overlapping workspaces
+    if (config?.workspaces) {
+      const wsPaths = Object.keys(config.workspaces).sort()
+      for (let i = 0; i < wsPaths.length; i++) {
+        for (let j = i + 1; j < wsPaths.length; j++) {
+          const a = wsPaths[i].endsWith('/') ? wsPaths[i] : wsPaths[i] + '/'
+          const b = wsPaths[j].endsWith('/') ? wsPaths[j] : wsPaths[j] + '/'
+          if (b.startsWith(a)) {
+            const nameA = path.basename(wsPaths[i])
+            const nameB = path.basename(wsPaths[j])
+            log('server', `WARNING: Overlapping workspaces detected: ${nameB} is inside ${nameA} — consider removing one`)
+            console.warn(`[config] Overlapping workspaces: ${nameB} is inside ${nameA} — consider removing one`)
+          }
+        }
+      }
+    }
+    
     const watcherConfig: WatcherConfig | undefined = config?.watcher;
     watcher = startWatcher({
       store,
@@ -1998,6 +2107,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
       pollIntervalMs: validatedIntervals?.reindexPoll ? validatedIntervals.reindexPoll * 1000 : (watcherConfig?.pollIntervalMs ?? 120000),
       sessionPollMs: validatedIntervals?.sessionPoll ? validatedIntervals.sessionPoll * 1000 : (watcherConfig?.sessionPollMs ?? 120000),
       embedIntervalMs: validatedIntervals?.embed ? validatedIntervals.embed * 1000 : (watcherConfig?.embedIntervalMs ?? 60000),
+      reindexCooldownMs: watcherConfig?.reindexCooldownMs,
+      embedQuietPeriodMs: watcherConfig?.embedQuietPeriodMs,
       sessionStorageDir: path.join(homeDir, '.local/share/opencode/storage'),
       outputDir: path.join(outputDir, 'sessions'),
       storageConfig,

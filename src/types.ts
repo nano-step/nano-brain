@@ -96,6 +96,7 @@ export interface CollectionConfig {
   consolidation?: Partial<ConsolidationConfig>
   importance?: Partial<ImportanceConfig>
   intents?: Partial<IntentConfig>
+  proactive?: Partial<ProactiveConfig>
 }
 
 export interface CodebaseConfig {
@@ -131,6 +132,8 @@ export interface WatcherConfig {
   pollIntervalMs?: number
   sessionPollMs?: number
   embedIntervalMs?: number
+  reindexCooldownMs?: number
+  embedQuietPeriodMs?: number
 }
 
 export interface CodebaseIndexResult {
@@ -360,6 +363,26 @@ export const DEFAULT_INTENT_CONFIG: IntentConfig = {
   },
 };
 
+export interface ProactiveConfig {
+  enabled: boolean;
+  chain_timeout_ms: number;
+  min_queries_for_prediction: number;
+  max_suggestions: number;
+  confidence_threshold: number;
+  cluster_count: number;
+  analysis_interval_ms: number;
+}
+
+export const DEFAULT_PROACTIVE_CONFIG: ProactiveConfig = {
+  enabled: false,
+  chain_timeout_ms: 300000,
+  min_queries_for_prediction: 50,
+  max_suggestions: 5,
+  confidence_threshold: 0.3,
+  cluster_count: 50,
+  analysis_interval_ms: 1800000,
+};
+
 export interface RemoveWorkspaceResult {
   documentsDeleted: number;
   embeddingsDeleted: number;
@@ -502,4 +525,26 @@ export interface Store {
   saveWorkspaceProfile(workspaceHash: string, profileData: string): void;
   saveGlobalLearning(parameterName: string, value: number, confidence: number): void;
   getGlobalLearning(): Array<{ parameter_name: string; value: number; confidence: number }>;
+
+  getTelemetryStats(workspaceHash: string): { queryCount: number; expandCount: number };
+  getTelemetryTopKeywords(workspaceHash: string, limit: number): Array<{ keyword: string; count: number }>;
+  insertChainMembership(chainId: string, queryId: string, position: number, workspaceHash: string): void;
+  getChainsByWorkspace(workspaceHash: string, limit: number): Array<{ chain_id: string; query_id: string; position: number }>;
+
+  getRecentTelemetryQueries(workspaceHash: string, limit: number): Array<{ id: number; query_id: string; query_text: string; timestamp: string; session_id: string }>;
+  upsertQueryCluster(clusterId: number, centroidEmbedding: string, representativeQuery: string, queryCount: number, workspaceHash: string): void;
+  getQueryClusters(workspaceHash: string): Array<{ cluster_id: number; centroid_embedding: string; representative_query: string; query_count: number }>;
+  clearQueryClusters(workspaceHash: string): void;
+  upsertClusterTransition(fromId: number, toId: number, frequency: number, probability: number, workspaceHash: string): void;
+  getClusterTransitions(workspaceHash: string): Array<{ from_cluster_id: number; to_cluster_id: number; frequency: number; probability: number }>;
+  getTransitionsFrom(fromClusterId: number, workspaceHash: string, limit: number): Array<{ to_cluster_id: number; frequency: number; probability: number }>;
+  clearClusterTransitions(workspaceHash: string): void;
+
+  upsertGlobalTransition(fromId: number, toId: number, frequency: number, probability: number): void;
+  getGlobalTransitions(): Array<{ from_cluster_id: number; to_cluster_id: number; frequency: number; probability: number }>;
+  getGlobalTransitionsFrom(fromClusterId: number, limit: number): Array<{ to_cluster_id: number; frequency: number; probability: number }>;
+  clearGlobalTransitions(): void;
+
+  recordSuggestionFeedback(suggestedQuery: string, actualQuery: string, matchType: string, workspaceHash: string): void;
+  getSuggestionAccuracy(workspaceHash: string): { total: number; exact: number; partial: number; none: number };
 }

@@ -1,5 +1,5 @@
-import type { Collection, CollectionConfig, WorkspaceConfig, TelemetryConfig, LearningConfig, ConsolidationConfig, ImportanceConfig, IntentConfig } from './types.js';
-import { DEFAULT_TELEMETRY_CONFIG, DEFAULT_LEARNING_CONFIG, DEFAULT_CONSOLIDATION_CONFIG, DEFAULT_IMPORTANCE_CONFIG, DEFAULT_INTENT_CONFIG } from './types.js';
+import type { Collection, CollectionConfig, WorkspaceConfig, TelemetryConfig, LearningConfig, ConsolidationConfig, ImportanceConfig, IntentConfig, ProactiveConfig } from './types.js';
+import { DEFAULT_TELEMETRY_CONFIG, DEFAULT_LEARNING_CONFIG, DEFAULT_CONSOLIDATION_CONFIG, DEFAULT_IMPORTANCE_CONFIG, DEFAULT_INTENT_CONFIG, DEFAULT_PROACTIVE_CONFIG } from './types.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -258,4 +258,8 @@ export function parseIntentConfig(partial?: Partial<IntentConfig>): IntentConfig
     enabled: partial.enabled ?? DEFAULT_INTENT_CONFIG.enabled,
     intents: partial.intents ?? DEFAULT_INTENT_CONFIG.intents,
   };
+}
+
+export function parseProactiveConfig(partial?: Partial<ProactiveConfig>): ProactiveConfig {
+  return { ...DEFAULT_PROACTIVE_CONFIG, ...partial };
 }

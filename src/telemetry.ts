@@ -56,3 +56,50 @@ export function detectReformulation(
   }
   return null;
 }
+
+export interface QueryChain {
+  chainId: string;
+  queries: Array<{ queryId: string; queryText: string; timestamp: string }>;
+  workspaceHash: string;
+}
+
+export function detectQueryChains(
+  queries: Array<{ id: number; query_id: string; query_text: string; timestamp: string; session_id: string }>,
+  chainTimeoutMs: number = 300000
+): QueryChain[] {
+  if (queries.length === 0) return [];
+  const sorted = [...queries].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  const chains: QueryChain[] = [];
+  let currentChain: QueryChain = {
+    chainId: generateQueryId(),
+    queries: [],
+    workspaceHash: '',
+  };
+  let lastTimestamp: number | null = null;
+  let lastSessionId: string | null = null;
+  for (const query of sorted) {
+    const queryTime = new Date(query.timestamp).getTime();
+    const shouldStartNewChain =
+      lastTimestamp !== null &&
+      (queryTime - lastTimestamp > chainTimeoutMs || query.session_id !== lastSessionId);
+    if (shouldStartNewChain && currentChain.queries.length > 0) {
+      chains.push(currentChain);
+      currentChain = {
+        chainId: generateQueryId(),
+        queries: [],
+        workspaceHash: '',
+      };
+    }
+    currentChain.queries.push({
+      queryId: query.query_id,
+      queryText: query.query_text,
+      timestamp: query.timestamp,
+    });
+    lastTimestamp = queryTime;
+    lastSessionId = query.session_id;
+  }
+  if (currentChain.queries.length > 0) {
+    chains.push(currentChain);
+  }
+  return chains;
+}

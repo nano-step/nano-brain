@@ -31,24 +31,30 @@ export interface WatcherOptions {
   projectHash?: string
   allWorkspaces?: Record<string, { codebase?: CodebaseConfig }>
   dataDir?: string
+  reindexCooldownMs?: number
+  embedQuietPeriodMs?: number
   learningConfig?: import('./types.js').LearningConfig
   sampler?: import('./bandits.js').ThompsonSampler
   consolidationAgent?: import('./consolidation.js').ConsolidationAgent
   consolidationIntervalMs?: number
   importanceScorer?: import('./importance.js').ImportanceScorer
   importanceIntervalMs?: number
+  workspaceProfile?: import('./workspace-profile.js').WorkspaceProfile
+  sequenceAnalyzer?: import('./sequence-analyzer.js').SequenceAnalyzer
+  proactiveConfig?: import('./types.js').ProactiveConfig
 }
 
 export interface Watcher {
   stop(): void;
   isDirty(): boolean;
-  triggerReindex(): Promise<void>;
+  triggerReindex(force?: boolean): Promise<void>;
   getStats(): WatcherStats;
 }
 
 export interface WatcherStats {
   filesWatched: number;
   lastReindexAt: number | null;
+  lastFileChangeAt: number;
   pendingChanges: number;
   isReindexing: boolean;
 }
@@ -73,6 +79,8 @@ export function startWatcher(options: WatcherOptions): Watcher {
     projectHash = 'global',
     allWorkspaces,
     dataDir,
+    reindexCooldownMs = 600000,
+    embedQuietPeriodMs = 60000,
     learningConfig,
     sampler,
   } = options
@@ -84,6 +92,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
   let dirty = false;
   const pendingPaths = new Set<string>();
   let lastReindexAt: number | null = null;
+  let lastFileChangeAt: number = 0;
   let isReindexing = false;
   let stopped = false;
   let debounceTimer: NodeJS.Timeout | null = null;
@@ -101,12 +110,14 @@ export function startWatcher(options: WatcherOptions): Watcher {
   let lastLearningRun = Date.now();
   let consolidationTimeout: NodeJS.Timeout | null = null;
   let importanceTimeout: NodeJS.Timeout | null = null;
+  let sequenceTimeout: NodeJS.Timeout | null = null;
 
   const handleFileChange = (filePath: string) => {
     if (stopped) return
     
     log('watcher', 'File change detected: ' + filePath)
     dirty = true
+    lastFileChangeAt = Date.now()
     pendingPaths.add(filePath)
     if (debounceTimer) {
       clearTimeout(debounceTimer)
@@ -126,42 +137,61 @@ export function startWatcher(options: WatcherOptions): Watcher {
     return codebaseExtensions.has(ext)
   }
 
-  const triggerReindex = async (): Promise<void> => {
+  const triggerReindex = async (force?: boolean): Promise<void> => {
     if (isReindexing || stopped) return
+    
+    if (!force && lastReindexAt && Date.now() - lastReindexAt < reindexCooldownMs) {
+      const remainingMs = reindexCooldownMs - (Date.now() - lastReindexAt)
+      const remainingMin = Math.ceil(remainingMs / 60000)
+      log('watcher', `Reindex skipped: cooldown active (${remainingMin}m remaining)`)
+      return
+    }
     
     isReindexing = true
     log('watcher', 'Starting reindex')
     
     try {
       for (const collection of collections) {
-        const files = await scanCollectionFiles(collection)
-        const activePaths: string[] = []
-        for (const filePath of files) {
-          if (!fs.existsSync(filePath)) continue
-          
-          const content = fs.readFileSync(filePath, 'utf-8')
-          const hash = computeHash(content)
-          
-          const existingDoc = store.findDocument(filePath)
-          if (!existingDoc || existingDoc.hash !== hash) {
-            const title = extractTitle(content)
-            const effectiveProjectHash = collection.name === 'sessions'
-              ? extractProjectHashFromPath(filePath, outputDir) ?? projectHash
-              : projectHash;
-            indexDocument(store, collection.name, filePath, content, title, effectiveProjectHash)
+        try {
+          const files = await scanCollectionFiles(collection)
+          const activePaths: string[] = []
+          for (const filePath of files) {
+            if (!fs.existsSync(filePath)) continue
+            
+            const content = fs.readFileSync(filePath, 'utf-8')
+            const hash = computeHash(content)
+            
+            const existingDoc = store.findDocument(filePath)
+            if (!existingDoc || existingDoc.hash !== hash) {
+              const title = extractTitle(content)
+              const effectiveProjectHash = collection.name === 'sessions'
+                ? extractProjectHashFromPath(filePath, outputDir) ?? projectHash
+                : projectHash;
+              indexDocument(store, collection.name, filePath, content, title, effectiveProjectHash)
+            }
+            
+            activePaths.push(filePath)
           }
           
-          activePaths.push(filePath)
+          store.bulkDeactivateExcept(collection.name, activePaths)
+        } catch (err) {
+          log('watcher', `Collection scan failed for ${collection.name}: ${err}`)
         }
-        
-        store.bulkDeactivateExcept(collection.name, activePaths)
       }
       
       if (codebaseConfig?.enabled) {
-        await indexCodebase(store, workspaceRoot, codebaseConfig, projectHash, embedder, db)
+        try {
+          await indexCodebase(store, workspaceRoot, codebaseConfig, projectHash, embedder, db)
+        } catch (err) {
+          log('watcher', `Codebase index failed for primary workspace: ${err}`)
+        }
       }
       if (embedder) {
-        await embedPendingCodebase(store, embedder, 50, projectHash)
+        try {
+          await embedPendingCodebase(store, embedder, 50, projectHash)
+        } catch (err) {
+          log('watcher', `Embedding failed for primary workspace: ${err}`)
+        }
       }
       
       if (allWorkspaces && dataDir) {
@@ -363,6 +393,13 @@ export function startWatcher(options: WatcherOptions): Watcher {
           }
           isEmbedding = true;
           try {
+            if (lastFileChangeAt > 0 && Date.now() - lastFileChangeAt < embedQuietPeriodMs) {
+              const sinceSec = Math.round((Date.now() - lastFileChangeAt) / 1000)
+              log('watcher', `Embedding skipped: quiet period active (${sinceSec}s since last change, need ${Math.round(embedQuietPeriodMs / 1000)}s)`)
+              isEmbedding = false;
+              scheduleNextEmbedCycle();
+              return;
+            }
             let count = await embedPendingCodebase(store, embedder, 50, projectHash);
             if (count > 0) {
               log('watcher', 'Embedding cycle: ' + count + ' document(s) embedded')
@@ -460,6 +497,14 @@ export function startWatcher(options: WatcherOptions): Watcher {
             
             lastLearningRun = Date.now();
             log('watcher', 'Learning cycle complete: saved bandit stats and config version');
+
+            try {
+              if (options.workspaceProfile) {
+                options.workspaceProfile.updateFromTelemetry(projectHash);
+              }
+            } catch (profileErr) {
+              console.warn('[watcher] Profile population failed:', profileErr);
+            }
           } catch (err) {
             console.warn('[watcher] Learning cycle failed:', err);
           } finally {
@@ -512,6 +557,25 @@ export function startWatcher(options: WatcherOptions): Watcher {
         }, importanceInterval);
       };
       scheduleImportanceUpdate();
+    }
+
+    if (options.sequenceAnalyzer && options.proactiveConfig?.enabled) {
+      const sequenceInterval = options.proactiveConfig.analysis_interval_ms ?? 1800000;
+      const scheduleSequenceAnalysis = () => {
+        if (stopped) return;
+        sequenceTimeout = setTimeout(async () => {
+          if (stopped) return;
+          try {
+            await options.sequenceAnalyzer!.runAnalysisCycle(projectHash);
+            log('watcher', 'Sequence analysis cycle complete');
+          } catch (err) {
+            console.warn('[watcher] Sequence analysis failed:', err);
+          } finally {
+            scheduleSequenceAnalysis();
+          }
+        }, sequenceInterval);
+      };
+      scheduleSequenceAnalysis();
     }
   };
 
@@ -575,6 +639,11 @@ export function startWatcher(options: WatcherOptions): Watcher {
         clearTimeout(importanceTimeout);
         importanceTimeout = null;
       }
+
+      if (sequenceTimeout) {
+        clearTimeout(sequenceTimeout);
+        sequenceTimeout = null;
+      }
       
       if (watcher) {
         watcher.close();
@@ -586,14 +655,15 @@ export function startWatcher(options: WatcherOptions): Watcher {
       return dirty;
     },
     
-    async triggerReindex() {
-      await triggerReindex();
+    async triggerReindex(force?: boolean) {
+      await triggerReindex(force);
     },
     
     getStats(): WatcherStats {
       return {
         filesWatched: watchedPaths.size,
         lastReindexAt,
+        lastFileChangeAt,
         pendingChanges: pendingPaths.size,
         isReindexing,
       };

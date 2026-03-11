@@ -29,6 +29,7 @@ export function createStore(dbPath: string): Store {
   
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  db.pragma('busy_timeout = 5000');
   
   let vecAvailable = false;
   let vectorStore: VectorStore | null = null;
@@ -273,7 +274,7 @@ export function createStore(dbPath: string): Store {
   
   // Schema versioning
   const currentVersion = (db.pragma('user_version') as Array<{ user_version: number }>)[0].user_version;
-  const TARGET_VERSION = 1;
+  const TARGET_VERSION = 3;
 
   if (currentVersion < 1) {
     db.exec(`
@@ -331,6 +332,68 @@ export function createStore(dbPath: string): Store {
     
     db.pragma(`user_version = 1`);
     log('store', 'Schema migrated to version 1 (self-learning tables)');
+  }
+
+  if (currentVersion < 2) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS query_chain_membership (
+        chain_id TEXT NOT NULL,
+        query_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        workspace_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (chain_id, position)
+      );
+      CREATE INDEX IF NOT EXISTS idx_chain_workspace ON query_chain_membership(workspace_hash);
+      CREATE INDEX IF NOT EXISTS idx_telemetry_ws_session_ts ON search_telemetry(workspace_hash, session_id, timestamp);
+
+      CREATE TABLE IF NOT EXISTS query_clusters (
+        cluster_id INTEGER NOT NULL,
+        centroid_embedding TEXT NOT NULL,
+        representative_query TEXT NOT NULL,
+        query_count INTEGER NOT NULL DEFAULT 0,
+        workspace_hash TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (cluster_id, workspace_hash)
+      );
+
+      CREATE TABLE IF NOT EXISTS cluster_transitions (
+        from_cluster_id INTEGER NOT NULL,
+        to_cluster_id INTEGER NOT NULL,
+        frequency INTEGER NOT NULL DEFAULT 0,
+        probability REAL NOT NULL DEFAULT 0.0,
+        workspace_hash TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (from_cluster_id, to_cluster_id, workspace_hash)
+      );
+
+      CREATE TABLE IF NOT EXISTS global_transitions (
+        from_cluster_id INTEGER NOT NULL,
+        to_cluster_id INTEGER NOT NULL,
+        frequency INTEGER NOT NULL DEFAULT 0,
+        probability REAL NOT NULL DEFAULT 0.0,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (from_cluster_id, to_cluster_id)
+      );
+    `);
+    db.pragma(`user_version = 2`);
+    log('store', 'Schema migrated to version 2 (proactive intelligence tables)');
+  }
+
+  if (currentVersion < 3) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS suggestion_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        suggested_query TEXT NOT NULL,
+        actual_next_query TEXT NOT NULL,
+        match_type TEXT NOT NULL DEFAULT 'none',
+        workspace_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_suggestion_feedback_workspace ON suggestion_feedback(workspace_hash);
+    `);
+    db.pragma(`user_version = 3`);
+    log('store', 'Schema migrated to version 3 (suggestion feedback table)');
   }
   
   if (vecAvailable) {
@@ -623,6 +686,111 @@ export function createStore(dbPath: string): Store {
 
   const getGlobalLearningStmt = db.prepare(`
     SELECT parameter_name, value, confidence FROM global_learning
+  `);
+
+  const getTelemetryStatsStmt = db.prepare(`
+    SELECT COUNT(*) as queryCount, SUM(CASE WHEN feedback_signal = 'positive' THEN 1 ELSE 0 END) as expandCount
+    FROM search_telemetry WHERE workspace_hash = ?
+  `);
+
+  const getTelemetryQueryTextsStmt = db.prepare(`
+    SELECT query_text FROM search_telemetry WHERE workspace_hash = ? ORDER BY timestamp DESC LIMIT 500
+  `);
+
+  const insertChainMembershipStmt = db.prepare(`
+    INSERT OR REPLACE INTO query_chain_membership (chain_id, query_id, position, workspace_hash)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  const getChainsByWorkspaceStmt = db.prepare(`
+    SELECT chain_id, query_id, position FROM query_chain_membership
+    WHERE workspace_hash = ? ORDER BY chain_id, position LIMIT ?
+  `);
+
+  const getRecentTelemetryQueriesStmt = db.prepare(`
+    SELECT id, query_id, query_text, timestamp, session_id FROM search_telemetry
+    WHERE workspace_hash = ? ORDER BY timestamp DESC LIMIT ?
+  `);
+
+  const upsertQueryClusterStmt = db.prepare(`
+    INSERT INTO query_clusters (cluster_id, centroid_embedding, representative_query, query_count, workspace_hash, updated_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(cluster_id, workspace_hash) DO UPDATE SET
+      centroid_embedding = excluded.centroid_embedding,
+      representative_query = excluded.representative_query,
+      query_count = excluded.query_count,
+      updated_at = datetime('now')
+  `);
+
+  const getQueryClustersStmt = db.prepare(`
+    SELECT cluster_id, centroid_embedding, representative_query, query_count
+    FROM query_clusters WHERE workspace_hash = ? ORDER BY cluster_id
+  `);
+
+  const clearQueryClustersStmt = db.prepare(`
+    DELETE FROM query_clusters WHERE workspace_hash = ?
+  `);
+
+  const upsertClusterTransitionStmt = db.prepare(`
+    INSERT INTO cluster_transitions (from_cluster_id, to_cluster_id, frequency, probability, workspace_hash, updated_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(from_cluster_id, to_cluster_id, workspace_hash) DO UPDATE SET
+      frequency = excluded.frequency,
+      probability = excluded.probability,
+      updated_at = datetime('now')
+  `);
+
+  const getClusterTransitionsStmt = db.prepare(`
+    SELECT from_cluster_id, to_cluster_id, frequency, probability
+    FROM cluster_transitions WHERE workspace_hash = ? ORDER BY frequency DESC
+  `);
+
+  const getTransitionsFromStmt = db.prepare(`
+    SELECT to_cluster_id, frequency, probability
+    FROM cluster_transitions WHERE from_cluster_id = ? AND workspace_hash = ?
+    ORDER BY probability DESC LIMIT ?
+  `);
+
+  const clearClusterTransitionsStmt = db.prepare(`
+    DELETE FROM cluster_transitions WHERE workspace_hash = ?
+  `);
+
+  const upsertGlobalTransitionStmt = db.prepare(`
+    INSERT INTO global_transitions (from_cluster_id, to_cluster_id, frequency, probability, updated_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(from_cluster_id, to_cluster_id) DO UPDATE SET
+      frequency = excluded.frequency,
+      probability = excluded.probability,
+      updated_at = datetime('now')
+  `);
+
+  const getGlobalTransitionsStmt = db.prepare(`
+    SELECT from_cluster_id, to_cluster_id, frequency, probability
+    FROM global_transitions ORDER BY frequency DESC
+  `);
+
+  const getGlobalTransitionsFromStmt = db.prepare(`
+    SELECT to_cluster_id, frequency, probability
+    FROM global_transitions WHERE from_cluster_id = ?
+    ORDER BY probability DESC LIMIT ?
+  `);
+
+  const clearGlobalTransitionsStmt = db.prepare(`
+    DELETE FROM global_transitions
+  `);
+
+  const insertSuggestionFeedbackStmt = db.prepare(`
+    INSERT INTO suggestion_feedback (suggested_query, actual_next_query, match_type, workspace_hash)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  const getSuggestionAccuracyStmt = db.prepare(`
+    SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN match_type = 'exact' THEN 1 ELSE 0 END) as exact,
+      SUM(CASE WHEN match_type = 'partial' THEN 1 ELSE 0 END) as partial,
+      SUM(CASE WHEN match_type = 'none' THEN 1 ELSE 0 END) as none
+    FROM suggestion_feedback WHERE workspace_hash = ?
   `);
   
   return {
@@ -1682,6 +1850,136 @@ export function createStore(dbPath: string): Store {
     getGlobalLearning(): Array<{ parameter_name: string; value: number; confidence: number }> {
       return getGlobalLearningStmt.all() as Array<{ parameter_name: string; value: number; confidence: number }>;
     },
+
+    getTelemetryStats(workspaceHash: string): { queryCount: number; expandCount: number } {
+      const row = getTelemetryStatsStmt.get(workspaceHash) as { queryCount: number; expandCount: number | null } | undefined;
+      return {
+        queryCount: row?.queryCount ?? 0,
+        expandCount: row?.expandCount ?? 0,
+      };
+    },
+
+    getTelemetryTopKeywords(workspaceHash: string, limit: number): Array<{ keyword: string; count: number }> {
+      const rows = getTelemetryQueryTextsStmt.all(workspaceHash) as Array<{ query_text: string }>;
+      const stopwords = new Set([
+        'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+        'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used',
+        'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into',
+        'through', 'during', 'before', 'after', 'above', 'below', 'between',
+        'and', 'but', 'or', 'nor', 'so', 'yet', 'both', 'either', 'neither',
+        'not', 'only', 'own', 'same', 'than', 'too', 'very', 'just',
+        'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves',
+        'you', 'your', 'yours', 'yourself', 'yourselves',
+        'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself',
+        'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves',
+        'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those',
+        'am', 'if', 'then', 'else', 'when', 'where', 'why', 'how', 'all', 'any',
+        'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no',
+      ]);
+      const keywordCounts = new Map<string, number>();
+      for (const row of rows) {
+        const tokens = row.query_text.toLowerCase().split(/\s+/).filter(t => t.length > 2 && !stopwords.has(t));
+        for (const token of tokens) {
+          keywordCounts.set(token, (keywordCounts.get(token) ?? 0) + 1);
+        }
+      }
+      const sorted = [...keywordCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([keyword, count]) => ({ keyword, count }));
+      return sorted;
+    },
+
+    insertChainMembership(chainId: string, queryId: string, position: number, workspaceHash: string): void {
+      try {
+        insertChainMembershipStmt.run(chainId, queryId, position, workspaceHash);
+      } catch (err) {
+        console.warn('[store] Failed to insert chain membership:', err instanceof Error ? err.message : String(err));
+      }
+    },
+
+    getChainsByWorkspace(workspaceHash: string, limit: number): Array<{ chain_id: string; query_id: string; position: number }> {
+      return getChainsByWorkspaceStmt.all(workspaceHash, limit) as Array<{ chain_id: string; query_id: string; position: number }>;
+    },
+
+    getRecentTelemetryQueries(workspaceHash: string, limit: number): Array<{ id: number; query_id: string; query_text: string; timestamp: string; session_id: string }> {
+      return getRecentTelemetryQueriesStmt.all(workspaceHash, limit) as Array<{ id: number; query_id: string; query_text: string; timestamp: string; session_id: string }>;
+    },
+
+    upsertQueryCluster(clusterId: number, centroidEmbedding: string, representativeQuery: string, queryCount: number, workspaceHash: string): void {
+      try {
+        upsertQueryClusterStmt.run(clusterId, centroidEmbedding, representativeQuery, queryCount, workspaceHash);
+      } catch (err) {
+        console.warn('[store] Failed to upsert query cluster:', err instanceof Error ? err.message : String(err));
+      }
+    },
+
+    getQueryClusters(workspaceHash: string): Array<{ cluster_id: number; centroid_embedding: string; representative_query: string; query_count: number }> {
+      return getQueryClustersStmt.all(workspaceHash) as Array<{ cluster_id: number; centroid_embedding: string; representative_query: string; query_count: number }>;
+    },
+
+    clearQueryClusters(workspaceHash: string): void {
+      clearQueryClustersStmt.run(workspaceHash);
+    },
+
+    upsertClusterTransition(fromId: number, toId: number, frequency: number, probability: number, workspaceHash: string): void {
+      try {
+        upsertClusterTransitionStmt.run(fromId, toId, frequency, probability, workspaceHash);
+      } catch (err) {
+        console.warn('[store] Failed to upsert cluster transition:', err instanceof Error ? err.message : String(err));
+      }
+    },
+
+    getClusterTransitions(workspaceHash: string): Array<{ from_cluster_id: number; to_cluster_id: number; frequency: number; probability: number }> {
+      return getClusterTransitionsStmt.all(workspaceHash) as Array<{ from_cluster_id: number; to_cluster_id: number; frequency: number; probability: number }>;
+    },
+
+    getTransitionsFrom(fromClusterId: number, workspaceHash: string, limit: number): Array<{ to_cluster_id: number; frequency: number; probability: number }> {
+      return getTransitionsFromStmt.all(fromClusterId, workspaceHash, limit) as Array<{ to_cluster_id: number; frequency: number; probability: number }>;
+    },
+
+    clearClusterTransitions(workspaceHash: string): void {
+      clearClusterTransitionsStmt.run(workspaceHash);
+    },
+
+    upsertGlobalTransition(fromId: number, toId: number, frequency: number, probability: number): void {
+      try {
+        upsertGlobalTransitionStmt.run(fromId, toId, frequency, probability);
+      } catch (err) {
+        console.warn('[store] Failed to upsert global transition:', err instanceof Error ? err.message : String(err));
+      }
+    },
+
+    getGlobalTransitions(): Array<{ from_cluster_id: number; to_cluster_id: number; frequency: number; probability: number }> {
+      return getGlobalTransitionsStmt.all() as Array<{ from_cluster_id: number; to_cluster_id: number; frequency: number; probability: number }>;
+    },
+
+    getGlobalTransitionsFrom(fromClusterId: number, limit: number): Array<{ to_cluster_id: number; frequency: number; probability: number }> {
+      return getGlobalTransitionsFromStmt.all(fromClusterId, limit) as Array<{ to_cluster_id: number; frequency: number; probability: number }>;
+    },
+
+    clearGlobalTransitions(): void {
+      clearGlobalTransitionsStmt.run();
+    },
+
+    recordSuggestionFeedback(suggestedQuery: string, actualQuery: string, matchType: string, workspaceHash: string): void {
+      try {
+        insertSuggestionFeedbackStmt.run(suggestedQuery, actualQuery, matchType, workspaceHash);
+      } catch (err) {
+        console.warn('[store] Failed to record suggestion feedback:', err instanceof Error ? err.message : String(err));
+      }
+    },
+
+    getSuggestionAccuracy(workspaceHash: string): { total: number; exact: number; partial: number; none: number } {
+      const row = getSuggestionAccuracyStmt.get(workspaceHash) as { total: number; exact: number; partial: number; none: number } | undefined;
+      return {
+        total: row?.total ?? 0,
+        exact: row?.exact ?? 0,
+        partial: row?.partial ?? 0,
+        none: row?.none ?? 0,
+      };
+    },
   };
 }
 
@@ -1727,7 +2025,27 @@ export function openWorkspaceStore(dataDir: string, workspacePath: string): Stor
   if (!fs.existsSync(dbPath)) {
     return null;
   }
-  return createStore(dbPath);
+  try {
+    return createStore(dbPath);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('malformed') || msg.includes('corrupt') || msg.includes('disk image')) {
+      log('store', `Corrupted database detected: ${dbPath} — deleting and rebuilding`);
+      console.warn(`[store] Corrupted database: ${path.basename(dbPath)} — auto-recovering`);
+      try {
+        const walPath = dbPath + '-wal';
+        const shmPath = dbPath + '-shm';
+        if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+        if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
+        if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
+        return createStore(dbPath);
+      } catch (recreateErr) {
+        log('store', `Failed to recreate database: ${recreateErr}`);
+        return null;
+      }
+    }
+    throw err;
+  }
 }
 
 /**

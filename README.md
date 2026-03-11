@@ -686,6 +686,37 @@ intents:
 - `memory_importance` — View document importance scores
 - `memory_status` — View learning system status (telemetry records, bandit variants, config version)
 
+## Proactive Intelligence
+
+nano-brain can predict what you'll need next based on your query patterns.
+
+### How It Works
+
+1. **Query chains**: Groups of related queries within 5-minute windows are detected
+2. **Clustering**: Similar queries are grouped into semantic clusters using embeddings
+3. **Transition learning**: The system learns which clusters follow which (e.g., "auth questions" → "token refresh questions")
+4. **Predictions**: When you ask about topic A, nano-brain predicts you'll need topic B next
+
+### Configuration
+
+```yaml
+proactive:
+  enabled: true
+  chain_timeout_ms: 300000      # 5 min window for grouping queries
+  min_queries_for_prediction: 50 # Minimum queries before predictions activate
+  max_suggestions: 5
+  confidence_threshold: 0.3
+  cluster_count: 50
+  analysis_interval_ms: 1800000  # Rebuild every 30 min
+```
+
+### MCP Tool
+
+- `memory_suggestions` — Get predicted next queries based on current context
+  - `context` (optional): Current query or topic
+  - `workspace` (optional): Workspace path
+  - `limit` (optional): Max suggestions (default 3)
+
 ## License
 
 MIT
