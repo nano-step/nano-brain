@@ -315,8 +315,13 @@ async function harvestFromDb(
       if (sessionIndex % 5 === 0) await yieldToEventLoop();
 
       if (state[sessionId]?.skipped) {
-        skippedCount++;
-        continue;
+        if (state[sessionId].mtime >= session.time_updated) {
+          skippedCount++;
+          continue;
+        }
+        delete state[sessionId].skipped;
+        stateChanged = true;
+        log('harvester', 'Re-evaluating previously skipped session ' + sessionId + ' (updated since last check)');
       }
 
       if (
