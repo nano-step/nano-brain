@@ -382,7 +382,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       tags: z.string().optional().describe('Comma-separated tags to filter by (AND logic)'),
       since: z.string().optional().describe('Filter documents modified on or after this date (ISO format)'),
       until: z.string().optional().describe('Filter documents modified on or before this date (ISO format)'),
-      compact: z.boolean().optional().default(false).describe('Return compact single-line results with caching. Defaults to verbose.'),
+      compact: z.boolean().optional().default(true).describe('Return compact single-line results with caching. Defaults to compact.'),
     },
     async ({ query, limit, collection, workspace, tags, since, until, compact }) => {
       if (checkReady()) return WARMUP_ERROR;
@@ -433,7 +433,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       tags: z.string().optional().describe('Comma-separated tags to filter by (AND logic)'),
       since: z.string().optional().describe('Filter documents modified on or after this date (ISO format)'),
       until: z.string().optional().describe('Filter documents modified on or before this date (ISO format)'),
-      compact: z.boolean().optional().default(false).describe('Return compact single-line results with caching. Defaults to verbose.'),
+      compact: z.boolean().optional().default(true).describe('Return compact single-line results with caching. Defaults to compact.'),
     },
     async ({ query, limit, collection, workspace, tags, since, until, compact }) => {
       if (checkReady()) return WARMUP_ERROR;
@@ -527,7 +527,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       tags: z.string().optional().describe('Comma-separated tags to filter by (AND logic)'),
       since: z.string().optional().describe('Filter documents modified on or after this date (ISO format)'),
       until: z.string().optional().describe('Filter documents modified on or before this date (ISO format)'),
-      compact: z.boolean().optional().default(false).describe('Return compact single-line results with caching. Defaults to verbose.'),
+      compact: z.boolean().optional().default(true).describe('Return compact single-line results with caching. Defaults to compact.'),
     },
     async ({ query, limit, collection, minScore, workspace, tags, since, until, compact }) => {
       if (checkReady()) return WARMUP_ERROR;
@@ -1685,12 +1685,13 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     {
       target: z.string().describe('Symbol name to analyze'),
       direction: z.enum(['upstream', 'downstream']).describe('Direction: upstream (callers) or downstream (callees)'),
-      max_depth: z.number().optional().describe('Maximum traversal depth (default: 5)'),
+      max_depth: z.number().optional().default(3).describe('Maximum traversal depth (default: 3)'),
+      max_entries: z.number().optional().default(50).describe('Maximum total entries to return (default: 50)'),
       min_confidence: z.number().optional().describe('Minimum edge confidence (0-1, default: 0)'),
       file_path: z.string().optional().describe('File path to disambiguate common names'),
       workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
     },
-    async ({ target, direction, max_depth, min_confidence, file_path, workspace }) => {
+    async ({ target, direction, max_depth, max_entries, min_confidence, file_path, workspace }) => {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'code_impact target="' + target + '" direction="' + direction + '" workspace="' + (workspace || '') + '"');
 
@@ -1743,8 +1744,8 @@ export function createMcpServer(deps: ServerDeps): McpServer {
 
         let totalEntries = 0;
         let truncatedEntries = 0;
-        const maxDepth = 3;
-        const maxEntries = 50;
+        const maxDepth = max_depth ?? 3;
+        const maxEntries = max_entries ?? 50;
         const truncatedByDepth: Record<string, Array<{ name: string; kind: string; filePath: string; edgeType: string }>> = {};
         for (const [depth, depItems] of Object.entries(result.byDepth as Record<string, Array<{ name: string; kind: string; filePath: string; edgeType: string; confidence: number }>>)) {
           if (parseInt(depth) > maxDepth) {
@@ -2736,8 +2737,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
           if (b.startsWith(a)) {
             const nameA = path.basename(wsPaths[i])
             const nameB = path.basename(wsPaths[j])
-            log('server', `WARNING: Overlapping workspaces detected: ${nameB} is inside ${nameA} — consider removing one`)
-            log('config', `Overlapping workspaces: ${nameB} is inside ${nameA} — consider removing one`, 'warn')
+            log('server', `Note: ${nameB} is a sub-workspace of ${nameA} — documents indexed under both`)
+            log('config', `Sub-workspace: ${nameB} is inside ${nameA} — documents indexed under both`)
           }
         }
       }

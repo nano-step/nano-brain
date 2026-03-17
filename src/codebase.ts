@@ -593,6 +593,8 @@ async function processSingleBatch(
   }
 }
 
+const EMPTY_BODY_HASH_PREFIX = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+
 export async function embedPendingCodebase(
   store: Store,
   embedder: { embed(text: string): Promise<{ embedding: number[]; model?: string }>; embedBatch?(texts: string[]): Promise<Array<{ embedding: number[] }>>; getModel?(): string; getMaxChars?(): number },
@@ -609,8 +611,20 @@ export async function embedPendingCodebase(
     const allPending = store.getHashesNeedingEmbedding(projectHash)
     if (allPending.length === 0) break
 
+    const emptyBodyDocs = allPending.filter(r => 
+      r.hash === EMPTY_BODY_HASH_PREFIX || 
+      r.body.trim().length === 0
+    )
+    if (emptyBodyDocs.length > 0) {
+      for (const doc of emptyBodyDocs) {
+        store.insertEmbeddingLocal(doc.hash, -1, 0, 'skipped:empty-body')
+        failedHashes.add(doc.hash)
+      }
+      log('codebase', `Skipped ${emptyBodyDocs.length} empty-body documents — marked as not embeddable`)
+    }
+
     const batches: Array<Array<{ hash: string; body: string; path: string }>> = []
-    let remaining = allPending.filter(r => !failedHashes.has(r.hash))
+    let remaining = allPending.filter(r => !failedHashes.has(r.hash) && r.body.trim().length > 0)
 
     while (remaining.length > 0 && batches.length < MAX_PENDING_BATCHES) {
       const batch = remaining.slice(0, batchSize)

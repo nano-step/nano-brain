@@ -107,6 +107,7 @@ export interface CollectionConfig {
   categorization?: Partial<LLMCategorizationConfig>
   preferences?: Partial<PreferenceConfig>
   pruning?: Partial<PruningConfig>
+  merge?: Partial<MergeConfig>
 }
 
 export interface CodebaseConfig {
@@ -454,6 +455,29 @@ export function parsePruningConfig(raw?: Partial<PruningConfig>): PruningConfig 
   };
 }
 
+export interface MergeConfig {
+  enabled: boolean;
+  interval_ms: number;
+  similarity_threshold: number;
+  batch_size: number;
+}
+
+export const DEFAULT_MERGE_CONFIG: MergeConfig = {
+  enabled: true,
+  interval_ms: 86400000,
+  similarity_threshold: 0.8,
+  batch_size: 50,
+};
+
+export function parseMergeConfig(raw?: Partial<MergeConfig>): MergeConfig {
+  return {
+    enabled: raw?.enabled ?? DEFAULT_MERGE_CONFIG.enabled,
+    interval_ms: raw?.interval_ms ?? DEFAULT_MERGE_CONFIG.interval_ms,
+    similarity_threshold: raw?.similarity_threshold ?? DEFAULT_MERGE_CONFIG.similarity_threshold,
+    batch_size: raw?.batch_size ?? DEFAULT_MERGE_CONFIG.batch_size,
+  };
+}
+
 export interface LLMCategorizationConfig {
   llm_enabled: boolean;
   confidence_threshold: number;
@@ -766,6 +790,12 @@ export interface Store {
   getPrunedEntitiesForHardDelete(retentionDays: number, batchSize: number, projectHash?: string): number[];
   softDeleteEntities(ids: number[]): void;
   hardDeleteEntities(ids: number[]): void;
+
+  getActiveEntitiesByTypeAndProject(projectHash?: string): MemoryEntity[];
+  getEntityEdgeCount(entityId: number): number;
+  redirectEntityEdges(fromId: number, toId: number): void;
+  deleteEntity(id: number): void;
+  deduplicateEdges(entityId: number): void;
 
   getUncategorizedDocuments(limit: number, projectHash?: string): Array<{ id: number; path: string; body: string }>;
 }

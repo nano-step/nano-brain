@@ -1,11 +1,12 @@
 import { watch, type FSWatcher } from 'chokidar';
-import type { Store, Collection, StorageConfig, CodebaseConfig, PruningConfig } from './types.js'
+import type { Store, Collection, StorageConfig, CodebaseConfig, PruningConfig, MergeConfig } from './types.js'
 import { scanCollectionFiles } from './collections.js';
 import { indexDocument, computeHash, extractProjectHashFromPath, openWorkspaceStore, resolveWorkspaceDbPath } from './store.js';
 import { harvestSessions } from './harvester.js';
 import { checkDiskSpace, evictExpiredSessions, evictBySize } from './storage.js';
 import { indexCodebase, mergeExcludePatterns, resolveExtensions, embedPendingCodebase } from './codebase.js'
 import { runPruningCycle, hardDeletePrunedEntities } from './pruning.js';
+import { runMergeCycle } from './entity-merger.js';
 import { log } from './logger.js';
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
@@ -47,6 +48,7 @@ export interface WatcherOptions {
   proactiveConfig?: import('./types.js').ProactiveConfig
   preferencesConfig?: import('./types.js').PreferenceConfig
   pruningConfig?: PruningConfig
+  mergeConfig?: MergeConfig
 }
 
 export interface Watcher {
@@ -118,6 +120,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
   let sequenceTimeout: NodeJS.Timeout | null = null;
   let pruningSoftDeleteTimeout: NodeJS.Timeout | null = null;
   let pruningHardDeleteTimeout: NodeJS.Timeout | null = null;
+  let mergeTimeout: NodeJS.Timeout | null = null;
 
   const handleFileChange = (filePath: string) => {
     if (stopped) return
@@ -650,6 +653,27 @@ export function startWatcher(options: WatcherOptions): Watcher {
       };
       scheduleHardDeleteCycle();
     }
+
+    const mergeConfig = options.mergeConfig;
+    if (mergeConfig?.enabled) {
+      const scheduleMergeCycle = () => {
+        if (stopped) return;
+        mergeTimeout = setTimeout(() => {
+          if (stopped) return;
+          try {
+            const result = runMergeCycle(store, mergeConfig, projectHash);
+            if (result.merged > 0) {
+              log('watcher', `Entity merge: ${result.groups} groups, ${result.merged} entities merged`);
+            }
+          } catch (err) {
+            log('watcher', `Entity merge failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+          } finally {
+            scheduleMergeCycle();
+          }
+        }, mergeConfig.interval_ms);
+      };
+      scheduleMergeCycle();
+    }
   };
 
   setupWatcher();
@@ -726,6 +750,11 @@ export function startWatcher(options: WatcherOptions): Watcher {
       if (pruningHardDeleteTimeout) {
         clearTimeout(pruningHardDeleteTimeout);
         pruningHardDeleteTimeout = null;
+      }
+
+      if (mergeTimeout) {
+        clearTimeout(mergeTimeout);
+        mergeTimeout = null;
       }
       
       if (watcher) {

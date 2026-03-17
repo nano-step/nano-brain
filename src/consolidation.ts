@@ -36,6 +36,9 @@ export class ConsolidationAgent {
   private maxMemoriesPerCycle: number;
   private minMemoriesThreshold: number;
   private confidenceThreshold: number;
+  private failedDocIds: Set<number> = new Set();
+  private failureCounts: Map<number, number> = new Map();
+  private static MAX_RETRIES = 3;
 
   constructor(store: Store, options: ConsolidationAgentOptions = {}) {
     this.store = store;
@@ -84,6 +87,13 @@ export class ConsolidationAgent {
 
   private getUnconsolidatedMemories(): UnconsolidatedMemory[] {
     const db = this.store.getDb();
+    
+    // Build exclusion list from permanently failed docs
+    const excludeIds = Array.from(this.failedDocIds);
+    const excludePlaceholders = excludeIds.length > 0 
+      ? `AND d.id NOT IN (${excludeIds.map(() => '?').join(',')})` 
+      : '';
+    
     const stmt = db.prepare(`
       SELECT d.id, d.title, d.path, d.hash, c.body 
       FROM documents d 
@@ -94,10 +104,11 @@ export class ConsolidationAgent {
         AND d.id NOT IN (
           SELECT json_each.value FROM consolidations, json_each(consolidations.source_ids)
         )
+        ${excludePlaceholders}
       ORDER BY d.modified_at DESC 
       LIMIT ?
     `);
-    const rows = stmt.all(this.maxMemoriesPerCycle) as Array<{
+    const rows = stmt.all(...excludeIds, this.maxMemoriesPerCycle) as Array<{
       id: number;
       title: string;
       path: string;
@@ -162,7 +173,15 @@ Respond with ONLY a JSON array, no other text.`;
   }
 
   private recordFailedBatch(docIds: number[]): void {
-    log('consolidation', 'Recording failed batch for retry: ' + docIds.length + ' documents, ids=[' + docIds.join(',') + ']', 'warn');
+    for (const id of docIds) {
+      const count = (this.failureCounts.get(id) ?? 0) + 1;
+      this.failureCounts.set(id, count);
+      if (count >= ConsolidationAgent.MAX_RETRIES) {
+        this.failedDocIds.add(id);
+        log('consolidation', 'Document ' + id + ' failed ' + count + ' times, skipping permanently until restart', 'warn');
+      }
+    }
+    log('consolidation', 'Recording failed batch: ' + docIds.length + ' documents, ids=[' + docIds.join(',') + '], permanently skipped=' + this.failedDocIds.size, 'warn');
   }
 
   async findConsolidationCandidates(documentId: number, maxCandidates: number = 5): Promise<UnconsolidatedMemory[]> {

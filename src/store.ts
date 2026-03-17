@@ -1097,6 +1097,53 @@ export function createStore(dbPath: string): Store {
       AND project_hash = ?
     LIMIT ?
   `);
+
+  const getActiveEntitiesByTypeAndProjectStmt = db.prepare(`
+    SELECT id, name, type, description, project_hash as projectHash,
+           first_learned_at as firstLearnedAt, last_confirmed_at as lastConfirmedAt,
+           contradicted_at as contradictedAt, contradicted_by_memory_id as contradictedByMemoryId
+    FROM memory_entities
+    WHERE pruned_at IS NULL AND contradicted_at IS NULL
+    ORDER BY type, project_hash, name COLLATE NOCASE
+  `);
+
+  const getActiveEntitiesByTypeAndProjectFilteredStmt = db.prepare(`
+    SELECT id, name, type, description, project_hash as projectHash,
+           first_learned_at as firstLearnedAt, last_confirmed_at as lastConfirmedAt,
+           contradicted_at as contradictedAt, contradicted_by_memory_id as contradictedByMemoryId
+    FROM memory_entities
+    WHERE pruned_at IS NULL AND contradicted_at IS NULL AND project_hash = ?
+    ORDER BY type, name COLLATE NOCASE
+  `);
+
+  const getEntityEdgeCountStmt = db.prepare(`
+    SELECT COUNT(*) as count FROM memory_edges
+    WHERE source_id = ? OR target_id = ?
+  `);
+
+  const redirectEntityEdgesSourceStmt = db.prepare(`
+    UPDATE memory_edges SET source_id = ? WHERE source_id = ?
+  `);
+
+  const redirectEntityEdgesTargetStmt = db.prepare(`
+    UPDATE memory_edges SET target_id = ? WHERE target_id = ?
+  `);
+
+  const deleteEntityStmt = db.prepare(`
+    DELETE FROM memory_entities WHERE id = ?
+  `);
+
+  const deleteSelfLoopEdgesStmt = db.prepare(`
+    DELETE FROM memory_edges WHERE source_id = target_id
+  `);
+
+  const deleteDuplicateEdgesStmt = db.prepare(`
+    DELETE FROM memory_edges
+    WHERE id NOT IN (
+      SELECT MIN(id) FROM memory_edges
+      GROUP BY source_id, target_id, edge_type, project_hash
+    )
+  `);
   
   return {
     modelStatus: {
@@ -2545,6 +2592,45 @@ export function createStore(dbPath: string): Store {
       const placeholders = ids.map(() => '?').join(',');
       db.prepare(`DELETE FROM memory_entities WHERE id IN (${placeholders})`).run(...ids);
       db.prepare(`DELETE FROM memory_edges WHERE source_id NOT IN (SELECT id FROM memory_entities) OR target_id NOT IN (SELECT id FROM memory_entities)`).run();
+    },
+
+    getActiveEntitiesByTypeAndProject(projectHash?: string): import('./types.js').MemoryEntity[] {
+      let rows: Array<Record<string, unknown>>;
+      if (projectHash) {
+        rows = getActiveEntitiesByTypeAndProjectFilteredStmt.all(projectHash) as Array<Record<string, unknown>>;
+      } else {
+        rows = getActiveEntitiesByTypeAndProjectStmt.all() as Array<Record<string, unknown>>;
+      }
+      return rows.map(row => ({
+        id: row.id as number,
+        name: row.name as string,
+        type: row.type as import('./types.js').MemoryEntity['type'],
+        description: row.description as string | undefined,
+        projectHash: row.projectHash as string,
+        firstLearnedAt: row.firstLearnedAt as string,
+        lastConfirmedAt: row.lastConfirmedAt as string,
+        contradictedAt: row.contradictedAt as string | null | undefined,
+        contradictedByMemoryId: row.contradictedByMemoryId as number | null | undefined,
+      }));
+    },
+
+    getEntityEdgeCount(entityId: number): number {
+      const row = getEntityEdgeCountStmt.get(entityId, entityId) as { count: number };
+      return row.count;
+    },
+
+    redirectEntityEdges(fromId: number, toId: number): void {
+      redirectEntityEdgesSourceStmt.run(toId, fromId);
+      redirectEntityEdgesTargetStmt.run(toId, fromId);
+    },
+
+    deleteEntity(id: number): void {
+      deleteEntityStmt.run(id);
+    },
+
+    deduplicateEdges(entityId: number): void {
+      deleteSelfLoopEdgesStmt.run();
+      deleteDuplicateEdgesStmt.run();
     },
 
     getUncategorizedDocuments(limit: number, projectHash?: string): Array<{ id: number; path: string; body: string }> {
