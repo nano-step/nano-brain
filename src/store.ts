@@ -36,6 +36,35 @@ export function clearCorruptionRecovery(): void {
   lastCorruptionRecovery = null;
 }
 
+const storeCache = new Map<string, Store>();
+const storeCacheUncache = new Map<string, () => void>();
+
+export function getCacheSize(): number {
+  return storeCache.size;
+}
+
+export function evictCachedStore(dbPath: string): void {
+  const resolvedPath = path.resolve(dbPath);
+  const store = storeCache.get(resolvedPath);
+  if (store) {
+    storeCache.delete(resolvedPath);
+    const uncache = storeCacheUncache.get(resolvedPath);
+    if (uncache) { uncache(); storeCacheUncache.delete(resolvedPath); }
+    store.close();
+  }
+}
+
+export function closeAllCachedStores(): void {
+  for (const [dbPath, store] of storeCache) {
+    log('store', `Closing cached store: ${dbPath}`);
+    const uncache = storeCacheUncache.get(dbPath);
+    if (uncache) uncache();
+    store.close();
+  }
+  storeCache.clear();
+  storeCacheUncache.clear();
+}
+
 export function sanitizeFTS5Query(query: string): string {
   const trimmed = query.trim();
   if (!trimmed) return '';
@@ -47,9 +76,17 @@ export function sanitizeFTS5Query(query: string): string {
 }
 
 export function createStore(dbPath: string): Store {
-  log('store', 'createStore dbPath=' + dbPath);
+  const resolvedPath = path.resolve(dbPath);
   
-  const recoveryResult = checkAndRecoverDB(dbPath, {
+  const cached = storeCache.get(resolvedPath);
+  if (cached) {
+    log('store', 'createStore returning cached instance for ' + resolvedPath);
+    return cached;
+  }
+  
+  log('store', 'createStore dbPath=' + resolvedPath);
+  
+  const recoveryResult = checkAndRecoverDB(resolvedPath, {
     logger: { log, error: (msg: string) => log('store', msg, 'error') },
     metricsCallback: (event: string) => {
       if (event === 'corruption_detected') {
@@ -1145,7 +1182,9 @@ export function createStore(dbPath: string): Store {
     )
   `);
   
-  return {
+  let _cached = false;
+  
+  const store: Store = {
     modelStatus: {
       embedding: 'missing',
       reranker: 'missing',
@@ -1157,6 +1196,10 @@ export function createStore(dbPath: string): Store {
     },
     
     close() {
+      if (_cached) {
+        log('store', 'close() skipped for cached store');
+        return;
+      }
       try { db.pragma('wal_checkpoint(PASSIVE)'); } catch { /* ignore checkpoint errors */ }
       db.close();
     },
@@ -2653,6 +2696,12 @@ export function createStore(dbPath: string): Store {
       return db.prepare(sql).all(...params) as Array<{ id: number; path: string; body: string }>;
     },
   };
+  
+  _cached = true;
+  storeCache.set(resolvedPath, store);
+  storeCacheUncache.set(resolvedPath, () => { _cached = false; });
+  
+  return store;
 }
 
 export function computeHash(content: string): string {

@@ -14,6 +14,16 @@ import * as path from 'path';
 import * as os from 'os';
 import { applyPragmas } from '../store.js';
 
+const checkedPaths = new Set<string>();
+
+export function resetCheckedPaths(): void {
+  checkedPaths.clear();
+}
+
+export function getCheckedPaths(): Set<string> {
+  return checkedPaths;
+}
+
 /**
  * Options for corruption recovery
  */
@@ -89,30 +99,42 @@ export function checkAndRecoverDB(
   const logger = options?.logger;
   const metricsCallback = options?.metricsCallback;
 
+  // Resolve to absolute path for consistent cache key
+  const resolvedPath = path.resolve(dbPath);
+
   // Ensure directory exists
-  const dir = path.dirname(dbPath);
+  const dir = path.dirname(resolvedPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
     logger?.log('corruption-recovery', `Created directory: ${dir}`);
   }
 
   // If database file doesn't exist, create fresh
-  if (!fs.existsSync(dbPath)) {
-    logger?.log('corruption-recovery', `No existing database at ${dbPath}, creating fresh`);
-    const freshDb = new Database(dbPath);
+  if (!fs.existsSync(resolvedPath)) {
+    logger?.log('corruption-recovery', `No existing database at ${resolvedPath}, creating fresh`);
+    const freshDb = new Database(resolvedPath);
     applyPragmas(freshDb);
+    checkedPaths.add(resolvedPath);
     return { db: freshDb, recovered: false };
   }
 
+  // Skip integrity check if already checked this path in this process
+  if (checkedPaths.has(resolvedPath)) {
+    logger?.log('corruption-recovery', `Skipping integrity check (already verified): ${resolvedPath}`);
+    const db = new Database(resolvedPath);
+    applyPragmas(db);
+    return { db, recovered: false };
+  }
+
   // Database file exists - check integrity
-  logger?.log('corruption-recovery', `Checking database integrity at ${dbPath}`);
+  logger?.log('corruption-recovery', `Checking database integrity at ${resolvedPath}`);
 
   let isCorrupted = false;
 
   try {
     // Open database with read-only mode initially to check integrity
     // Using a test connection to avoid modifying anything
-    const checkDb = new Database(dbPath, { readonly: false });
+    const checkDb = new Database(resolvedPath, { readonly: false });
     applyPragmas(checkDb);
 
     // Run quick_check (faster than integrity_check, <0.5s on 200MB)
@@ -124,6 +146,7 @@ export function checkAndRecoverDB(
         logger?.log('corruption-recovery', `Quick check FAILED: ${JSON.stringify(result)}`);
       } else {
         logger?.log('corruption-recovery', 'Quick check PASSED - database is valid');
+        checkedPaths.add(resolvedPath);
       }
     } catch (checkError) {
       // If quick_check itself throws, database is corrupted
@@ -148,16 +171,16 @@ export function checkAndRecoverDB(
 
     // Generate timestamp for backup filename
     const isoTimestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5); // YYYY-MM-DDTHH-mm-ss
-    const corruptedPath = `${dbPath}.corrupted.${isoTimestamp}`;
+    const corruptedPath = `${resolvedPath}.corrupted.${isoTimestamp}`;
 
     try {
       // Rename corrupted file
-      fs.renameSync(dbPath, corruptedPath);
+      fs.renameSync(resolvedPath, corruptedPath);
       logger?.log('corruption-recovery', `Renamed corrupted database to: ${corruptedPath}`);
 
       // Clean up WAL and SHM files (Write-Ahead Log and Shared Memory)
-      const walPath = `${dbPath}-wal`;
-      const shmPath = `${dbPath}-shm`;
+      const walPath = `${resolvedPath}-wal`;
+      const shmPath = `${resolvedPath}-shm`;
 
       if (fs.existsSync(walPath)) {
         fs.unlinkSync(walPath);
@@ -172,7 +195,7 @@ export function checkAndRecoverDB(
       // Write CORRUPTION_NOTICE.md for user visibility
       const noticeDir = path.join(os.homedir(), '.nano-brain');
       const noticePath = path.join(noticeDir, 'CORRUPTION_NOTICE.md');
-      const noticeEntry = `\n## Corruption Recovered: ${new Date().toISOString()}\n\n- **Original file**: ${dbPath}\n- **Corrupt file preserved at**: ${corruptedPath}\n- **Action taken**: Renamed corrupt file, created fresh database\n- **To inspect**: \`sqlite3 ${corruptedPath} ".recover"\`\n\n`;
+      const noticeEntry = `\n## Corruption Recovered: ${new Date().toISOString()}\n\n- **Original file**: ${resolvedPath}\n- **Corrupt file preserved at**: ${corruptedPath}\n- **Action taken**: Renamed corrupt file, created fresh database\n- **To inspect**: \`sqlite3 ${corruptedPath} ".recover"\`\n\n`;
       try {
         fs.appendFileSync(noticePath, noticeEntry);
         logger?.log('corruption-recovery', `Wrote recovery notice to: ${noticePath}`);
@@ -184,9 +207,8 @@ export function checkAndRecoverDB(
       throw renameError; // Let launchd handle the restart
     }
 
-    // Initialize fresh database
-    logger?.log('corruption-recovery', `Initializing fresh database at ${dbPath}`);
-    const freshDb = new Database(dbPath);
+    logger?.log('corruption-recovery', `Initializing fresh database at ${resolvedPath}`);
+    const freshDb = new Database(resolvedPath);
     applyPragmas(freshDb);
 
     try {
@@ -203,10 +225,12 @@ export function checkAndRecoverDB(
       throw freshCheckError;
     }
 
+    checkedPaths.add(resolvedPath);
     return { db: freshDb, recovered: true, recoveredAt: new Date().toISOString(), corruptedPath };
   }
 
-  const db = new Database(dbPath);
+  checkedPaths.add(resolvedPath);
+  const db = new Database(resolvedPath);
   applyPragmas(db);
   return { db, recovered: false };
 }

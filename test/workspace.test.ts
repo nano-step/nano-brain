@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createStore, computeHash } from '../src/store.js';
+import { createStore, computeHash, evictCachedStore } from '../src/store.js';
 import type { Store } from '../src/types.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -18,7 +18,7 @@ describe('Workspace Scoping', () => {
   });
 
   afterEach(() => {
-    store.close();
+    evictCachedStore(dbPath);
     if (fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -36,11 +36,11 @@ describe('Workspace Scoping', () => {
     });
 
     it('should not fail on subsequent creates', () => {
-      store.close();
+      evictCachedStore(dbPath);
       
       expect(() => {
         const store2 = createStore(dbPath);
-        store2.close();
+        evictCachedStore(dbPath);
       }).not.toThrow();
       
       store = createStore(dbPath);
@@ -48,7 +48,7 @@ describe('Workspace Scoping', () => {
 
     it('should backfill project_hash from session paths on migration', () => {
       const Database = require('better-sqlite3');
-      store.close();
+      evictCachedStore(dbPath);
       const db = new Database(dbPath);
       // Must drop index before dropping column in SQLite
       db.exec("DROP INDEX IF EXISTS idx_documents_project_hash");

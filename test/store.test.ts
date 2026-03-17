@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
-import { createStore, computeHash, indexDocument, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore, sanitizeFTS5Query } from '../src/store.js';
+import { createStore, computeHash, indexDocument, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore, sanitizeFTS5Query, evictCachedStore, getCacheSize, closeAllCachedStores } from '../src/store.js';
 import type { Store } from '../src/types.js';
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
@@ -17,7 +17,7 @@ describe('Store', () => {
   });
   
   afterEach(() => {
-    store.close();
+    evictCachedStore(dbPath);
     const dir = path.dirname(dbPath);
     if (fs.existsSync(dir)) {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -87,13 +87,11 @@ describe('Store', () => {
       db.close();
     });
 
-    it('should handle idempotent schema creation (calling createStore twice)', () => {
-      store.close();
+    it('should return cached instance when calling createStore twice with same path', () => {
       const store2 = createStore(dbPath);
+      expect(store2).toBe(store);
       const health = store2.getIndexHealth();
       expect(health).toBeDefined();
-      store2.close();
-      store = createStore(dbPath);
     });
   });
 

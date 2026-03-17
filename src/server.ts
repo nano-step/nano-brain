@@ -19,7 +19,7 @@ import { ConsolidationWorker } from './consolidation-worker.js';
 import type { SearchProviders } from './search.js';
 import { hybridSearch, parseSearchConfig } from './search.js';
 import { findCycles } from './graph.js';
-import { createStore, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore, setProjectLabelDataDir, resolveProjectLabel, openDatabase, getLastCorruptionRecovery, clearCorruptionRecovery } from './store.js';
+import { createStore, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore, setProjectLabelDataDir, resolveProjectLabel, openDatabase, getLastCorruptionRecovery, clearCorruptionRecovery, closeAllCachedStores } from './store.js';
 import { log, initLogger } from './logger.js';
 import { loadCollectionConfig, getCollections, scanCollectionFiles, getWorkspaceConfig } from './collections.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth, checkOpenAIHealth } from './embeddings.js';
@@ -158,15 +158,10 @@ function requireDaemonWorkspace(
 
   const resolved = resolveWorkspace(deps, filePath, workspace)
   if (resolved) {
-    let db = deps.db
-    if (resolved.needsClose && deps.dataDir && resolved.workspaceRoot) {
-      const dbPath = resolveWorkspaceDbPath(deps.dataDir, resolved.workspaceRoot)
-      db = openDatabase(dbPath)
-    }
     return {
       projectHash: resolved.projectHash,
       workspaceRoot: resolved.workspaceRoot,
-      db,
+      db: resolved.store.getDb(),
       store: resolved.store,
       needsClose: resolved.needsClose,
     }
@@ -2808,7 +2803,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     if (watcher) watcher.stop();
     try { symbolGraphDb.pragma('wal_checkpoint(PASSIVE)'); } catch { /* ignore checkpoint errors */ }
     symbolGraphDb.close();
-    store.close();
+    closeAllCachedStores();
     process.exit(0);
   };
   cleanupRef = cleanup;

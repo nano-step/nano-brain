@@ -3,8 +3,8 @@ import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { openDatabase, applyPragmas, createStore } from '../src/store.js';
-import { checkAndRecoverDB } from '../src/db/corruption-recovery.js';
+import { openDatabase, applyPragmas, createStore, evictCachedStore, getCacheSize, closeAllCachedStores } from '../src/store.js';
+import { checkAndRecoverDB, resetCheckedPaths, getCheckedPaths } from '../src/db/corruption-recovery.js';
 import { generateLaunchdPlist, generateSystemdService, getDefaultServiceConfig, type ServiceConfig } from '../src/service-installer.js';
 import { createRejectionThreshold } from '../src/server.js';
 
@@ -242,6 +242,92 @@ describe('SQLite Corruption Fix', () => {
       
       const dockerenvExists = fs.existsSync('/.dockerenv');
       expect(isRunningInContainer()).toBe(dockerenvExists);
+    });
+  });
+
+  describe('Store instance cache', () => {
+    beforeEach(() => {
+      closeAllCachedStores();
+      resetCheckedPaths();
+    });
+
+    afterEach(() => {
+      closeAllCachedStores();
+      resetCheckedPaths();
+    });
+
+    it('createStore returns cached instance for same dbPath', () => {
+      const dbPath = path.join(tmpDir, 'cache-test.db');
+      const store1 = createStore(dbPath);
+      const store2 = createStore(dbPath);
+      expect(store1).toBe(store2);
+      store1.close();
+      const health = store2.getIndexHealth();
+      expect(health).toBeDefined();
+      evictCachedStore(dbPath);
+    });
+
+    it('cached store close() is a no-op', () => {
+      const dbPath = path.join(tmpDir, 'noop-close.db');
+      const store1 = createStore(dbPath);
+      store1.close();
+      expect(() => store1.getIndexHealth()).not.toThrow();
+      evictCachedStore(dbPath);
+    });
+
+    it('evictCachedStore actually closes the store', () => {
+      const dbPath = path.join(tmpDir, 'evict-test.db');
+      createStore(dbPath);
+      expect(getCacheSize()).toBeGreaterThanOrEqual(1);
+      evictCachedStore(dbPath);
+      const resolvedPath = path.resolve(dbPath);
+      const newStore = createStore(dbPath);
+      expect(newStore).toBeDefined();
+      evictCachedStore(dbPath);
+    });
+
+    it('closeAllCachedStores closes all cached stores', () => {
+      const s1 = createStore(path.join(tmpDir, 'a.db'));
+      const s2 = createStore(path.join(tmpDir, 'b.db'));
+      expect(getCacheSize()).toBeGreaterThanOrEqual(2);
+      closeAllCachedStores();
+      expect(getCacheSize()).toBe(0);
+    });
+  });
+
+  describe('Corruption check dedup', () => {
+    beforeEach(() => {
+      resetCheckedPaths();
+      closeAllCachedStores();
+    });
+
+    afterEach(() => {
+      resetCheckedPaths();
+      closeAllCachedStores();
+    });
+
+    it('checkAndRecoverDB only runs quick_check once per path', () => {
+      const dbPath = path.join(tmpDir, 'dedup-check.db');
+      
+      const result1 = checkAndRecoverDB(dbPath);
+      result1.db.close();
+      const resolvedPath = path.resolve(dbPath);
+      expect(getCheckedPaths().has(resolvedPath)).toBe(true);
+      
+      const result2 = checkAndRecoverDB(dbPath);
+      result2.db.close();
+      expect(result2.recovered).toBe(false);
+    });
+
+    it('resetCheckedPaths clears the checked paths set', () => {
+      const dbPath = path.join(tmpDir, 'reset-check.db');
+      const result = checkAndRecoverDB(dbPath);
+      result.db.close();
+      const resolvedPath = path.resolve(dbPath);
+      expect(getCheckedPaths().has(resolvedPath)).toBe(true);
+      
+      resetCheckedPaths();
+      expect(getCheckedPaths().size).toBe(0);
     });
   });
 });
