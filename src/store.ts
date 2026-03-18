@@ -80,7 +80,6 @@ export function createStore(dbPath: string): Store {
   
   const cached = storeCache.get(resolvedPath);
   if (cached) {
-    log('store', 'createStore cache hit for ' + resolvedPath, 'debug');
     return cached;
   }
   
@@ -346,7 +345,7 @@ export function createStore(dbPath: string): Store {
   
   // Schema versioning
   const currentVersion = (db.pragma('user_version') as Array<{ user_version: number }>)[0].user_version;
-  const TARGET_VERSION = 6;
+  const TARGET_VERSION = 8;
 
   if (currentVersion < 1) {
     db.exec(`
@@ -548,6 +547,29 @@ export function createStore(dbPath: string): Store {
     db.pragma(`user_version = 7`);
     log('store', 'Schema migrated to version 7 (entity pruning support)');
   }
+
+  if (currentVersion < 8) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS memory_connections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        to_doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        relationship_type TEXT NOT NULL,
+        description TEXT,
+        strength REAL NOT NULL DEFAULT 1.0,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        project_hash TEXT NOT NULL,
+        UNIQUE(from_doc_id, to_doc_id, relationship_type)
+      );
+      CREATE INDEX IF NOT EXISTS idx_mc_from ON memory_connections(from_doc_id);
+      CREATE INDEX IF NOT EXISTS idx_mc_to ON memory_connections(to_doc_id);
+      CREATE INDEX IF NOT EXISTS idx_mc_type ON memory_connections(relationship_type);
+      CREATE INDEX IF NOT EXISTS idx_mc_project ON memory_connections(project_hash);
+    `);
+    db.pragma(`user_version = 8`);
+    log('store', 'Schema migrated to version 8 (memory connections)');
+  }
   
   if (vecAvailable) {
     try {
@@ -596,6 +618,19 @@ export function createStore(dbPath: string): Store {
   const deactivateDocumentStmt = db.prepare(`
     UPDATE documents SET active = 0 WHERE collection = ? AND path = ?
   `);
+
+  const insertConnectionStmt = db.prepare(`
+    INSERT INTO memory_connections (from_doc_id, to_doc_id, relationship_type, description, strength, created_by, project_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(from_doc_id, to_doc_id, relationship_type) DO UPDATE SET
+      description = excluded.description, strength = excluded.strength, created_by = excluded.created_by
+  `);
+  const getConnectionsFromStmt = db.prepare(`SELECT * FROM memory_connections WHERE from_doc_id = ? ORDER BY strength DESC`);
+  const getConnectionsToStmt = db.prepare(`SELECT * FROM memory_connections WHERE to_doc_id = ? ORDER BY strength DESC`);
+  const getConnectionsBothStmt = db.prepare(`SELECT * FROM memory_connections WHERE from_doc_id = ? OR to_doc_id = ? ORDER BY strength DESC`);
+  const getConnectionsByTypeStmt = db.prepare(`SELECT * FROM memory_connections WHERE (from_doc_id = ? OR to_doc_id = ?) AND relationship_type = ? ORDER BY strength DESC`);
+  const deleteConnectionStmt = db.prepare(`DELETE FROM memory_connections WHERE id = ?`);
+  const getConnectionCountStmt = db.prepare(`SELECT COUNT(*) as cnt FROM memory_connections WHERE from_doc_id = ? OR to_doc_id = ?`);
   
 
   
@@ -1197,7 +1232,7 @@ export function createStore(dbPath: string): Store {
     
     close() {
       if (_cached) {
-        log('store', 'close() skipped for cached store', 'debug');
+        // cached store — close is a no-op, real close happens via closeAllCachedStores()
         return;
       }
       try { db.pragma('wal_checkpoint(PASSIVE)'); } catch { /* ignore checkpoint errors */ }
@@ -2694,6 +2729,49 @@ export function createStore(dbPath: string): Store {
       sql += ` ORDER BY d.modified_at DESC LIMIT ?`;
       params.push(limit);
       return db.prepare(sql).all(...params) as Array<{ id: number; path: string; body: string }>;
+    },
+
+    insertConnection(conn) {
+      const result = insertConnectionStmt.run(
+        conn.fromDocId, conn.toDocId, conn.relationshipType,
+        conn.description ?? null, conn.strength, conn.createdBy, conn.projectHash
+      );
+      return Number(result.lastInsertRowid);
+    },
+
+    getConnectionsForDocument(docId, options) {
+      const dir = options?.direction ?? 'both';
+      const relType = options?.relationshipType;
+      let rows: any[];
+      if (relType) {
+        rows = getConnectionsByTypeStmt.all(docId, docId, relType);
+      } else if (dir === 'outgoing') {
+        rows = getConnectionsFromStmt.all(docId);
+      } else if (dir === 'incoming') {
+        rows = getConnectionsToStmt.all(docId);
+      } else {
+        rows = getConnectionsBothStmt.all(docId, docId);
+      }
+      return rows.map((r: any) => ({
+        id: r.id,
+        fromDocId: r.from_doc_id,
+        toDocId: r.to_doc_id,
+        relationshipType: r.relationship_type,
+        description: r.description,
+        strength: r.strength,
+        createdBy: r.created_by,
+        createdAt: r.created_at,
+        projectHash: r.project_hash,
+      }));
+    },
+
+    deleteConnection(id) {
+      deleteConnectionStmt.run(id);
+    },
+
+    getConnectionCount(docId) {
+      const row = getConnectionCountStmt.get(docId, docId) as { cnt: number } | undefined;
+      return row?.cnt ?? 0;
     },
   };
   

@@ -11,7 +11,8 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import * as http from 'http';
 import type { Store, SearchResult, IndexHealth, Collection, StorageConfig, CodebaseConfig, EmbeddingConfig, WatcherConfig, SearchConfig, ConsolidationConfig, ProactiveConfig } from './types.js'
-import { DEFAULT_PROACTIVE_CONFIG } from './types.js'
+import { DEFAULT_PROACTIVE_CONFIG, VALID_RELATIONSHIP_TYPES } from './types.js'
+import { traverse, isValidRelationshipType } from './connection-graph.js';
 import { extractEntitiesFromMemory } from './entity-extraction.js'
 import { createLLMProvider } from './llm-provider.js';
 import { ConsolidationAgent } from './consolidation.js';
@@ -2547,6 +2548,160 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         }
         throw err;
       }
+    }
+  );
+
+  server.tool(
+    'memory_connections',
+    'Get all connections for a document. Shows how memories relate to each other.',
+    {
+      doc_id: z.string().describe('Document ID or path'),
+      relationship_type: z.string().optional().describe('Filter by type: supports, contradicts, extends, supersedes, related, caused_by, refines, implements'),
+      direction: z.enum(['incoming', 'outgoing', 'both']).optional().default('both').describe('Connection direction'),
+      workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
+    },
+    async ({ doc_id, relationship_type, direction, workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
+      log('mcp', 'memory_connections doc_id="' + doc_id + '" type="' + (relationship_type || '') + '"');
+
+      const wsResult = requireDaemonWorkspace(deps, workspace);
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true };
+      }
+
+      const doc = wsResult.store.findDocument(doc_id);
+      if (!doc) {
+        return { content: [{ type: 'text', text: 'Document not found: ' + doc_id }], isError: true };
+      }
+
+      if (relationship_type && !isValidRelationshipType(relationship_type)) {
+        return { content: [{ type: 'text', text: 'Invalid relationship type: ' + relationship_type + '. Valid: ' + VALID_RELATIONSHIP_TYPES.join(', ') }], isError: true };
+      }
+
+      const connections = wsResult.store.getConnectionsForDocument(doc.id, {
+        direction: direction as 'incoming' | 'outgoing' | 'both',
+        relationshipType: relationship_type,
+      });
+
+      if (connections.length === 0) {
+        return { content: [{ type: 'text', text: 'No connections found for ' + doc_id }] };
+      }
+
+      const lines: string[] = [`## Connections for ${doc.title} (${connections.length})\n`];
+      for (const conn of connections) {
+        const otherId = conn.fromDocId === doc.id ? conn.toDocId : conn.fromDocId;
+        const otherDoc = wsResult.store.findDocument(String(otherId));
+        const dir = conn.fromDocId === doc.id ? '→' : '←';
+        lines.push(`- ${dir} **${conn.relationshipType}** ${otherDoc?.title ?? 'doc#' + otherId} (strength: ${conn.strength.toFixed(2)}, by: ${conn.createdBy})`);
+        if (conn.description) lines.push(`  ${conn.description}`);
+      }
+
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+  );
+
+  server.tool(
+    'memory_traverse',
+    'Traverse the memory connection graph from a starting document. Finds related memories up to N hops away.',
+    {
+      start_doc_id: z.string().describe('Starting document ID or path'),
+      max_depth: z.number().optional().default(2).describe('Maximum traversal depth (default: 2)'),
+      relationship_types: z.array(z.string()).optional().describe('Only follow these relationship types'),
+      workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
+    },
+    async ({ start_doc_id, max_depth, relationship_types, workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
+      log('mcp', 'memory_traverse start="' + start_doc_id + '" depth=' + max_depth);
+
+      const wsResult = requireDaemonWorkspace(deps, workspace);
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true };
+      }
+
+      const doc = wsResult.store.findDocument(start_doc_id);
+      if (!doc) {
+        return { content: [{ type: 'text', text: 'Document not found: ' + start_doc_id }], isError: true };
+      }
+
+      if (relationship_types) {
+        for (const rt of relationship_types) {
+          if (!isValidRelationshipType(rt)) {
+            return { content: [{ type: 'text', text: 'Invalid relationship type: ' + rt + '. Valid: ' + VALID_RELATIONSHIP_TYPES.join(', ') }], isError: true };
+          }
+        }
+      }
+
+      const nodes = traverse(wsResult.store, doc.id, { maxDepth: max_depth, relationshipTypes: relationship_types });
+
+      if (nodes.length === 0) {
+        return { content: [{ type: 'text', text: 'No connected memories found within depth ' + max_depth }] };
+      }
+
+      const lines: string[] = [`## Graph traversal from: ${doc.title}\n`];
+      for (const node of nodes) {
+        const nodeDoc = wsResult.store.findDocument(String(node.docId));
+        const indent = '  '.repeat(node.depth);
+        const lastConn = node.path[node.path.length - 1];
+        lines.push(`${indent}[depth ${node.depth}] ${nodeDoc?.title ?? 'doc#' + node.docId} (via ${lastConn?.relationshipType ?? '?'})`);
+      }
+      lines.push(`\n**Total:** ${nodes.length} connected memories found`);
+
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+  );
+
+  server.tool(
+    'memory_connect',
+    'Create a connection between two memories. Defines how they relate to each other.',
+    {
+      from_doc_id: z.string().describe('Source document ID or path'),
+      to_doc_id: z.string().describe('Target document ID or path'),
+      relationship_type: z.string().describe('Type: supports, contradicts, extends, supersedes, related, caused_by, refines, implements'),
+      description: z.string().optional().describe('Description of the relationship'),
+      strength: z.number().optional().default(1.0).describe('Connection strength 0.0-1.0 (default: 1.0)'),
+      workspace: z.string().optional().describe('Workspace path or hash. Required in daemon mode.'),
+    },
+    async ({ from_doc_id, to_doc_id, relationship_type, description, strength, workspace }) => {
+      if (checkReady()) return WARMUP_ERROR;
+      log('mcp', 'memory_connect from="' + from_doc_id + '" to="' + to_doc_id + '" type="' + relationship_type + '"');
+
+      const wsResult = requireDaemonWorkspace(deps, workspace);
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true };
+      }
+
+      if (!isValidRelationshipType(relationship_type)) {
+        return { content: [{ type: 'text', text: 'Invalid relationship type: ' + relationship_type + '. Valid: ' + VALID_RELATIONSHIP_TYPES.join(', ') }], isError: true };
+      }
+
+      const fromDoc = wsResult.store.findDocument(from_doc_id);
+      if (!fromDoc) {
+        return { content: [{ type: 'text', text: 'Source document not found: ' + from_doc_id }], isError: true };
+      }
+
+      const toDoc = wsResult.store.findDocument(to_doc_id);
+      if (!toDoc) {
+        return { content: [{ type: 'text', text: 'Target document not found: ' + to_doc_id }], isError: true };
+      }
+
+      const count = wsResult.store.getConnectionCount(fromDoc.id);
+      if (count >= 50) {
+        return { content: [{ type: 'text', text: 'Connection limit reached (50) for document: ' + from_doc_id }], isError: true };
+      }
+
+      const id = wsResult.store.insertConnection({
+        fromDocId: fromDoc.id,
+        toDocId: toDoc.id,
+        relationshipType: relationship_type as any,
+        description: description ?? null,
+        strength: strength ?? 1.0,
+        createdBy: 'user',
+        projectHash: wsResult.projectHash,
+      });
+
+      return {
+        content: [{ type: 'text', text: `✅ Connection created (#${id}): ${fromDoc.title} —[${relationship_type}]→ ${toDoc.title}` }],
+      };
     }
   );
   

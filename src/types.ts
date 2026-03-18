@@ -612,6 +612,26 @@ export interface RemoveWorkspaceResult {
   executionFlowsDeleted: number;
 }
 
+export type MemoryConnectionRelationshipType = 'supports' | 'contradicts' | 'extends' | 'supersedes' | 'related' | 'caused_by' | 'refines' | 'implements';
+
+export type MemoryConnectionCreatedBy = 'consolidation' | 'user' | 'extraction';
+
+export const VALID_RELATIONSHIP_TYPES: MemoryConnectionRelationshipType[] = [
+  'supports', 'contradicts', 'extends', 'supersedes', 'related', 'caused_by', 'refines', 'implements'
+];
+
+export interface MemoryConnection {
+  id: number;
+  fromDocId: number;
+  toDocId: number;
+  relationshipType: MemoryConnectionRelationshipType;
+  description: string | null;
+  strength: number;
+  createdBy: MemoryConnectionCreatedBy;
+  createdAt: string;
+  projectHash: string;
+}
+
 export interface Store {
   getDb(): import('better-sqlite3').Database;
   close(): void;
@@ -798,4 +818,9 @@ export interface Store {
   deduplicateEdges(entityId: number): void;
 
   getUncategorizedDocuments(limit: number, projectHash?: string): Array<{ id: number; path: string; body: string }>;
+
+  insertConnection(conn: Omit<MemoryConnection, 'id' | 'createdAt'>): number;
+  getConnectionsForDocument(docId: number, options?: { direction?: 'incoming' | 'outgoing' | 'both'; relationshipType?: string; projectHash?: string }): MemoryConnection[];
+  deleteConnection(id: number): void;
+  getConnectionCount(docId: number): number;
 }

@@ -169,6 +169,36 @@ Respond with ONLY a JSON array, no other text.`;
       result.overallConfidence,
       new Date().toISOString()
     );
+
+    if (result.connections.length > 0) {
+      const projectHashRow = result.sourceIds.length > 0
+        ? db.prepare('SELECT project_hash FROM documents WHERE id = ?').get(result.sourceIds[0]) as { project_hash: string } | undefined
+        : undefined;
+      const projectHash = projectHashRow?.project_hash ?? 'global';
+      let created = 0;
+      for (const conn of result.connections) {
+        if (!conn.fromId || !conn.toId || !conn.relationship) continue;
+        try {
+          if (this.store.getConnectionCount(conn.fromId) >= 50) continue;
+          this.store.insertConnection({
+            fromDocId: conn.fromId,
+            toDocId: conn.toId,
+            relationshipType: conn.relationship as any,
+            description: null,
+            strength: typeof conn.confidence === 'number' ? conn.confidence : result.overallConfidence,
+            createdBy: 'consolidation',
+            projectHash,
+          });
+          created++;
+        } catch (err) {
+          log('consolidation', 'Failed to create connection ' + conn.fromId + '->' + conn.toId + ': ' + (err instanceof Error ? err.message : String(err)), 'warn');
+        }
+      }
+      if (created > 0) {
+        log('consolidation', 'Created ' + created + ' memory connections from consolidation');
+      }
+    }
+
     log('consolidation', 'Applied consolidation for ' + result.sourceIds.length + ' memories, confidence=' + result.overallConfidence.toFixed(2));
   }
 
