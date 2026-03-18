@@ -66,6 +66,54 @@ export interface WatcherStats {
   isReindexing: boolean;
 }
 
+/**
+ * Convert a glob exclude pattern (e.g. from BUILTIN_EXCLUDE_PATTERNS) into a
+ * chokidar v5-compatible matcher.  Chokidar v5 only does exact-string equality
+ * for string matchers, so we must return a RegExp or function instead.
+ *
+ * Supported pattern shapes:
+ *   ** /dir/ **        → directory name anywhere          → /[/\\]dir([/\\]|$)/
+ *   ** /a/b/ **        → nested path segment              → /[/\\]a[/\\]b([/\\]|$)/
+ *   ** /*.ext          → file extension anywhere          → /\.ext$/
+ *   ** /exact-file     → filename anywhere                → /[/\\]exact-file$/
+ *   /absolute/ **      → absolute prefix                  → starts-with check
+ *   plain-name         → bare directory name              → /[/\\]plain-name([/\\]|$)/
+ */
+function globToChokidarMatcher(pattern: string): RegExp {
+  const p = pattern.replace(/\\/g, '/')
+
+  // Absolute prefix: /tmp/** → match paths starting with /tmp/
+  if (p.startsWith('/') && !p.startsWith('*')) {
+    const prefix = p.replace(/\/\*\*\/?$/, '')
+    const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`^${escaped}([/\\\\]|$)`)
+  }
+
+  // Strip leading **/ and trailing /**
+  let core = p
+  if (core.startsWith('**/')) core = core.slice(3)
+  if (core.endsWith('/**')) core = core.slice(0, -3)
+
+  if (core.startsWith('*')) {
+    const ext = core.slice(1)
+    const escaped = ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // *.egg-info etc. can be directories — match as path segment, not just suffix
+    return new RegExp(`${escaped}([/\\\\]|$)`)
+  }
+
+  // Contains wildcard in filename: e.g. "assets/index-*.js" or "i18n/locales/*.json"
+  if (core.includes('*')) {
+    const escaped = core
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '[^/\\\\]*')
+    return new RegExp(`[/\\\\]${escaped}$`)
+  }
+
+  // Directory or filename: "node_modules", "public/vs", "package-lock.json"
+  const escaped = core.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\//g, '[/\\\\]')
+  return new RegExp(`[/\\\\]${escaped}([/\\\\]|$)`)
+}
+
 export function startWatcher(options: WatcherOptions): Watcher {
   const {
     store,
@@ -281,7 +329,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
 
   const setupWatcher = () => {
     const pathsToWatch: string[] = []
-    const ignoredPatterns: (string | RegExp)[] = [/(^|[\/])\../]
+    const ignoredPatterns: (string | RegExp | ((path: string) => boolean))[] = [/(^|[/\\])\./]
     for (const collection of collections) {
       const expandedPath = collection.path.replace(/^~/, os.homedir())
       if (fs.existsSync(expandedPath)) {
@@ -294,20 +342,20 @@ export function startWatcher(options: WatcherOptions): Watcher {
       watchedPaths.add(workspaceRoot)
       const excludePatterns = mergeExcludePatterns(codebaseConfig, workspaceRoot)
       for (const pattern of excludePatterns) {
-        // Convert glob patterns to regex for chokidar directory-level matching
-        // e.g. 'node_modules' -> /[\/]node_modules([\/]|$)/
-        // e.g. '*.min.js' -> /\.min\.js$/
-        if (pattern.startsWith('*')) {
-          const escaped = pattern.slice(1).replace(/\./g, '\\.').replace(/\*/g, '.*')
-          ignoredPatterns.push(new RegExp(`${escaped}$`))
-        } else {
-          const escaped = pattern.replace(/\./g, '\\.').replace(/\*/g, '.*')
-          ignoredPatterns.push(new RegExp(`[\\/]${escaped}([\\/]|$)`))
-        }
+        ignoredPatterns.push(globToChokidarMatcher(pattern))
       }
     }
-    if (pathsToWatch.length === 0) return
-    watcher = watch(pathsToWatch, {
+    const deduped: string[] = []
+    for (const p of pathsToWatch) {
+      const isSubpath = pathsToWatch.some(other =>
+        other !== p && p.startsWith(other.endsWith('/') ? other : other + '/')
+      )
+      if (!isSubpath) {
+        deduped.push(p)
+      }
+    }
+    if (deduped.length === 0) return
+    watcher = watch(deduped, {
       ignored: ignoredPatterns,
       persistent: true,
       ignoreInitial: true,
