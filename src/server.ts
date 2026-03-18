@@ -91,7 +91,7 @@ export function resolveWorkspace(deps: ServerDeps, filePath?: string, workspaceP
         }
         const wsStore = openWorkspaceStore(deps.dataDir, wsPath);
         if (wsStore) {
-          return { store: wsStore, workspaceRoot: wsPath, projectHash: wsHash, needsClose: true };
+          return { store: wsStore, workspaceRoot: wsPath, projectHash: wsHash, needsClose: false };
         }
       }
     }
@@ -111,7 +111,7 @@ export function resolveWorkspace(deps: ServerDeps, filePath?: string, workspaceP
       }
       const wsStore = openWorkspaceStore(deps.dataDir, bestMatch.wsPath);
       if (wsStore) {
-        return { store: wsStore, workspaceRoot: bestMatch.wsPath, projectHash: wsHash, needsClose: true };
+        return { store: wsStore, workspaceRoot: bestMatch.wsPath, projectHash: wsHash, needsClose: false };
       }
     }
   }
@@ -1122,7 +1122,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       // Open the correct workspace's symbol graph DB (not deps.db which is the startup workspace)
       let symbolGraphDb = deps.db;
       let symbolGraphDbNeedsClose = false;
-      if (resolved?.needsClose && deps.dataDir && resolved.workspaceRoot) {
+      if (resolved && resolved.projectHash !== deps.currentProjectHash && deps.dataDir && resolved.workspaceRoot) {
         const wsDbPath = resolveWorkspaceDbPath(deps.dataDir, resolved.workspaceRoot);
         symbolGraphDb = openDatabase(wsDbPath);
         symbolGraphDbNeedsClose = true;
@@ -2609,17 +2609,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
   let resolvedWorkspaceRoot: string;
   if (daemon && config?.workspaces && Object.keys(config.workspaces).length > 0) {
     const configuredWorkspaces = Object.keys(config.workspaces);
-    const cwd = root || process.cwd();
-    const cwdMatch = configuredWorkspaces.find(ws => cwd === ws || cwd.startsWith(ws + '/'));
-    if (cwdMatch) {
-      resolvedWorkspaceRoot = cwdMatch;
-      log('server', 'Daemon mode: cwd matches configured workspace');
-      log('server', `Daemon mode: workspace from cwd = ${resolvedWorkspaceRoot}`);
-    } else {
-      resolvedWorkspaceRoot = configuredWorkspaces[0];
-      log('server', 'Daemon mode: cwd does not match any workspace, using first configured');
-      log('server', `Daemon mode: primary workspace = ${resolvedWorkspaceRoot}`);
-    }
+    resolvedWorkspaceRoot = configuredWorkspaces[0];
+    log('server', `Daemon mode: primary workspace = ${resolvedWorkspaceRoot}`);
   } else {
     resolvedWorkspaceRoot = root || process.cwd();
   }

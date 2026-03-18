@@ -80,7 +80,7 @@ export function createStore(dbPath: string): Store {
   
   const cached = storeCache.get(resolvedPath);
   if (cached) {
-    log('store', 'createStore returning cached instance for ' + resolvedPath);
+    log('store', 'createStore cache hit for ' + resolvedPath, 'debug');
     return cached;
   }
   
@@ -1197,7 +1197,7 @@ export function createStore(dbPath: string): Store {
     
     close() {
       if (_cached) {
-        log('store', 'close() skipped for cached store');
+        log('store', 'close() skipped for cached store', 'debug');
         return;
       }
       try { db.pragma('wal_checkpoint(PASSIVE)'); } catch { /* ignore checkpoint errors */ }
