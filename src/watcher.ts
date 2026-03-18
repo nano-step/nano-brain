@@ -337,13 +337,12 @@ export function startWatcher(options: WatcherOptions): Watcher {
         watchedPaths.add(expandedPath)
       }
     }
-    if (codebaseConfig?.enabled && fs.existsSync(workspaceRoot)) {
-      pathsToWatch.push(workspaceRoot)
-      watchedPaths.add(workspaceRoot)
-      const excludePatterns = mergeExcludePatterns(codebaseConfig, workspaceRoot)
-      for (const pattern of excludePatterns) {
-        ignoredPatterns.push(globToChokidarMatcher(pattern))
-      }
+    // NOTE: We intentionally do NOT watch the workspace root for codebase changes.
+    // Large workspaces (e.g. 30+ subprojects, 8000+ dirs) exhaust OS file descriptor
+    // limits even with node_modules excluded. Codebase changes are picked up by the
+    // poll-based reindex cycle instead (pollIntervalMs, default 5min).
+    if (codebaseConfig?.enabled) {
+      log('watcher', 'Codebase watching uses poll-based reindex (not fs.watch) to avoid EMFILE on large workspaces')
     }
     const deduped: string[] = []
     for (const p of pathsToWatch) {
