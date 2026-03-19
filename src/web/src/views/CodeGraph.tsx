@@ -1,0 +1,90 @@
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import GraphCanvas from '../components/GraphCanvas';
+import NodeDetail from '../components/NodeDetail';
+import { fetchCodeDependencies } from '../api/client';
+import { buildCodeGraph } from '../lib/graph-adapter';
+import { fallbackColors } from '../lib/colors';
+import { useAppStore } from '../store/app';
+
+export default function CodeGraph() {
+  const workspace = useAppStore((state) => state.workspace);
+  const { data, isLoading } = useQuery({
+    queryKey: ['code-deps', workspace],
+    queryFn: () => fetchCodeDependencies(workspace),
+  });
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+
+  const clusterColors = useMemo(() => {
+    const clusters = new Map<number, string>();
+    data?.files.forEach((file) => {
+      if (file.clusterId === null || clusters.has(file.clusterId)) return;
+      const color = fallbackColors[clusters.size % fallbackColors.length];
+      clusters.set(file.clusterId, color);
+    });
+    return Object.fromEntries(clusters.entries());
+  }, [data]);
+
+  const graph = useMemo(() => {
+    if (!data) return null;
+    return buildCodeGraph(data.files, data.edges, clusterColors);
+  }, [data, clusterColors]);
+
+  const selectedFile = data?.files.find((file) => file.path === selectedNode);
+  const imports = data?.edges.filter((edge) => edge.source === selectedNode).length ?? 0;
+  const dependents = data?.edges.filter((edge) => edge.target === selectedNode).length ?? 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Code Dependencies</h1>
+          <p className="mt-1 text-sm text-[#8888a0]">File-level dependency graph with centrality sizing.</p>
+        </div>
+        <div className="text-right text-xs text-[#8888a0]">
+          <p>Files: {data?.files.length ?? '—'}</p>
+          <p>Edges: {data?.edges.length ?? '—'}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[1fr_320px] gap-6">
+        <div className="card graph-shell overflow-hidden">
+          {graph ? (
+            <GraphCanvas graph={graph} onNodeClick={(id) => setSelectedNode(id)} />
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-[#8888a0]">
+              {isLoading ? 'Loading code graph...' : 'No dependency data.'}
+            </div>
+          )}
+        </div>
+        <div className="space-y-4">
+          {selectedFile ? (
+            <NodeDetail
+              title={selectedFile.path.split('/').slice(-2).join('/')}
+              subtitle={selectedFile.path}
+              meta={[
+                { label: 'Centrality', value: selectedFile.centrality.toFixed(3) },
+                { label: 'Cluster', value: selectedFile.clusterId ?? '—' },
+                { label: 'Imports', value: imports },
+                { label: 'Dependents', value: dependents },
+              ]}
+            />
+          ) : (
+            <div className="card p-4 text-sm text-[#8888a0]">Select a file to inspect details.</div>
+          )}
+          <div className="card p-4 text-sm text-[#8888a0]">
+            <p className="font-semibold text-[#e4e4ed]">Cluster legend</p>
+            <div className="mt-3 grid gap-2">
+              {Object.entries(clusterColors).map(([cluster, color]) => (
+                <div key={cluster} className="flex items-center justify-between">
+                  <span>Cluster {cluster}</span>
+                  <span className="h-3 w-6 rounded-full" style={{ background: color }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: "Space Grotesk", "IBM Plex Sans", "Inter", system-ui, sans-serif;
+  background: #0a0a0f;
+  color: #e4e4ed;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a38 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #2a2a38;
+  border-radius: 999px;
+}
+
+.card {
+  background: #16161f;
+  border: 1px solid #232331;
+  border-radius: 16px;
+}
+
+.panel {
+  background: #111118;
+  border: 1px solid #1f1f2c;
+  border-radius: 16px;
+}
+
+.muted {
+  color: #8888a0;
+}
+
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.grid-dense {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.graph-shell {
+  height: calc(100vh - 220px);
+  min-height: 520px;
+}
+
+@media (max-width: 1280px) {
+  .grid-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

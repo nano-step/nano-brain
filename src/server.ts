@@ -3287,6 +3287,319 @@ export async function startServer(options: ServerOptions): Promise<void> {
         return;
       }
 
+      // CORS middleware for REST API and web dashboard
+      if (req.url?.startsWith('/api/v1/') || req.url?.startsWith('/web/') || req.url === '/web') {
+        const origin = req.headers.origin;
+        if (!origin || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+          res.setHeader('Access-Control-Allow-Origin', origin || '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        }
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+      }
+
+      // Static file serving for web dashboard
+      if (req.url?.startsWith('/web/') || req.url === '/web') {
+        const webDir = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'dist', 'web');
+        let filePath = req.url === '/web' || req.url === '/web/'
+          ? path.join(webDir, 'index.html')
+          : path.join(webDir, req.url.slice(5));
+
+        const resolved = path.resolve(filePath);
+        if (!resolved.startsWith(path.resolve(webDir))) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Forbidden' }));
+          return;
+        }
+
+        const ext = path.extname(resolved);
+        const mimeTypes: Record<string, string> = {
+          '.html': 'text/html',
+          '.js': 'application/javascript',
+          '.css': 'text/css',
+          '.json': 'application/json',
+          '.png': 'image/png',
+          '.svg': 'image/svg+xml',
+          '.ico': 'image/x-icon',
+        };
+
+        try {
+          const content = fs.readFileSync(resolved);
+          res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+          res.end(content);
+        } catch {
+          try {
+            const indexContent = fs.readFileSync(path.join(webDir, 'index.html'));
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(indexContent);
+          } catch {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Web dashboard not built. Run: npm run build:web' }));
+          }
+        }
+        return;
+      }
+
+      // REST API v1 endpoints
+      if (req.method === 'GET' && pathname === '/api/v1/status') {
+        let version = 'unknown';
+        try {
+          const pkgPath = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'package.json');
+          version = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version;
+        } catch {}
+        const workspaces = deps.allWorkspaces
+          ? Object.entries(deps.allWorkspaces).map(([wsPath]) => ({
+              path: wsPath,
+              name: path.basename(wsPath),
+            }))
+          : [];
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          version,
+          uptime: process.uptime(),
+          documents: store.getIndexHealth().documentCount,
+          embeddings: store.getIndexHealth().embeddedCount,
+          workspaces,
+          primaryWorkspace: resolvedWorkspaceRoot,
+        }));
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/workspaces') {
+        const workspaceList: Array<{ path: string; name: string; hash: string; documentCount: number }> = [];
+        if (deps.allWorkspaces) {
+          for (const [wsPath] of Object.entries(deps.allWorkspaces)) {
+            const wsHash = crypto.createHash('sha256').update(wsPath).digest('hex').substring(0, 12);
+            const wsDbPath = resolveWorkspaceDbPath(deps.dataDir ?? path.dirname(effectiveDbPath), wsPath);
+            try {
+              const wsStore = createStore(wsDbPath);
+              const stats = wsStore.getWorkspaceStats();
+              const docCount = stats.find((s: { projectHash: string }) => s.projectHash === wsHash)?.count ?? 0;
+              workspaceList.push({
+                path: wsPath,
+                name: path.basename(wsPath),
+                hash: wsHash,
+                documentCount: docCount,
+              });
+            } catch {
+              workspaceList.push({
+                path: wsPath,
+                name: path.basename(wsPath),
+                hash: wsHash,
+                documentCount: 0,
+              });
+            }
+          }
+        } else {
+          workspaceList.push({
+            path: resolvedWorkspaceRoot,
+            name: path.basename(resolvedWorkspaceRoot),
+            hash: currentProjectHash,
+            documentCount: store.getIndexHealth().documentCount,
+          });
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ workspaces: workspaceList }));
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/graph/entities') {
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        try {
+          const entities = store.getMemoryEntities(wsHash);
+          const entityEdges: Array<{ id: number; sourceId: number; targetId: number; edgeType: string; createdAt: string }> = [];
+          for (const entity of entities) {
+            const edges = store.getEntityEdges(entity.id, 'outgoing');
+            for (const edge of edges) {
+              entityEdges.push({
+                id: edge.id,
+                sourceId: edge.sourceId,
+                targetId: edge.targetId,
+                edgeType: edge.edgeType,
+                createdAt: edge.createdAt,
+              });
+            }
+          }
+          const typeDistribution: Record<string, number> = {};
+          for (const entity of entities) {
+            typeDistribution[entity.type] = (typeDistribution[entity.type] || 0) + 1;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            nodes: entities.map(e => ({
+              id: e.id,
+              name: e.name,
+              type: e.type,
+              description: e.description,
+              firstLearnedAt: e.firstLearnedAt,
+              lastConfirmedAt: e.lastConfirmedAt,
+              contradictedAt: e.contradictedAt,
+            })),
+            edges: entityEdges,
+            stats: {
+              nodeCount: entities.length,
+              edgeCount: entityEdges.length,
+              typeDistribution,
+            },
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/graph/stats') {
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        try {
+          const stats = store.getGraphStats(wsHash);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(stats));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/code/dependencies') {
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        try {
+          const edges = store.getFileEdges(wsHash);
+          const fileSet = new Set<string>();
+          for (const edge of edges) {
+            fileSet.add(edge.source_path);
+            fileSet.add(edge.target_path);
+          }
+          const files: Array<{ path: string; centrality: number; clusterId: number | null }> = [];
+          for (const fp of fileSet) {
+            const centralityInfo = store.getDocumentCentrality(fp);
+            files.push({
+              path: fp,
+              centrality: centralityInfo?.centrality ?? 0,
+              clusterId: centralityInfo?.clusterId ?? null,
+            });
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            files,
+            edges: edges.map(e => ({ source: e.source_path, target: e.target_path })),
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/search') {
+        const query = url.searchParams.get('q');
+        const limit = parseInt(url.searchParams.get('limit') || '10', 10);
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        if (!query) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'query parameter "q" is required' }));
+          return;
+        }
+        try {
+          const startTime = Date.now();
+          const results = await hybridSearch(
+            store,
+            { query, limit, projectHash: wsHash, searchConfig: deps.searchConfig, db: deps.db },
+            providers
+          );
+          const executionMs = Date.now() - startTime;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            results: results.map(r => ({
+              id: r.id,
+              docid: r.docid,
+              title: r.title,
+              path: r.path,
+              score: r.score,
+              snippet: r.snippet,
+              collection: r.collection,
+            })),
+            query,
+            executionMs,
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/telemetry') {
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        try {
+          const telemetryCount = store.getTelemetryCount();
+          const banditStats = store.loadBanditStats(wsHash);
+          const profile = store.getWorkspaceProfile(wsHash);
+          const telemetryStats = store.getTelemetryStats(wsHash);
+          const importanceRows = store.getActiveDocumentsWithAccess();
+          const accessCounts = importanceRows.map((r) => r.access_count || 0);
+          const importanceStats = accessCounts.length > 0
+            ? {
+                min: Math.min(...accessCounts),
+                max: Math.max(...accessCounts),
+                mean: accessCounts.reduce((a, b) => a + b, 0) / accessCounts.length,
+                median: accessCounts.sort((a, b) => a - b)[Math.floor(accessCounts.length / 2)],
+              }
+            : { min: 0, max: 0, mean: 0, median: 0 };
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            queryCount: telemetryCount,
+            banditStats,
+            preferenceWeights: profile ? JSON.parse(profile.profile_data || '{}').categoryWeights || {} : {},
+            expandRate: telemetryStats.expandCount / Math.max(telemetryStats.queryCount, 1),
+            importanceStats,
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/connections') {
+        const docId = url.searchParams.get('docId');
+        const direction = (url.searchParams.get('direction') || 'both') as 'incoming' | 'outgoing' | 'both';
+        if (!docId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'docId parameter is required' }));
+          return;
+        }
+        try {
+          const doc = store.findDocument(docId);
+          if (!doc) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Document not found' }));
+            return;
+          }
+          const connections = store.getConnectionsForDocument(doc.id, { direction });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            connections: connections.map(c => ({
+              fromDocId: c.fromDocId,
+              toDocId: c.toDocId,
+              relationshipType: c.relationshipType,
+              strength: c.strength,
+              description: c.description,
+              createdAt: c.createdAt,
+            })),
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
       if (pathname === '/mcp') {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         
