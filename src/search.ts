@@ -441,10 +441,12 @@ export async function hybridSearch(
   } = options;
   
   const config = { ...(searchConfig ?? DEFAULT_SEARCH_CONFIG) };
+  let selectedBanditVariants: Record<string, number> | null = null;
   
   if (options.sampler) {
     try {
       const variants = options.sampler.selectSearchConfig();
+      selectedBanditVariants = variants;
       if (variants.rrf_k !== undefined) config.rrf_k = variants.rrf_k;
       if (variants.centrality_weight !== undefined) config.centrality_weight = variants.centrality_weight;
     } catch (err) {
@@ -698,11 +700,12 @@ export async function hybridSearch(
     const queryId = generateQueryId();
     const resultDocids = results.map(r => r.docid);
     const tier = providers.reranker && useReranking ? 'hybrid+rerank' : (providers.embedder ? 'hybrid' : 'fts');
+    const configVariant = selectedBanditVariants ? JSON.stringify(selectedBanditVariants) : null;
     store.logSearchQuery(
       queryId,
       query,
       tier,
-      null,
+      configVariant,
       resultDocids,
       executionMs,
       sessionId ?? null,

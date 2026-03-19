@@ -37,6 +37,7 @@ import { detectReformulation } from './telemetry.js'
 import { categorize } from './categorizer.js'
 import { categorizeMemory } from './llm-categorizer.js'
 import { parseCategorizationConfig } from './types.js'
+import { ThompsonSampler, DEFAULT_BANDIT_CONFIGS } from './bandits.js'
 
 let maintenanceMode = false;
 let maintenanceTimer: NodeJS.Timeout | null = null;
@@ -69,6 +70,7 @@ export interface ServerDeps {
   ready?: { value: boolean }
   sequenceAnalyzer?: import('./sequence-analyzer.js').SequenceAnalyzer
   corruptionWarningPending?: { value: boolean; corruptedPath?: string }
+  sampler?: ThompsonSampler
 }
 
 export interface ResolvedWorkspace {
@@ -539,7 +541,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       const sessionId = crypto.createHash('sha256').update(query + Date.now().toString()).digest('hex').substring(0, 12);
       const rawResults = await hybridSearch(
         store,
-        { query, limit, collection, minScore, projectHash: effectiveWorkspace, tags: parsedTags, since, until, searchConfig: deps.searchConfig, db: deps.db, sessionId },
+        { query, limit, collection, minScore, projectHash: effectiveWorkspace, tags: parsedTags, since, until, searchConfig: deps.searchConfig, db: deps.db, sessionId, sampler: deps.sampler },
         providers
       );
       const results = attachTagsToResults(rawResults, store);
@@ -549,6 +551,18 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         const reformulatedId = detectReformulation(query, recentQueries);
         if (reformulatedId !== null) {
           store.markReformulation(reformulatedId);
+          if (deps.sampler) {
+            const configVariant = store.getConfigVariantById(reformulatedId);
+            if (configVariant) {
+              try {
+                const variants = JSON.parse(configVariant) as Record<string, number>;
+                for (const [paramName, value] of Object.entries(variants)) {
+                  deps.sampler.recordReward(paramName, value, false);
+                }
+              } catch {
+              }
+            }
+          }
         }
       } catch {
       }
@@ -611,6 +625,18 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         
         try {
           store.logSearchExpand(cacheKey, expandIndices);
+          if (deps.sampler) {
+            const configVariant = store.getConfigVariantByCacheKey(cacheKey);
+            if (configVariant) {
+              try {
+                const variants = JSON.parse(configVariant) as Record<string, number>;
+                for (const [paramName, value] of Object.entries(variants)) {
+                  deps.sampler.recordReward(paramName, value, true);
+                }
+              } catch {
+              }
+            }
+          }
         } catch {
         }
         

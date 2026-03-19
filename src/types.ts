@@ -749,6 +749,8 @@ export interface Store {
   logSearchQuery(queryId: string, queryText: string, tier: string, configVariant: string | null, resultDocids: string[], executionMs: number, sessionId: string | null, cacheKey: string | null, workspaceHash: string): void;
   logSearchExpand(cacheKey: string, expandedIndices: number[]): void;
   getRecentQueries(sessionId: string): Array<{ id: number; query_text: string; timestamp: string }>;
+  getConfigVariantByCacheKey(cacheKey: string): string | null;
+  getConfigVariantById(telemetryId: number): string | null;
   markReformulation(telemetryId: number): void;
   purgeTelemetry(retentionDays: number): number;
   getTelemetryCount(): number;
@@ -823,4 +825,7 @@ export interface Store {
   getConnectionsForDocument(docId: number, options?: { direction?: 'incoming' | 'outgoing' | 'both'; relationshipType?: string; projectHash?: string }): MemoryConnection[];
   deleteConnection(id: number): void;
   getConnectionCount(docId: number): number;
+
+  getActiveDocumentsWithAccess(): Array<{ id: number; path: string; hash: string; access_count: number; last_accessed_at: string | null }>;
+  getTagCountForDocument(docId: number): number;
 }

@@ -819,6 +819,14 @@ export function createStore(dbPath: string): Store {
     ORDER BY timestamp DESC LIMIT 5
   `);
 
+  const getConfigVariantByCacheKeyStmt = db.prepare(`
+    SELECT config_variant FROM search_telemetry WHERE cache_key = ? LIMIT 1
+  `);
+
+  const getConfigVariantByIdStmt = db.prepare(`
+    SELECT config_variant FROM search_telemetry WHERE id = ? LIMIT 1
+  `);
+
   const purgeTelemetryStmt = db.prepare(`
     DELETE FROM search_telemetry WHERE timestamp < datetime('now', '-' || ? || ' days')
   `);
@@ -878,6 +886,14 @@ export function createStore(dbPath: string): Store {
 
   const getGlobalLearningStmt = db.prepare(`
     SELECT parameter_name, value, confidence FROM global_learning
+  `);
+
+  const getActiveDocumentsWithAccessStmt = db.prepare(`
+    SELECT id, path, hash, access_count, last_accessed_at FROM documents WHERE active = 1
+  `);
+
+  const getTagCountForDocumentStmt = db.prepare(`
+    SELECT COUNT(*) as cnt FROM document_tags WHERE document_id = ?
   `);
 
   const getTelemetryStatsStmt = db.prepare(`
@@ -2235,6 +2251,16 @@ export function createStore(dbPath: string): Store {
       return getRecentQueriesStmt.all(sessionId) as Array<{ id: number; query_text: string; timestamp: string }>;
     },
 
+    getConfigVariantByCacheKey(cacheKey: string): string | null {
+      const row = getConfigVariantByCacheKeyStmt.get(cacheKey) as { config_variant: string | null } | undefined;
+      return row?.config_variant ?? null;
+    },
+
+    getConfigVariantById(telemetryId: number): string | null {
+      const row = getConfigVariantByIdStmt.get(telemetryId) as { config_variant: string | null } | undefined;
+      return row?.config_variant ?? null;
+    },
+
     markReformulation(telemetryId: number) {
       try {
         updateTelemetryReformulationStmt.run(telemetryId);
@@ -2771,6 +2797,15 @@ export function createStore(dbPath: string): Store {
 
     getConnectionCount(docId) {
       const row = getConnectionCountStmt.get(docId, docId) as { cnt: number } | undefined;
+      return row?.cnt ?? 0;
+    },
+
+    getActiveDocumentsWithAccess(): Array<{ id: number; path: string; hash: string; access_count: number; last_accessed_at: string | null }> {
+      return getActiveDocumentsWithAccessStmt.all() as Array<{ id: number; path: string; hash: string; access_count: number; last_accessed_at: string | null }>;
+    },
+
+    getTagCountForDocument(docId: number): number {
+      const row = getTagCountForDocumentStmt.get(docId) as { cnt: number } | undefined;
       return row?.cnt ?? 0;
     },
   };
