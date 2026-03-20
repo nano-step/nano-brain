@@ -828,4 +828,58 @@ export interface Store {
 
   getActiveDocumentsWithAccess(): Array<{ id: number; path: string; hash: string; access_count: number; last_accessed_at: string | null }>;
   getTagCountForDocument(docId: number): number;
+
+  getSymbolsForProject(projectHash: string): Array<{
+    id: number;
+    name: string;
+    kind: string;
+    filePath: string;
+    startLine: number;
+    endLine: number;
+    exported: boolean;
+    clusterId: number | null;
+  }>;
+  getSymbolEdgesForProject(projectHash: string): Array<{
+    id: number;
+    sourceId: number;
+    targetId: number;
+    edgeType: string;
+    confidence: number;
+  }>;
+  getSymbolClusters(projectHash: string): Array<{
+    clusterId: number;
+    memberCount: number;
+  }>;
+  getFlowsWithSteps(projectHash: string): Array<{
+    id: number;
+    label: string;
+    flowType: string;
+    stepCount: number;
+    entryName: string;
+    entryFile: string;
+    terminalName: string;
+    terminalFile: string;
+  }>;
+  getFlowSteps(flowId: number): Array<{
+    stepIndex: number;
+    symbolId: number;
+    name: string;
+    kind: string;
+    filePath: string;
+    startLine: number;
+  }>;
+  getAllConnections(projectHash: string): Array<MemoryConnection & {
+    fromTitle: string;
+    fromPath: string;
+    toTitle: string;
+    toPath: string;
+  }>;
+  getInfrastructureSymbols(projectHash: string): Array<{
+    type: string;
+    pattern: string;
+    operation: string;
+    repo: string;
+    filePath: string;
+    lineNumber: number;
+  }>;
 }

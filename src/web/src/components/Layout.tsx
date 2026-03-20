@@ -1,6 +1,6 @@
 import { PropsWithChildren } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Activity, Network, Search, Waypoints } from 'lucide-react';
+import { Activity, Boxes, GitBranch, Link2, Network, Search, Server, Waypoints } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchStatus, fetchWorkspaces } from '../api/client';
 import { useAppStore } from '../store/app';
@@ -9,6 +9,10 @@ const navItems = [
   { label: 'Dashboard', path: '/dashboard', icon: Activity },
   { label: 'Knowledge Graph', path: '/graph', icon: Network },
   { label: 'Code Dependencies', path: '/code', icon: Waypoints },
+  { label: 'Symbol Graph', path: '/symbols', icon: Boxes },
+  { label: 'Execution Flows', path: '/flows', icon: GitBranch },
+  { label: 'Document Connections', path: '/connections', icon: Link2 },
+  { label: 'Infrastructure Symbols', path: '/infrastructure', icon: Server },
   { label: 'Search', path: '/search', icon: Search },
 ];
 

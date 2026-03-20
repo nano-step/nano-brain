@@ -1232,6 +1232,58 @@ export function createStore(dbPath: string): Store {
       GROUP BY source_id, target_id, edge_type, project_hash
     )
   `);
+
+  const getSymbolsForProjectStmt = db.prepare(`
+    SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine,
+           exported, cluster_id as clusterId
+    FROM code_symbols WHERE project_hash = ?
+  `);
+
+  const getSymbolEdgesForProjectStmt = db.prepare(`
+    SELECT id, source_id as sourceId, target_id as targetId, edge_type as edgeType, confidence
+    FROM symbol_edges WHERE project_hash = ?
+  `);
+
+  const getSymbolClustersStmt = db.prepare(`
+    SELECT cluster_id as clusterId, COUNT(*) as memberCount
+    FROM code_symbols WHERE project_hash = ? AND cluster_id IS NOT NULL
+    GROUP BY cluster_id
+  `);
+
+  const getFlowsWithStepsStmt = db.prepare(`
+    SELECT ef.id, ef.label, ef.flow_type as flowType, ef.step_count as stepCount,
+      entry.name as entryName, entry.file_path as entryFile,
+      term.name as terminalName, term.file_path as terminalFile
+    FROM execution_flows ef
+    JOIN code_symbols entry ON ef.entry_symbol_id = entry.id
+    JOIN code_symbols term ON ef.terminal_symbol_id = term.id
+    WHERE ef.project_hash = ?
+  `);
+
+  const getFlowStepsStmt = db.prepare(`
+    SELECT fs.step_index as stepIndex, cs.id as symbolId, cs.name, cs.kind, cs.file_path as filePath, cs.start_line as startLine
+    FROM flow_steps fs
+    JOIN code_symbols cs ON fs.symbol_id = cs.id
+    WHERE fs.flow_id = ?
+    ORDER BY fs.step_index
+  `);
+
+  const getAllConnectionsStmt = db.prepare(`
+    SELECT mc.id, mc.from_doc_id as fromDocId, mc.to_doc_id as toDocId, mc.relationship_type as relationshipType,
+           mc.strength, mc.description, mc.created_at as createdAt, mc.created_by as createdBy, mc.project_hash as projectHash,
+           d1.title as fromTitle, d1.path as fromPath,
+           d2.title as toTitle, d2.path as toPath
+    FROM memory_connections mc
+    JOIN documents d1 ON mc.from_doc_id = d1.id
+    JOIN documents d2 ON mc.to_doc_id = d2.id
+    WHERE mc.project_hash = ?
+  `);
+
+  const getInfrastructureSymbolsStmt = db.prepare(`
+    SELECT type, pattern, operation, repo, file_path as filePath, line_number as lineNumber
+    FROM symbols WHERE project_hash = ?
+    ORDER BY type, pattern, operation
+  `);
   
   let _cached = false;
   
@@ -2807,6 +2859,92 @@ export function createStore(dbPath: string): Store {
     getTagCountForDocument(docId: number): number {
       const row = getTagCountForDocumentStmt.get(docId) as { cnt: number } | undefined;
       return row?.cnt ?? 0;
+    },
+
+    getSymbolsForProject(projectHash: string) {
+      const rows = getSymbolsForProjectStmt.all(projectHash) as Array<{
+        id: number;
+        name: string;
+        kind: string;
+        filePath: string;
+        startLine: number;
+        endLine: number;
+        exported: number;
+        clusterId: number | null;
+      }>;
+      return rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        kind: row.kind,
+        filePath: row.filePath,
+        startLine: row.startLine,
+        endLine: row.endLine,
+        exported: Boolean(row.exported),
+        clusterId: row.clusterId,
+      }));
+    },
+
+    getSymbolEdgesForProject(projectHash: string) {
+      return getSymbolEdgesForProjectStmt.all(projectHash) as Array<{
+        id: number;
+        sourceId: number;
+        targetId: number;
+        edgeType: string;
+        confidence: number;
+      }>;
+    },
+
+    getSymbolClusters(projectHash: string) {
+      return getSymbolClustersStmt.all(projectHash) as Array<{
+        clusterId: number;
+        memberCount: number;
+      }>;
+    },
+
+    getFlowsWithSteps(projectHash: string) {
+      return getFlowsWithStepsStmt.all(projectHash) as Array<{
+        id: number;
+        label: string;
+        flowType: string;
+        stepCount: number;
+        entryName: string;
+        entryFile: string;
+        terminalName: string;
+        terminalFile: string;
+      }>;
+    },
+
+    getFlowSteps(flowId: number) {
+      return getFlowStepsStmt.all(flowId) as Array<{
+        stepIndex: number;
+        symbolId: number;
+        name: string;
+        kind: string;
+        filePath: string;
+        startLine: number;
+      }>;
+    },
+
+    getAllConnections(projectHash: string) {
+      return getAllConnectionsStmt.all(projectHash) as Array<
+        import('./types.js').MemoryConnection & {
+          fromTitle: string;
+          fromPath: string;
+          toTitle: string;
+          toPath: string;
+        }
+      >;
+    },
+
+    getInfrastructureSymbols(projectHash: string) {
+      return getInfrastructureSymbolsStmt.all(projectHash) as Array<{
+        type: string;
+        pattern: string;
+        operation: string;
+        repo: string;
+        filePath: string;
+        lineNumber: number;
+      }>;
     },
   };
   

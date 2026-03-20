@@ -64,6 +64,89 @@ export type CodeDependencyResponse = {
   edges: Array<{ source: string; target: string }>;
 };
 
+export type SymbolNode = {
+  id: number;
+  name: string;
+  kind: string;
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  exported: number;
+  cluster_id: number | null;
+};
+
+export type SymbolEdge = {
+  id: number;
+  source_id: number;
+  target_id: number;
+  edge_type: string;
+  confidence: number;
+};
+
+export type SymbolsResponse = {
+  symbols: SymbolNode[];
+  edges: SymbolEdge[];
+  clusters: Array<{ cluster_id: number; member_count: number }>;
+};
+
+export type FlowStep = {
+  step_index: number;
+  symbol_id: number;
+  name: string;
+  kind: string;
+  file_path: string;
+  start_line: number;
+};
+
+export type Flow = {
+  id: number;
+  label: string;
+  flow_type: string;
+  step_count: number;
+  entry_name: string;
+  entry_file: string;
+  terminal_name: string;
+  terminal_file: string;
+  steps: FlowStep[];
+};
+
+export type FlowsResponse = { flows: Flow[] };
+
+export type DocConnection = {
+  id: number;
+  from_doc_id: number;
+  from_title: string;
+  from_path: string;
+  to_doc_id: number;
+  to_title: string;
+  to_path: string;
+  relationship_type: string;
+  strength: number;
+  description: string | null;
+  created_at: string;
+};
+
+export type ConnectionsResponse = { connections: DocConnection[] };
+
+export type InfraSymbol = {
+  type: string;
+  pattern: string;
+  operation: string;
+  repo: string;
+  file_path: string;
+  line_number: number;
+};
+
+export type InfraGroup = {
+  pattern: string;
+  operations: Array<{ op: string; repo: string; file: string; line: number }>;
+};
+
+export type InfrastructureResponse = {
+  symbols: InfraSymbol[];
+  grouped: Record<string, InfraGroup[]>;
+};
+
 export type TelemetryResponse = {
   queryCount: number;
   banditStats: Record<string, { success: number; failure: number }>;
@@ -109,6 +192,26 @@ export async function fetchGraphEntities(workspace?: string) {
 export async function fetchCodeDependencies(workspace?: string) {
   const params = workspace ? `?workspace=${workspace}` : '';
   return requestJson<CodeDependencyResponse>(`/code/dependencies${params}`);
+}
+
+export async function fetchSymbols(workspace?: string) {
+  const params = workspace ? `?workspace=${workspace}` : '';
+  return requestJson<SymbolsResponse>(`/graph/symbols${params}`);
+}
+
+export async function fetchFlows(workspace?: string) {
+  const params = workspace ? `?workspace=${workspace}` : '';
+  return requestJson<FlowsResponse>(`/graph/flows${params}`);
+}
+
+export async function fetchConnections(workspace?: string) {
+  const params = workspace ? `?workspace=${workspace}` : '';
+  return requestJson<ConnectionsResponse>(`/graph/connections${params}`);
+}
+
+export async function fetchInfrastructure(workspace?: string) {
+  const params = workspace ? `?workspace=${workspace}` : '';
+  return requestJson<InfrastructureResponse>(`/graph/infrastructure${params}`);
 }
 
 export async function fetchSearch(query: string, limit = 20, workspace?: string) {

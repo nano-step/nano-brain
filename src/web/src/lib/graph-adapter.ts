@@ -1,6 +1,6 @@
 import Graph from 'graphology';
-import { GraphEntity, GraphEntitiesResponse } from '../api/client';
-import { typeColorMap } from './colors';
+import { ConnectionsResponse, GraphEntity, GraphEntitiesResponse, SymbolsResponse } from '../api/client';
+import { edgeTypeColorMap, fallbackColors, relationshipColorMap, symbolKindColorMap, typeColorMap } from './colors';
 
 function randomLayout(graph: Graph, scale: number) {
   graph.forEachNode((node) => {
@@ -19,6 +19,17 @@ type GraphNodeMeta = {
   firstLearnedAt?: string | null;
   lastConfirmedAt?: string | null;
   contradictedAt?: string | null;
+};
+
+type SymbolNodeMeta = {
+  id: string;
+  label: string;
+  entityType: string;
+  size: number;
+  color: string;
+  filePath?: string;
+  startLine?: number;
+  clusterId?: number | null;
 };
 
 export function buildEntityGraph(data: GraphEntitiesResponse) {
@@ -89,6 +100,128 @@ export function buildCodeGraph(files: Array<{ path: string; centrality: number; 
   }
 
   randomLayout(graph, 900);
+  return graph;
+}
+
+export function buildSymbolGraph(data: SymbolsResponse, clusterMode: boolean) {
+  const graph = new Graph();
+
+  if (clusterMode && data.clusters.length > 0) {
+    for (const cluster of data.clusters) {
+      graph.addNode(`cluster-${cluster.cluster_id}`, {
+        id: `cluster-${cluster.cluster_id}`,
+        label: `Cluster ${cluster.cluster_id} (${cluster.member_count})`,
+        entityType: 'cluster',
+        size: Math.max(10, Math.min(40, 10 + cluster.member_count * 0.5)),
+        color: fallbackColors[cluster.cluster_id % fallbackColors.length],
+      } satisfies SymbolNodeMeta);
+    }
+
+    for (const sym of data.symbols) {
+      if (sym.cluster_id === null) {
+        graph.addNode(String(sym.id), {
+          id: String(sym.id),
+          label: sym.name,
+          entityType: sym.kind,
+          size: 6,
+          color: symbolKindColorMap[sym.kind] || '#64748b',
+          filePath: sym.file_path,
+          startLine: sym.start_line,
+        } satisfies SymbolNodeMeta);
+      }
+    }
+
+    const clusterEdges = new Map<string, number>();
+    const symbolById = new Map(data.symbols.map((sym) => [sym.id, sym]));
+    for (const edge of data.edges) {
+      const src = symbolById.get(edge.source_id);
+      const tgt = symbolById.get(edge.target_id);
+      if (src?.cluster_id !== null && tgt?.cluster_id !== null && src?.cluster_id !== tgt?.cluster_id) {
+        const key = `cluster-${src.cluster_id}->cluster-${tgt.cluster_id}`;
+        clusterEdges.set(key, (clusterEdges.get(key) || 0) + 1);
+      }
+    }
+    for (const [key, count] of clusterEdges) {
+      const [src, tgt] = key.split('->');
+      if (graph.hasNode(src) && graph.hasNode(tgt)) {
+        graph.addEdge(src, tgt, {
+          label: `${count} calls`,
+          size: Math.min(5, 1 + count * 0.2),
+          color: 'rgba(148,163,184,0.4)',
+        });
+      }
+    }
+  } else {
+    for (const sym of data.symbols) {
+      graph.addNode(String(sym.id), {
+        id: String(sym.id),
+        label: sym.name,
+        entityType: sym.kind,
+        size: 6,
+        color: symbolKindColorMap[sym.kind] || '#64748b',
+        filePath: sym.file_path,
+        startLine: sym.start_line,
+        clusterId: sym.cluster_id,
+      } satisfies SymbolNodeMeta);
+    }
+    for (const edge of data.edges) {
+      const src = String(edge.source_id);
+      const tgt = String(edge.target_id);
+      if (graph.hasNode(src) && graph.hasNode(tgt)) {
+        graph.addEdge(src, tgt, {
+          label: edge.edge_type,
+          edgeType: edge.edge_type,
+          size: 1,
+          color: edgeTypeColorMap[edge.edge_type] || 'rgba(148, 163, 184, 0.3)',
+        });
+      }
+    }
+  }
+
+  randomLayout(graph, 1000);
+  return graph;
+}
+
+export function buildConnectionGraph(data: ConnectionsResponse) {
+  const graph = new Graph();
+  const docNodes = new Set<string>();
+
+  for (const conn of data.connections) {
+    const fromId = String(conn.from_doc_id);
+    const toId = String(conn.to_doc_id);
+
+    if (!docNodes.has(fromId)) {
+      docNodes.add(fromId);
+      graph.addNode(fromId, {
+        id: fromId,
+        label: conn.from_title || conn.from_path.split('/').pop() || fromId,
+        entityType: 'document',
+        size: 8,
+        color: '#3b82f6',
+        fullPath: conn.from_path,
+      });
+    }
+    if (!docNodes.has(toId)) {
+      docNodes.add(toId);
+      graph.addNode(toId, {
+        id: toId,
+        label: conn.to_title || conn.to_path.split('/').pop() || toId,
+        entityType: 'document',
+        size: 8,
+        color: '#3b82f6',
+        fullPath: conn.to_path,
+      });
+    }
+
+    graph.addEdge(fromId, toId, {
+      label: conn.relationship_type,
+      edgeType: conn.relationship_type,
+      size: Math.max(1, Math.min(5, conn.strength * 5)),
+      color: relationshipColorMap[conn.relationship_type] || 'rgba(148,163,184,0.4)',
+    });
+  }
+
+  randomLayout(graph, 800);
   return graph;
 }
 

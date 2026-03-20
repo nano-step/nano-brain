@@ -3600,6 +3600,82 @@ export async function startServer(options: ServerOptions): Promise<void> {
         return;
       }
 
+      if (req.method === 'GET' && pathname === '/api/v1/graph/symbols') {
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        try {
+          const symbols = store.getSymbolsForProject(wsHash);
+          const edges = store.getSymbolEdgesForProject(wsHash);
+          const clusters = store.getSymbolClusters(wsHash);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ symbols, edges, clusters }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/graph/flows') {
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        try {
+          const flows = store.getFlowsWithSteps(wsHash);
+          const flowsWithSteps = flows.map(flow => ({
+            ...flow,
+            steps: store.getFlowSteps(flow.id),
+          }));
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ flows: flowsWithSteps }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/graph/connections') {
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        try {
+          const connections = store.getAllConnections(wsHash);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ connections }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/graph/infrastructure') {
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        try {
+          const symbols = store.getInfrastructureSymbols(wsHash);
+          const grouped: Record<string, Array<{
+            pattern: string;
+            operations: Array<{ op: string; repo: string; file: string; line: number }>;
+          }>> = {};
+          for (const sym of symbols) {
+            if (!grouped[sym.type]) grouped[sym.type] = [];
+            let patternEntry = grouped[sym.type].find(p => p.pattern === sym.pattern);
+            if (!patternEntry) {
+              patternEntry = { pattern: sym.pattern, operations: [] };
+              grouped[sym.type].push(patternEntry);
+            }
+            patternEntry.operations.push({
+              op: sym.operation,
+              repo: sym.repo,
+              file: sym.filePath,
+              line: sym.lineNumber,
+            });
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ symbols, grouped }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
       if (pathname === '/mcp') {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         

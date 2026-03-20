@@ -190,6 +190,78 @@ describe('REST API v1', () => {
         return;
       }
 
+      if (req.method === 'GET' && pathname === '/api/v1/graph/symbols') {
+        try {
+          const symbols = store.getSymbolsForProject(currentProjectHash);
+          const edges = store.getSymbolEdgesForProject(currentProjectHash);
+          const clusters = store.getSymbolClusters(currentProjectHash);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ symbols, edges, clusters }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/graph/flows') {
+        try {
+          const flows = store.getFlowsWithSteps(currentProjectHash);
+          const flowsWithSteps = flows.map(flow => ({
+            ...flow,
+            steps: store.getFlowSteps(flow.id),
+          }));
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ flows: flowsWithSteps }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/graph/connections') {
+        try {
+          const connections = store.getAllConnections(currentProjectHash);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ connections }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/graph/infrastructure') {
+        try {
+          const symbols = store.getInfrastructureSymbols(currentProjectHash);
+          const grouped: Record<string, Array<{
+            pattern: string;
+            operations: Array<{ op: string; repo: string; file: string; line: number }>;
+          }>> = {};
+          for (const sym of symbols) {
+            if (!grouped[sym.type]) grouped[sym.type] = [];
+            let patternEntry = grouped[sym.type].find(p => p.pattern === sym.pattern);
+            if (!patternEntry) {
+              patternEntry = { pattern: sym.pattern, operations: [] };
+              grouped[sym.type].push(patternEntry);
+            }
+            patternEntry.operations.push({
+              op: sym.operation,
+              repo: sym.repo,
+              file: sym.filePath,
+              line: sym.lineNumber,
+            });
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ symbols, grouped }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
       res.writeHead(404);
       res.end('Not Found');
     });
@@ -358,6 +430,83 @@ describe('REST API v1', () => {
       const data = JSON.parse(res.body);
       expect(data).toHaveProperty('connections');
       expect(Array.isArray(data.connections)).toBe(true);
+    });
+  });
+
+  describe('GET /api/v1/graph/symbols', () => {
+    it('should return symbols, edges, and clusters as JSON', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/graph/symbols`);
+      expect(res.status).toBe(200);
+      const data = JSON.parse(res.body);
+      expect(data).toHaveProperty('symbols');
+      expect(data).toHaveProperty('edges');
+      expect(data).toHaveProperty('clusters');
+      expect(Array.isArray(data.symbols)).toBe(true);
+      expect(Array.isArray(data.edges)).toBe(true);
+      expect(Array.isArray(data.clusters)).toBe(true);
+    });
+
+    it('should return empty arrays when no symbols exist', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/graph/symbols`);
+      expect(res.status).toBe(200);
+      const data = JSON.parse(res.body);
+      expect(data.symbols).toEqual([]);
+      expect(data.edges).toEqual([]);
+      expect(data.clusters).toEqual([]);
+    });
+  });
+
+  describe('GET /api/v1/graph/flows', () => {
+    it('should return flows as JSON', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/graph/flows`);
+      expect(res.status).toBe(200);
+      const data = JSON.parse(res.body);
+      expect(data).toHaveProperty('flows');
+      expect(Array.isArray(data.flows)).toBe(true);
+    });
+
+    it('should return empty array when no flows exist', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/graph/flows`);
+      expect(res.status).toBe(200);
+      const data = JSON.parse(res.body);
+      expect(data.flows).toEqual([]);
+    });
+  });
+
+  describe('GET /api/v1/graph/connections', () => {
+    it('should return connections as JSON', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/graph/connections`);
+      expect(res.status).toBe(200);
+      const data = JSON.parse(res.body);
+      expect(data).toHaveProperty('connections');
+      expect(Array.isArray(data.connections)).toBe(true);
+    });
+
+    it('should return empty array when no connections exist', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/graph/connections`);
+      expect(res.status).toBe(200);
+      const data = JSON.parse(res.body);
+      expect(data.connections).toEqual([]);
+    });
+  });
+
+  describe('GET /api/v1/graph/infrastructure', () => {
+    it('should return infrastructure symbols as JSON', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/graph/infrastructure`);
+      expect(res.status).toBe(200);
+      const data = JSON.parse(res.body);
+      expect(data).toHaveProperty('symbols');
+      expect(data).toHaveProperty('grouped');
+      expect(Array.isArray(data.symbols)).toBe(true);
+      expect(typeof data.grouped).toBe('object');
+    });
+
+    it('should return empty data when no infrastructure symbols exist', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/graph/infrastructure`);
+      expect(res.status).toBe(200);
+      const data = JSON.parse(res.body);
+      expect(data.symbols).toEqual([]);
+      expect(data.grouped).toEqual({});
     });
   });
 
