@@ -329,7 +329,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
 
   const setupWatcher = () => {
     const pathsToWatch: string[] = []
-    const ignoredPatterns: (string | RegExp | ((path: string) => boolean))[] = [/(^|[/\\])\./]
+    const ignoredPatterns: (string | RegExp | ((path: string) => boolean))[] = [/(^|[/\\])\./, /[/\\]node_modules([/\\]|$)/]
     for (const collection of collections) {
       const expandedPath = collection.path.replace(/^~/, os.homedir())
       if (fs.existsSync(expandedPath)) {
