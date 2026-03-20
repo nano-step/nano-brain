@@ -1,7 +1,13 @@
 import Graph from 'graphology';
-import { random } from 'graphology-layout-noverlap/helpers';
 import { GraphEntity, GraphEntitiesResponse } from '../api/client';
 import { typeColorMap } from './colors';
+
+function randomLayout(graph: Graph, scale: number) {
+  graph.forEachNode((node) => {
+    graph.setNodeAttribute(node, 'x', (Math.random() - 0.5) * scale);
+    graph.setNodeAttribute(node, 'y', (Math.random() - 0.5) * scale);
+  });
+}
 
 type GraphNodeMeta = {
   id: string;
@@ -53,7 +59,7 @@ export function buildEntityGraph(data: GraphEntitiesResponse) {
     }
   }
 
-  random.assign(graph, { scale: 800 });
+  randomLayout(graph, 800);
   return graph;
 }
 
@@ -82,7 +88,7 @@ export function buildCodeGraph(files: Array<{ path: string; centrality: number; 
     }
   }
 
-  random.assign(graph, { scale: 900 });
+  randomLayout(graph, 900);
   return graph;
 }
 

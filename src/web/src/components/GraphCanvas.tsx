@@ -47,17 +47,21 @@ function GraphInteractions({ onNodeClick, onNodeHover }: GraphInteractionProps) 
 
 function GraphLayout({ graph }: { graph: Graph }) {
   useEffect(() => {
-    const settings = forceAtlas2.inferSettings(graph);
-    const iterations = Math.min(120, Math.max(40, graph.order));
-    forceAtlas2.assign(graph, {
-      iterations,
-      settings: {
-        ...settings,
-        gravity: 0.6,
-        scalingRatio: 10,
-        slowDown: 10,
-      },
-    });
+    if (graph.order < 2) return;
+    try {
+      const inferred = forceAtlas2.inferSettings(graph);
+      forceAtlas2.assign(graph, {
+        iterations: Math.min(120, Math.max(40, graph.order)),
+        settings: {
+          ...(inferred ?? {}),
+          gravity: 0.6,
+          scalingRatio: 10,
+          slowDown: 10,
+        },
+      });
+    } catch {
+      // graph may lack edges for layout — positions from random init are fine
+    }
   }, [graph]);
   return null;
 }
