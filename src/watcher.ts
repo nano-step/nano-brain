@@ -329,7 +329,17 @@ export function startWatcher(options: WatcherOptions): Watcher {
 
   const setupWatcher = () => {
     const pathsToWatch: string[] = []
-    const ignoredPatterns: (string | RegExp | ((path: string) => boolean))[] = [/(^|[/\\])\./, /[/\\]node_modules([/\\]|$)/]
+    // Function-based ignore so chokidar skips entire directory trees BEFORE opening them.
+    // Regex-only ignored still causes EMFILE because chokidar opens dirs before filtering.
+    const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '__pycache__', '.venv', 'venv', '.tox', 'target', 'vendor', '.bundle'])
+    const ignoredPatterns: (string | RegExp | ((path: string) => boolean))[] = [
+      (p: string) => {
+        const base = path.basename(p)
+        if (SKIP_DIRS.has(base)) return true
+        if (base.startsWith('.') && base !== '.nano-brain') return true
+        return false
+      },
+    ]
     for (const collection of collections) {
       const expandedPath = collection.path.replace(/^~/, os.homedir())
       if (fs.existsSync(expandedPath)) {
