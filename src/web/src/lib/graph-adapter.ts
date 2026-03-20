@@ -52,7 +52,7 @@ export function buildEntityGraph(data: GraphEntitiesResponse) {
     if (graph.hasNode(source) && graph.hasNode(target)) {
       graph.addEdgeWithKey(String(edge.id), source, target, {
         label: edge.edgeType,
-        type: edge.edgeType,
+        edgeType: edge.edgeType,
         size: 1,
         color: 'rgba(148, 163, 184, 0.4)',
       });
