@@ -78,12 +78,22 @@ export default function GraphCanvas({ graph, onNodeClick, onNodeHover }: GraphCa
       renderEdgeLabels: true,
       labelDensity: 0.5,
       zIndex: true,
+      defaultNodeColor: '#64748b',
+      defaultEdgeColor: 'rgba(148, 163, 184, 0.4)',
+      labelColor: { color: '#e4e4ed' },
+      labelFont: 'Space Grotesk, system-ui, sans-serif',
+      labelRenderedSizeThreshold: 8,
     }),
     []
   );
 
   return (
-    <SigmaContainer key={key} graph={graph} settings={settings} className="h-full w-full">
+    <SigmaContainer
+      key={key}
+      settings={settings}
+      className="h-full w-full"
+      style={{ background: '#0d0d14' }}
+    >
       <GraphLoader graph={graph} />
       <GraphLayout graph={graph} />
       <GraphInteractions onNodeClick={onNodeClick} onNodeHover={onNodeHover} />
