@@ -595,6 +595,34 @@ async function handleServe(globalOpts: GlobalOptions, commandArgs: string[]): Pr
     return handleMcp(globalOpts, ['--http', `--port=${port}`, '--host=0.0.0.0', '--daemon', ...(root ? [`--root=${root}`] : [])]);
   }
 
+  // --force: stop existing server before starting
+  if (force) {
+    try {
+      if (fs.existsSync(SERVE_PID_FILE)) {
+        const existingPid = parseInt(fs.readFileSync(SERVE_PID_FILE, 'utf-8').trim(), 10);
+        try { process.kill(existingPid, 'SIGTERM'); } catch {}
+        cliOutput(`Stopped existing server (PID: ${existingPid})`);
+        fs.unlinkSync(SERVE_PID_FILE);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    } catch {}
+    const portBusy = await detectRunningServer(port);
+    if (portBusy) {
+      const platform = process.platform;
+      if (platform === 'darwin' || platform === 'linux') {
+        try {
+          const cmd = platform === 'darwin' ? `lsof -ti tcp:${port}` : `lsof -ti tcp:${port} 2>/dev/null || fuser ${port}/tcp 2>/dev/null`;
+          const raw = execSync(cmd, { encoding: 'utf-8' }).trim();
+          for (const pidStr of raw.split(/\s+/)) {
+            const pid = parseInt(pidStr, 10);
+            if (pid > 0) { try { process.kill(pid, 'SIGKILL'); } catch {} }
+          }
+          await new Promise(r => setTimeout(r, 500));
+        } catch {}
+      }
+    }
+  }
+
   // Check if already running via PID file
   let pidAlive = false;
   try {
@@ -602,7 +630,7 @@ async function handleServe(globalOpts: GlobalOptions, commandArgs: string[]): Pr
       const existingPid = parseInt(fs.readFileSync(SERVE_PID_FILE, 'utf-8').trim(), 10);
       process.kill(existingPid, 0);
       pidAlive = true;
-      cliOutput(`Server already running (PID: ${existingPid}). Stop first: npx nano-brain serve stop`);
+      cliOutput(`Server already running (PID: ${existingPid}). Stop first or use: npx nano-brain serve start --force`);
       return;
     }
   } catch {
@@ -612,7 +640,7 @@ async function handleServe(globalOpts: GlobalOptions, commandArgs: string[]): Pr
   // Secondary check: verify if port is already in use by another instance
   const isPortActive = await detectRunningServer(port);
   if (isPortActive) {
-    cliOutput(`Port ${port} is in use by an orphaned process. Run: npx nano-brain serve stop --force`);
+    cliOutput(`Port ${port} is in use by an orphaned process. Run: npx nano-brain serve start --force`);
     return;
   }
 
