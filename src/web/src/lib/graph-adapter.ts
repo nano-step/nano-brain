@@ -136,19 +136,21 @@ export function buildSymbolGraph(data: SymbolsResponse, clusterMode: boolean) {
     for (const edge of data.edges) {
       const src = symbolById.get(edge.source_id);
       const tgt = symbolById.get(edge.target_id);
-      if (src?.cluster_id !== null && tgt?.cluster_id !== null && src?.cluster_id !== tgt?.cluster_id) {
-        const key = `cluster-${src.cluster_id}->cluster-${tgt.cluster_id}`;
-        clusterEdges.set(key, (clusterEdges.get(key) || 0) + 1);
-      }
+      if (!src || !tgt || src.cluster_id == null || tgt.cluster_id == null) continue;
+      if (src.cluster_id === tgt.cluster_id) continue;
+      const key = `cluster-${src.cluster_id}||cluster-${tgt.cluster_id}`;
+      clusterEdges.set(key, (clusterEdges.get(key) || 0) + 1);
     }
     for (const [key, count] of clusterEdges) {
-      const [src, tgt] = key.split('->');
-      if (graph.hasNode(src) && graph.hasNode(tgt)) {
-        graph.addEdge(src, tgt, {
-          label: `${count} calls`,
-          size: Math.min(5, 1 + count * 0.2),
-          color: 'rgba(148,163,184,0.4)',
-        });
+      const [srcNode, tgtNode] = key.split('||');
+      if (graph.hasNode(srcNode) && graph.hasNode(tgtNode)) {
+        try {
+          graph.addEdge(srcNode, tgtNode, {
+            label: `${count}`,
+            size: Math.min(5, 1 + count * 0.2),
+            color: 'rgba(148,163,184,0.4)',
+          });
+        } catch { /* duplicate edge */ }
       }
     }
   } else {
