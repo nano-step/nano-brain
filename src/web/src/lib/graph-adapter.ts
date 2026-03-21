@@ -108,25 +108,25 @@ export function buildSymbolGraph(data: SymbolsResponse, clusterMode: boolean) {
 
   if (clusterMode && data.clusters.length > 0) {
     for (const cluster of data.clusters) {
-      graph.addNode(`cluster-${cluster.cluster_id}`, {
-        id: `cluster-${cluster.cluster_id}`,
-        label: `Cluster ${cluster.cluster_id} (${cluster.member_count})`,
+      graph.addNode(`cluster-${cluster.clusterId}`, {
+        id: `cluster-${cluster.clusterId}`,
+        label: `Cluster ${cluster.clusterId} (${cluster.memberCount})`,
         entityType: 'cluster',
-        size: Math.max(10, Math.min(40, 10 + cluster.member_count * 0.5)),
-        color: fallbackColors[cluster.cluster_id % fallbackColors.length],
+        size: Math.max(10, Math.min(40, 10 + cluster.memberCount * 0.5)),
+        color: fallbackColors[cluster.clusterId % fallbackColors.length],
       } satisfies SymbolNodeMeta);
     }
 
     for (const sym of data.symbols) {
-      if (sym.cluster_id === null) {
+      if (sym.clusterId === null) {
         graph.addNode(String(sym.id), {
           id: String(sym.id),
           label: sym.name,
           entityType: sym.kind,
           size: 6,
           color: symbolKindColorMap[sym.kind] || '#64748b',
-          filePath: sym.file_path,
-          startLine: sym.start_line,
+          filePath: sym.filePath,
+          startLine: sym.startLine,
         } satisfies SymbolNodeMeta);
       }
     }
@@ -134,11 +134,11 @@ export function buildSymbolGraph(data: SymbolsResponse, clusterMode: boolean) {
     const clusterEdges = new Map<string, number>();
     const symbolById = new Map(data.symbols.map((sym) => [sym.id, sym]));
     for (const edge of data.edges) {
-      const src = symbolById.get(edge.source_id);
-      const tgt = symbolById.get(edge.target_id);
-      if (!src || !tgt || src.cluster_id == null || tgt.cluster_id == null) continue;
-      if (src.cluster_id === tgt.cluster_id) continue;
-      const key = `cluster-${src.cluster_id}||cluster-${tgt.cluster_id}`;
+      const src = symbolById.get(edge.sourceId);
+      const tgt = symbolById.get(edge.targetId);
+      if (!src || !tgt || src.clusterId == null || tgt.clusterId == null) continue;
+      if (src.clusterId === tgt.clusterId) continue;
+      const key = `cluster-${src.clusterId}||cluster-${tgt.clusterId}`;
       clusterEdges.set(key, (clusterEdges.get(key) || 0) + 1);
     }
     for (const [key, count] of clusterEdges) {
@@ -161,18 +161,18 @@ export function buildSymbolGraph(data: SymbolsResponse, clusterMode: boolean) {
         entityType: sym.kind,
         size: 6,
         color: symbolKindColorMap[sym.kind] || '#64748b',
-        filePath: sym.file_path,
-        startLine: sym.start_line,
-        clusterId: sym.cluster_id,
+        filePath: sym.filePath,
+        startLine: sym.startLine,
+        clusterId: sym.clusterId,
       } satisfies SymbolNodeMeta);
     }
     for (const edge of data.edges) {
-      const src = String(edge.source_id);
-      const tgt = String(edge.target_id);
+      const src = String(edge.sourceId);
+      const tgt = String(edge.targetId);
       if (graph.hasNode(src) && graph.hasNode(tgt)) {
         graph.addEdge(src, tgt, {
-          label: edge.edge_type,
-          edgeType: edge.edge_type,
+          label: edge.edgeType,
+          edgeType: edge.edgeType,
           size: 1,
           color: edgeTypeColorMap[edge.edge_type] || 'rgba(148, 163, 184, 0.3)',
         });

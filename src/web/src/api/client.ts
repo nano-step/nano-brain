@@ -68,45 +68,45 @@ export type SymbolNode = {
   id: number;
   name: string;
   kind: string;
-  file_path: string;
-  start_line: number;
-  end_line: number;
+  filePath: string;
+  startLine: number;
+  endLine: number;
   exported: number;
-  cluster_id: number | null;
+  clusterId: number | null;
 };
 
 export type SymbolEdge = {
   id: number;
-  source_id: number;
-  target_id: number;
-  edge_type: string;
+  sourceId: number;
+  targetId: number;
+  edgeType: string;
   confidence: number;
 };
 
 export type SymbolsResponse = {
   symbols: SymbolNode[];
   edges: SymbolEdge[];
-  clusters: Array<{ cluster_id: number; member_count: number }>;
+  clusters: Array<{ clusterId: number; memberCount: number }>;
 };
 
 export type FlowStep = {
-  step_index: number;
-  symbol_id: number;
+  stepIndex: number;
+  symbolId: number;
   name: string;
   kind: string;
-  file_path: string;
-  start_line: number;
+  filePath: string;
+  startLine: number;
 };
 
 export type Flow = {
   id: number;
   label: string;
-  flow_type: string;
-  step_count: number;
-  entry_name: string;
-  entry_file: string;
-  terminal_name: string;
-  terminal_file: string;
+  flowType: string;
+  stepCount: number;
+  entryName: string;
+  entryFile: string;
+  terminalName: string;
+  terminalFile: string;
   steps: FlowStep[];
 };
 

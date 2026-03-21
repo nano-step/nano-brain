@@ -30,8 +30,8 @@ export default function SymbolGraph() {
 
   const selectedSymbol = data?.symbols.find((s) => String(s.id) === selectedNode);
 
-  const callers = data?.edges.filter((e) => String(e.target_id) === selectedNode).length ?? 0;
-  const callees = data?.edges.filter((e) => String(e.source_id) === selectedNode).length ?? 0;
+  const callers = data?.edges.filter((e) => String(e.targetId) === selectedNode).length ?? 0;
+  const callees = data?.edges.filter((e) => String(e.sourceId) === selectedNode).length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -74,12 +74,12 @@ export default function SymbolGraph() {
           {selectedSymbol ? (
             <NodeDetail
               title={selectedSymbol.name}
-              subtitle={`${selectedSymbol.kind} · ${selectedSymbol.file_path.split('/').pop()}:${selectedSymbol.start_line}`}
-              description={selectedSymbol.file_path}
+              subtitle={`${selectedSymbol.kind} · ${selectedSymbol.filePath?.split('/').pop()}:${selectedSymbol.startLine}`}
+              description={selectedSymbol.filePath}
               meta={[
                 { label: 'Kind', value: selectedSymbol.kind },
                 { label: 'Exported', value: selectedSymbol.exported ? 'Yes' : 'No' },
-                { label: 'Cluster', value: selectedSymbol.cluster_id ?? '—' },
+                { label: 'Cluster', value: selectedSymbol.clusterId ?? '—' },
                 { label: 'Callers', value: callers },
                 { label: 'Callees', value: callees },
               ]}
