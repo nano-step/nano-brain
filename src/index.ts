@@ -311,6 +311,10 @@ nano-brain - Memory system with hybrid search
     --json          Output as JSON
     --save          Save results as baseline
     --compare       Compare with last saved baseline
+  docker            Manage nano-brain Docker services
+    start           Start nano-brain + qdrant containers
+    stop            Stop all containers
+    status          Show container and API health
   qdrant            Manage Qdrant vector store
     up              Start Qdrant via Docker, configure as vector provider
     down            Stop Qdrant, switch back to sqlite-vec
@@ -3877,6 +3881,149 @@ async function handleLearning(globalOpts: GlobalOptions, commandArgs: string[]):
   process.exit(1);
 }
 
+async function handleDocker(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
+  const subcommand = commandArgs[0];
+
+  if (!subcommand) {
+    cliError('Missing docker subcommand (start, stop, status)');
+    process.exit(1);
+  }
+
+  log('cli', 'docker subcommand=' + subcommand);
+
+  const packageRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const composeFile = path.join(packageRoot, 'docker-compose.yml');
+
+  if (!fs.existsSync(composeFile)) {
+    cliError('docker-compose.yml not found at ' + composeFile);
+    process.exit(1);
+  }
+
+  const env = {
+    ...process.env,
+    NANO_BRAIN_APP: packageRoot,
+    NANO_BRAIN_HOME: NANO_BRAIN_HOME,
+  };
+
+  switch (subcommand) {
+    case 'start': {
+      const configTarget = path.join(NANO_BRAIN_HOME, 'config.yml');
+      const defaultConfig = path.join(packageRoot, 'config.default.yml');
+      if (!fs.existsSync(configTarget) && fs.existsSync(defaultConfig)) {
+        fs.mkdirSync(NANO_BRAIN_HOME, { recursive: true });
+        fs.copyFileSync(defaultConfig, configTarget);
+        cliOutput('Created default config at ' + configTarget);
+      }
+
+      for (const dir of ['data', 'memory', 'sessions', 'logs']) {
+        fs.mkdirSync(path.join(NANO_BRAIN_HOME, dir), { recursive: true });
+      }
+
+      cliOutput('Starting nano-brain + qdrant...');
+      try {
+        execSync(`docker compose -f "${composeFile}" up -d`, { stdio: 'inherit', env });
+      } catch {
+        cliError('Failed to start. Is Docker running?');
+        process.exit(1);
+      }
+
+      const healthUrl = 'http://localhost:3100/health';
+      let healthy = false;
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const res = await fetch(healthUrl);
+          if (res.ok) {
+            healthy = true;
+            break;
+          }
+        } catch {}
+        cliOutput(`Waiting for nano-brain... (${i + 1}/10)`);
+      }
+
+      if (healthy) {
+        cliOutput('✅ nano-brain is running on http://localhost:3100');
+      } else {
+        cliError('nano-brain did not become healthy. Check: docker logs nano-brain-server');
+      }
+      break;
+    }
+
+    case 'stop': {
+      cliOutput('Stopping nano-brain + qdrant...');
+      try {
+        execSync(`docker compose -f "${composeFile}" down`, { stdio: 'inherit', env });
+      } catch {
+        cliError('Failed to stop containers');
+        process.exit(1);
+      }
+      cliOutput('✅ Stopped. Data persists in ~/.nano-brain and Docker volumes.');
+      break;
+    }
+
+    case 'status': {
+      let containerOutput = '';
+      try {
+        containerOutput = execSync(
+          `docker compose -f "${composeFile}" ps --format json 2>/dev/null`,
+          { env, encoding: 'utf-8' }
+        ).trim();
+      } catch {
+      }
+
+      cliOutput('nano-brain Docker Status');
+      cliOutput('═══════════════════════════════════════════════════');
+
+      if (containerOutput) {
+        const lines = containerOutput.split('\n').filter(l => l.trim());
+        for (const line of lines) {
+          try {
+            const info = JSON.parse(line);
+            const name = info.Name || info.Service || 'unknown';
+            const state = info.State || info.Status || 'unknown';
+            const health = info.Health || '';
+            const icon = state === 'running' ? '✅' : '❌';
+            cliOutput(`  ${icon} ${name}: ${state}${health ? ` (${health})` : ''}`);
+          } catch {
+            cliOutput(`  ${line}`);
+          }
+        }
+      } else {
+        cliOutput('  ❌ No containers running');
+      }
+
+      cliOutput('');
+      try {
+        const res = await fetch('http://localhost:3100/health');
+        if (res.ok) {
+          cliOutput('  API: ✅ http://localhost:3100');
+        } else {
+          cliOutput('  API: ❌ unhealthy (status ' + res.status + ')');
+        }
+      } catch {
+        cliOutput('  API: ❌ not reachable');
+      }
+
+      try {
+        const res = await fetch('http://localhost:6333/healthz');
+        if (res.ok) {
+          cliOutput('  Qdrant: ✅ http://localhost:6333');
+        } else {
+          cliOutput('  Qdrant: ❌ unhealthy');
+        }
+      } catch {
+        cliOutput('  Qdrant: ❌ not reachable');
+      }
+
+      break;
+    }
+
+    default:
+      cliError(`Unknown docker subcommand: ${subcommand}. Use: start, stop, status`);
+      process.exit(1);
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -3894,7 +4041,7 @@ async function main() {
   // Daemon mode (serve or mcp --daemon) skips early resolution — startServer() resolves
   // using the correct workspace root from config.yml instead of process.cwd()
   const isDaemonMode = command === 'serve' || (command === 'mcp' && commandArgs.includes('--daemon'));
-  if (command !== 'init' && !isDaemonMode) {
+  if (command !== 'init' && command !== 'docker' && !isDaemonMode) {
     globalOpts.dbPath = resolveDbPath(globalOpts.dbPath, process.cwd());
   }
 
@@ -3941,6 +4088,8 @@ async function main() {
       return handleImpact(globalOpts, commandArgs);
     case 'logs':
       return handleLogs(commandArgs);
+    case 'docker':
+      return handleDocker(globalOpts, commandArgs);
     case 'qdrant':
       return handleQdrant(globalOpts, commandArgs);
     case 'reset':
