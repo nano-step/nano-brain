@@ -5,46 +5,43 @@
 
 This project uses **nano-brain** for persistent context across sessions.
 
+> **Container setup required:** Each agent container must install the wrapper script to avoid
+> SQLite conflicts. See your project's nano-brain setup guide.
+
 ### Quick Reference
 
-All commands use the CLI via Bash tool:
+All commands use HTTP API (nano-brain runs as Docker service on port 3100):
 
 | I want to... | Command |
 |--------------|---------|
-| Recall past work on a topic | `npx nano-brain query "topic"` |
-| Find exact error/function name | `npx nano-brain search "exact term"` |
-| Explore a concept semantically | `npx nano-brain vsearch "concept"` |
-| Save a decision for future sessions | Create file in `~/.nano-brain/memory/`, then `npx nano-brain update` |
-| Check index health | `npx nano-brain status` |
-| Write a note with tags | `npx nano-brain write "content" --tags=decision,auth` |
-| Supersede old info | `npx nano-brain write "new info" --supersedes=<path>` |
-| See file dependencies | `npx nano-brain focus src/server.ts` |
-| Find cross-repo Redis usage | `npx nano-brain symbols --type=redis_key --pattern="sinv:*"` |
-| Analyze cross-repo impact | `npx nano-brain impact --type=redis_key --pattern="sinv:*:compressed"` |
-| Search across all workspaces | `npx nano-brain query "topic" --scope=all` |
-| Filter by tags | `npx nano-brain query "topic" --tags=decision` |
+| Recall past work on a topic | `curl -s localhost:3100/api/query -d '{"query":"topic"}'` |
+| Find exact error/function name | `curl -s localhost:3100/api/search -d '{"query":"exact term"}'` |
+| Explore a concept semantically | `curl -s localhost:3100/api/query -d '{"query":"concept"}'` |
+| Save a decision for future sessions | `curl -s localhost:3100/api/write -d '{"content":"...","tags":"decision"}'` |
+| Check index health | `curl -s localhost:3100/api/status` |
+| Write a note with tags | `curl -s localhost:3100/api/write -d '{"content":"...","tags":"decision,auth"}'` |
+| Supersede old info | `curl -s localhost:3100/api/write -d '{"content":"new info","supersedes":"<path>"}'` |
+| See file dependencies | Use MCP tool: `memory_focus` with `{"filePath":"src/server.ts"}` |
+| Find cross-repo Redis usage | Use MCP tool: `memory_symbols` with `{"type":"redis_key","pattern":"sinv:*"}` |
+| Analyze cross-repo impact | Use MCP tool: `memory_impact` with `{"type":"redis_key","pattern":"sinv:*:compressed"}` |
+| Search across all workspaces | `curl -s localhost:3100/api/query -d '{"query":"topic","scope":"all"}'` |
+| Filter by tags | `curl -s localhost:3100/api/query -d '{"query":"topic","tags":"decision"}'` |
 
 ### Session Workflow
 
 **Start of session:** Check memory for relevant past context before exploring the codebase.
 ```
-npx nano-brain query "what have we done regarding {current task topic}"
+curl -s localhost:3100/api/query -d '{"query":"what have we done regarding {current task topic}"}'
 ```
 
 **End of session:** Save key decisions, patterns discovered, and debugging insights.
 ```bash
-cat > ~/.nano-brain/memory/$(date +%Y-%m-%d)-summary.md << 'EOF'
-## Summary
-- Decision: ...
-- Why: ...
-- Files: ...
-EOF
-npx nano-brain update
+curl -s localhost:3100/api/write -d '{"content":"## Summary\n- Decision: ...\n- Why: ...\n- Files: ...","tags":"summary"}'
 ```
 
 ### When to Search Memory vs Codebase
 
-- **"Have we done this before?"** → `npx nano-brain query` (searches past sessions)
+- **"Have we done this before?"** → `curl -s localhost:3100/api/query` (searches past sessions)
 - **"Where is this in the code?"** → grep / ast-grep (searches current files)
 - **"How does this concept work here?"** → Both (memory for past context + grep for current code)
 

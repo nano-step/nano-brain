@@ -2530,14 +2530,14 @@ async function handleQdrant(globalOpts: GlobalOptions, commandArgs: string[]): P
 
   log('cli', 'qdrant subcommand=' + subcommand);
 
-  const composeSource = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'docker-compose.qdrant.yml');
-  const composeTarget = path.join(NANO_BRAIN_HOME, 'docker-compose.qdrant.yml');
+  const composeSource = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'docker-compose.yml');
+  const composeTarget = path.join(NANO_BRAIN_HOME, 'docker-compose.yml');
 
   switch (subcommand) {
     case 'up': {
       if (!fs.existsSync(composeTarget)) {
         if (!fs.existsSync(composeSource)) {
-          cliError('❌ docker-compose.qdrant.yml not found in package');
+          cliError('❌ docker-compose.yml not found in package');
           process.exit(1);
         }
         fs.mkdirSync(path.dirname(composeTarget), { recursive: true });

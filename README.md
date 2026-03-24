@@ -235,8 +235,7 @@ Heading-aware markdown chunking that respects document structure:
 - `flows` — detected call flows (entry → leaf)
 
 **Qdrant** (optional, production vector store):
-- Managed via `qdrant up/down/status/migrate/verify/activate/cleanup` commands
-- Docker-based deployment
+- Included in `nano-brain docker start` compose stack, or managed standalone via `qdrant up/down/status` commands
 - Automatic migration from sqlite-vec
 - Verification and cleanup tools
 
@@ -409,24 +408,45 @@ npx nano-brain init --root=/path/to/your/project
 npx nano-brain status
 ```
 
+### Docker Deployment (Recommended)
+
+The simplest way to run nano-brain as a persistent service:
+
+```bash
+# Start nano-brain + Qdrant containers
+npx nano-brain docker start
+
+# Check status
+npx nano-brain docker status
+
+# Stop
+npx nano-brain docker stop
+```
+
+This runs the bundled `docker-compose.yml` which starts nano-brain (HTTP/SSE on port 3100) and Qdrant (ports 6333/6334). A `config.default.yml` is included as a starting template — copy it to `~/.nano-brain/config.yml` and customize.
+
+**Environment variables:**
+- `NANO_BRAIN_APP` — Path to nano-brain source directory (default: package install location)
+- `NANO_BRAIN_HOME` — Path to `~/.nano-brain` data directory (default: `~/.nano-brain`)
+
+**HTTP API** (available when Docker is running):
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/api/status` | GET | Index health, collections, model status |
+| `/api/query` | POST | Hybrid search (body: `{query, tags, scope, limit}`) |
+| `/api/search` | POST | BM25 keyword search (body: `{query, limit}`) |
+| `/api/write` | POST | Write memory (body: `{content, tags, supersedes}`) |
+| `/api/reindex` | POST | Trigger reindex (body: `{root}`) |
+| `/mcp` | — | MCP endpoint (for AI agent integration) |
+| `/sse` | — | SSE transport (for MCP remote clients) |
+
 ### MCP Configuration
 
 Add to your AI agent's MCP config (e.g., `~/.config/opencode/opencode.json`):
 
-**Local mode (stdio):**
-```json
-{
-  "mcp": {
-    "nano-brain": {
-      "type": "local",
-      "command": ["npx", "nano-brain", "mcp"],
-      "enabled": true
-    }
-  }
-}
-```
-
-**Remote mode (HTTP/SSE, for Docker/containers):**
+**Docker mode (recommended):**
 ```json
 {
   "mcp": {
@@ -439,12 +459,36 @@ Add to your AI agent's MCP config (e.g., `~/.config/opencode/opencode.json`):
 }
 ```
 
-Start the remote server:
+Start the server via Docker:
 ```bash
-npx nano-brain serve              # Background daemon (port 3100)
-npx nano-brain serve --foreground # Foreground (for debugging)
-npx nano-brain serve status       # Check if running
-npx nano-brain serve stop         # Stop daemon
+npx nano-brain docker start       # Start nano-brain + Qdrant containers
+npx nano-brain docker status      # Check if running
+npx nano-brain docker stop        # Stop containers
+```
+
+**Local mode (stdio, for development):**
+```json
+{
+  "mcp": {
+    "nano-brain": {
+      "type": "local",
+      "command": ["npx", "nano-brain", "mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+**Claude Code (`.mcp.json`):**
+```json
+{
+  "mcpServers": {
+    "nano-brain": {
+      "command": "npx",
+      "args": ["mcp-remote", "http://localhost:3100/sse"]
+    }
+  }
+}
 ```
 
 ## Configuration
@@ -576,7 +620,7 @@ logging:
 └── logs/         # Application logs
 ```
 
-## CLI Commands (24 Total)
+## CLI Commands (27 Total)
 
 ### Setup & Initialization
 
@@ -602,6 +646,22 @@ nano-brain serve stop         # Stop the daemon
 nano-brain serve --foreground # Run in foreground (for debugging)
 nano-brain serve --port=8080  # Custom port
 ```
+
+### Docker Deployment
+
+```bash
+nano-brain docker start       # Start nano-brain + Qdrant via docker compose
+nano-brain docker status      # Check container status
+nano-brain docker stop        # Stop containers
+```
+
+The `docker start` command runs the bundled `docker-compose.yml` which starts:
+- **nano-brain** — HTTP/SSE server on port 3100 (node:22-slim)
+- **Qdrant** — Vector store on ports 6333/6334
+
+Environment variables for volume mounts:
+- `NANO_BRAIN_APP` — Path to nano-brain source (default: current directory)
+- `NANO_BRAIN_HOME` — Path to data directory (default: `~/.nano-brain`)
 
 ### Search
 
@@ -651,6 +711,8 @@ nano-brain rm <workspace>                   # Remove workspace and all its data
 ```
 
 ### Qdrant Management
+
+> **Note:** If using `nano-brain docker start`, Qdrant is already included in the compose stack. These commands manage a standalone Qdrant container separately.
 
 ```bash
 nano-brain qdrant up            # Start Qdrant Docker container
