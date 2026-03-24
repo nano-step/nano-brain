@@ -25,7 +25,7 @@ services:
     environment:
       - NODE_ENV=production
     command: >
-      sh -c "npm install --production --prefer-offline &&
+      sh -c "npm install --omit=dev --prefer-offline --legacy-peer-deps &&
              npx tsx src/index.ts mcp --http --port=3100 --host=0.0.0.0"
     depends_on:
       - qdrant
