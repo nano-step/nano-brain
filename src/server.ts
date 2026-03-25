@@ -3746,15 +3746,10 @@ export async function startServer(options: ServerOptions): Promise<void> {
         store.modelStatus.embedding = loadedEmbedder ? loadedEmbedder.getModel() : 'missing';
         if (loadedEmbedder) {
           store.ensureVecTable(loadedEmbedder.getDimensions());
-          if (vectorStore) {
-            vectorStore.health().then((health) => {
-              if (health.ok && health.dimensions && health.dimensions !== loadedEmbedder.getDimensions()) {
-                log('server', `DIMENSION MISMATCH: qdrant=${health.dimensions}, embedder=${loadedEmbedder.getDimensions()}`, 'error');
-                log('server', 'Vector search DISABLED. Run: npx nano-brain recreate-vectors', 'error');
-                log('server', 'dimension mismatch qdrant=' + health.dimensions + ' embedder=' + loadedEmbedder.getDimensions() + ' — disabling vector search');
-                store.setVectorStore(null);
-              }
-            }).catch(() => {});
+          if (config?.vector?.provider === 'qdrant' && config.vector.url) {
+            const correctStore = createVectorStore({ ...config.vector, dimensions: loadedEmbedder.getDimensions() });
+            store.setVectorStore(correctStore);
+            log('server', 'vector store reinitialized dims=' + loadedEmbedder.getDimensions());
           }
         }
         log('server', 'Embedding provider initialized model=' + store.modelStatus.embedding);

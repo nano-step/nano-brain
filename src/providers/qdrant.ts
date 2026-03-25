@@ -43,8 +43,9 @@ export class QdrantVecStore implements VectorStore {
       url: resolvedUrl,
       apiKey: options.apiKey,
     });
-    this.collectionName = options.collection ?? 'nano-brain';
+    const baseName = options.collection ?? 'nano-brain';
     this.dimensions = options.dimensions ?? 1024;
+    this.collectionName = `${baseName}-${this.dimensions}`;
   }
 
   async ensureCollection(): Promise<void> {
