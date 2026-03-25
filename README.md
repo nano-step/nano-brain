@@ -428,6 +428,7 @@ This runs the bundled `docker-compose.yml` which starts nano-brain (HTTP/SSE on 
 **Environment variables:**
 - `NANO_BRAIN_APP` — Path to nano-brain source directory (default: package install location)
 - `NANO_BRAIN_HOME` — Path to `~/.nano-brain` data directory (default: `~/.nano-brain`)
+- `NANO_BRAIN_WORKSPACE` — Path to your project workspace to index (mounted read-only and passed as `--root`)
 
 **HTTP API** (available when Docker is running):
 
@@ -662,6 +663,7 @@ The `docker start` command runs the bundled `docker-compose.yml` which starts:
 Environment variables for volume mounts:
 - `NANO_BRAIN_APP` — Path to nano-brain source (default: current directory)
 - `NANO_BRAIN_HOME` — Path to data directory (default: `~/.nano-brain`)
+- `NANO_BRAIN_WORKSPACE` — Path to your project workspace to index as codebase (mounted read-only, passed as `--root`)
 
 ### Search
 
