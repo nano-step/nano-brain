@@ -203,18 +203,20 @@ class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
   private model: string;
   private apiKey: string;
   private dimensions: number | null = null;
+  private outputDimensions: number;
   private maxChars: number;
   private requestTimestamps: number[] = [];
   private rpmLimit: number;
   private onTokenUsage?: (model: string, tokens: number) => void;
 
-  constructor(baseUrl: string, model: string, apiKey: string, maxChars?: number, rpmLimit?: number, onTokenUsage?: (model: string, tokens: number) => void) {
+  constructor(baseUrl: string, model: string, apiKey: string, maxChars?: number, rpmLimit?: number, onTokenUsage?: (model: string, tokens: number) => void, outputDimensions?: number) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.apiKey = apiKey;
     this.maxChars = maxChars ?? 8000;
     this.rpmLimit = rpmLimit ?? 40;
     this.onTokenUsage = onTokenUsage;
+    this.outputDimensions = outputDimensions ?? 1024;
   }
 
   private truncate(text: string): string {
@@ -277,6 +279,7 @@ class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
       model: this.model,
       input: [this.truncate(text)],
       input_type: 'query',
+      dimensions: this.outputDimensions,
     }, 10000);
 
     const embedding = data.data[0]?.embedding;
@@ -322,6 +325,7 @@ class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
         model: this.model,
         input: batch,
         input_type: 'document',
+        dimensions: this.outputDimensions,
       }, 120000);
 
       if (data.usage?.total_tokens && this.onTokenUsage) {
@@ -391,7 +395,7 @@ export async function createEmbeddingProvider(
     }
 
     try {
-      const provider = new OpenAICompatibleEmbeddingProvider(url, model, apiKey, config.maxChars, config.rpmLimit, options?.onTokenUsage);
+      const provider = new OpenAICompatibleEmbeddingProvider(url, model, apiKey, config.maxChars, config.rpmLimit, options?.onTokenUsage, config.dimensions);
       await provider.embed('test');
       log('embed', 'Using OpenAI-compatible provider: ' + model + ' at ' + url + ' (' + provider.getRpmLimit() + ' rpm)');
       return provider;

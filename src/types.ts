@@ -131,6 +131,7 @@ export interface EmbeddingConfig {
   apiKey?: string
   maxChars?: number
   rpmLimit?: number
+  dimensions?: number
 }
 
 export interface RerankerConfig {
