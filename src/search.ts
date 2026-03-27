@@ -469,7 +469,7 @@ export async function hybridSearch(
   const useReranking = options.useReranking ?? config.reranking.enabled;
   const topK = options.topK ?? config.top_k;
   
-  log('search', 'hybridSearch query=' + query + ' limit=' + limit + ' collection=' + (collection || 'all') + ' expansion=' + useExpansion + ' reranking=' + useReranking);
+  log('search', 'hybridSearch START query=' + query + ' limit=' + limit + ' expansion=' + useExpansion + ' reranking=' + useReranking + ' hasEmbedder=' + !!providers.embedder + ' hasExpander=' + !!providers.expander);
   
   const { embedder, reranker, expander } = providers;
   
@@ -507,6 +507,7 @@ export async function hybridSearch(
     }
   }
   
+  log('search', 'hybridSearch expansion done queries=' + queries.length);
   const searchPromises = queries.map(async (q, i) => {
     const isOriginal = i === 0;
     const weight = isOriginal ? 2 : config.expansion.weight;
@@ -542,7 +543,9 @@ export async function hybridSearch(
     return { ftsResults, vecResults, weight };
   });
 
+  log('search', 'hybridSearch awaiting searchPromises...');
   const searchResults = await Promise.all(searchPromises);
+  log('search', 'hybridSearch searchPromises resolved');
 
   const allResultSets: SearchResult[][] = [];
   const weights: number[] = [];
@@ -560,6 +563,7 @@ export async function hybridSearch(
   }
   log('search', 'hybridSearch fts=' + totalFts + ' vec=' + totalVec);
 
+  log('search', 'hybridSearch fusing results...');
   if (db && projectHash) {
     const symbolGraph = new SymbolGraph(db);
     for (let i = 0; i < queries.length; i++) {

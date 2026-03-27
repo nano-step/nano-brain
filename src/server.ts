@@ -2991,6 +2991,14 @@ export async function startServer(options: ServerOptions): Promise<void> {
     const eventStoreCleanupInterval = setInterval(() => eventStore.cleanup(), 60000);
     eventStoreCleanupInterval.unref();
 
+    const readBody = (req: http.IncomingMessage): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => resolve(Buffer.concat(chunks).toString()));
+        req.on('error', reject);
+      });
+
     httpServer = http.createServer(async (req, res) => {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       const pathname = url.pathname;
@@ -3090,8 +3098,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       }
 
       if (req.method === 'POST' && pathname === '/api/query') {
-        let body = '';
-        for await (const chunk of req) body += chunk;
+        const body = await readBody(req);
         try {
           const { query, tags, scope, limit } = JSON.parse(body);
           if (!query) {
@@ -3101,23 +3108,30 @@ export async function startServer(options: ServerOptions): Promise<void> {
           }
           const effectiveProjectHash = scope === 'all' ? 'all' : currentProjectHash;
           const parsedTags = tags ? tags.split(',').map((t: string) => t.trim().toLowerCase()).filter((t: string) => t.length > 0) : undefined;
-          const results = await hybridSearch(
-            store,
-            { query, limit: limit || 10, projectHash: effectiveProjectHash, tags: parsedTags, searchConfig: deps.searchConfig, db: deps.db },
-            providers
-          );
+          const QUERY_TIMEOUT_MS = 15000;
+          const results = await Promise.race([
+            hybridSearch(
+              store,
+              { query, limit: limit || 10, projectHash: effectiveProjectHash, tags: parsedTags, searchConfig: deps.searchConfig, db: deps.db },
+              providers
+            ),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Query timed out after ' + QUERY_TIMEOUT_MS + 'ms')), QUERY_TIMEOUT_MS)
+            ),
+          ]);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ results }));
         } catch (err) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+          const message = err instanceof Error ? err.message : 'Invalid JSON body';
+          const status = message.includes('timed out') ? 504 : 400;
+          res.writeHead(status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: message }));
         }
         return;
       }
 
       if (req.method === 'POST' && pathname === '/api/search') {
-        let body = '';
-        for await (const chunk of req) body += chunk;
+        const body = await readBody(req);
         try {
           const { query, limit } = JSON.parse(body);
           if (!query) {
@@ -3137,8 +3151,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       }
 
       if (req.method === 'POST' && pathname === '/api/write') {
-        let body = '';
-        for await (const chunk of req) body += chunk;
+        const body = await readBody(req);
         try {
           const { content, tags, workspace } = JSON.parse(body);
           if (!content) {
@@ -3193,8 +3206,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       }
 
       if (req.method === 'POST' && pathname === '/api/reindex') {
-        let body = '';
-        for await (const chunk of req) body += chunk;
+        const body = await readBody(req);
         try {
           const { root } = JSON.parse(body || '{}');
           const effectiveRoot = root || resolvedWorkspaceRoot;

@@ -96,8 +96,14 @@ function rotateLogs(): void {
 export function log(tag: string, message: string, level: LogLevel = 'info'): void {
   if (!enabled) return;
   if (LEVEL_PRIORITY[level] > LEVEL_PRIORITY[logLevel]) return;
-  const line = `[${new Date().toISOString()}] [${level}] [${tag}] ${message}\n`;
-  appendFileSync(getLogPath(), line);
+  const line = `[${new Date().toISOString()}] [${level}] [${tag}] ${message}`;
+  // Write to stdout/stderr so `docker logs` captures output
+  if (level === 'error') {
+    process.stderr.write(line + '\n');
+  } else {
+    process.stdout.write(line + '\n');
+  }
+  appendFileSync(getLogPath(), line + '\n');
   rotateLogs();
 }
 
