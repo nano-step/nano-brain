@@ -314,6 +314,7 @@ nano-brain - Memory system with hybrid search
   docker            Manage nano-brain Docker services
     start           Start nano-brain + qdrant containers
     stop            Stop all containers
+    restart [svc]   Restart all or specific service (nano-brain|qdrant)
     status          Show container and API health
   qdrant            Manage Qdrant vector store
     up              Start Qdrant via Docker, configure as vector provider
@@ -3885,7 +3886,7 @@ async function handleDocker(globalOpts: GlobalOptions, commandArgs: string[]): P
   const subcommand = commandArgs[0];
 
   if (!subcommand) {
-    cliError('Missing docker subcommand (start, stop, status)');
+    cliError('Missing docker subcommand (start, stop, restart, status)');
     process.exit(1);
   }
 
@@ -3961,6 +3962,48 @@ async function handleDocker(globalOpts: GlobalOptions, commandArgs: string[]): P
       break;
     }
 
+    case 'restart': {
+      const target = commandArgs[1] || '';
+      if (target && target !== 'nano-brain' && target !== 'qdrant') {
+        cliError(`Unknown service: ${target}. Use: nano-brain, qdrant, or omit for all`);
+        process.exit(1);
+      }
+
+      const service = target || '';
+      const label = service || 'nano-brain + qdrant';
+      cliOutput(`Restarting ${label}...`);
+      try {
+        execSync(`docker compose -f "${composeFile}" restart ${service}`, { stdio: 'inherit', env });
+      } catch {
+        cliError('Failed to restart. Is Docker running?');
+        process.exit(1);
+      }
+
+      const healthUrl = 'http://localhost:3100/health';
+      let healthy = false;
+      for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const res = await fetch(healthUrl);
+          if (res.ok) {
+            const data = await res.json() as { ready?: boolean };
+            if (data.ready) {
+              healthy = true;
+              break;
+            }
+          }
+        } catch {}
+        cliOutput(`Waiting for nano-brain... (${i + 1}/15)`);
+      }
+
+      if (healthy) {
+        cliOutput('✅ nano-brain restarted and ready on http://localhost:3100');
+      } else {
+        cliError('nano-brain did not become healthy. Check: docker logs nano-brain-server');
+      }
+      break;
+    }
+
     case 'status': {
       let containerOutput = '';
       try {
@@ -4019,7 +4062,7 @@ async function handleDocker(globalOpts: GlobalOptions, commandArgs: string[]): P
     }
 
     default:
-      cliError(`Unknown docker subcommand: ${subcommand}. Use: start, stop, status`);
+      cliError(`Unknown docker subcommand: ${subcommand}. Use: start, stop, restart, status`);
       process.exit(1);
   }
 }
