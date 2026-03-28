@@ -3003,7 +3003,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       const pathname = url.pathname;
 
-      if (maintenanceMode && pathname !== '/api/maintenance/resume' && pathname !== '/health') {
+      if (maintenanceMode && pathname !== '/api/maintenance/resume' && pathname !== '/health' && pathname !== '/api/maintenance/prepare') {
         res.writeHead(503, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'maintenance in progress' }));
         return;
@@ -3139,7 +3139,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
             res.end(JSON.stringify({ error: 'query is required' }));
             return;
           }
-          const results = store.searchFTS(query, { limit: limit || 10, projectHash: currentProjectHash });
+          const safeLimit = Math.max(1, Math.min(typeof limit === 'number' && limit > 0 ? limit : 10, 100));
+          const results = store.searchFTS(query, { limit: safeLimit, projectHash: currentProjectHash });
           try { store.trackAccess(results.map((r: { id: string | number }) => typeof r.id === 'string' ? parseInt(r.id, 10) : r.id)); } catch { /* non-critical */ }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ results }));
@@ -3154,7 +3155,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         const body = await readBody(req);
         try {
           const { content, tags, workspace } = JSON.parse(body);
-          if (!content) {
+          if (!content || !content.trim()) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'content is required' }));
             return;
