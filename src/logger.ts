@@ -17,6 +17,7 @@ let currentDate: string | null = null;
 let currentPath: string | null = null;
 let logLevel: LogLevel = 'info';
 let lastRotateCheck = 0;
+let stdioMode = false;
 const ROTATE_CHECK_INTERVAL = 60_000;
 const MAX_LOG_SIZE = 50 * 1024 * 1024;
 const MAX_LOG_AGE_DAYS = 2;
@@ -35,6 +36,15 @@ export function initLogger(config?: { logging?: { enabled?: boolean; level?: str
       logLevel = level;
     }
   }
+}
+
+/**
+ * Enable stdio mode — suppresses all stdout/stderr writes to avoid corrupting
+ * the MCP JSON-RPC protocol over stdio. Logs still go to file.
+ * Call this before starting the stdio MCP transport.
+ */
+export function setStdioMode(on: boolean): void {
+  stdioMode = on;
 }
 
 function ensureLogDir(): string {
@@ -98,10 +108,13 @@ export function log(tag: string, message: string, level: LogLevel = 'info'): voi
   if (LEVEL_PRIORITY[level] > LEVEL_PRIORITY[logLevel]) return;
   const line = `[${new Date().toISOString()}] [${level}] [${tag}] ${message}`;
   // Write to stdout/stderr so `docker logs` captures output
-  if (level === 'error') {
-    process.stderr.write(line + '\n');
-  } else {
-    process.stdout.write(line + '\n');
+  // but NEVER in stdio mode — it would corrupt the MCP JSON-RPC protocol
+  if (!stdioMode) {
+    if (level === 'error') {
+      process.stderr.write(line + '\n');
+    } else {
+      process.stdout.write(line + '\n');
+    }
   }
   appendFileSync(getLogPath(), line + '\n');
   rotateLogs();

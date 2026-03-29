@@ -38,6 +38,8 @@ export function clearCorruptionRecovery(): void {
 
 const storeCache = new Map<string, Store>();
 const storeCacheUncache = new Map<string, () => void>();
+// Track in-progress store creation to prevent duplicate initialization
+const storeCreating = new Set<string>();
 
 export function getCacheSize(): number {
   return storeCache.size;
@@ -77,12 +79,23 @@ export function sanitizeFTS5Query(query: string): string {
 
 export function createStore(dbPath: string): Store {
   const resolvedPath = path.resolve(dbPath);
-  
+
   const cached = storeCache.get(resolvedPath);
   if (cached) {
     return cached;
   }
-  
+
+  // Guard against concurrent initialization of the same DB path.
+  // Since better-sqlite3 is synchronous this should not normally happen,
+  // but defensive coding prevents duplicate DB connections if it does.
+  if (storeCreating.has(resolvedPath)) {
+    log('store', 'createStore already in progress for ' + resolvedPath + ', waiting...', 'warn');
+    // Return a second check — by now the first call should have cached it
+    const nowCached = storeCache.get(resolvedPath);
+    if (nowCached) return nowCached;
+  }
+  storeCreating.add(resolvedPath);
+
   log('store', 'createStore dbPath=' + resolvedPath);
   
   const recoveryResult = checkAndRecoverDB(resolvedPath, {
@@ -1380,40 +1393,52 @@ export function createStore(dbPath: string): Store {
     },
     
     bulkDeactivateExcept(collection: string, activePaths: string[]): number {
-      const beforeHashes = new Set<string>();
-      if (vectorStore) {
-        const rows = db.prepare('SELECT DISTINCT hash FROM documents WHERE collection = ? AND active = 1').all(collection) as Array<{ hash: string }>;
-        for (const r of rows) beforeHashes.add(r.hash);
-      }
-      
-      db.exec('CREATE TEMP TABLE IF NOT EXISTS _active_paths(path TEXT PRIMARY KEY)');
-      db.exec('DELETE FROM _active_paths');
-      const insertPath = db.prepare('INSERT OR IGNORE INTO _active_paths(path) VALUES(?)');
-      const BATCH_SIZE = 200;
-      const insertBatch = db.transaction((paths: string[]) => {
-        for (const p of paths) insertPath.run(p);
+      // Wrap the entire read-deactivate-diff cycle in a transaction to prevent
+      // races where another client inserts a document between the before/after snapshots
+      const transaction = db.transaction(() => {
+        const beforeHashes = new Set<string>();
+        if (vectorStore) {
+          const rows = db.prepare('SELECT DISTINCT hash FROM documents WHERE collection = ? AND active = 1').all(collection) as Array<{ hash: string }>;
+          for (const r of rows) beforeHashes.add(r.hash);
+        }
+
+        db.exec('CREATE TEMP TABLE IF NOT EXISTS _active_paths(path TEXT PRIMARY KEY)');
+        db.exec('DELETE FROM _active_paths');
+        const insertPath = db.prepare('INSERT OR IGNORE INTO _active_paths(path) VALUES(?)');
+        const BATCH_SIZE = 200;
+        const insertBatchInner = db.transaction((paths: string[]) => {
+          for (const p of paths) insertPath.run(p);
+        });
+        for (let i = 0; i < activePaths.length; i += BATCH_SIZE) {
+          insertBatchInner(activePaths.slice(i, i + BATCH_SIZE));
+        }
+        const updateStmt = db.prepare('UPDATE documents SET active = 0 WHERE collection = ? AND path NOT IN (SELECT path FROM _active_paths)');
+        const result = updateStmt.run(collection);
+        db.exec('DROP TABLE IF EXISTS _active_paths');
+
+        let removedHashes: string[] = [];
+        if (vectorStore && beforeHashes.size > 0) {
+          const afterRows = db.prepare('SELECT DISTINCT hash FROM documents WHERE collection = ? AND active = 1').all(collection) as Array<{ hash: string }>;
+          const afterHashes = new Set(afterRows.map(r => r.hash));
+          removedHashes = [...beforeHashes].filter(h => !afterHashes.has(h));
+        }
+
+        return { changes: result.changes, removedHashes };
       });
-      for (let i = 0; i < activePaths.length; i += BATCH_SIZE) {
-        insertBatch(activePaths.slice(i, i + BATCH_SIZE));
-      }
-      const updateStmt = db.prepare('UPDATE documents SET active = 0 WHERE collection = ? AND path NOT IN (SELECT path FROM _active_paths)');
-      const result = updateStmt.run(collection);
-      db.exec('DROP TABLE IF EXISTS _active_paths');
-      
-      if (vectorStore && beforeHashes.size > 0) {
-        const afterRows = db.prepare('SELECT DISTINCT hash FROM documents WHERE collection = ? AND active = 1').all(collection) as Array<{ hash: string }>;
-        const afterHashes = new Set(afterRows.map(r => r.hash));
-        for (const hash of beforeHashes) {
-          if (!afterHashes.has(hash)) {
-            vectorStore.deleteByHash(hash).catch(err => {
-              log('store', 'bulkDeactivateExcept vector cleanup failed hash=' + hash.substring(0, 8));
-              log('store', `Failed to cleanup vector: ${err instanceof Error ? err.message : String(err)}`, 'warn');
-            });
-          }
+
+      const { changes, removedHashes } = transaction();
+
+      // Async vector cleanup — safe because hashes are already deactivated inside the transaction
+      if (vectorStore && removedHashes.length > 0) {
+        for (const hash of removedHashes) {
+          vectorStore.deleteByHash(hash).catch(err => {
+            log('store', 'bulkDeactivateExcept vector cleanup failed hash=' + hash.substring(0, 8));
+            log('store', `Failed to cleanup vector: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+          });
         }
       }
-      
-      return result.changes;
+
+      return changes;
     },
     
     insertEmbeddingLocal(hash: string, seq: number, pos: number, model: string, filePath?: string) {
@@ -1758,13 +1783,20 @@ export function createStore(dbPath: string): Store {
     },
     
     getIndexHealth(): IndexHealth {
-      const docCount = (getDocumentCountStmt.get() as { count: number }).count;
-      const embeddedCount = (getEmbeddedCountStmt.get() as { count: number }).count;
-      const collections = getCollectionStatsStmt.all() as Array<{ name: string; documentCount: number; path: string }>;
-      const pending = (getHashesNeedingEmbeddingStmt.all(1000000) as unknown[]).length;
-      const workspaceStats = this.getWorkspaceStats();
-      const extractedFactCount = (getExtractedFactCountStmt.get() as { count: number }).count;
-      
+      // Wrap all queries in a transaction for a consistent snapshot —
+      // without this, concurrent writes could make counts inconsistent
+      const snapshot = db.transaction(() => {
+        const docCount = (getDocumentCountStmt.get() as { count: number }).count;
+        const embeddedCount = (getEmbeddedCountStmt.get() as { count: number }).count;
+        const collections = getCollectionStatsStmt.all() as Array<{ name: string; documentCount: number; path: string }>;
+        const pending = (getHashesNeedingEmbeddingStmt.all(1000000) as unknown[]).length;
+        const workspaceStats = this.getWorkspaceStats();
+        const extractedFactCount = (getExtractedFactCountStmt.get() as { count: number }).count;
+        return { docCount, embeddedCount, collections, pending, workspaceStats, extractedFactCount };
+      });
+
+      const { docCount, embeddedCount, collections, pending, workspaceStats, extractedFactCount } = snapshot();
+
       let dbSize = 0;
       try {
         const stats = fs.statSync(dbPath);
@@ -1772,7 +1804,7 @@ export function createStore(dbPath: string): Store {
       } catch {
         // ignore
       }
-      
+
       return {
         documentCount: docCount,
         embeddedCount: embeddedCount,
@@ -1943,32 +1975,41 @@ export function createStore(dbPath: string): Store {
     },
     
     cleanOrphanedEmbeddings(): number {
-      let totalDeleted = 0;
-      
-      let orphanedHashes: string[] = [];
-      if (vectorStore) {
-        orphanedHashes = (db.prepare(`
-          SELECT DISTINCT hash FROM content_vectors WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)
-        `).all() as Array<{ hash: string }>).map(r => r.hash);
-      }
-      
-      const deleteContentVectorsStmt = db.prepare(`
-        DELETE FROM content_vectors WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)
-      `);
-      const cvResult = deleteContentVectorsStmt.run();
-      totalDeleted += cvResult.changes;
-      
-      if (vecAvailable) {
-        try {
-          const deleteVecStmt = db.prepare(`
-            DELETE FROM vectors_vec WHERE substr(hash_seq, 1, instr(hash_seq, ':') - 1) NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)
-          `);
-          const vecResult = deleteVecStmt.run();
-          totalDeleted += vecResult.changes;
-        } catch {
+      // Use a transaction to atomically snapshot orphaned hashes AND delete them,
+      // preventing races where a new document with the same hash is inserted mid-cleanup
+      const transaction = db.transaction(() => {
+        let totalDeleted = 0;
+
+        let orphanedHashes: string[] = [];
+        if (vectorStore) {
+          orphanedHashes = (db.prepare(`
+            SELECT DISTINCT hash FROM content_vectors WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)
+          `).all() as Array<{ hash: string }>).map(r => r.hash);
         }
-      }
-      
+
+        const deleteContentVectorsStmt = db.prepare(`
+          DELETE FROM content_vectors WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)
+        `);
+        const cvResult = deleteContentVectorsStmt.run();
+        totalDeleted += cvResult.changes;
+
+        if (vecAvailable) {
+          try {
+            const deleteVecStmt = db.prepare(`
+              DELETE FROM vectors_vec WHERE substr(hash_seq, 1, instr(hash_seq, ':') - 1) NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)
+            `);
+            const vecResult = deleteVecStmt.run();
+            totalDeleted += vecResult.changes;
+          } catch {
+          }
+        }
+
+        return { totalDeleted, orphanedHashes };
+      });
+
+      const { totalDeleted, orphanedHashes } = transaction();
+
+      // Vector store cleanup is async but safe — hashes were already removed from SQLite inside the transaction
       if (vectorStore && orphanedHashes.length > 0) {
         for (const hash of orphanedHashes) {
           vectorStore.deleteByHash(hash).catch(err => {
@@ -1978,7 +2019,7 @@ export function createStore(dbPath: string): Store {
         }
         log('store', 'cleanOrphanedEmbeddings queued ' + orphanedHashes.length + ' vector store deletes');
       }
-      
+
       log('store', 'cleanOrphanedEmbeddings deleted=' + totalDeleted);
       return totalDeleted;
     },
@@ -2951,7 +2992,8 @@ export function createStore(dbPath: string): Store {
   _cached = true;
   storeCache.set(resolvedPath, store);
   storeCacheUncache.set(resolvedPath, () => { _cached = false; });
-  
+  storeCreating.delete(resolvedPath);
+
   return store;
 }
 

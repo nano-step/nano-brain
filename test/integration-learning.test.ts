@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { ThompsonSampler, DEFAULT_BANDIT_CONFIGS } from '../src/bandits.js';
 import { IntentClassifier } from '../src/intent-classifier.js';
 import { ImportanceScorer } from '../src/importance.js';

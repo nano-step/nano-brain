@@ -36,6 +36,7 @@ export class QdrantVecStore implements VectorStore {
   private collectionName: string;
   private dimensions: number;
   private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
   constructor(options: QdrantVecStoreOptions) {
     const resolvedUrl = resolveHostUrl(options.url);
@@ -51,14 +52,28 @@ export class QdrantVecStore implements VectorStore {
   async ensureCollection(): Promise<void> {
     if (this.initialized) return;
 
+    // Serialize concurrent callers — only the first one creates the collection,
+    // all others wait on the same promise
+    if (!this.initPromise) {
+      this.initPromise = this._doEnsureCollection().then(() => {
+        this.initialized = true;
+      }).catch(err => {
+        this.initPromise = null; // allow retry on failure
+        throw err;
+      });
+    }
+    return this.initPromise;
+  }
+
+  private async _doEnsureCollection(): Promise<void> {
     try {
       await this.client.getCollection(this.collectionName);
     } catch (err) {
       const errAny = err as any;
       const isNotFound = (errAny?.status === 404) ||
-        (err instanceof Error && 
+        (err instanceof Error &&
           (err.message.includes('404') || err.message.includes('Not found') || err.message.includes('doesn\'t exist')));
-      
+
       if (isNotFound) {
         await this.client.createCollection(this.collectionName, {
           vectors: {
@@ -80,8 +95,6 @@ export class QdrantVecStore implements VectorStore {
         throw err;
       }
     }
-
-    this.initialized = true;
   }
 
   async search(embedding: number[], options?: VectorSearchOptions): Promise<VectorSearchResult[]> {

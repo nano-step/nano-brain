@@ -23,10 +23,28 @@ describe('nano-brain MCP (live)', () => {
     response.content?.[0]?.text ?? ''
 
   beforeAll(async () => {
+    // Quick health check before attempting MCP connect (which can hang without a timeout)
+    try {
+      const healthCheck = await fetch('http://localhost:3100/health', {
+        signal: AbortSignal.timeout(2000),
+      })
+      if (!healthCheck.ok) {
+        serverAvailable = false
+        return
+      }
+    } catch {
+      serverAvailable = false
+      return
+    }
+
     transport = new StreamableHTTPClientTransport(new URL(MCP_URL))
     client = new Client({ name: 'nano-brain-mcp-client-test', version: '0.0.0' })
     try {
-      await client.connect(transport)
+      // Timeout the connect attempt to avoid 30s hangs when server exists but MCP endpoint is unresponsive
+      await Promise.race([
+        client.connect(transport),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('MCP connect timeout')), 5000)),
+      ])
       serverAvailable = true
     } catch {
       serverAvailable = false

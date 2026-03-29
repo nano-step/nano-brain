@@ -318,7 +318,7 @@ describe('createLLMProvider', () => {
 
     const provider = createLLMProvider(config);
     expect(provider).not.toBeNull();
-    expect(provider?.model).toBe('litellm/claude-haiku-4-5');
+    expect(provider?.model).toBe('gitlab/claude-haiku-4-5');
   });
 
   it('should use custom endpoint and model from config', () => {

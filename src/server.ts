@@ -21,7 +21,7 @@ import type { SearchProviders } from './search.js';
 import { hybridSearch, parseSearchConfig } from './search.js';
 import { findCycles } from './graph.js';
 import { createStore, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore, setProjectLabelDataDir, resolveProjectLabel, openDatabase, getLastCorruptionRecovery, clearCorruptionRecovery, closeAllCachedStores } from './store.js';
-import { log, initLogger } from './logger.js';
+import { log, initLogger, setStdioMode } from './logger.js';
 import { loadCollectionConfig, getCollections, scanCollectionFiles, getWorkspaceConfig } from './collections.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth, checkOpenAIHealth } from './embeddings.js';
 import { createReranker } from './reranker.js';
@@ -41,6 +41,18 @@ import { ThompsonSampler, DEFAULT_BANDIT_CONFIGS } from './bandits.js'
 
 let maintenanceMode = false;
 let maintenanceTimer: NodeJS.Timeout | null = null;
+
+// Per-file write queue to prevent interleaved appends from concurrent clients
+const fileWriteQueues = new Map<string, Promise<void>>();
+function sequentialFileAppend(filePath: string, data: string): void {
+  const prev = fileWriteQueues.get(filePath) ?? Promise.resolve();
+  const next = prev.then(() => {
+    fs.appendFileSync(filePath, data, 'utf-8');
+  }).catch(() => {
+    // Ensure queue continues even if a write fails
+  });
+  fileWriteQueues.set(filePath, next);
+}
 
 export interface ServerOptions {
   dbPath: string;
@@ -815,9 +827,9 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         const timestamp = new Date().toISOString();
         const workspaceName = path.basename(effectiveWorkspaceRoot);
         const entry = `\n## ${timestamp}\n\n**Workspace:** ${workspaceName} (${effectiveProjectHash})\n\n${content}\n`;
-        
-        fs.appendFileSync(targetPath, entry, 'utf-8');
-        
+
+        sequentialFileAppend(targetPath, entry);
+
         let supersedeWarning = '';
         if (supersedes) {
           const targetDoc = effectiveStore.findDocument(supersedes);
@@ -942,10 +954,6 @@ export function createMcpServer(deps: ServerDeps): McpServer {
               }
             }).catch(err => {
               log('mcp', 'LLM categorization failed: ' + (err instanceof Error ? err.message : String(err)));
-            }).finally(() => {
-              if (wsResult.needsClose) {
-                try { tagStore.close(); } catch {}
-              }
             });
           }
         }
@@ -3036,16 +3044,20 @@ export async function startServer(options: ServerOptions): Promise<void> {
       if (req.method === 'GET' && pathname === '/sse') {
         const transport = new SSEServerTransport('/messages', res);
         const clientServer = createMcpServer(deps);
-        
-        sseSessions.set(transport.sessionId, { transport, server: clientServer });
-        log('server', `SSE client connected sessionId=${transport.sessionId}`);
-        
+
         transport.onclose = () => {
           sseSessions.delete(transport.sessionId);
           log('server', `SSE client disconnected sessionId=${transport.sessionId}`);
         };
-        
-        await clientServer.connect(transport);
+
+        try {
+          sseSessions.set(transport.sessionId, { transport, server: clientServer });
+          log('server', `SSE client connected sessionId=${transport.sessionId}`);
+          await clientServer.connect(transport);
+        } catch (err) {
+          sseSessions.delete(transport.sessionId);
+          log('server', `SSE client connect failed sessionId=${transport.sessionId}: ${err instanceof Error ? err.message : String(err)}`, 'error');
+        }
         return;
       }
 
@@ -3167,7 +3179,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
           const timestamp = new Date().toISOString();
           const workspaceName = path.basename(resolvedWorkspaceRoot);
           const entry = `\n## ${timestamp}\n\n**Workspace:** ${workspaceName} (${currentProjectHash})\n\n${content}\n`;
-          fs.appendFileSync(targetPath, entry, 'utf-8');
+          sequentialFileAppend(targetPath, entry);
           let tagInfo = '';
           if (tags) {
             const parsedTags = tags.split(',').map((t: string) => t.trim().toLowerCase()).filter((t: string) => t.length > 0);
@@ -3747,6 +3759,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
       log('server', `Streamable HTTP endpoint: /mcp`);
     });
   } else {
+    // Suppress stdout/stderr log writes — they would corrupt the JSON-RPC stream
+    setStdioMode(true);
     const transport = new StdioServerTransport();
     await server.connect(transport);
     log('server', 'MCP server started on stdio');

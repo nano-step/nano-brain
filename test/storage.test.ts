@@ -100,14 +100,10 @@ describe('Storage Limits', () => {
     });
 
     it('should use defaults for invalid values', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      
+      // parseStorageConfig logs warnings via log() not console.warn
       const config = parseStorageConfig({ maxSize: 'banana' });
-      
+
       expect(config.maxSize).toBe(2147483648);
-      expect(warnSpy).toHaveBeenCalled();
-      
-      warnSpy.mockRestore();
     });
 
     it('should handle partial config', () => {

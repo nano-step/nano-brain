@@ -49,6 +49,8 @@ export interface WatcherOptions {
   preferencesConfig?: import('./types.js').PreferenceConfig
   pruningConfig?: PruningConfig
   mergeConfig?: MergeConfig
+  /** Chokidar file polling interval in ms (default: 5000). Lower values detect changes faster but use more CPU. */
+  chokidarIntervalMs?: number
 }
 
 export interface Watcher {
@@ -365,7 +367,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
       persistent: true,
       ignoreInitial: true,
       usePolling: true,
-      interval: 5000,
+      interval: options.chokidarIntervalMs ?? 5000,
       binaryInterval: 10000,
       awaitWriteFinish: {
         stabilityThreshold: 100,
@@ -739,8 +741,10 @@ export function startWatcher(options: WatcherOptions): Watcher {
     log('watcher', `Startup integrity check failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
   });
 
+  let initialEmbedTimer: ReturnType<typeof setTimeout> | null = null;
   if (embedder) {
-    setTimeout(async () => {
+    initialEmbedTimer = setTimeout(async () => {
+      if (stopped) return;
       isEmbedding = true;
       try {
         const count = await embedPendingCodebase(store, embedder, 50, projectHash);
@@ -751,6 +755,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
         log('embed', `Initial embedding failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
       } finally {
         isEmbedding = false;
+        initialEmbedTimer = null;
       }
     }, 5000);
   }
@@ -777,6 +782,11 @@ export function startWatcher(options: WatcherOptions): Watcher {
       if (embeddingTimeout) {
         clearTimeout(embeddingTimeout);
         embeddingTimeout = null;
+      }
+
+      if (initialEmbedTimer) {
+        clearTimeout(initialEmbedTimer);
+        initialEmbedTimer = null;
       }
 
       if (learningTimeout) {

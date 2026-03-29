@@ -280,7 +280,10 @@ export function computeDecayScore(
   halfLifeDays: number
 ): number {
   const dateStr = lastAccessedAt ?? createdAt;
-  const daysSinceAccess = (Date.now() - Date.parse(dateStr)) / 86400000;
+  const parsed = Date.parse(dateStr);
+  if (isNaN(parsed)) return 0.5; // safe fallback for invalid dates
+  const daysSinceAccess = (Date.now() - parsed) / 86400000;
+  if (daysSinceAccess < 0) return 1; // future dates treated as fresh
   return 1 / (1 + daysSinceAccess / halfLifeDays);
 }
 
@@ -535,8 +538,8 @@ export async function hybridSearch(
             setTimeout(() => resolve([]), VEC_SEARCH_TIMEOUT_MS)
           ),
         ]);
-      } catch {
-        // Embed or vec search failed — fall back to FTS-only results
+      } catch (err) {
+        log('search', `Vector search failed, falling back to FTS-only: ${err instanceof Error ? err.message : String(err)}`, 'warn');
       }
     }
     

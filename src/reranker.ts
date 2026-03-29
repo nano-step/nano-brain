@@ -68,11 +68,13 @@ class VoyageAIReranker implements Reranker {
         return { results: [], model: this.model };
       }
 
-      const results = data.results.map(r => ({
-        file: documents[r.index].file,
-        score: r.relevance_score,
-        index: r.index,
-      }));
+      const results = data.results
+        .filter(r => r.index >= 0 && r.index < documents.length)
+        .map(r => ({
+          file: documents[r.index].file,
+          score: r.relevance_score,
+          index: r.index,
+        }));
 
       log('reranker', `VoyageAI rerank model=${this.model} docs=${documents.length} tokens=${data.total_tokens}`, 'debug');
 

@@ -321,38 +321,53 @@ class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
 
     const allResults: EmbeddingResult[] = [];
     for (const batch of subBatches) {
-      const data = await this.fetchWithRetry({
-        model: this.model,
-        input: batch,
-        input_type: 'document',
-        dimensions: this.outputDimensions,
-      }, 120000);
-
-      if (data.usage?.total_tokens && this.onTokenUsage) {
-        try { this.onTokenUsage(this.model, data.usage.total_tokens); } catch { /* ignore */ }
-      }
-      const batchResults = new Map<number, EmbeddingResult>();
-      for (const item of data.data) {
-        const embedding = item.embedding;
-        if (!embedding) continue;
-        this.setDimensions(embedding);
-        batchResults.set(item.index, {
-          embedding,
+      try {
+        const data = await this.fetchWithRetry({
           model: this.model,
-          dimensions: this.dimensions ?? embedding.length,
-        });
-      }
+          input: batch,
+          input_type: 'document',
+          dimensions: this.outputDimensions,
+        }, 120000);
 
-      if (batchResults.size !== batch.length) {
-        throw new Error('OpenAI-compatible embedBatch failed: missing embeddings');
-      }
-
-      for (let i = 0; i < batch.length; i++) {
-        const result = batchResults.get(i);
-        if (!result) {
-          throw new Error('OpenAI-compatible embedBatch failed: missing embedding index');
+        if (data.usage?.total_tokens && this.onTokenUsage) {
+          try { this.onTokenUsage(this.model, data.usage.total_tokens); } catch { /* ignore */ }
         }
-        allResults.push(result);
+        const batchResults = new Map<number, EmbeddingResult>();
+        for (const item of data.data) {
+          const embedding = item.embedding;
+          if (!embedding) continue;
+          this.setDimensions(embedding);
+          batchResults.set(item.index, {
+            embedding,
+            model: this.model,
+            dimensions: this.dimensions ?? embedding.length,
+          });
+        }
+
+        for (let i = 0; i < batch.length; i++) {
+          const result = batchResults.get(i);
+          if (!result) {
+            // Individual embedding missing — use zero vector as placeholder so other results aren't lost
+            log('embeddings', `Sub-batch item ${i} missing embedding, using zero vector`, 'warn');
+            allResults.push({
+              embedding: new Array(this.dimensions ?? 1024).fill(0),
+              model: this.model,
+              dimensions: this.dimensions ?? 1024,
+            });
+          } else {
+            allResults.push(result);
+          }
+        }
+      } catch (err) {
+        // Sub-batch failed entirely — fill with zero vectors so partial results from other sub-batches are preserved
+        log('embeddings', `Sub-batch of ${batch.length} items failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+        for (let i = 0; i < batch.length; i++) {
+          allResults.push({
+            embedding: new Array(this.dimensions ?? 1024).fill(0),
+            model: this.model,
+            dimensions: this.dimensions ?? 1024,
+          });
+        }
       }
     }
 

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, appendFileSync, statSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, appendFileSync, statSync, renameSync } from 'fs';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
 import type { HarvestedSession, ExtractionConfig, Store } from './types.js';
@@ -256,8 +256,12 @@ export function saveHarvestState(stateFile: string, state: HarvestState): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-  
-  writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8');
+
+  // Atomic write: write to temp file then rename to prevent partial reads
+  // from concurrent harvester instances
+  const tmpFile = stateFile + '.tmp.' + process.pid;
+  writeFileSync(tmpFile, JSON.stringify(state, null, 2), 'utf-8');
+  renameSync(tmpFile, stateFile);
 }
 
 export function getMessageDirMtime(sessionId: string, storageDir: string): number | null {
