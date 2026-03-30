@@ -2,6 +2,7 @@ import type { SearchResult, Store, StoreSearchOptions, SearchConfig } from './ty
 import { DEFAULT_SEARCH_CONFIG } from './types.js';
 import { computeHash } from './store.js';
 import { log } from './logger.js';
+import { searchFTSAsync, isFTSWorkerReady } from './fts-client.js';
 import type Database from 'better-sqlite3';
 import { getClusterLabels } from './graph.js';
 import { SymbolGraph } from './symbol-graph.js';
@@ -515,7 +516,9 @@ export async function hybridSearch(
     const isOriginal = i === 0;
     const weight = isOriginal ? 2 : config.expansion.weight;
     
-    const ftsResults = store.searchFTS(q, searchOpts);
+    const ftsResults = isFTSWorkerReady()
+      ? await searchFTSAsync(q, searchOpts)
+      : store.searchFTS(q, searchOpts);
     
     let vecResults: SearchResult[] = [];
     if (embedder) {

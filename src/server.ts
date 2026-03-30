@@ -33,6 +33,7 @@ import { createVectorStore, type VectorStore, type VectorStoreHealth } from './v
 import Database from 'better-sqlite3'
 import { SymbolGraph, type ContextResult, type ImpactResult, type DetectChangesResult } from './symbol-graph.js'
 import { ResultCache } from './cache.js'
+import { initFTSWorker, shutdownFTSWorker, searchFTSAsync, isFTSWorkerReady } from './fts-client.js'
 import { detectReformulation } from './telemetry.js'
 import { categorize } from './categorizer.js'
 import { categorizeMemory } from './llm-categorizer.js'
@@ -2981,6 +2982,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     }
     
     if (watcher) watcher.stop();
+    await shutdownFTSWorker();
     try { symbolGraphDb.pragma('wal_checkpoint(PASSIVE)'); } catch { /* ignore checkpoint errors */ }
     symbolGraphDb.close();
     closeAllCachedStores();
@@ -2995,6 +2997,12 @@ export async function startServer(options: ServerOptions): Promise<void> {
   deps.ready = readyState;
   
   if (httpPort) {
+    try {
+      await initFTSWorker(effectiveDbPath);
+    } catch (err) {
+      log('server', 'FTS worker init failed, search will use main thread: ' + (err instanceof Error ? err.message : String(err)), 'warn');
+    }
+
     const eventStore = new SqliteEventStore(symbolGraphDb, 300);
     const eventStoreCleanupInterval = setInterval(() => eventStore.cleanup(), 60000);
     eventStoreCleanupInterval.unref();
@@ -3152,7 +3160,9 @@ export async function startServer(options: ServerOptions): Promise<void> {
             return;
           }
           const safeLimit = Math.max(1, Math.min(typeof limit === 'number' && limit > 0 ? limit : 10, 100));
-          const results = store.searchFTS(query, { limit: safeLimit, projectHash: currentProjectHash });
+          const results = isFTSWorkerReady()
+            ? await searchFTSAsync(query, { limit: safeLimit, projectHash: currentProjectHash })
+            : store.searchFTS(query, { limit: safeLimit, projectHash: currentProjectHash });
           try { store.trackAccess(results.map((r: { id: string | number }) => typeof r.id === 'string' ? parseInt(r.id, 10) : r.id)); } catch { /* non-critical */ }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ results }));
@@ -3532,11 +3542,30 @@ export async function startServer(options: ServerOptions): Promise<void> {
         }
         try {
           const startTime = Date.now();
-          const results = await hybridSearch(
-            store,
-            { query, limit, projectHash: wsHash, searchConfig: deps.searchConfig, db: deps.db },
-            providers
-          );
+          const SEARCH_TIMEOUT_MS = 10000;
+          let results: import('./types.js').SearchResult[];
+          let timedOut = false;
+          try {
+            results = await Promise.race([
+              hybridSearch(
+                store,
+                { query, limit, projectHash: wsHash, searchConfig: deps.searchConfig, db: deps.db },
+                providers
+              ),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('__SEARCH_TIMEOUT__')), SEARCH_TIMEOUT_MS)
+              ),
+            ]);
+          } catch (timeoutErr: any) {
+            if (timeoutErr?.message === '__SEARCH_TIMEOUT__') {
+              log('server', `hybrid search timed out after ${SEARCH_TIMEOUT_MS}ms, falling back to FTS`, 'warn');
+              timedOut = true;
+              const { searchFTS } = await import('./search.js');
+              results = searchFTS(store, query, { limit, projectHash: wsHash });
+            } else {
+              throw timeoutErr;
+            }
+          }
           const executionMs = Date.now() - startTime;
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
@@ -3551,6 +3580,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
             })),
             query,
             executionMs,
+            ...(timedOut ? { fallback: 'fts' } : {}),
           }));
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
