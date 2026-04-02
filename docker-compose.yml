@@ -1,3 +1,13 @@
+# IMPORTANT: Ollama must be running natively on the host machine for GPU acceleration.
+# On macOS (Apple Silicon), native Ollama uses Metal GPU → ~50-200ms per embed vs ~15s in Docker.
+#
+# Setup:
+#   brew install ollama
+#   OLLAMA_KEEP_ALIVE=30m OLLAMA_NUM_PARALLEL=4 ollama serve
+#   ollama pull nomic-embed-text
+#
+# Then start this stack: docker compose up -d
+
 services:
   qdrant:
     image: qdrant/qdrant:latest
@@ -25,6 +35,9 @@ services:
       - ${NANO_BRAIN_WORKSPACE:-/Users/tamlh/workspaces/NUSTechnology/Projects/zengamingx}:${NANO_BRAIN_WORKSPACE:-/Users/tamlh/workspaces/NUSTechnology/Projects/zengamingx}:ro
     environment:
       - NODE_ENV=production
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - NODE_OPTIONS=--max-old-space-size=1536
+      - NANO_BRAIN_EMBEDDING_CONCURRENCY=3
     command: sh -c "npm install --omit=dev --prefer-offline --legacy-peer-deps && npm rebuild tree-sitter tree-sitter-python tree-sitter-typescript tree-sitter-javascript && npx tsx src/index.ts mcp --http --port=3100 --host=0.0.0.0 --root=${NANO_BRAIN_WORKSPACE:-/Users/tamlh/workspaces/NUSTechnology/Projects/zengamingx}"
     depends_on:
       - qdrant
@@ -37,7 +50,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 2G
 
 volumes:
   nano-brain-qdrant-data:

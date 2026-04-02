@@ -62,4 +62,20 @@ body {
   .grid-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .grid-dense {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+  .grid-dense > * {
+    grid-column: span 1 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .grid-cards {
+    grid-template-columns: 1fr;
+  }
+  .graph-shell {
+    height: calc(100vh - 300px);
+    min-height: 360px;
+  }
 }

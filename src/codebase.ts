@@ -179,7 +179,7 @@ const PROJECT_TYPE_MARKERS: Record<string, string[]> = {
 
 export function detectProjectType(workspaceRoot: string): string[] {
   const extensions = new Set<string>()
-  
+
   for (const [marker, exts] of Object.entries(PROJECT_TYPE_MARKERS)) {
     const markerPath = path.join(workspaceRoot, marker)
     if (fs.existsSync(markerPath)) {
@@ -188,34 +188,34 @@ export function detectProjectType(workspaceRoot: string): string[] {
       }
     }
   }
-  
+
   extensions.add('.md')
-  
+
   if (extensions.size === 1) {
     return ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.py', '.go', '.rs', '.java', '.rb', '.md']
   }
-  
+
   return Array.from(extensions)
 }
 
 export function loadGitignorePatterns(workspaceRoot: string): string[] {
   const gitignorePath = path.join(workspaceRoot, '.gitignore')
-  
+
   if (!fs.existsSync(gitignorePath)) {
     return []
   }
-  
+
   try {
     const content = fs.readFileSync(gitignorePath, 'utf-8')
     const patterns: string[] = []
-    
+
     for (const line of content.split('\n')) {
       const trimmed = line.trim()
       if (trimmed && !trimmed.startsWith('#')) {
         patterns.push(trimmed)
       }
     }
-    
+
     return patterns
   } catch {
     return []
@@ -224,18 +224,18 @@ export function loadGitignorePatterns(workspaceRoot: string): string[] {
 
 export function mergeExcludePatterns(config: CodebaseConfig, workspaceRoot: string): string[] {
   const patterns = new Set<string>(BUILTIN_EXCLUDE_PATTERNS)
-  
+
   const gitignorePatterns = loadGitignorePatterns(workspaceRoot)
   for (const pattern of gitignorePatterns) {
     patterns.add(pattern)
   }
-  
+
   if (config.exclude) {
     for (const pattern of config.exclude) {
       patterns.add(pattern)
     }
   }
-  
+
   return Array.from(patterns)
 }
 
@@ -243,7 +243,7 @@ export function resolveExtensions(config: CodebaseConfig, workspaceRoot: string)
   if (config.extensions && config.extensions.length > 0) {
     return config.extensions
   }
-  
+
   return detectProjectType(workspaceRoot)
 }
 
@@ -254,15 +254,15 @@ export async function scanCodebaseFiles(
   const extensions = resolveExtensions(config, workspaceRoot)
   log('codebase', 'Scanning with extensions: ' + extensions.join(', '))
   const excludePatterns = mergeExcludePatterns(config, workspaceRoot)
-  
+
   const maxFileSize = config.maxFileSize
     ? parseSize(config.maxFileSize)
     : DEFAULT_MAX_FILE_SIZE
-  
+
   const effectiveMaxSize = maxFileSize > 0 ? maxFileSize : DEFAULT_MAX_FILE_SIZE
-  
+
   const patterns = extensions.map(ext => `**/*${ext}`)
-  
+
   const allFiles = await fg(patterns, {
     cwd: workspaceRoot,
     absolute: true,
@@ -270,10 +270,10 @@ export async function scanCodebaseFiles(
     ignore: excludePatterns,
   })
   log('codebase', 'Found ' + allFiles.length + ' files matching patterns')
-  
+
   const files: string[] = []
   let skippedTooLarge = 0
-  
+
   for (const filePath of allFiles) {
     try {
       const stats = fs.statSync(filePath)
@@ -286,7 +286,7 @@ export async function scanCodebaseFiles(
       continue
     }
   }
-  
+
   if (skippedTooLarge > 0) {
     log('codebase', 'Skipped ' + skippedTooLarge + ' files (too large)')
   }
@@ -316,7 +316,7 @@ export async function indexCodebase(
   const activePaths: string[] = []
   const scannedFiles: Array<{ path: string; content: string }> = []
   let batchNum = 0
-  
+
   for (let i = 0; i < files.length; i++) {
     const filePath = files[i]
     try {
@@ -397,15 +397,15 @@ export async function indexCodebase(
     } catch {
       continue
     }
-    
+
     if ((i + 1) % 10 === 0) await yieldToEventLoop();
-    
+
     if ((i + 1) % batchSize === 0) {
       batchNum++
       log('codebase', 'Batch ' + batchNum + ': indexed ' + (i + 1) + '/' + files.length + ' files')
     }
   }
-  
+
   store.bulkDeactivateExcept('codebase', activePaths)
 
   const fileEdges = store.getFileEdges(projectHash)
@@ -493,9 +493,9 @@ async function processSingleBatch(
     if (allChunks.length >= maxChunksPerBatch) break
   }
 
+  await store.insertEmbeddingLocalBatch(emptyBodyHashes.map(hash => ({ hash, seq: -1, pos: 0, model: 'skipped:empty-body' })));
   for (const hash of emptyBodyHashes) {
     failedHashes.add(hash)
-    store.insertEmbeddingLocal(hash, -1, 0, 'skipped:empty-body')
   }
 
   if (allChunks.length === 0) {
@@ -545,15 +545,13 @@ async function processSingleBatch(
       }
     }
 
-    for (let i = 0; i < allChunks.length; i++) {
-      store.insertEmbeddingLocal(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, modelName, allChunks[i].path)
-      if (i % 10 === 0) await yieldToEventLoop();
-    }
+    await store.insertEmbeddingLocalBatch(allChunks.map(c => ({ hash: c.hash, seq: c.seq, pos: c.pos, model: modelName })));
 
     return { embedded: batch.length, emptyBodyHashes }
   } catch (err) {
     log('codebase', 'Batch embedding failed, falling back to sequential: ' + (err instanceof Error ? err.message : String(err)), 'warn')
     const succeededHashes = new Set<string>()
+    const succeededChunks: Array<{ hash: string; seq: number; pos: number; model: string }> = []
 
     for (let i = 0; i < allChunks.length; i++) {
       try {
@@ -572,15 +570,17 @@ async function processSingleBatch(
           }
         }
 
-        store.insertEmbeddingLocal(allChunks[i].hash, allChunks[i].seq, allChunks[i].pos, result.model || modelName, allChunks[i].path)
+        succeededChunks.push({ hash: allChunks[i].hash, seq: allChunks[i].seq, pos: allChunks[i].pos, model: result.model || modelName })
         succeededHashes.add(allChunks[i].hash)
       } catch {
         log('codebase', 'Skipping chunk ' + allChunks[i].hash + ':' + allChunks[i].seq, 'warn')
         continue
       }
-      
+
       if (i % 5 === 0) await yieldToEventLoop();
     }
+
+    await store.insertEmbeddingLocalBatch(succeededChunks);
 
     for (const row of batch) {
       if (!succeededHashes.has(row.hash)) {
@@ -611,13 +611,13 @@ export async function embedPendingCodebase(
     const allPending = store.getHashesNeedingEmbedding(projectHash)
     if (allPending.length === 0) break
 
-    const emptyBodyDocs = allPending.filter(r => 
-      r.hash === EMPTY_BODY_HASH_PREFIX || 
+    const emptyBodyDocs = allPending.filter(r =>
+      r.hash === EMPTY_BODY_HASH_PREFIX ||
       r.body.trim().length === 0
     )
     if (emptyBodyDocs.length > 0) {
+      await store.insertEmbeddingLocalBatch(emptyBodyDocs.map(doc => ({ hash: doc.hash, seq: -1, pos: 0, model: 'skipped:empty-body' })));
       for (const doc of emptyBodyDocs) {
-        store.insertEmbeddingLocal(doc.hash, -1, 0, 'skipped:empty-body')
         failedHashes.add(doc.hash)
       }
       log('codebase', `Skipped ${emptyBodyDocs.length} empty-body documents — marked as not embeddable`)
@@ -757,7 +757,7 @@ export async function indexSymbolGraph(
 
     fileSymbolMap.set(file.path, fileSymbols)
     filesProcessed++
-    
+
     if (fileIndex % 10 === 0) await yieldToEventLoop();
   }
 
@@ -792,12 +792,12 @@ export async function indexSymbolGraph(
     for (const edge of allEdges) {
       edgeIterationCount++;
       if (edgeIterationCount % 100 === 0) await yieldToEventLoop();
-      
-      const sourceSymbols = fileSymbols.filter(s => 
-        s.symbol.startLine <= getLineForCall(edge, file.content) && 
+
+      const sourceSymbols = fileSymbols.filter(s =>
+        s.symbol.startLine <= getLineForCall(edge, file.content) &&
         s.symbol.endLine >= getLineForCall(edge, file.content)
       )
-      
+
       let sourceId: number | undefined
       if (sourceSymbols.length > 0) {
         sourceId = sourceSymbols[sourceSymbols.length - 1].id
@@ -863,7 +863,7 @@ export async function indexSymbolGraph(
         edgesCreated++
       }
     }
-    
+
     if (fileIdx % 10 === 0) await yieldToEventLoop();
   }
 

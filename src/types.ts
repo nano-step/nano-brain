@@ -636,45 +636,46 @@ export interface MemoryConnection {
 export interface Store {
   getDb(): import('better-sqlite3').Database;
   close(): void;
-  
+
   insertDocument(doc: Omit<Document, 'id'>): number;
   findDocument(pathOrDocid: string): Document | null;
   getDocumentBody(hash: string, fromLine?: number, maxLines?: number): string | null;
   deactivateDocument(collection: string, path: string): void;
   bulkDeactivateExcept(collection: string, activePaths: string[]): number;
-  
+
   insertContent(hash: string, body: string): void;
-  
+
   insertEmbeddingLocal(hash: string, seq: number, pos: number, model: string, filePath?: string): void;
+  insertEmbeddingLocalBatch(items: Array<{ hash: string; seq: number; pos: number; model: string }>): Promise<void>;
   insertEmbedding(hash: string, seq: number, pos: number, embedding: number[], model: string, vectorStore?: import('./vector-store.js').VectorStore): void;
   ensureVecTable(dimensions: number): void;
-  
+
   searchFTS(query: string, options?: StoreSearchOptions): SearchResult[];
   searchVec(query: string, embedding: number[], options?: StoreSearchOptions): SearchResult[];
   searchVecAsync(query: string, embedding: number[], options?: StoreSearchOptions): Promise<SearchResult[]>;
   setVectorStore(vs: import('./vector-store.js').VectorStore | null): void;
   getVectorStore(): import('./vector-store.js').VectorStore | null;
-  
+
   getCachedResult(hash: string, projectHash?: string): string | null;
   setCachedResult(hash: string, result: string, projectHash?: string, type?: string): void;
   clearCache(projectHash?: string, type?: string): number;
   getCacheStats(): Array<{ type: string; projectHash: string; count: number }>;
-  
+
   getQueryEmbeddingCache(query: string): number[] | null;
   setQueryEmbeddingCache(query: string, embedding: number[]): void;
   clearQueryEmbeddingCache(): void;
-  
+
   getIndexHealth(): IndexHealth;
   getHashesNeedingEmbedding(projectHash?: string, limit?: number): Array<{ hash: string; body: string; path: string }>;
   getNextHashNeedingEmbedding(projectHash?: string): { hash: string; body: string; path: string } | null;
   getWorkspaceStats(): Array<{ projectHash: string; count: number }>;
-  
+
   deleteDocumentsByPath(filePath: string): number;
   clearWorkspace(projectHash: string): { documentsDeleted: number; embeddingsDeleted: number };
   removeWorkspace(projectHash: string): RemoveWorkspaceResult;
   cleanOrphanedEmbeddings(): number;
   getCollectionStorageSize(collection: string): number;
-  
+
   modelStatus: {
     embedding: string;
     reranker: string;

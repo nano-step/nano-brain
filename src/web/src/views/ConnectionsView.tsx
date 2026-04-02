@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import GraphCanvas from '../components/GraphCanvas';
 import NodeDetail from '../components/NodeDetail';
+import QueryStatus from '../components/QueryStatus';
+import { SkeletonGraph } from '../components/Skeleton';
 import { fetchConnections } from '../api/client';
 import { buildConnectionGraph } from '../lib/graph-adapter';
 import { relationshipColorMap } from '../lib/colors';
@@ -9,7 +11,7 @@ import { useAppStore } from '../store/app';
 
 export default function ConnectionsView() {
   const workspace = useAppStore((state) => state.workspace);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['connections', workspace],
     queryFn: () => fetchConnections(workspace),
   });
@@ -113,16 +115,20 @@ export default function ConnectionsView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-[1fr_320px] gap-6">
-        <div className="card graph-shell overflow-hidden">
-          {graph ? (
-            <GraphCanvas graph={graph} onNodeClick={(id) => setSelectedNode(id)} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-[#8888a0]">
-              {isLoading ? 'Loading connections...' : 'No connection data.'}
-            </div>
-          )}
-        </div>
+      {isError && <QueryStatus isLoading={false} isError={true} error={error} refetch={refetch} />}
+
+      <div className="grid grid-cols-[1fr_320px] gap-6 max-lg:grid-cols-1">
+        {isLoading ? (
+          <SkeletonGraph />
+        ) : (
+          <div className="card graph-shell overflow-hidden">
+            {graph ? (
+              <GraphCanvas graph={graph} onNodeClick={(id) => setSelectedNode(id)} />
+            ) : (
+              <QueryStatus isLoading={false} isError={false} isEmpty={true} emptyText="No document connections found. Use the 'memory_connect' tool or MCP 'connect' command to create relationships between memory documents." />
+            )}
+          </div>
+        )}
         <div className="space-y-4">
           {selectedMeta ? (
             <NodeDetail

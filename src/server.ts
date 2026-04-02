@@ -97,7 +97,7 @@ export function resolveWorkspace(deps: ServerDeps, filePath?: string, workspaceP
   if (!deps.daemon || !deps.allWorkspaces || !deps.dataDir) {
     return { store: deps.store, workspaceRoot: deps.workspaceRoot, projectHash: deps.currentProjectHash, needsClose: false };
   }
-  
+
   if (workspaceParam && workspaceParam !== 'all') {
     for (const [wsPath, _wsConfig] of Object.entries(deps.allWorkspaces)) {
       const wsHash = crypto.createHash('sha256').update(wsPath).digest('hex').substring(0, 12);
@@ -112,7 +112,7 @@ export function resolveWorkspace(deps: ServerDeps, filePath?: string, workspaceP
       }
     }
   }
-  
+
   if (filePath) {
     let bestMatch: { wsPath: string; length: number } | null = null;
     for (const wsPath of Object.keys(deps.allWorkspaces)) {
@@ -131,7 +131,7 @@ export function resolveWorkspace(deps: ServerDeps, filePath?: string, workspaceP
       }
     }
   }
-  
+
   return null;
 }
 
@@ -203,11 +203,11 @@ export function formatSearchResults(results: SearchResult[]): string {
   if (results.length === 0) {
     return 'No results found.';
   }
-  
+
   return results.map((r, i) => {
     let output = `### ${i + 1}. ${r.title} (${r.docid})\n` +
       `**Path:** ${r.path} | **Score:** ${r.score.toFixed(3)} | **Lines:** ${r.startLine}-${r.endLine}\n`;
-    
+
     if (r.tags && r.tags.length > 0) {
       output += `**Tags:** ${r.tags.join(', ')}\n`;
     }
@@ -220,7 +220,7 @@ export function formatSearchResults(results: SearchResult[]): string {
     if (r.flowCount !== undefined && r.flowCount > 0) {
       output += `**Flows:** ${r.flowCount}\n`;
     }
-    
+
     output += `\n${r.snippet}\n`;
     return output;
   }).join('\n---\n\n');
@@ -252,7 +252,7 @@ export function formatCompactResults(results: SearchResult[], cacheKey: string):
   }
 
   const header = `🔑 ${cacheKey} | Use memory_expand(cacheKey, index) for full content | compact:false for verbose`;
-  
+
   const lines = results.map((r, i) => {
     const score = r.score.toFixed(3);
     const title = r.title.replace(/[|—]/g, '-');
@@ -351,9 +351,9 @@ const WARMUP_ERROR = { isError: true, content: [{ type: 'text' as const, text: '
 
 export function createMcpServer(deps: ServerDeps): McpServer {
   const { store, providers, collections, configPath, outputDir, currentProjectHash, workspaceRoot } = deps;
-  
+
   const checkReady = () => deps.ready && !deps.ready.value;
-  
+
   const getCorruptionWarning = (): string | null => {
     if (deps.corruptionWarningPending?.value) {
       deps.corruptionWarningPending.value = false;
@@ -362,12 +362,12 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     }
     return null;
   };
-  
+
   const prependWarning = (text: string): string => {
     const warning = getCorruptionWarning();
     return warning ? warning + text : text;
   };
-  
+
   const server = new McpServer(
     {
       name: 'nano-brain',
@@ -379,9 +379,9 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       },
     }
   );
-  
+
   const resultCache = new ResultCache();
-  
+
   server.tool(
     'memory_search',
     'BM25 full-text keyword search across indexed documents',
@@ -432,7 +432,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       };
     }
   );
-  
+
   server.tool(
     'memory_vsearch',
     'Semantic vector search using embeddings',
@@ -525,7 +525,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       }
     }
   );
-  
+
   server.tool(
     'memory_query',
     'Full hybrid search with query expansion, RRF fusion, and LLM reranking',
@@ -558,7 +558,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         providers
       );
       const results = attachTagsToResults(rawResults, store);
-      
+
       try {
         const recentQueries = store.getRecentQueries(sessionId);
         const reformulatedId = detectReformulation(query, recentQueries);
@@ -579,7 +579,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         }
       } catch {
       }
-      
+
       if (compact) {
         const cacheKey = resultCache.set(results, query);
         return {
@@ -596,7 +596,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       };
     }
   );
-  
+
   server.tool(
     'memory_expand',
     'Expand a compact search result to see full content',
@@ -609,20 +609,20 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ cacheKey, index, indices, docid }) => {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_expand cacheKey="' + cacheKey + '" index=' + index + ' indices=' + JSON.stringify(indices) + ' docid=' + (docid || ''));
-      
+
       const cached = resultCache.get(cacheKey);
-      
+
       const expandIndices: number[] = [];
       if (indices && indices.length > 0) {
         expandIndices.push(...indices);
       } else if (index !== undefined) {
         expandIndices.push(index);
       }
-      
+
       if (cached && expandIndices.length > 0) {
         const errors: string[] = [];
         const expanded: string[] = [];
-        
+
         for (const idx of expandIndices) {
           if (idx < 1 || idx > cached.results.length) {
             errors.push(`Index ${idx} out of range. Results have ${cached.results.length} items (1-${cached.results.length}).`);
@@ -631,11 +631,11 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           const result = cached.results[idx - 1];
           expanded.push(formatSearchResults([result]));
         }
-        
+
         if (errors.length > 0 && expanded.length === 0) {
           return { content: [{ type: 'text', text: errors.join('\n') }], isError: true };
         }
-        
+
         try {
           store.logSearchExpand(cacheKey, expandIndices);
           if (deps.sampler) {
@@ -652,18 +652,18 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           }
         } catch {
         }
-        
+
         const text = expanded.join('\n---\n\n') + (errors.length > 0 ? '\n\n⚠️ ' + errors.join('\n') : '');
         return { content: [{ type: 'text', text }] };
       }
-      
+
       if (expandIndices.length === 0 && !docid) {
         return {
           content: [{ type: 'text', text: 'Provide index, indices, or docid to expand.' }],
           isError: true,
         };
       }
-      
+
       if (!cached && docid) {
         const doc = store.findDocument(docid);
         if (!doc) {
@@ -681,21 +681,21 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           }],
         };
       }
-      
+
       if (!cached) {
         return {
           content: [{ type: 'text', text: 'Cache expired. Re-run your search or provide a docid.' }],
           isError: true,
         };
       }
-      
+
       return {
         content: [{ type: 'text', text: 'Provide index, indices, or docid to expand.' }],
         isError: true,
       };
     }
   );
-  
+
   server.tool(
     'memory_get',
     'Retrieve a document by path or docid (#abc123)',
@@ -709,7 +709,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       log('mcp', 'memory_get id="' + id + '"');
       const docid = id.startsWith('#') ? id.slice(1) : id;
       const doc = store.findDocument(docid);
-      
+
       if (!doc) {
         return {
           content: [
@@ -721,7 +721,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           isError: true,
         };
       }
-      
+
       const effectiveMaxLines = maxLines ?? 200;
       const body = store.getDocumentBody(doc.hash, fromLine, effectiveMaxLines);
       const fullBody = store.getDocumentBody(doc.hash);
@@ -741,7 +741,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       };
     }
   );
-  
+
   server.tool(
     'memory_multi_get',
     'Batch retrieve documents by glob pattern or comma-separated list',
@@ -753,36 +753,36 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_multi_get pattern="' + pattern + '" maxBytes=' + maxBytes);
       const ids = pattern.split(',').map(s => s.trim());
-      
+
       let totalBytes = 0;
       const results: string[] = [];
-      
+
       for (const id of ids) {
         const docid = id.startsWith('#') ? id.slice(1) : id;
         const doc = store.findDocument(docid);
-        
+
         if (!doc) {
           results.push(`### Document not found: ${id}\n`);
           continue;
         }
-        
+
         const body = store.getDocumentBody(doc.hash);
         if (!body) {
           results.push(`### Document body not found: ${id}\n`);
           continue;
         }
-        
+
         const docText = `### ${doc.title} (${doc.path})\n\n${body}\n\n---\n\n`;
-        
+
         if (totalBytes + docText.length > maxBytes) {
           results.push(`\n⚠️  Reached maxBytes limit (${maxBytes}), truncating results.\n`);
           break;
         }
-        
+
         results.push(docText);
         totalBytes += docText.length;
       }
-      
+
       return {
         content: [
           {
@@ -793,7 +793,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       };
     }
   );
-  
+
   server.tool(
     'memory_write',
     'Write content to daily log with workspace context',
@@ -809,17 +809,17 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         return { content: [{ type: 'text', text: 'Error: content must not be empty' }], isError: true };
       }
       log('mcp', 'memory_write content_length=' + content.length);
-      
+
       const wsResult = requireDaemonWorkspace(deps, workspace)
       if ('error' in wsResult) {
         return { content: [{ type: 'text', text: wsResult.error }], isError: true }
       }
-      
+
       const effectiveProjectHash = wsResult.projectHash
       const effectiveWorkspaceRoot = wsResult.workspaceRoot
       const effectiveStore = wsResult.store
       let asyncCategorizationPending = false;
-      
+
       try {
         const date = new Date().toISOString().split('T')[0];
         const memoryDir = path.join(outputDir, 'memory');
@@ -840,7 +840,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             supersedeWarning = `\n⚠️ Supersede target not found: ${supersedes}`;
           }
         }
-        
+
         const fileContent = fs.readFileSync(targetPath, 'utf-8');
         const title = path.basename(targetPath, path.extname(targetPath));
         const hash = crypto.createHash('sha256').update(fileContent).digest('hex');
@@ -958,7 +958,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             });
           }
         }
-        
+
         return {
           content: [
             {
@@ -974,7 +974,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       }
     }
   );
-  
+
   server.tool(
     'memory_tags',
     'List all tags with document counts',
@@ -1007,7 +1007,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       };
     }
   );
-  
+
   server.tool(
     'memory_status',
     'Show index health, collection info, and model status',
@@ -1020,7 +1020,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       const health = store.getIndexHealth()
       const effectiveRoot = root || deps.workspaceRoot
       let codebaseStats = getCodebaseStats(store, deps.codebaseConfig, effectiveRoot)
-      
+
       let workspaceStatsText = '';
       if (deps.daemon && deps.allWorkspaces && deps.dataDir) {
         const wsStats: string[] = [];
@@ -1057,13 +1057,13 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           workspaceStatsText = '\n\n**Workspace Codebase Stats:**\n' + wsStats.join('\n');
         }
       }
-      
+
       const embeddingConfig = deps.embeddingConfig
       const ollamaUrl = embeddingConfig?.url || detectOllamaUrl()
       const ollamaModel = embeddingConfig?.model || 'mxbai-embed-large'
       const provider = embeddingConfig?.provider || 'ollama'
       let embeddingHealth: { provider: string; url: string; model: string; reachable: boolean; models?: string[]; error?: string } | undefined
-      
+
       if (provider === 'openai' && embeddingConfig?.apiKey) {
         const openaiHealth = await checkOpenAIHealth(ollamaUrl, embeddingConfig.apiKey, ollamaModel)
         embeddingHealth = { provider, url: ollamaUrl, model: ollamaModel, ...openaiHealth }
@@ -1093,7 +1093,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         const telemetryCount = store.getTelemetryCount();
         const banditStats = store.loadBanditStats(currentProjectHash);
         const latestConfig = store.getLatestConfigVersion();
-        
+
         learningText = '\n\n## Learning\n';
         learningText += '- PID: ' + process.pid + '\n';
         learningText += '- Uptime: ' + Math.round(process.uptime()) + 's\n';
@@ -1124,12 +1124,12 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ root }) => {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_index_codebase root="' + (root || '') + '"');
-      
+
       const resolved = root ? resolveWorkspace(deps, undefined, root) : null;
       const effectiveRoot = resolved?.workspaceRoot || root || deps.workspaceRoot;
       const effectiveStore = resolved?.store || store;
       const effectiveProjectHash = resolved?.projectHash || crypto.createHash('sha256').update(effectiveRoot).digest('hex').substring(0, 12);
-      
+
       let effectiveCodebaseConfig = deps.codebaseConfig;
       if (deps.daemon && deps.allWorkspaces && effectiveRoot) {
         const wsConfig = deps.allWorkspaces[effectiveRoot];
@@ -1137,7 +1137,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           effectiveCodebaseConfig = wsConfig.codebase;
         }
       }
-      
+
       if (!effectiveCodebaseConfig?.enabled) {
         if (resolved?.needsClose) resolved.store.close();
         return {
@@ -1150,11 +1150,11 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           isError: true,
         }
       }
-      
+
       const needsClose = resolved?.needsClose ?? false;
       const storeToUse = effectiveStore;
       const configToUse = effectiveCodebaseConfig;
-      
+
       // Open the correct workspace's symbol graph DB (not deps.db which is the startup workspace)
       let symbolGraphDb = deps.db;
       let symbolGraphDbNeedsClose = false;
@@ -1163,7 +1163,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         symbolGraphDb = openDatabase(wsDbPath);
         symbolGraphDbNeedsClose = true;
       }
-      
+
       log('codebase-debug', `symbolGraphDb=${symbolGraphDbNeedsClose ? 'workspace-specific' : 'startup'} root=${effectiveRoot} hash=${effectiveProjectHash}`, 'error')
       ;(async () => {
         try {
@@ -1187,7 +1187,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           if (needsClose) storeToUse.close();
         }
       })()
-      
+
       return {
         content: [
           {
@@ -1198,7 +1198,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       }
     }
   )
-  
+
   server.tool(
     'memory_update',
     'Trigger immediate reindex of all collections',
@@ -1208,30 +1208,30 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       log('mcp', 'memory_update');
       let totalAdded = 0;
       let totalUpdated = 0;
-      
+
       const freshConfig = loadCollectionConfig(deps.configPath);
       const freshCollections = freshConfig ? getCollections(freshConfig) : deps.collections;
-      
+
       for (const collection of freshCollections) {
         const files = await scanCollectionFiles(collection);
-        
+
         for (const filePath of files) {
           const existing = store.findDocument(filePath);
           const stats = fs.statSync(filePath);
           const content = fs.readFileSync(filePath, 'utf-8');
           const hash = crypto.createHash('sha256').update(content).digest('hex');
-          
+
           if (existing && existing.hash === hash) {
             continue;
           }
-          
+
           if (existing) {
             store.deactivateDocument(collection.name, filePath);
             totalUpdated++;
           } else {
             totalAdded++;
           }
-          
+
           const effectiveProjectHash = collection.name === 'sessions'
             ? extractProjectHashFromPath(filePath, path.join(outputDir, 'sessions'))
             : currentProjectHash;
@@ -1249,7 +1249,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           });
         }
       }
-      
+
       return {
         content: [
           {
@@ -1260,7 +1260,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       };
     }
   );
-  
+
   server.tool(
     'memory_focus',
     'Get dependency graph context for a specific file',
@@ -1273,16 +1273,16 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       const resolved = resolveWorkspace(deps, filePath);
       const effectiveStore = resolved?.store || store;
       const effectiveProjectHash = resolved?.projectHash || currentProjectHash;
-      
+
       try {
         const dependencies = effectiveStore.getFileDependencies(filePath, effectiveProjectHash);
         const dependents = effectiveStore.getFileDependents(filePath, effectiveProjectHash);
         const centralityInfo = effectiveStore.getDocumentCentrality(filePath);
-        
+
         const lines: string[] = [];
         lines.push(`**File:** ${filePath}`);
         lines.push('');
-        
+
         if (centralityInfo) {
           lines.push(`**Centrality:** ${centralityInfo.centrality.toFixed(4)}`);
           if (centralityInfo.clusterId !== null) {
@@ -1302,7 +1302,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         lines.push('**Centrality:** Not indexed');
       }
       lines.push('');
-      
+
         lines.push(`**Dependencies (imports):** ${dependencies.length}`);
         const maxDeps = 30;
         for (const dep of dependencies.slice(0, maxDeps)) {
@@ -1312,7 +1312,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           lines.push(`  ... and ${dependencies.length - maxDeps} more`);
         }
         lines.push('');
-        
+
         lines.push(`**Dependents (imported by):** ${dependents.length}`);
         const maxDependents = 30;
         for (const dep of dependents.slice(0, maxDependents)) {
@@ -1321,7 +1321,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         if (dependents.length > maxDependents) {
           lines.push(`  ... and ${dependents.length - maxDependents} more`);
         }
-        
+
         return {
           content: [
             {
@@ -1335,7 +1335,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       }
     }
   );
-  
+
   server.tool(
     'memory_graph_stats',
     'Get statistics about the file dependency graph',
@@ -1345,14 +1345,14 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ workspace }) => {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_graph_stats workspace="' + (workspace || '') + '"');
-      
+
       const wsResult = requireDaemonWorkspace(deps, workspace)
       if ('error' in wsResult) {
         return { content: [{ type: 'text', text: wsResult.error }], isError: true }
       }
-      
+
       const lines: string[] = [];
-      
+
       try {
         if (wsResult.projectHash === 'all' && deps.allWorkspaces && deps.dataDir) {
           lines.push('**Graph Statistics (All Workspaces)**');
@@ -1360,7 +1360,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           let totalNodes = 0;
           let totalEdges = 0;
           let totalClusters = 0;
-          
+
           for (const [wsPath, wsConfig] of Object.entries(deps.allWorkspaces)) {
             if (!wsConfig.codebase?.enabled) continue;
             try {
@@ -1380,7 +1380,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
               }
             } catch { }
           }
-          
+
           lines.push('');
           lines.push(`**Total:** ${totalNodes} nodes, ${totalEdges} edges, ${totalClusters} clusters`);
         } else {
@@ -1389,14 +1389,14 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           const stats = effectiveStore.getGraphStats(effectiveProjectHash);
           const edges = effectiveStore.getFileEdges(effectiveProjectHash);
           const cycles = findCycles(edges.map(e => ({ source: e.source_path, target: e.target_path })), 5);
-          
+
           lines.push('**Graph Statistics**');
           lines.push('');
           lines.push(`**Nodes:** ${stats.nodeCount}`);
           lines.push(`**Edges:** ${stats.edgeCount}`);
           lines.push(`**Clusters:** ${stats.clusterCount}`);
           lines.push('');
-          
+
           if (stats.topCentrality.length > 0) {
             lines.push('**Top 10 by Centrality:**');
             for (const { path: filePath, centrality } of stats.topCentrality) {
@@ -1404,7 +1404,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             }
             lines.push('');
           }
-          
+
           if (cycles.length > 0) {
             lines.push(`**Cycles (length ≤ 5):** ${cycles.length}`);
             for (const cycle of cycles.slice(0, 5)) {
@@ -1417,7 +1417,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             lines.push('**Cycles:** None detected');
           }
         }
-        
+
         return {
           content: [
             {
@@ -1453,7 +1453,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       }
       const effectiveProjectHash = wsResult.projectHash === 'all' ? undefined : wsResult.projectHash
       const effectiveStore = wsResult.store
-      
+
       try {
         const results = effectiveStore.querySymbols({
           type,
@@ -1534,7 +1534,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         return { content: [{ type: 'text', text: wsResult.error }], isError: true }
       }
       const effectiveStore = wsResult.store
-      
+
       try {
         const results = effectiveStore.getSymbolImpact(type, pattern, wsResult.projectHash);
 
@@ -1933,47 +1933,47 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ workspace }) => {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_consolidate triggered');
-      
+
       const wsResult = requireDaemonWorkspace(deps, workspace);
       if ('error' in wsResult) {
         return { content: [{ type: 'text', text: wsResult.error }], isError: true };
       }
-      
+
       const effectiveStore = wsResult.store;
-      
+
       try {
         const config = loadCollectionConfig(deps.configPath);
-        
+
         if (!config?.consolidation?.enabled) {
           return {
             content: [{ type: 'text', text: 'Consolidation is not enabled. Set consolidation.enabled=true in config.yml' }],
           };
         }
-        
+
         const consolidationConfig = config.consolidation as ConsolidationConfig;
         const provider = createLLMProvider(consolidationConfig);
-        
+
         if (!provider) {
           return {
             content: [{ type: 'text', text: 'No API key configured. Set consolidation.apiKey in config.yml or CONSOLIDATION_API_KEY env var' }],
           };
         }
-        
+
         const agent = new ConsolidationAgent(effectiveStore, {
           llmProvider: provider,
           maxMemoriesPerCycle: consolidationConfig.max_memories_per_cycle,
           minMemoriesThreshold: consolidationConfig.min_memories_threshold,
           confidenceThreshold: consolidationConfig.confidence_threshold,
         });
-        
+
         const results = await agent.runConsolidationCycle();
-        
+
         if (results.length === 0) {
           return {
             content: [{ type: 'text', text: 'No memories to consolidate' }],
           };
         }
-        
+
         return {
           content: [{ type: 'text', text: `Consolidation complete: ${results.length} consolidation(s) created` }],
         };
@@ -1999,20 +1999,20 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ workspace }) => {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_consolidation_status');
-      
+
       const wsResult = requireDaemonWorkspace(deps, workspace);
       if ('error' in wsResult) {
         return { content: [{ type: 'text', text: wsResult.error }], isError: true };
       }
-      
+
       try {
         const effectiveStore = wsResult.store;
         const queueStats = effectiveStore.getQueueStats();
         const recentLogs = effectiveStore.getRecentConsolidationLogs(10);
-        
+
         const config = loadCollectionConfig(deps.configPath);
         const consolidationEnabled = config?.consolidation?.enabled ?? false;
-        
+
         let text = '## Consolidation Status\n\n';
         text += `**Enabled:** ${consolidationEnabled ? 'Yes' : 'No'}\n`;
         text += '\n### Queue\n';
@@ -2020,7 +2020,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         text += `- Processing: ${queueStats.processing}\n`;
         text += `- Completed: ${queueStats.completed}\n`;
         text += `- Failed: ${queueStats.failed}\n`;
-        
+
         if (recentLogs.length > 0) {
           text += '\n### Recent Activity\n';
           for (const log of recentLogs) {
@@ -2037,7 +2037,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         } else {
           text += '\n_No recent consolidation activity._\n';
         }
-        
+
         return { content: [{ type: 'text', text }] };
       } finally {
         if (wsResult.needsClose) wsResult.store.close();
@@ -2055,12 +2055,12 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ limit, workspace }) => {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_importance limit=' + limit);
-      
+
       const wsResult = requireDaemonWorkspace(deps, workspace);
       if ('error' in wsResult) {
         return { content: [{ type: 'text', text: wsResult.error }], isError: true };
       }
-      
+
       try {
         return {
           content: [{ type: 'text', text: 'Importance scoring not yet active. Enable with importance.enabled=true in config.' }],
@@ -2080,26 +2080,26 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ workspace }) => {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_learning_status');
-      
+
       const wsResult = requireDaemonWorkspace(deps, workspace);
       if ('error' in wsResult) {
         return { content: [{ type: 'text', text: wsResult.error }], isError: true };
       }
-      
+
       try {
         const effectiveStore = wsResult.store;
         const effectiveProjectHash = wsResult.projectHash;
-        
+
         const telemetryCount = effectiveStore.getTelemetryCount();
         const banditStats = effectiveStore.loadBanditStats(effectiveProjectHash);
         const globalLearning = effectiveStore.getGlobalLearning();
-        
+
         let text = '## Learning Status\n\n';
         text += '**PID:** ' + process.pid + '\n';
         text += '**Uptime:** ' + Math.round(process.uptime()) + 's\n';
         text += '**Telemetry:** ' + telemetryCount + ' queries logged\n';
         text += '**Bandit Stats:** ' + banditStats.length + ' variant records\n';
-        
+
         if (banditStats.length > 0) {
           text += '\n### Active Bandits\n';
           const grouped = new Map<string, typeof banditStats>();
@@ -2117,19 +2117,19 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             }
           }
         }
-        
+
         if (globalLearning.length > 0) {
           text += '\n### Global Learning\n';
           for (const g of globalLearning) {
             text += '- ' + g.parameter_name + ': ' + g.value.toFixed(4) + ' (confidence: ' + g.confidence.toFixed(2) + ')\n';
           }
         }
-        
+
         try {
           const clusters = effectiveStore.getQueryClusters(effectiveProjectHash);
           const transitions = effectiveStore.getClusterTransitions(effectiveProjectHash);
           const accuracy = effectiveStore.getSuggestionAccuracy(effectiveProjectHash);
-          
+
           text += '\n### Proactive Intelligence\n';
           text += '- Clusters: ' + clusters.length + '\n';
           text += '- Transitions: ' + transitions.length + '\n';
@@ -2138,7 +2138,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           }
         } catch {
         }
-        
+
         return { content: [{ type: 'text', text }] };
       } finally {
         if (wsResult.needsClose) wsResult.store.close();
@@ -2157,23 +2157,23 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ context, workspace, limit }) => {
       if (checkReady()) return WARMUP_ERROR;
       log('mcp', 'memory_suggestions context="' + (context || '') + '" workspace="' + (workspace || '') + '"');
-      
+
       const wsResult = requireDaemonWorkspace(deps, workspace);
       if ('error' in wsResult) {
         return { content: [{ type: 'text', text: wsResult.error }], isError: true };
       }
-      
+
       try {
         const effectiveStore = wsResult.store;
         const effectiveProjectHash = wsResult.projectHash;
-        
+
         if (!deps.sequenceAnalyzer) {
           return {
             content: [{ type: 'text', text: 'Proactive intelligence is not configured. Set proactive.enabled=true in config.yml.' }],
             isError: true,
           };
         }
-        
+
         if (!context) {
           const profile = effectiveStore.getWorkspaceProfile(effectiveProjectHash);
           const telemetryStats = effectiveStore.getTelemetryStats(effectiveProjectHash);
@@ -2186,15 +2186,15 @@ export function createMcpServer(deps: ServerDeps): McpServer {
             content: [{ type: 'text', text: '## Workspace Insights\n\n**Top topics:** ' + topKeywords.map(k => k.keyword).join(', ') + '\n**Queries logged:** ' + telemetryStats.queryCount + '\n**Expand rate:** ' + (expandRate * 100).toFixed(1) + '%' }],
           };
         }
-        
+
         const suggestions = await deps.sequenceAnalyzer.predictNext(context, effectiveProjectHash, limit ?? 3);
-        
+
         if (suggestions.length === 0) {
           return { content: [{ type: 'text', text: 'No predictions available for this context. The system needs more query data to learn patterns.' }] };
         }
-        
+
         const dataFreshness = new Date().toISOString();
-        
+
         let text = '## Predicted Next Queries\n\n';
         for (const s of suggestions) {
           text += '- **' + s.query + '** (confidence: ' + (s.confidence * 100).toFixed(0) + '%)\n';
@@ -2205,7 +2205,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           text += '\n';
         }
         text += '_Data freshness: ' + dataFreshness + '_';
-        
+
         return { content: [{ type: 'text', text }] };
       } catch (err) {
         return {
@@ -2534,7 +2534,6 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           const statusIcon = row.status === 'superseded' ? '~~' : '';
           const supersededNote = row.superseded_by ? ` (superseded by #${row.superseded_by})` : '';
           lines.push(`- **${date}** ${statusIcon}${row.title}${statusIcon}${supersededNote}`);
-          lines.push(`  ${row.path}`);
         }
 
         return { content: [{ type: 'text', text: lines.join('\n') }] };
@@ -2739,7 +2738,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
       };
     }
   );
-  
+
   return server;
 }
 
@@ -2787,7 +2786,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   process.on('unhandledRejection', rejectionThreshold.handler);
 
   const { dbPath, configPath, httpPort, httpHost = '127.0.0.1', daemon, root } = options;
-  
+
   const homeDir = os.homedir();
   const nanoBrainHome = path.join(homeDir, '.nano-brain');
   const outputDir = nanoBrainHome;
@@ -2817,7 +2816,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   log('server', 'Config path=' + finalConfigPath);
   const store = createStore(effectiveDbPath);
   const symbolGraphDb = store.getDb();
-  
+
   const validateInterval = (value: number | undefined, name: string, defaultVal: number): number => {
     if (value === undefined) return defaultVal;
     if (value <= 0 || value > 3600) {
@@ -2831,7 +2830,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     sessionPoll: validateInterval(config.intervals.sessionPoll, 'sessionPoll', 120),
     reindexPoll: validateInterval(config.intervals.reindexPoll, 'reindexPoll', 120),
   } : undefined;
-  
+
   let vectorStore: VectorStore | null = null;
   const configuredDimensions = config?.vector?.dimensions;
   if (config?.vector?.provider === 'qdrant') {
@@ -2857,31 +2856,31 @@ export async function startServer(options: ServerOptions): Promise<void> {
     log('server', 'vector provider=sqlite-vec (default)');
     log('server', 'Vector store: sqlite-vec (default)');
   }
-  
+
   if (vectorStore) {
     store.setVectorStore(vectorStore);
   }
-  
+
   let embedder: SearchProviders['embedder'] = null;
   let reranker: SearchProviders['reranker'] = null;
-  
+
   const providers: SearchProviders = {
     embedder,
     reranker,
     expander: null,
   };
-  
+
   store.modelStatus = {
     embedding: 'loading...',
     reranker: 'loading...',
     expander: 'disabled',
   };
-  
+
   const recovery = getLastCorruptionRecovery();
   const corruptionWarningPending = recovery?.recovered
     ? { value: true, corruptedPath: recovery.corruptedPath }
     : { value: false };
-  
+
   const deps: ServerDeps = {
     store,
     providers,
@@ -2900,16 +2899,16 @@ export async function startServer(options: ServerOptions): Promise<void> {
     daemon: daemon ?? false,
     corruptionWarningPending,
   };
-  
+
   const server = createMcpServer(deps);
-  
+
   let watcher: ReturnType<typeof startWatcher> | null = null;
   const startFileWatcher = () => {
     if (watcher) {
       return;
     }
     log('server', 'Starting file watcher');
-    
+
     // Detect overlapping workspaces
     if (config?.workspaces) {
       const wsPaths = Object.keys(config.workspaces).sort()
@@ -2926,7 +2925,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         }
       }
     }
-    
+
     const watcherConfig: WatcherConfig | undefined = config?.watcher;
     watcher = startWatcher({
       store,
@@ -2955,32 +2954,32 @@ export async function startServer(options: ServerOptions): Promise<void> {
       projectHash: currentProjectHash,
     });
   };
-  
+
   const sseSessions = new Map<string, { transport: SSEServerTransport; server: McpServer }>();
   const streamableSessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
   let httpServer: http.Server | null = null;
   let consolidationWorker: ConsolidationWorker | null = null;
-  
+
   const cleanup = async () => {
     log('server', 'Shutting down');
-    
+
     if (httpServer) {
       httpServer.close();
     }
-    
+
     if (consolidationWorker) {
       await consolidationWorker.stop();
     }
-    
+
     await new Promise(resolve => setTimeout(resolve, 5000));
-    
+
     for (const [_id, session] of sseSessions) {
       try { await session.transport.close(); } catch {}
     }
     for (const [_id, session] of streamableSessions) {
       try { await session.transport.close(); } catch {}
     }
-    
+
     if (watcher) watcher.stop();
     await shutdownFTSWorker();
     try { symbolGraphDb.pragma('wal_checkpoint(PASSIVE)'); } catch { /* ignore checkpoint errors */ }
@@ -2992,10 +2991,10 @@ export async function startServer(options: ServerOptions): Promise<void> {
   rejectionThreshold.setOnExit(cleanup);
   process.on('SIGTERM', cleanup);
   process.on('SIGINT', cleanup);
-  
+
   const readyState = { value: false };
   deps.ready = readyState;
-  
+
   if (httpPort) {
     try {
       await initFTSWorker(effectiveDbPath);
@@ -3076,14 +3075,14 @@ export async function startServer(options: ServerOptions): Promise<void> {
           res.end(JSON.stringify({ error: 'Missing sessionId parameter' }));
           return;
         }
-        
+
         const session = sseSessions.get(sessionId);
         if (!session) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Session not found' }));
           return;
         }
-        
+
         await session.transport.handlePostMessage(req, res);
         return;
       }
@@ -3128,7 +3127,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
           }
           const effectiveProjectHash = scope === 'all' ? 'all' : currentProjectHash;
           const parsedTags = tags ? tags.split(',').map((t: string) => t.trim().toLowerCase()).filter((t: string) => t.length > 0) : undefined;
-          const QUERY_TIMEOUT_MS = 15000;
+          // hybridSearch has internal timeouts: 1s FTS + 5s vec → max ~6s total
+          const QUERY_TIMEOUT_MS = 6000;
           const results = await Promise.race([
             hybridSearch(
               store,
@@ -3160,12 +3160,35 @@ export async function startServer(options: ServerOptions): Promise<void> {
             return;
           }
           const safeLimit = Math.max(1, Math.min(typeof limit === 'number' && limit > 0 ? limit : 10, 100));
-          const results = isFTSWorkerReady()
-            ? await searchFTSAsync(query, { limit: safeLimit, projectHash: currentProjectHash })
-            : store.searchFTS(query, { limit: safeLimit, projectHash: currentProjectHash });
+          // Hard outer deadline to prevent indefinite blocking on WAL write locks
+          const SEARCH_DEADLINE_MS = 8000;
+          const FTS_TIMEOUT_MS = 5000;
+          const deadline = new Promise<{ results: import('./types.js').SearchResult[]; timedOut: boolean }>((resolve) => {
+            setTimeout(() => resolve({ results: [], timedOut: true }), SEARCH_DEADLINE_MS);
+          });
+          const doSearch = async (): Promise<{ results: import('./types.js').SearchResult[]; timedOut: boolean }> => {
+            if (isFTSWorkerReady()) {
+              try {
+                const results = await Promise.race([
+                  searchFTSAsync(query, { limit: safeLimit, projectHash: currentProjectHash }),
+                  new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('__FTS_TIMEOUT__')), FTS_TIMEOUT_MS)
+                  ),
+                ]);
+                return { results, timedOut: false };
+              } catch (ftsErr: any) {
+                log('server', `POST /api/search FTS worker timeout/fail: ${ftsErr?.message}`, 'warn');
+              }
+            }
+            // NOTE: Do NOT call store.searchFTS() here — it is synchronous and will block
+            // the event loop when SQLite WAL write locks are held by the embedder.
+            // Return empty results immediately; the deadline Promise handles the timeout case.
+            return { results: [], timedOut: false };
+          };
+          const { results, timedOut } = await Promise.race([doSearch(), deadline]);
           try { store.trackAccess(results.map((r: { id: string | number }) => typeof r.id === 'string' ? parseInt(r.id, 10) : r.id)); } catch { /* non-critical */ }
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ results }));
+          res.end(JSON.stringify({ results, ...(timedOut ? { warning: 'search timed out, try again when indexing completes' } : {}) }));
         } catch (err) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid JSON body' }));
@@ -3409,25 +3432,27 @@ export async function startServer(options: ServerOptions): Promise<void> {
         if (deps.allWorkspaces) {
           for (const [wsPath] of Object.entries(deps.allWorkspaces)) {
             const wsHash = crypto.createHash('sha256').update(wsPath).digest('hex').substring(0, 12);
-            const wsDbPath = resolveWorkspaceDbPath(deps.dataDir ?? path.dirname(effectiveDbPath), wsPath);
+            // Use a lightweight direct DB open instead of createStore() to avoid
+            // the expensive store initialization (prepared statements, migrations, etc.)
+            let docCount = 0;
             try {
-              const wsStore = createStore(wsDbPath);
-              const stats = wsStore.getWorkspaceStats();
-              const docCount = stats.find((s: { projectHash: string }) => s.projectHash === wsHash)?.count ?? 0;
-              workspaceList.push({
-                path: wsPath,
-                name: path.basename(wsPath),
-                hash: wsHash,
-                documentCount: docCount,
-              });
-            } catch {
-              workspaceList.push({
-                path: wsPath,
-                name: path.basename(wsPath),
-                hash: wsHash,
-                documentCount: 0,
-              });
-            }
+              const wsDbPath = resolveWorkspaceDbPath(deps.dataDir ?? path.dirname(effectiveDbPath), wsPath);
+              const lightDb = openDatabase(wsDbPath);
+              try {
+                const row = lightDb.prepare(
+                  `SELECT COUNT(*) as cnt FROM documents WHERE active = 1 AND project_hash = ?`
+                ).get(wsHash) as { cnt: number } | undefined;
+                docCount = row?.cnt ?? 0;
+              } finally {
+                lightDb.close();
+              }
+            } catch { /* workspace DB may not exist yet */ }
+            workspaceList.push({
+              path: wsPath,
+              name: path.basename(wsPath),
+              hash: wsHash,
+              documentCount: docCount,
+            });
           }
         } else {
           workspaceList.push({
@@ -3540,32 +3565,40 @@ export async function startServer(options: ServerOptions): Promise<void> {
           res.end(JSON.stringify({ error: 'query parameter "q" is required' }));
           return;
         }
-        try {
-          const startTime = Date.now();
-          const SEARCH_TIMEOUT_MS = 10000;
-          let results: import('./types.js').SearchResult[];
-          let timedOut = false;
-          try {
-            results = await Promise.race([
-              hybridSearch(
-                store,
-                { query, limit, projectHash: wsHash, searchConfig: deps.searchConfig, db: deps.db },
-                providers
-              ),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('__SEARCH_TIMEOUT__')), SEARCH_TIMEOUT_MS)
-              ),
-            ]);
-          } catch (timeoutErr: any) {
-            if (timeoutErr?.message === '__SEARCH_TIMEOUT__') {
-              log('server', `hybrid search timed out after ${SEARCH_TIMEOUT_MS}ms, falling back to FTS`, 'warn');
-              timedOut = true;
-              const { searchFTS } = await import('./search.js');
-              results = searchFTS(store, query, { limit, projectHash: wsHash });
-            } else {
-              throw timeoutErr;
+        // Hard outer deadline: always respond within SEARCH_HARD_DEADLINE_MS.
+        // This prevents the HTTP handler from blocking indefinitely when both
+        // the FTS worker AND store.searchFTS are blocked by SQLite WAL write locks
+        // held by the codebase embedding background process.
+        const SEARCH_HARD_DEADLINE_MS = 8000;
+        const searchDeadline = new Promise<{ results: import('./types.js').SearchResult[]; timedOut: boolean }>((resolve) => {
+          setTimeout(() => resolve({ results: [], timedOut: true }), SEARCH_HARD_DEADLINE_MS);
+        });
+
+        const doSearch = async (): Promise<{ results: import('./types.js').SearchResult[]; timedOut: boolean }> => {
+          let results: import('./types.js').SearchResult[] = [];
+          // Try FTS worker first (read-only connection, should be fast)
+          const FTS_WORKER_TIMEOUT_MS = 5000;
+          if (isFTSWorkerReady()) {
+            try {
+              results = await Promise.race([
+                searchFTSAsync(query, { limit, projectHash: wsHash }),
+                new Promise<never>((_, reject) =>
+                  setTimeout(() => reject(new Error('__FTS_TIMEOUT__')), FTS_WORKER_TIMEOUT_MS)
+                ),
+              ]);
+              return { results, timedOut: false };
+            } catch (ftsErr: any) {
+              log('server', `FTS worker timeout/fail: ${ftsErr?.message}`, 'warn');
             }
           }
+          // NOTE: Do NOT call store.searchFTS() here — it is synchronous and will block
+          // the event loop when SQLite WAL write locks are held by the embedder.
+          return { results: [], timedOut: false };
+        };
+
+        try {
+          const startTime = Date.now();
+          const { results, timedOut } = await Promise.race([doSearch(), searchDeadline]);
           const executionMs = Date.now() - startTime;
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
@@ -3580,7 +3613,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
             })),
             query,
             executionMs,
-            ...(timedOut ? { fallback: 'fts' } : {}),
+            ...(timedOut ? { warning: 'search timed out, try again when indexing completes' } : {}),
           }));
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -3657,12 +3690,37 @@ export async function startServer(options: ServerOptions): Promise<void> {
 
       if (req.method === 'GET' && pathname === '/api/v1/graph/symbols') {
         const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        // limit=0 means "no limit" (return all). Default 2000 to keep payload manageable.
+        const limitParam = url.searchParams.get('limit');
+        const symbolLimit = limitParam === '0' ? Infinity : parseInt(limitParam || '2000', 10);
         try {
-          const symbols = store.getSymbolsForProject(wsHash);
-          const edges = store.getSymbolEdgesForProject(wsHash);
+          const allSymbols = store.getSymbolsForProject(wsHash);
+          const allEdges = store.getSymbolEdgesForProject(wsHash);
           const clusters = store.getSymbolClusters(wsHash);
+          const total = allSymbols.length;
+
+          // If we need to trim, keep the exported + high-degree symbols first.
+          // Build a set of symbol IDs present in edges for quick lookup.
+          let symbols = allSymbols;
+          let edges = allEdges;
+          if (isFinite(symbolLimit) && allSymbols.length > symbolLimit) {
+            // Sort: exported symbols first, then by how many edges they have.
+            const edgeDegree = new Map<number, number>();
+            for (const e of allEdges) {
+              edgeDegree.set(e.sourceId, (edgeDegree.get(e.sourceId) || 0) + 1);
+              edgeDegree.set(e.targetId, (edgeDegree.get(e.targetId) || 0) + 1);
+            }
+            symbols = [...allSymbols].sort((a, b) => {
+              const exportedDiff = (b.exported ? 1 : 0) - (a.exported ? 1 : 0);
+              if (exportedDiff !== 0) return exportedDiff;
+              return (edgeDegree.get(b.id) || 0) - (edgeDegree.get(a.id) || 0);
+            }).slice(0, symbolLimit);
+            const keptIds = new Set(symbols.map(s => s.id));
+            edges = allEdges.filter(e => keptIds.has(e.sourceId) && keptIds.has(e.targetId));
+          }
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ symbols, edges, clusters }));
+          res.end(JSON.stringify({ symbols, edges, clusters, total, truncated: total > symbols.length }));
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
@@ -3722,8 +3780,10 @@ export async function startServer(options: ServerOptions): Promise<void> {
               line: sym.lineNumber,
             });
           }
+          // Return only the grouped view (not the raw symbols array which duplicates all data).
+          // The grouped view is sufficient for the frontend and is much smaller.
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ symbols, grouped }));
+          res.end(JSON.stringify({ grouped, total: symbols.length }));
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
@@ -3731,23 +3791,82 @@ export async function startServer(options: ServerOptions): Promise<void> {
         return;
       }
 
+      if (req.method === 'GET' && pathname === '/api/v1/tags') {
+        const wsHash = url.searchParams.get('workspace') || currentProjectHash;
+        try {
+          const tags = store.listAllTags();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ tags }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/vsearch') {
+        const body = await readBody(req);
+        try {
+          const { query, limit, workspace } = JSON.parse(body);
+          if (!query) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'query is required' }));
+            return;
+          }
+          const safeLimit = Math.max(1, Math.min(typeof limit === 'number' && limit > 0 ? limit : 10, 100));
+          const wsHash = workspace || currentProjectHash;
+          // Hard outer deadline to prevent indefinite blocking on WAL write locks
+          const VSEARCH_DEADLINE_MS = 8000;
+          const deadline = new Promise<import('./types.js').SearchResult[]>((resolve) => {
+            setTimeout(() => resolve([]), VSEARCH_DEADLINE_MS);
+          });
+          const doVsearch = async (): Promise<import('./types.js').SearchResult[]> => {
+            if (providers.embedder) {
+              try {
+                let embedding: number[];
+                const cached = store.getQueryEmbeddingCache(query);
+                if (cached) {
+                  embedding = cached;
+                } else {
+                  const result = await providers.embedder.embed(query);
+                  embedding = result.embedding;
+                  store.setQueryEmbeddingCache(query, embedding);
+                }
+                return await store.searchVecAsync(query, embedding, { limit: safeLimit, projectHash: wsHash });
+              } catch {
+                // Fall back to FTS if vector search fails
+              }
+            }
+            // NOTE: Do NOT call store.searchFTS() here — synchronous, blocks event loop
+            return [];
+          };
+          const results = await Promise.race([doVsearch(), deadline]);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ results }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        }
+        return;
+      }
+
       if (pathname === '/mcp') {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
-        
+
         if (req.method === 'GET' || (req.method === 'POST' && !sessionId)) {
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             eventStore,
           });
           const clientServer = createMcpServer(deps);
-          
+
           await clientServer.connect(transport);
           await transport.handleRequest(req, res);
-          
+
           if (transport.sessionId) {
             streamableSessions.set(transport.sessionId, { transport, server: clientServer });
             log('server', `Streamable HTTP client connected sessionId=${transport.sessionId}`);
-            
+
             transport.onclose = () => {
               if (transport.sessionId) {
                 streamableSessions.delete(transport.sessionId);
@@ -3757,7 +3876,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
           }
           return;
         }
-        
+
         if (sessionId) {
           const session = streamableSessions.get(sessionId);
           if (!session) {
@@ -3765,16 +3884,16 @@ export async function startServer(options: ServerOptions): Promise<void> {
             res.end(JSON.stringify({ error: 'Session not found' }));
             return;
           }
-          
+
           await session.transport.handleRequest(req, res);
           return;
         }
       }
-      
+
       res.writeHead(404);
       res.end('Not Found');
     });
-    
+
     httpServer.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
         log('server', `nano-brain already running on port ${httpPort}`, 'error');
@@ -3782,7 +3901,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       }
       throw err;
     });
-    
+
     httpServer.listen(httpPort, httpHost, () => {
       log('server', `MCP server listening on http://${httpHost}:${httpPort}`);
       log('server', `SSE endpoint: GET /sse, POST /messages?sessionId=<id>`);
@@ -3795,7 +3914,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     await server.connect(transport);
     log('server', 'MCP server started on stdio');
   }
-  
+
   Promise.all([
     createEmbeddingProvider({ embeddingConfig: config?.embedding, onTokenUsage: (model, tokens) => store.recordTokenUsage(model, tokens) })
       .then((loadedEmbedder) => {
@@ -3852,7 +3971,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         });
         consolidationWorker.start();
         log('server', 'Consolidation worker started');
-        
+
         providers.expander = createLLMQueryExpander(llmProvider);
         store.modelStatus.expander = 'llm:' + (llmProvider.model ?? 'unknown');
         log('server', 'Query expander enabled with LLM');
@@ -3869,7 +3988,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     const ollamaUrl = embeddingConfig?.url || detectOllamaUrl();
     const ollamaModel = embeddingConfig?.model || 'mxbai-embed-large';
     let startedWithLocalGGUF = false;
-    
+
     // Check after initial provider loads whether we're using local GGUF
     setTimeout(() => {
       // Local GGUF model is 'nomic-embed-text-v1.5', Ollama is 'nomic-embed-text'
@@ -3877,7 +3996,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         startedWithLocalGGUF = true;
       }
     }, 5000);
-    
+
     const reconnectTimer = setInterval(async () => {
       if (!startedWithLocalGGUF) {
         clearInterval(reconnectTimer);
@@ -3908,7 +4027,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         // Silent retry — don't spam logs
       }
     }, 60000);
-    
+
     // Don't prevent process exit
     reconnectTimer.unref();
   }

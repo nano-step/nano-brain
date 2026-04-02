@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import GraphCanvas from '../components/GraphCanvas';
 import NodeDetail from '../components/NodeDetail';
+import QueryStatus from '../components/QueryStatus';
+import { SkeletonGraph } from '../components/Skeleton';
 import { fetchSymbols } from '../api/client';
 import { buildSymbolGraph } from '../lib/graph-adapter';
 import { symbolKindColorMap } from '../lib/colors';
@@ -9,7 +11,7 @@ import { useAppStore } from '../store/app';
 
 export default function SymbolGraph() {
   const workspace = useAppStore((state) => state.workspace);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['symbols', workspace],
     queryFn: () => fetchSymbols(workspace),
   });
@@ -60,16 +62,25 @@ export default function SymbolGraph() {
         </div>
       </div>
 
-      <div className="grid grid-cols-[1fr_320px] gap-6">
-        <div className="card graph-shell overflow-hidden">
-          {graph ? (
-            <GraphCanvas graph={graph} onNodeClick={(id) => setSelectedNode(id)} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-[#8888a0]">
-              {isLoading ? 'Loading symbols...' : 'No symbol data.'}
-            </div>
-          )}
-        </div>
+      {isError && <QueryStatus isLoading={false} isError={true} error={error} refetch={refetch} />}
+
+      <div className="grid grid-cols-[1fr_320px] gap-6 max-lg:grid-cols-1">
+        {isLoading ? (
+          <SkeletonGraph />
+        ) : (
+          <div className="card graph-shell overflow-hidden">
+            {graph && (data?.symbols.length ?? 0) > 0 ? (
+              <GraphCanvas graph={graph} onNodeClick={(id) => setSelectedNode(id)} />
+            ) : (
+              <QueryStatus
+                isLoading={false}
+                isError={false}
+                isEmpty={true}
+                emptyText="No symbol data available. Run 'npx nano-brain index-codebase' to index symbols, or the code_symbols table may need repair (check DB integrity)."
+              />
+            )}
+          </div>
+        )}
         <div className="space-y-4">
           {selectedSymbol ? (
             <NodeDetail

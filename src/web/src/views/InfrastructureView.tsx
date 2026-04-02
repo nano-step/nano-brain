@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchInfrastructure } from '../api/client';
 import { infraTypeColorMap } from '../lib/colors';
 import { useAppStore } from '../store/app';
+import QueryStatus from '../components/QueryStatus';
+import { SkeletonList } from '../components/Skeleton';
 
 export default function InfrastructureView() {
   const workspace = useAppStore((state) => state.workspace);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['infrastructure', workspace],
     queryFn: () => fetchInfrastructure(workspace),
   });
@@ -17,19 +19,32 @@ export default function InfrastructureView() {
   const [operationFilter, setOperationFilter] = useState('all');
 
   const grouped = data?.grouped ?? {};
-  const rawSymbols = data?.symbols ?? [];
   const types = Object.keys(grouped);
+
+  // Derive repos and operations from grouped data (server no longer sends raw symbols array)
   const repoOptions = useMemo(() => {
     const repos = new Set<string>();
-    rawSymbols.forEach((symbol) => repos.add(symbol.repo));
+    for (const patterns of Object.values(grouped)) {
+      for (const pattern of patterns) {
+        for (const op of pattern.operations) {
+          repos.add(op.repo);
+        }
+      }
+    }
     return Array.from(repos.values()).sort();
-  }, [rawSymbols]);
+  }, [grouped]);
 
   const operationOptions = useMemo(() => {
     const ops = new Set<string>();
-    rawSymbols.forEach((symbol) => ops.add(symbol.operation));
+    for (const patterns of Object.values(grouped)) {
+      for (const pattern of patterns) {
+        for (const op of pattern.operations) {
+          ops.add(op.op);
+        }
+      }
+    }
     return Array.from(ops.values()).sort();
-  }, [rawSymbols]);
+  }, [grouped]);
 
   const filteredGroups = useMemo(() => {
     const repoNeedle = repoFilter.trim().toLowerCase();
@@ -113,7 +128,9 @@ export default function InfrastructureView() {
         </div>
       </header>
 
-      {filteredGroups.length === 0 && !isLoading ? (
+      {isError && <QueryStatus isLoading={false} isError={true} error={error} refetch={refetch} />}
+      {isLoading && <SkeletonList count={4} />}
+      {filteredGroups.length === 0 && !isLoading && !isError ? (
         <div className="card p-6 text-sm text-[#8888a0]">No infrastructure symbols found.</div>
       ) : (
         <div className="space-y-6">

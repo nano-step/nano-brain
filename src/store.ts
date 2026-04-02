@@ -14,7 +14,7 @@ import { incrementCounter } from './metrics.js';
 export function applyPragmas(db: Database.Database): void {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
-  db.pragma('busy_timeout = 15000');
+  db.pragma('busy_timeout = 0');
   db.pragma('synchronous = NORMAL');
   db.pragma('wal_autocheckpoint = 1000');
   db.pragma('journal_size_limit = 67108864');
@@ -97,7 +97,7 @@ export function createStore(dbPath: string): Store {
   storeCreating.add(resolvedPath);
 
   log('store', 'createStore dbPath=' + resolvedPath);
-  
+
   const recoveryResult = checkAndRecoverDB(resolvedPath, {
     logger: { log, error: (msg: string) => log('store', msg, 'error') },
     metricsCallback: (event: string) => {
@@ -106,25 +106,25 @@ export function createStore(dbPath: string): Store {
       }
     }
   });
-  
+
   const db = recoveryResult.db;
   if (recoveryResult.recovered) {
     lastCorruptionRecovery = recoveryResult;
     log('store', `Database recovered from corruption at ${recoveryResult.recoveredAt}`);
   }
-  
+
   applyPragmas(db);
-  
+
   let vecAvailable = false;
   let vectorStore: VectorStore | null = null;
-  
+
   try {
     sqliteVec.load(db);
     vecAvailable = true;
   } catch {
     log('store', 'sqlite-vec extension not available, vector search disabled', 'warn');
   }
-  
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS content (
       hash TEXT PRIMARY KEY,
@@ -307,7 +307,7 @@ export function createStore(dbPath: string): Store {
     CREATE INDEX IF NOT EXISTS idx_telemetry_config ON search_telemetry(config_variant);
     CREATE INDEX IF NOT EXISTS idx_telemetry_cache_key ON search_telemetry(cache_key);
   `);
-  
+
   const hasProjectHash = (db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>).some(col => col.name === 'project_hash');
   if (!hasProjectHash) {
     db.exec("ALTER TABLE documents ADD COLUMN project_hash TEXT DEFAULT 'global'");
@@ -322,22 +322,22 @@ export function createStore(dbPath: string): Store {
     }
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_documents_project_hash ON documents(project_hash, active)");
-  
+
   const hasCentrality = (db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>).some(col => col.name === 'centrality');
   if (!hasCentrality) {
     db.exec("ALTER TABLE documents ADD COLUMN centrality REAL DEFAULT 0.0");
   }
-  
+
   const hasClusterId = (db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>).some(col => col.name === 'cluster_id');
   if (!hasClusterId) {
     db.exec("ALTER TABLE documents ADD COLUMN cluster_id INTEGER DEFAULT NULL");
   }
-  
+
   const hasSupersededBy = (db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>).some(col => col.name === 'superseded_by');
   if (!hasSupersededBy) {
     db.exec("ALTER TABLE documents ADD COLUMN superseded_by INTEGER DEFAULT NULL");
   }
-  
+
   const hasProjectHashCol = (db.pragma('table_info(llm_cache)') as Array<{name: string}>).some(c => c.name === 'project_hash');
   if (!hasProjectHashCol) {
     db.exec(`
@@ -355,7 +355,7 @@ export function createStore(dbPath: string): Store {
       DROP TABLE llm_cache_old;
     `);
   }
-  
+
   // Schema versioning
   const currentVersion = (db.pragma('user_version') as Array<{ user_version: number }>)[0].user_version;
   const TARGET_VERSION = 8;
@@ -413,7 +413,7 @@ export function createStore(dbPath: string): Store {
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
     `);
-    
+
     db.pragma(`user_version = 1`);
     log('store', 'Schema migrated to version 1 (self-learning tables)');
   }
@@ -583,7 +583,7 @@ export function createStore(dbPath: string): Store {
     db.pragma(`user_version = 8`);
     log('store', 'Schema migrated to version 8 (memory connections)');
   }
-  
+
   if (vecAvailable) {
     try {
       db.exec(`
@@ -597,11 +597,11 @@ export function createStore(dbPath: string): Store {
       vecAvailable = false;
     }
   }
-  
+
   const insertContentStmt = db.prepare(`
     INSERT OR IGNORE INTO content (hash, body) VALUES (?, ?)
   `);
-  
+
   const insertDocumentStmt = db.prepare(`
     INSERT INTO documents (collection, path, title, hash, agent, created_at, modified_at, active, project_hash)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -613,21 +613,21 @@ export function createStore(dbPath: string): Store {
       active = excluded.active,
       project_hash = excluded.project_hash
   `);
-  
+
   const findDocumentByPathStmt = db.prepare(`
     SELECT id, collection, path, title, hash, agent, created_at as createdAt, modified_at as modifiedAt, active, project_hash as projectHash
     FROM documents WHERE path = ? AND active = 1
   `);
-  
+
   const findDocumentByDocidStmt = db.prepare(`
     SELECT id, collection, path, title, hash, agent, created_at as createdAt, modified_at as modifiedAt, active, project_hash as projectHash
     FROM documents WHERE substr(hash, 1, 6) = ? AND active = 1
   `);
-  
+
   const getContentStmt = db.prepare(`
     SELECT body FROM content WHERE hash = ?
   `);
-  
+
   const deactivateDocumentStmt = db.prepare(`
     UPDATE documents SET active = 0 WHERE collection = ? AND path = ?
   `);
@@ -644,11 +644,11 @@ export function createStore(dbPath: string): Store {
   const getConnectionsByTypeStmt = db.prepare(`SELECT * FROM memory_connections WHERE (from_doc_id = ? OR to_doc_id = ?) AND relationship_type = ? ORDER BY strength DESC`);
   const deleteConnectionStmt = db.prepare(`DELETE FROM memory_connections WHERE id = ?`);
   const getConnectionCountStmt = db.prepare(`SELECT COUNT(*) as cnt FROM memory_connections WHERE from_doc_id = ? OR to_doc_id = ?`);
-  
 
-  
+
+
   const searchFTSStmt = db.prepare(`
-    SELECT 
+    SELECT
       d.id, d.path, d.collection, d.title, d.hash, d.agent,
       snippet(documents_fts, 2, '<mark>', '</mark>', '...', 64) as snippet,
       bm25(documents_fts) as score
@@ -658,9 +658,9 @@ export function createStore(dbPath: string): Store {
     ORDER BY bm25(documents_fts)
     LIMIT ?
   `);
-  
+
   const searchFTSWithCollectionStmt = db.prepare(`
-    SELECT 
+    SELECT
       d.id, d.path, d.collection, d.title, d.hash, d.agent,
       snippet(documents_fts, 2, '<mark>', '</mark>', '...', 64) as snippet,
       bm25(documents_fts) as score
@@ -670,9 +670,9 @@ export function createStore(dbPath: string): Store {
     ORDER BY bm25(documents_fts)
     LIMIT ?
   `);
-  
+
   const searchFTSWithWorkspaceStmt = db.prepare(`
-    SELECT 
+    SELECT
       d.id, d.path, d.collection, d.title, d.hash, d.agent,
       snippet(documents_fts, 2, '<mark>', '</mark>', '...', 64) as snippet,
       bm25(documents_fts) as score
@@ -682,9 +682,9 @@ export function createStore(dbPath: string): Store {
     ORDER BY bm25(documents_fts)
     LIMIT ?
   `);
-  
+
   const searchFTSWithWorkspaceAndCollectionStmt = db.prepare(`
-    SELECT 
+    SELECT
       d.id, d.path, d.collection, d.title, d.hash, d.agent,
       snippet(documents_fts, 2, '<mark>', '</mark>', '...', 64) as snippet,
       bm25(documents_fts) as score
@@ -694,34 +694,34 @@ export function createStore(dbPath: string): Store {
     ORDER BY bm25(documents_fts)
     LIMIT ?
   `);
-  
+
   const insertEmbeddingStmt = db.prepare(`
     INSERT OR REPLACE INTO content_vectors (hash, seq, pos, model)
     VALUES (?, ?, ?, ?)
   `);
-  
+
   const getCachedResultStmt = db.prepare(`
     SELECT result FROM llm_cache WHERE hash = ? AND project_hash = ?
   `);
-  
+
   const setCachedResultStmt = db.prepare(`
     INSERT OR REPLACE INTO llm_cache (hash, project_hash, type, result) VALUES (?, ?, ?, ?)
   `);
-  
+
   const getDocumentCountStmt = db.prepare(`
     SELECT COUNT(*) as count FROM documents WHERE active = 1
   `);
-  
+
   const getEmbeddedCountStmt = db.prepare(`
     SELECT COUNT(*) as count FROM content_vectors
   `);
-  
+
   const getCollectionStatsStmt = db.prepare(`
     SELECT collection as name, COUNT(*) as documentCount, MIN(path) as path
     FROM documents WHERE active = 1
     GROUP BY collection
   `);
-  
+
   const getWorkspaceStatsStmt = db.prepare(`
     SELECT project_hash as projectHash, COUNT(*) as count
     FROM documents WHERE active = 1
@@ -731,7 +731,15 @@ export function createStore(dbPath: string): Store {
   const getExtractedFactCountStmt = db.prepare(`
     SELECT COUNT(*) as count FROM documents WHERE path LIKE 'auto:extracted-fact:%' AND active = 1
   `);
-  
+
+  const getPendingEmbeddingCountStmt = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM content c
+    JOIN documents d ON d.hash = c.hash AND d.active = 1
+    LEFT JOIN content_vectors cv ON cv.hash = c.hash
+    WHERE cv.hash IS NULL AND d.collection != 'sessions'
+  `);
+
   const getHashesNeedingEmbeddingStmt = db.prepare(`
     SELECT c.hash, c.body, d.path
     FROM content c
@@ -1006,7 +1014,7 @@ export function createStore(dbPath: string): Store {
   `);
 
   const getSuggestionAccuracyStmt = db.prepare(`
-    SELECT 
+    SELECT
       COUNT(*) as total,
       SUM(CASE WHEN match_type = 'exact' THEN 1 ELSE 0 END) as exact,
       SUM(CASE WHEN match_type = 'partial' THEN 1 ELSE 0 END) as partial,
@@ -1033,7 +1041,7 @@ export function createStore(dbPath: string): Store {
   `);
 
   const getQueueStatsStmt = db.prepare(`
-    SELECT 
+    SELECT
       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
       SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing,
       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
@@ -1297,20 +1305,20 @@ export function createStore(dbPath: string): Store {
     FROM symbols WHERE project_hash = ?
     ORDER BY type, pattern, operation
   `);
-  
+
   let _cached = false;
-  
+
   const store: Store = {
     modelStatus: {
       embedding: 'missing',
       reranker: 'missing',
       expander: 'missing',
     },
-    
+
     getDb() {
       return db;
     },
-    
+
     close() {
       if (_cached) {
         // cached store — close is a no-op, real close happens via closeAllCachedStores()
@@ -1319,11 +1327,11 @@ export function createStore(dbPath: string): Store {
       try { db.pragma('wal_checkpoint(PASSIVE)'); } catch { /* ignore checkpoint errors */ }
       db.close();
     },
-    
+
     insertContent(hash: string, body: string) {
       insertContentStmt.run(hash, body);
     },
-    
+
     insertDocument(doc: Omit<Document, 'id'>): number {
       log('store', 'insertDocument collection=' + doc.collection + ' path=' + doc.path);
       const result = insertDocumentStmt.run(
@@ -1346,20 +1354,20 @@ export function createStore(dbPath: string): Store {
       if (rowid > 0) return rowid;
       return 0;
     },
-    
+
     findDocument(pathOrDocid: string): Document | null {
       let row: Record<string, unknown> | undefined;
-      
+
       if (pathOrDocid.length === 6 && /^[a-f0-9]+$/i.test(pathOrDocid)) {
         row = findDocumentByDocidStmt.get(pathOrDocid.toLowerCase()) as Record<string, unknown> | undefined;
       }
-      
+
       if (!row) {
         row = findDocumentByPathStmt.get(pathOrDocid) as Record<string, unknown> | undefined;
       }
-      
+
       if (!row) return null;
-      
+
       return {
         id: row.id as number,
         collection: row.collection as string,
@@ -1373,25 +1381,25 @@ export function createStore(dbPath: string): Store {
         projectHash: row.projectHash as string | undefined,
       };
     },
-    
+
     getDocumentBody(hash: string, fromLine?: number, maxLines?: number): string | null {
       const row = getContentStmt.get(hash) as { body: string } | undefined;
       if (!row) return null;
-      
+
       if (fromLine === undefined && maxLines === undefined) {
         return row.body;
       }
-      
+
       const lines = row.body.split('\n');
       const start = fromLine ?? 0;
       const end = maxLines !== undefined ? start + maxLines : lines.length;
       return lines.slice(start, end).join('\n');
     },
-    
+
     deactivateDocument(collection: string, path: string) {
       deactivateDocumentStmt.run(collection, path);
     },
-    
+
     bulkDeactivateExcept(collection: string, activePaths: string[]): number {
       // Wrap the entire read-deactivate-diff cycle in a transaction to prevent
       // races where another client inserts a document between the before/after snapshots
@@ -1440,19 +1448,54 @@ export function createStore(dbPath: string): Store {
 
       return changes;
     },
-    
+
     insertEmbeddingLocal(hash: string, seq: number, pos: number, model: string, filePath?: string) {
       const pathSuffix = filePath ? ' path=' + filePath : '';
       log('store', 'insertEmbeddingLocal hash=' + hash.substring(0, 8) + ' seq=' + seq + pathSuffix, 'debug');
       insertEmbeddingStmt.run(hash, seq, pos, model);
     },
 
+    async insertEmbeddingLocalBatch(items: Array<{ hash: string; seq: number; pos: number; model: string }>): Promise<void> {
+      if (items.length === 0) return;
+      // Split into sub-batches of 25 rows each, yielding the event loop between sub-batches.
+      // This prevents the SQLite write transaction from blocking the event loop (and all HTTP
+      // handlers) for extended periods when large batches (100-200 rows) are committed at once.
+      // Each sub-batch acquires the WAL write lock for only a short window (~1-2ms), allowing
+      // timers and I/O callbacks (including HTTP responses) to fire between sub-batches.
+      const SUB_BATCH_SIZE = 25;
+      const batchTx = db.transaction((rows: typeof items) => {
+        for (const item of rows) {
+          insertEmbeddingStmt.run(item.hash, item.seq, item.pos, item.model);
+        }
+      });
+      for (let i = 0; i < items.length; i += SUB_BATCH_SIZE) {
+        const subBatch = items.slice(i, i + SUB_BATCH_SIZE);
+        try {
+          batchTx(subBatch);
+        } catch (err: any) {
+          // SQLITE_BUSY: another connection holds the write lock; skip this sub-batch
+          // rather than blocking the event loop. The codebase indexer will retry on the
+          // next scan cycle.
+          if (err?.code === 'SQLITE_BUSY') {
+            log('store', 'insertEmbeddingLocalBatch SQLITE_BUSY skip sub-batch i=' + i, 'warn');
+            continue;
+          }
+          throw err;
+        }
+        // Yield to the event loop between sub-batches so HTTP handlers and timers can fire
+        if (i + SUB_BATCH_SIZE < items.length) {
+          await new Promise<void>(resolve => setImmediate(resolve));
+        }
+      }
+      log('store', 'insertEmbeddingLocalBatch count=' + items.length, 'debug');
+    },
+
     insertEmbedding(hash: string, seq: number, pos: number, embedding: number[], model: string, externalVectorStore?: VectorStore) {
       log('store', 'insertEmbedding hash=' + hash.substring(0, 8) + ' seq=' + seq, 'debug');
       insertEmbeddingStmt.run(hash, seq, pos, model);
-      
+
       const useExternalStore = externalVectorStore && !(externalVectorStore instanceof SqliteVecStore);
-      
+
       if (useExternalStore) {
         const point: VectorPoint = {
           id: `${hash}:${seq}`,
@@ -1483,7 +1526,7 @@ export function createStore(dbPath: string): Store {
         }
       }
     },
-    
+
     ensureVecTable(dimensions: number) {
       if (!vecAvailable) return;
       try {
@@ -1522,14 +1565,14 @@ export function createStore(dbPath: string): Store {
         log('store', `Failed to recreate vector table: ${err instanceof Error ? err.message : String(err)}`, 'warn');
       }
     },
-    
+
     searchFTS(query: string, options: StoreSearchOptions = {}): SearchResult[] {
       const { limit = 10, collection, projectHash, tags, since, until } = options;
       const sanitized = sanitizeFTS5Query(query);
       if (!sanitized) return [];
-      
+
       let sql = `
-        SELECT 
+        SELECT
           d.id, d.path, d.collection, d.title, d.hash, d.agent, d.project_hash,
           d.centrality, d.cluster_id, d.superseded_by,
           d.access_count, d.last_accessed_at as lastAccessedAt,
@@ -1540,7 +1583,7 @@ export function createStore(dbPath: string): Store {
         WHERE documents_fts MATCH ? AND d.active = 1
       `;
       const params: (string | number)[] = [sanitized];
-      
+
       if (collection) {
         sql += ` AND d.collection = ?`;
         params.push(collection);
@@ -1567,13 +1610,13 @@ export function createStore(dbPath: string): Store {
         params.push(...tags.map(t => t.toLowerCase().trim()));
         params.push(tags.length);
       }
-      
+
       sql += ` ORDER BY bm25(documents_fts) LIMIT ?`;
       params.push(limit);
-      
+
       const rows = db.prepare(sql).all(...params) as Array<Record<string, unknown>>;
       log('store', 'searchFTS query=' + query + ' results=' + rows.length, 'debug');
-      
+
       return rows.map(row => ({
         id: String(row.id),
         path: row.path as string,
@@ -1593,13 +1636,13 @@ export function createStore(dbPath: string): Store {
         lastAccessedAt: row.lastAccessedAt as string | null | undefined,
       }));
     },
-    
+
     searchVec(query: string, embedding: number[], options: StoreSearchOptions = {}): SearchResult[] {
       const { limit = 10, collection, projectHash, tags, since, until } = options;
       if (!vecAvailable) {
         return [];
       }
-      
+
       try {
         let sql = `
           SELECT v.hash_seq, v.distance, d.id, d.path, d.collection, d.title, d.hash, d.agent, d.project_hash,
@@ -1613,7 +1656,7 @@ export function createStore(dbPath: string): Store {
             AND k = ?
             AND d.active = 1
         `;
-        
+
         const params: (Float32Array | string | number)[] = [new Float32Array(embedding), limit];
         if (collection) {
           sql += ` AND d.collection = ?`;
@@ -1642,11 +1685,11 @@ export function createStore(dbPath: string): Store {
           params.push(tags.length);
         }
         sql += ` ORDER BY v.distance`;
-        
+
         const stmt = db.prepare(sql);
         const rows = stmt.all(...params) as Array<Record<string, unknown>>;
         log('store', 'searchVec query=' + query + ' results=' + rows.length, 'debug');
-        
+
         return rows.map(row => ({
           id: String(row.id),
           path: row.path as string,
@@ -1670,15 +1713,15 @@ export function createStore(dbPath: string): Store {
         return [];
       }
     },
-    
+
     setVectorStore(vs: VectorStore | null): void {
       vectorStore = vs;
     },
-    
+
     getVectorStore(): VectorStore | null {
       return vectorStore;
     },
-    
+
     cleanupVectorsForHash(hash: string): void {
       if (vectorStore) {
         vectorStore.deleteByHash(hash).catch(err => {
@@ -1687,15 +1730,15 @@ export function createStore(dbPath: string): Store {
         });
       }
     },
-    
+
     async searchVecAsync(query: string, embedding: number[], options: StoreSearchOptions = {}): Promise<SearchResult[]> {
       const { limit = 10, collection, projectHash, tags, since, until } = options;
-      
+
       if (vectorStore) {
         try {
           const vecResults = await vectorStore.search(embedding, { limit: limit * 3, collection });
           if (vecResults.length === 0) return [];
-          
+
           const results: SearchResult[] = [];
           for (const vr of vecResults) {
             const row = db.prepare(`
@@ -1708,21 +1751,21 @@ export function createStore(dbPath: string): Store {
               WHERE d.hash = ? AND d.active = 1
               LIMIT 1
             `).get(vr.hash) as Record<string, unknown> | undefined;
-            
+
             if (!row) continue;
-            
+
             if (collection && row.collection !== collection) continue;
             if (projectHash && projectHash !== 'all' && row.project_hash !== projectHash && row.project_hash !== 'global') continue;
             if (since && (row.modified_at as string) < since) continue;
             if (until && (row.modified_at as string) > until) continue;
             if (tags && tags.length > 0) {
               const tagCount = (db.prepare(`
-                SELECT COUNT(DISTINCT tag) as cnt FROM document_tags 
+                SELECT COUNT(DISTINCT tag) as cnt FROM document_tags
                 WHERE document_id = ? AND tag IN (${tags.map(() => '?').join(',')})
               `).get(row.id, ...tags.map(t => t.toLowerCase().trim())) as { cnt: number }).cnt;
               if (tagCount < tags.length) continue;
             }
-            
+
             results.push({
               id: String(row.id),
               path: row.path as string,
@@ -1742,26 +1785,26 @@ export function createStore(dbPath: string): Store {
               lastAccessedAt: row.lastAccessedAt as string | null | undefined,
             });
           }
-          
+
           log('store', 'searchVecAsync(qdrant) query=' + query + ' results=' + results.length, 'debug');
           return results;
         } catch (err) {
           log('store', 'searchVecAsync qdrant failed, falling back to SQLite: ' + (err instanceof Error ? err.message : String(err)));
         }
       }
-      
+
       return this.searchVec(query, embedding, options);
     },
-    
+
     getCachedResult(hash: string, projectHash: string = 'global'): string | null {
       const row = getCachedResultStmt.get(hash, projectHash) as { result: string } | undefined;
       return row?.result ?? null;
     },
-    
+
     setCachedResult(hash: string, result: string, projectHash: string = 'global', type: string = 'general') {
       setCachedResultStmt.run(hash, projectHash, type, result);
     },
-    
+
     getQueryEmbeddingCache(query: string): number[] | null {
       const key = computeHash('qembed:' + query);
       const cached = getCachedResultStmt.get(key, 'global') as { result: string } | undefined;
@@ -1772,16 +1815,16 @@ export function createStore(dbPath: string): Store {
         return null;
       }
     },
-    
+
     setQueryEmbeddingCache(query: string, embedding: number[]) {
       const key = computeHash('qembed:' + query);
       setCachedResultStmt.run(key, 'global', 'qembed', JSON.stringify(embedding));
     },
-    
+
     clearQueryEmbeddingCache() {
       db.exec("DELETE FROM llm_cache WHERE type = 'qembed'");
     },
-    
+
     getIndexHealth(): IndexHealth {
       // Wrap all queries in a transaction for a consistent snapshot —
       // without this, concurrent writes could make counts inconsistent
@@ -1789,7 +1832,7 @@ export function createStore(dbPath: string): Store {
         const docCount = (getDocumentCountStmt.get() as { count: number }).count;
         const embeddedCount = (getEmbeddedCountStmt.get() as { count: number }).count;
         const collections = getCollectionStatsStmt.all() as Array<{ name: string; documentCount: number; path: string }>;
-        const pending = (getHashesNeedingEmbeddingStmt.all(1000000) as unknown[]).length;
+        const pending = (getPendingEmbeddingCountStmt.get() as { count: number }).count;
         const workspaceStats = this.getWorkspaceStats();
         const extractedFactCount = (getExtractedFactCountStmt.get() as { count: number }).count;
         return { docCount, embeddedCount, collections, pending, workspaceStats, extractedFactCount };
@@ -1816,7 +1859,7 @@ export function createStore(dbPath: string): Store {
         extractedFacts: extractedFactCount,
       };
     },
-    
+
     getHashesNeedingEmbedding(projectHash?: string, limit?: number): Array<{ hash: string; body: string; path: string }> {
       const effectiveLimit = limit ?? 1000000;
       if (projectHash && projectHash !== 'all') {
@@ -1831,11 +1874,11 @@ export function createStore(dbPath: string): Store {
       }
       return getNextHashNeedingEmbeddingStmt.get() as { hash: string; body: string; path: string } | null;
     },
-    
+
     getWorkspaceStats(): Array<{ projectHash: string; count: number }> {
       return getWorkspaceStatsStmt.all() as Array<{ projectHash: string; count: number }>;
     },
-    
+
     deleteDocumentsByPath(filePath: string): number {
       const deleteStmt = db.prepare(`DELETE FROM documents WHERE path = ? AND active = 1`);
       const result = deleteStmt.run(filePath);
@@ -1973,7 +2016,7 @@ export function createStore(dbPath: string): Store {
       });
       return transaction();
     },
-    
+
     cleanOrphanedEmbeddings(): number {
       // Use a transaction to atomically snapshot orphaned hashes AND delete them,
       // preventing races where a new document with the same hash is inserted mid-cleanup
@@ -2023,7 +2066,7 @@ export function createStore(dbPath: string): Store {
       log('store', 'cleanOrphanedEmbeddings deleted=' + totalDeleted);
       return totalDeleted;
     },
-    
+
     getCollectionStorageSize(collection: string): number {
       const stmt = db.prepare(`
         SELECT COALESCE(SUM(LENGTH(c.body)), 0) as totalSize
@@ -2034,7 +2077,7 @@ export function createStore(dbPath: string): Store {
       const row = stmt.get(collection) as { totalSize: number } | undefined;
       return row?.totalSize ?? 0;
     },
-    
+
     clearCache(projectHash?: string, type?: string): number {
       let sql = 'DELETE FROM llm_cache';
       const conditions: string[] = [];
@@ -2053,7 +2096,7 @@ export function createStore(dbPath: string): Store {
       const result = db.prepare(sql).run(...params);
       return result.changes;
     },
-    
+
     getCacheStats(): Array<{ type: string; projectHash: string; count: number }> {
       return db.prepare('SELECT type, project_hash as projectHash, COUNT(*) as count FROM llm_cache GROUP BY type, project_hash ORDER BY count DESC').all() as Array<{ type: string; projectHash: string; count: number }>;
     },
@@ -2110,16 +2153,16 @@ export function createStore(dbPath: string): Store {
 
     listAllTags(): Array<{ tag: string; count: number }> {
       return db.prepare(`
-        SELECT tag, COUNT(*) as count 
-        FROM document_tags 
-        GROUP BY tag 
+        SELECT tag, COUNT(*) as count
+        FROM document_tags
+        GROUP BY tag
         ORDER BY count DESC, tag ASC
       `).all() as Array<{ tag: string; count: number }>;
     },
 
     getFileDependencies(filePath: string, projectHash: string): string[] {
       const rows = db.prepare(`
-        SELECT target_path FROM file_edges 
+        SELECT target_path FROM file_edges
         WHERE source_path = ? AND project_hash = ?
       `).all(filePath, projectHash) as Array<{ target_path: string }>;
       return rows.map(r => r.target_path);
@@ -2127,7 +2170,7 @@ export function createStore(dbPath: string): Store {
 
     getFileDependents(filePath: string, projectHash: string): string[] {
       const rows = db.prepare(`
-        SELECT source_path FROM file_edges 
+        SELECT source_path FROM file_edges
         WHERE target_path = ? AND project_hash = ?
       `).all(filePath, projectHash) as Array<{ source_path: string }>;
       return rows.map(r => r.source_path);
@@ -2135,7 +2178,7 @@ export function createStore(dbPath: string): Store {
 
     getDocumentCentrality(filePath: string): { centrality: number; clusterId: number | null } | null {
       const row = db.prepare(`
-        SELECT centrality, cluster_id FROM documents 
+        SELECT centrality, cluster_id FROM documents
         WHERE path = ? AND active = 1
       `).get(filePath) as { centrality: number; cluster_id: number | null } | undefined;
       if (!row) return null;
@@ -2144,7 +2187,7 @@ export function createStore(dbPath: string): Store {
 
     getClusterMembers(clusterId: number, projectHash: string): string[] {
       const rows = db.prepare(`
-        SELECT path FROM documents 
+        SELECT path FROM documents
         WHERE cluster_id = ? AND project_hash = ? AND active = 1
         ORDER BY centrality DESC
       `).all(clusterId, projectHash) as Array<{ path: string }>;
@@ -2160,7 +2203,7 @@ export function createStore(dbPath: string): Store {
       const edges = db.prepare(`
         SELECT COUNT(*) as count FROM file_edges WHERE project_hash = ?
       `).get(projectHash) as { count: number };
-      
+
       const nodes = db.prepare(`
         SELECT COUNT(*) as count FROM (
           SELECT source_path as node FROM file_edges WHERE project_hash = ?
@@ -2168,19 +2211,19 @@ export function createStore(dbPath: string): Store {
           SELECT target_path as node FROM file_edges WHERE project_hash = ?
         )
       `).get(projectHash, projectHash) as { count: number };
-      
+
       const clusters = db.prepare(`
-        SELECT COUNT(DISTINCT cluster_id) as count FROM documents 
+        SELECT COUNT(DISTINCT cluster_id) as count FROM documents
         WHERE project_hash = ? AND cluster_id IS NOT NULL AND active = 1
       `).get(projectHash) as { count: number };
-      
+
       const topCentrality = db.prepare(`
-        SELECT path, centrality FROM documents 
+        SELECT path, centrality FROM documents
         WHERE project_hash = ? AND active = 1 AND centrality > 0
         ORDER BY centrality DESC
         LIMIT 10
       `).all(projectHash) as Array<{ path: string; centrality: number }>;
-      
+
       return {
         nodeCount: nodes.count,
         edgeCount: edges.count,
@@ -2620,7 +2663,7 @@ export function createStore(dbPath: string): Store {
           entity.projectHash
         );
         const row = db.prepare(`
-          SELECT id FROM memory_entities 
+          SELECT id FROM memory_entities
           WHERE name COLLATE NOCASE = ? AND type = ? AND project_hash = ?
         `).get(entity.name, entity.type, entity.projectHash) as { id: number } | undefined;
         return row?.id ?? 0;
@@ -2640,7 +2683,7 @@ export function createStore(dbPath: string): Store {
         );
         if (result.changes === 0) {
           const existing = db.prepare(`
-            SELECT id FROM memory_edges 
+            SELECT id FROM memory_edges
             WHERE source_id = ? AND target_id = ? AND edge_type = ? AND project_hash = ?
           `).get(edge.sourceId, edge.targetId, edge.edgeType, edge.projectHash) as { id: number } | undefined;
           return existing?.id ?? 0;
@@ -2832,10 +2875,10 @@ export function createStore(dbPath: string): Store {
 
     getUncategorizedDocuments(limit: number, projectHash?: string): Array<{ id: number; path: string; body: string }> {
       let sql = `
-        SELECT d.id, d.path, c.body 
-        FROM documents d 
+        SELECT d.id, d.path, c.body
+        FROM documents d
         JOIN content c ON d.hash = c.hash
-        WHERE d.active = 1 
+        WHERE d.active = 1
         AND d.id NOT IN (
           SELECT document_id FROM document_tags WHERE tag LIKE 'llm:%'
         )
@@ -2988,7 +3031,7 @@ export function createStore(dbPath: string): Store {
       }>;
     },
   };
-  
+
   _cached = true;
   storeCache.set(resolvedPath, store);
   storeCacheUncache.set(resolvedPath, () => { _cached = false; });
@@ -3070,20 +3113,20 @@ export function indexDocument(
   projectHash?: string
 ): { hash: string; chunks: number; skipped: boolean } {
   const hash = computeHash(content);
-  
+
   const existingDoc = store.findDocument(filePath);
   if (existingDoc && existingDoc.hash === hash) {
     return { hash, chunks: 0, skipped: true };
   }
-  
+
   if (existingDoc && existingDoc.hash !== hash) {
     store.cleanupVectorsForHash(existingDoc.hash);
   }
-  
+
   store.insertContent(hash, content);
-  
+
   const chunks = chunkMarkdown(content, hash);
-  
+
   const now = new Date().toISOString();
   store.insertDocument({
     collection,
@@ -3095,6 +3138,6 @@ export function indexDocument(
     active: true,
     projectHash,
   });
-  
+
   return { hash, chunks: chunks.length, skipped: false };
 }

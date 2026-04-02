@@ -29,8 +29,8 @@ function GraphInteractions({ onNodeClick, onNodeHover }: GraphInteractionProps) 
 
   useEffect(() => {
     registerEvents({
-      clickNode: (event) => onNodeClick?.(event.node),
-      enterNode: (event) => onNodeHover?.(event.node),
+      clickNode: (event: any) => onNodeClick?.(event.node),
+      enterNode: (event: any) => onNodeHover?.(event.node),
       leaveNode: () => onNodeHover?.(undefined),
     });
   }, [registerEvents, onNodeClick, onNodeHover]);

@@ -174,6 +174,7 @@ export type SearchResponse = {
   results: SearchResult[];
   query: string;
   executionMs: number;
+  fallback?: 'fts';
 };
 
 export type WorkspacesResponse = {

@@ -40,9 +40,18 @@ function sanitizeFTS5Query(query: string): string {
 }
 
 // Open read-only connection
+// NOTE: Do NOT set journal_mode on a read-only connection — it tries to write and blocks.
+// With WAL mode (set by the writer), read-only connections can always read without waiting.
+// Set busy_timeout = 0 so we never block waiting for locks — return immediately if busy.
 const dbPath = workerData.dbPath as string;
 const db = new Database(dbPath, { readonly: true });
-db.pragma('journal_mode = WAL');
+db.pragma('busy_timeout = 0');
+
+// Prepared statement: look up doc id+hash by path for enrichment.
+// Uses the indexed (path) column — fast single-row lookup, no JOIN with FTS.
+const enrichByPathStmt = db.prepare(`
+  SELECT id, hash FROM documents WHERE path = ? AND active = 1 LIMIT 1
+`);
 
 // Try to load sqlite-vec extension for vector search
 let vecAvailable = false;
@@ -55,76 +64,71 @@ try {
 }
 
 /**
- * searchFTS - Replicates store.ts lines 1526-1595
+ * searchFTS — queries FTS5 index WITHOUT joining the documents table.
+ * The documents JOIN blocks when the writer holds a WAL lock during embedding.
+ * Instead we derive collection/path from the stored filepath string and return
+ * lightweight results. The caller can optionally enrich them via the write connection.
  */
 function searchFTS(query: string, options: StoreSearchOptions = {}): SearchResult[] {
-  const { limit = 10, collection, projectHash, tags, since, until } = options;
+  const { limit = 10, collection } = options;
   const sanitized = sanitizeFTS5Query(query);
   if (!sanitized) return [];
 
+  // Build collection filter for FTS filepath prefix (format: "collection/path")
   let sql = `
-    SELECT 
-      d.id, d.path, d.collection, d.title, d.hash, d.agent, d.project_hash,
-      d.centrality, d.cluster_id, d.superseded_by,
-      d.access_count, d.last_accessed_at as lastAccessedAt,
+    SELECT
+      filepath,
+      title,
       snippet(documents_fts, 2, '<mark>', '</mark>', '...', 64) as snippet,
       bm25(documents_fts) as score
-    FROM documents_fts f
-    JOIN documents d ON f.filepath = d.collection || '/' || d.path
-    WHERE documents_fts MATCH ? AND d.active = 1
+    FROM documents_fts
+    WHERE documents_fts MATCH ?
   `;
   const params: (string | number)[] = [sanitized];
 
+  // Filter by collection prefix in filepath
   if (collection) {
-    sql += ` AND d.collection = ?`;
-    params.push(collection);
-  }
-  if (projectHash && projectHash !== 'all') {
-    sql += ` AND d.project_hash IN (?, 'global')`;
-    params.push(projectHash);
-  }
-  if (since) {
-    sql += ` AND d.modified_at >= ?`;
-    params.push(since);
-  }
-  if (until) {
-    sql += ` AND d.modified_at <= ?`;
-    params.push(until);
-  }
-  if (tags && tags.length > 0) {
-    sql += ` AND d.id IN (
-      SELECT dt.document_id FROM document_tags dt
-      WHERE dt.tag IN (${tags.map(() => '?').join(',')})
-      GROUP BY dt.document_id
-      HAVING COUNT(DISTINCT dt.tag) = ?
-    )`;
-    params.push(...tags.map(t => t.toLowerCase().trim()));
-    params.push(tags.length);
+    sql += ` AND filepath LIKE ?`;
+    params.push(`${collection}/%`);
   }
 
   sql += ` ORDER BY bm25(documents_fts) LIMIT ?`;
   params.push(limit);
 
-  const rows = db.prepare(sql).all(...params) as Array<Record<string, unknown>>;
+  const rows = db.prepare(sql).all(...params) as Array<{ filepath: string; title: string; snippet: string; score: number }>;
 
-  return rows.map(row => ({
-    id: String(row.id),
-    path: row.path as string,
-    collection: row.collection as string,
-    title: row.title as string,
-    snippet: row.snippet as string,
-    score: Math.abs(row.score as number),
-    startLine: 0,
-    endLine: 0,
-    docid: (row.hash as string).substring(0, 6),
-    agent: row.agent as string | undefined,
-    projectHash: projectHash === 'all' ? (row.project_hash as string | undefined) : undefined,
-    centrality: row.centrality as number | undefined,
-    clusterId: row.cluster_id as number | undefined,
-    supersededBy: row.superseded_by as number | null | undefined,
-    access_count: row.access_count as number | undefined,
-    lastAccessedAt: row.lastAccessedAt as string | null | undefined,
-  }));
+  return rows.map(row => {
+    // filepath format: "collection/path/to/file" or "collection//absolute/path"
+    const slashIdx = row.filepath.indexOf('/');
+    const coll = slashIdx >= 0 ? row.filepath.substring(0, slashIdx) : '';
+    const path = slashIdx >= 0 ? row.filepath.substring(slashIdx + 1) : row.filepath;
+
+    // Enrich: look up id + hash by path using a single indexed SELECT.
+    // This is safe even on a read-only connection — no WAL lock contention.
+    let docId = '';
+    let docHash = '';
+    try {
+      const docRow = enrichByPathStmt.get(path) as { id: number; hash: string } | undefined;
+      if (docRow) {
+        docId = String(docRow.id);
+        docHash = docRow.hash.substring(0, 6);
+      }
+    } catch {
+      // Ignore enrichment failure — return result without id/docid
+    }
+
+    return {
+      id: docId,
+      path,
+      collection: coll,
+      title: row.title || path,
+      snippet: row.snippet || '',
+      score: Math.abs(row.score),
+      startLine: 0,
+      endLine: 0,
+      docid: docHash,
+    };
+  });
 }
 
 /**

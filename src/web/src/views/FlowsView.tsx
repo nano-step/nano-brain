@@ -2,10 +2,12 @@ import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchFlows } from '../api/client';
 import { useAppStore } from '../store/app';
+import QueryStatus from '../components/QueryStatus';
+import { SkeletonList } from '../components/Skeleton';
 
 export default function FlowsView() {
   const workspace = useAppStore((state) => state.workspace);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['flows', workspace],
     queryFn: () => fetchFlows(workspace),
   });
@@ -50,10 +52,17 @@ export default function FlowsView() {
         </span>
       </div>
 
-      <div className="grid grid-cols-[1fr_1fr] gap-6">
+      {isError && <QueryStatus isLoading={false} isError={true} error={error} refetch={refetch} />}
+
+      <div className="grid grid-cols-[1fr_1fr] gap-6 max-lg:grid-cols-1">
         <div className="space-y-2 overflow-auto" style={{ maxHeight: 'calc(100vh - 260px)' }}>
-          {filtered.length === 0 && !isLoading && (
-            <div className="card p-4 text-sm text-[#8888a0]">No flows found.</div>
+          {isLoading && <SkeletonList count={5} />}
+          {filtered.length === 0 && !isLoading && !isError && (
+            <div className="card p-4 text-sm text-[#8888a0]">
+              {flows.length === 0
+                ? "No execution flows found. Flows are detected during codebase indexing via Tree-sitter — run 'npx nano-brain index-codebase' to populate this view."
+                : 'No flows match the current filter.'}
+            </div>
           )}
           {filtered.map((flow) => (
             <div

@@ -32,8 +32,8 @@ type SymbolNodeMeta = {
   clusterId?: number | null;
 };
 
-export function buildEntityGraph(data: GraphEntitiesResponse) {
-  const graph = new Graph();
+export function buildEntityGraph(data: GraphEntitiesResponse, nodeLimit = 500) {
+  const graph = new Graph({ type: 'directed', multi: false });
   const edgeCounts = new Map<number, number>();
 
   for (const edge of data.edges) {
@@ -41,7 +41,11 @@ export function buildEntityGraph(data: GraphEntitiesResponse) {
     edgeCounts.set(edge.targetId, (edgeCounts.get(edge.targetId) || 0) + 1);
   }
 
-  for (const node of data.nodes) {
+  // Sort by degree descending, take top N
+  const nodes = [...data.nodes].sort((a, b) => (edgeCounts.get(b.id) || 0) - (edgeCounts.get(a.id) || 0)).slice(0, nodeLimit);
+  const nodeIds = new Set(nodes.map((n) => n.id));
+
+  for (const node of nodes) {
     const count = edgeCounts.get(node.id) || 0;
     const size = Math.max(5, Math.min(25, 5 + count * 1.2));
     graph.addNode(String(node.id), {
@@ -57,16 +61,34 @@ export function buildEntityGraph(data: GraphEntitiesResponse) {
     } satisfies GraphNodeMeta);
   }
 
+  // Deduplicate edges: keep only one edge per source→target pair (combine labels if multiple types)
+  const seenPairs = new Map<string, string>();
   for (const edge of data.edges) {
+    if (!nodeIds.has(edge.sourceId) || !nodeIds.has(edge.targetId)) continue;
     const source = String(edge.sourceId);
     const target = String(edge.targetId);
-    if (graph.hasNode(source) && graph.hasNode(target)) {
-      graph.addEdgeWithKey(String(edge.id), source, target, {
-        label: edge.edgeType,
-        edgeType: edge.edgeType,
-        size: 1,
-        color: 'rgba(148, 163, 184, 0.4)',
-      });
+    const pairKey = `${source}->${target}`;
+    if (seenPairs.has(pairKey)) {
+      // Append edge type to existing edge label
+      const existing = graph.findEdge(source, target, () => true);
+      if (existing) {
+        const existingLabel = graph.getEdgeAttribute(existing, 'label') as string;
+        if (!existingLabel.includes(edge.edgeType)) {
+          graph.setEdgeAttribute(existing, 'label', `${existingLabel}, ${edge.edgeType}`);
+        }
+      }
+    } else {
+      seenPairs.set(pairKey, edge.edgeType);
+      if (graph.hasNode(source) && graph.hasNode(target)) {
+        try {
+          graph.addEdge(source, target, {
+            label: edge.edgeType,
+            edgeType: edge.edgeType,
+            size: 1,
+            color: 'rgba(148, 163, 184, 0.4)',
+          });
+        } catch { /* skip */ }
+      }
     }
   }
 
@@ -90,12 +112,14 @@ export function buildCodeGraph(files: Array<{ path: string; centrality: number; 
   }
 
   for (const edge of edges) {
-    if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
-      graph.addEdge(edge.source, edge.target, {
-        label: 'imports',
-        size: 1,
-        color: 'rgba(148, 163, 184, 0.35)',
-      });
+    if (graph.hasNode(edge.source) && graph.hasNode(edge.target) && !graph.hasEdge(edge.source, edge.target)) {
+      try {
+        graph.addEdge(edge.source, edge.target, {
+          label: 'imports',
+          size: 1,
+          color: 'rgba(148, 163, 184, 0.35)',
+        });
+      } catch { /* skip duplicate edge */ }
     }
   }
 
@@ -169,13 +193,15 @@ export function buildSymbolGraph(data: SymbolsResponse, clusterMode: boolean) {
     for (const edge of data.edges) {
       const src = String(edge.sourceId);
       const tgt = String(edge.targetId);
-      if (graph.hasNode(src) && graph.hasNode(tgt)) {
-        graph.addEdge(src, tgt, {
-          label: edge.edgeType,
-          edgeType: edge.edgeType,
-          size: 1,
-          color: edgeTypeColorMap[edge.edge_type] || 'rgba(148, 163, 184, 0.3)',
-        });
+      if (graph.hasNode(src) && graph.hasNode(tgt) && !graph.hasEdge(src, tgt)) {
+        try {
+          graph.addEdge(src, tgt, {
+            label: edge.edgeType,
+            edgeType: edge.edgeType,
+            size: 1,
+            color: edgeTypeColorMap[edge.edgeType] || 'rgba(148, 163, 184, 0.3)',
+          });
+        } catch { /* skip duplicate edge */ }
       }
     }
   }
@@ -185,8 +211,9 @@ export function buildSymbolGraph(data: SymbolsResponse, clusterMode: boolean) {
 }
 
 export function buildConnectionGraph(data: ConnectionsResponse) {
-  const graph = new Graph();
+  const graph = new Graph({ type: 'directed', multi: false });
   const docNodes = new Set<string>();
+  const seenPairs = new Map<string, string>();
 
   for (const conn of data.connections) {
     const fromId = String(conn.from_doc_id);
@@ -215,12 +242,27 @@ export function buildConnectionGraph(data: ConnectionsResponse) {
       });
     }
 
-    graph.addEdge(fromId, toId, {
-      label: conn.relationship_type,
-      edgeType: conn.relationship_type,
-      size: Math.max(1, Math.min(5, conn.strength * 5)),
-      color: relationshipColorMap[conn.relationship_type] || 'rgba(148,163,184,0.4)',
-    });
+    const pairKey = `${fromId}->${toId}`;
+    if (seenPairs.has(pairKey)) {
+      // Merge relationship type into existing edge label
+      const existing = graph.findEdge(fromId, toId, () => true);
+      if (existing) {
+        const existingLabel = graph.getEdgeAttribute(existing, 'label') as string;
+        if (!existingLabel.includes(conn.relationship_type)) {
+          graph.setEdgeAttribute(existing, 'label', `${existingLabel}, ${conn.relationship_type}`);
+        }
+      }
+    } else {
+      seenPairs.set(pairKey, conn.relationship_type);
+      try {
+        graph.addEdge(fromId, toId, {
+          label: conn.relationship_type,
+          edgeType: conn.relationship_type,
+          size: Math.max(1, Math.min(5, conn.strength * 5)),
+          color: relationshipColorMap[conn.relationship_type] || 'rgba(148,163,184,0.4)',
+        });
+      } catch { /* skip */ }
+    }
   }
 
   randomLayout(graph, 800);

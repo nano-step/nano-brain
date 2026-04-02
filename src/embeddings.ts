@@ -108,7 +108,7 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
           this.contextTokens = ctxLen;
           const bufferTokens = 128;
           // BERT WordPiece: ~2 chars/token for code-heavy content (empirically tested)
-          this.maxChars = Math.floor((ctxLen - bufferTokens) * 2);
+          this.maxChars = Math.min(Math.floor((ctxLen - bufferTokens) * 2), 6000);
           log('embed', 'Detected ' + this.model + ' context: ' + ctxLen + ' tokens → ' + this.maxChars + ' max chars');
         }
 
@@ -134,7 +134,7 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
         model: this.model,
         input: [this.truncate(text)],
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(90000),
     });
 
     if (!response.ok) {
@@ -158,7 +158,7 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
         model: this.model,
         input: texts.map(t => this.truncate(t)),
       }),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(180000),
     });
 
     if (!response.ok) {

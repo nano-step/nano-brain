@@ -1,4 +1,4 @@
-import { PropsWithChildren } from 'react';
+import { PropsWithChildren, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Activity, Boxes, GitBranch, Link2, Network, Search, Server, Waypoints } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -24,6 +24,17 @@ export default function Layout({ children }: PropsWithChildren) {
 
   const workspaceOptions = workspaces?.workspaces ?? [];
   const selectedValue = workspace ?? workspaceOptions[0]?.hash ?? '';
+  const selectedWorkspaceName =
+    workspaceOptions.find((ws) => ws.hash === selectedValue)?.name ??
+    status?.primaryWorkspace?.split('/').pop() ??
+    'loading';
+
+  // Auto-select the first workspace when workspaces load and none is selected yet
+  useEffect(() => {
+    if (!workspace && workspaceOptions.length > 0) {
+      setWorkspace(workspaceOptions[0].hash);
+    }
+  }, [workspace, workspaceOptions, setWorkspace]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e4e4ed]">
@@ -76,8 +87,8 @@ export default function Layout({ children }: PropsWithChildren) {
           </nav>
           <div className="mt-8 border-t border-[#1f1f2c] pt-4 text-xs text-[#8888a0]">
             <p>Workspace</p>
-            <p className="mt-1 truncate text-sm text-[#e4e4ed]" title={status?.primaryWorkspace}>
-              {status?.primaryWorkspace?.split('/').pop() ?? 'loading'}
+            <p className="mt-1 truncate text-sm text-[#e4e4ed]" title={selectedValue}>
+              {selectedWorkspaceName}
             </p>
           </div>
         </aside>
