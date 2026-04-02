@@ -884,4 +884,23 @@ export interface Store {
     filePath: string;
     lineNumber: number;
   }>;
+  getDocFlows(projectHash: string): Array<{
+    id: number;
+    label: string;
+    flowType: string;
+    description: string | null;
+    services: string | null;
+    sourceFile: string | null;
+    lastUpdated: string | null;
+  }>;
+  upsertDocFlow(flow: {
+    label: string;
+    flowType: string;
+    description?: string | null;
+    services?: string | null;
+    sourceFile?: string | null;
+    lastUpdated?: string | null;
+    projectHash: string;
+  }): number;
+  deleteDocFlowsByProject(projectHash: string): number;
 }

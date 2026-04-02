@@ -280,6 +280,18 @@ export function createStore(dbPath: string): Store {
     );
     CREATE INDEX IF NOT EXISTS idx_flow_steps_symbol ON flow_steps(symbol_id);
 
+    CREATE TABLE IF NOT EXISTS doc_flows (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      flow_type TEXT NOT NULL DEFAULT 'doc_flow',
+      description TEXT,
+      services TEXT,
+      source_file TEXT,
+      last_updated TEXT,
+      project_hash TEXT NOT NULL DEFAULT 'global'
+    );
+    CREATE INDEX IF NOT EXISTS idx_doc_flows_project ON doc_flows(project_hash);
+
     CREATE TABLE IF NOT EXISTS token_usage (
       model TEXT PRIMARY KEY,
       total_tokens INTEGER NOT NULL DEFAULT 0,
@@ -1287,6 +1299,23 @@ export function createStore(dbPath: string): Store {
     JOIN code_symbols cs ON fs.symbol_id = cs.id
     WHERE fs.flow_id = ?
     ORDER BY fs.step_index
+  `);
+
+  const getDocFlowsStmt = db.prepare(`
+    SELECT id, label, flow_type as flowType, description, services, source_file as sourceFile, last_updated as lastUpdated
+    FROM doc_flows
+    WHERE project_hash = ?
+    ORDER BY label ASC
+  `);
+
+  const upsertDocFlowStmt = db.prepare(`
+    INSERT INTO doc_flows (label, flow_type, description, services, source_file, last_updated, project_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT DO NOTHING
+  `);
+
+  const deleteDocFlowsByProjectStmt = db.prepare(`
+    DELETE FROM doc_flows WHERE project_hash = ?
   `);
 
   const getAllConnectionsStmt = db.prepare(`
@@ -3007,6 +3036,40 @@ export function createStore(dbPath: string): Store {
         filePath: string;
         startLine: number;
       }>;
+    },
+
+    getDocFlows(projectHash: string) {
+      return getDocFlowsStmt.all(projectHash) as Array<{
+        id: number;
+        label: string;
+        flowType: string;
+        description: string | null;
+        services: string | null;
+        sourceFile: string | null;
+        lastUpdated: string | null;
+      }>;
+    },
+
+    upsertDocFlow(flow: {
+      label: string;
+      flowType: string;
+      description?: string | null;
+      services?: string | null;
+      sourceFile?: string | null;
+      lastUpdated?: string | null;
+      projectHash: string;
+    }): number {
+      const result = upsertDocFlowStmt.run(
+        flow.label, flow.flowType, flow.description ?? null,
+        flow.services ?? null, flow.sourceFile ?? null,
+        flow.lastUpdated ?? null, flow.projectHash
+      );
+      return Number(result.lastInsertRowid);
+    },
+
+    deleteDocFlowsByProject(projectHash: string): number {
+      const result = deleteDocFlowsByProjectStmt.run(projectHash);
+      return result.changes;
     },
 
     getAllConnections(projectHash: string) {

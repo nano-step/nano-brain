@@ -3693,30 +3693,45 @@ export async function startServer(options: ServerOptions): Promise<void> {
         // limit=0 means "no limit" (return all). Default 2000 to keep payload manageable.
         const limitParam = url.searchParams.get('limit');
         const symbolLimit = limitParam === '0' ? Infinity : parseInt(limitParam || '2000', 10);
+        // kinds filter: comma-separated list or 'all'. Default excludes noisy 'property' symbols.
+        const kindsParam = url.searchParams.get('kinds');
+        const excludeKinds = kindsParam === 'all' ? new Set<string>() : new Set(['property']);
         try {
-          const allSymbols = store.getSymbolsForProject(wsHash);
+          const allSymbolsRaw = store.getSymbolsForProject(wsHash);
+          // Filter out noisy property symbols (e.g. module.exports.x config exports) unless caller opts out
+          const allSymbols = excludeKinds.size > 0
+            ? allSymbolsRaw.filter((s: { kind: string }) => !excludeKinds.has(s.kind))
+            : allSymbolsRaw;
           const allEdges = store.getSymbolEdgesForProject(wsHash);
           const clusters = store.getSymbolClusters(wsHash);
           const total = allSymbols.length;
 
-          // If we need to trim, keep the exported + high-degree symbols first.
-          // Build a set of symbol IDs present in edges for quick lookup.
+          // Build edge degree map for sorting
+          const edgeDegree = new Map<number, number>();
+          for (const e of allEdges) {
+            edgeDegree.set(e.sourceId, (edgeDegree.get(e.sourceId) || 0) + 1);
+            edgeDegree.set(e.targetId, (edgeDegree.get(e.targetId) || 0) + 1);
+          }
+
+          // If we need to trim: prioritize connected symbols first, then exported, then degree.
           let symbols = allSymbols;
           let edges = allEdges;
           if (isFinite(symbolLimit) && allSymbols.length > symbolLimit) {
-            // Sort: exported symbols first, then by how many edges they have.
-            const edgeDegree = new Map<number, number>();
-            for (const e of allEdges) {
-              edgeDegree.set(e.sourceId, (edgeDegree.get(e.sourceId) || 0) + 1);
-              edgeDegree.set(e.targetId, (edgeDegree.get(e.targetId) || 0) + 1);
-            }
             symbols = [...allSymbols].sort((a, b) => {
+              // 1. Connected symbols (have at least one edge) come first
+              const aDeg = edgeDegree.get(a.id) || 0;
+              const bDeg = edgeDegree.get(b.id) || 0;
+              const aConnected = aDeg > 0 ? 1 : 0;
+              const bConnected = bDeg > 0 ? 1 : 0;
+              if (bConnected !== aConnected) return bConnected - aConnected;
+              // 2. Exported first
               const exportedDiff = (b.exported ? 1 : 0) - (a.exported ? 1 : 0);
               if (exportedDiff !== 0) return exportedDiff;
-              return (edgeDegree.get(b.id) || 0) - (edgeDegree.get(a.id) || 0);
+              // 3. Higher degree first
+              return bDeg - aDeg;
             }).slice(0, symbolLimit);
-            const keptIds = new Set(symbols.map(s => s.id));
-            edges = allEdges.filter(e => keptIds.has(e.sourceId) && keptIds.has(e.targetId));
+            const keptIds = new Set(symbols.map((s: { id: number }) => s.id));
+            edges = allEdges.filter((e: { sourceId: number; targetId: number }) => keptIds.has(e.sourceId) && keptIds.has(e.targetId));
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -3736,8 +3751,24 @@ export async function startServer(options: ServerOptions): Promise<void> {
             ...flow,
             steps: store.getFlowSteps(flow.id),
           }));
+          // Merge doc flows from .agents/_flows/*.md
+          const docFlows = store.getDocFlows(wsHash);
+          const docFlowsMapped = docFlows.map(df => ({
+            id: df.id + 100000,
+            label: df.label,
+            flowType: df.flowType,
+            stepCount: 0,
+            entryName: null,
+            entryFile: df.sourceFile,
+            terminalName: null,
+            terminalFile: null,
+            description: df.description,
+            services: df.services,
+            lastUpdated: df.lastUpdated,
+            steps: [],
+          }));
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ flows: flowsWithSteps }));
+          res.end(JSON.stringify({ flows: [...flowsWithSteps, ...docFlowsMapped] }));
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
