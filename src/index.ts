@@ -10,7 +10,6 @@ import { findCycles } from './graph.js';
 import { handleBench } from './bench.js';
 import { resolveHostUrl } from './host.js';
 import { SymbolGraph } from './symbol-graph.js';
-import { installService, uninstallService } from './service-installer.js';
 import { isTreeSitterAvailable } from './treesitter.js';
 import { QdrantVecStore } from './providers/qdrant.js';
 import { createVectorStore } from './vector-store.js';
@@ -30,11 +29,12 @@ import { log, initLogger, cliOutput, cliError, setStdioMode } from './logger.js'
 
 const DEFAULT_HTTP_PORT = 3100;
 
-async function detectRunningServer(port: number = DEFAULT_HTTP_PORT): Promise<boolean> {
+async function detectRunningServer(port: number = getHttpPort()): Promise<boolean> {
+  const host = getHttpHost();
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1000);
-    const resp = await fetch(`http://localhost:${port}/health`, { signal: controller.signal });
+    const resp = await fetch(`http://${host}:${port}/health`, { signal: controller.signal });
     clearTimeout(timeout);
     return resp.ok;
   } catch {
@@ -42,51 +42,16 @@ async function detectRunningServer(port: number = DEFAULT_HTTP_PORT): Promise<bo
   }
 }
 
-const UNSAFE_SERVE_STOP_PATTERNS = [
-  /docker/i,
-  /docker-proxy/i,
-  /com\.docker/i,
-  /vpnkit/i,
-  /containerd/i,
-];
-
-function getProcessCommand(pid: number): string {
-  if (!Number.isInteger(pid) || pid <= 0) return '';
-  try {
-    return execSync(`ps -p ${pid} -o command=`, { encoding: 'utf-8' }).trim();
-  } catch {
-    return '';
-  }
-}
-
-function isUnsafeServeStopTarget(command: string): boolean {
-  if (!command) return true;
-  return UNSAFE_SERVE_STOP_PATTERNS.some((pattern) => pattern.test(command));
-}
-
-function isLikelyNanoBrainServerCommand(command: string): boolean {
-  if (!command) return false;
-  const normalized = command.toLowerCase();
-  const hasNanoBrainMarker =
-    normalized.includes('nano-brain') ||
-    normalized.includes('/bin/cli.js') ||
-    normalized.includes('/src/index.ts');
-
-  const hasServerModeMarker =
-    normalized.includes(' mcp') ||
-    normalized.includes(' serve') ||
-    normalized.includes('--daemon');
-
-  return hasNanoBrainMarker && hasServerModeMarker;
-}
 
 async function proxyGet(port: number, path: string): Promise<any> {
-  const resp = await fetch(`http://localhost:${port}${path}`);
+  const host = getHttpHost();
+  const resp = await fetch(`http://${host}:${port}${path}`);
   return resp.json();
 }
 
 async function proxyPost(port: number, path: string, body: any): Promise<any> {
-  const resp = await fetch(`http://localhost:${port}${path}`, {
+  const host = getHttpHost();
+  const resp = await fetch(`http://${host}:${port}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -103,10 +68,16 @@ function isRunningInContainer(): boolean {
 }
 
 function getHttpHost(): string {
+  if (process.env.NANO_BRAIN_HOST) return process.env.NANO_BRAIN_HOST;
   return isRunningInContainer() ? 'host.docker.internal' : 'localhost';
 }
 
-async function detectRunningServerContainer(port: number = DEFAULT_HTTP_PORT): Promise<boolean> {
+function getHttpPort(): number {
+  if (process.env.NANO_BRAIN_PORT) return parseInt(process.env.NANO_BRAIN_PORT, 10);
+  return DEFAULT_HTTP_PORT;
+}
+
+async function detectRunningServerContainer(port: number = getHttpPort()): Promise<boolean> {
   const host = getHttpHost();
   try {
     const controller = new AbortController();
@@ -220,14 +191,6 @@ nano-brain - Memory system with hybrid search
     --host=<addr>   Bind address (default: 127.0.0.1)
     --daemon        Run as background daemon
     stop            Stop running daemon
-  serve             Start SSE server as background daemon (shortcut)
-    --port=<n>      HTTP port (default: 3100)
-    --foreground    Run in foreground instead of detaching
-    stop [--force]  Stop running server (safe PID checks)
-    status          Show server status
-    install         Install as system service (launchd on macOS, systemd on Linux)
-      --force       Overwrite existing service file
-    uninstall       Remove system service
   status            Show index health, embedding server status, and stats
     --all           Show status for all workspaces
   collection        Manage collections
@@ -431,264 +394,6 @@ async function handleMcp(globalOpts: GlobalOptions, commandArgs: string[]): Prom
   });
 }
 
-async function handleServe(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
-  const SERVE_PID_FILE = path.join(NANO_BRAIN_HOME, 'serve.pid');
-  const SERVE_LOG_FILE = path.join(NANO_BRAIN_HOME, 'logs', 'server.log');
-
-  let port = 3100;
-  let foreground = false;
-  let subcommand: string | undefined;
-  let root: string | undefined;
-  let force = false;
-
-  for (const arg of commandArgs) {
-    if (arg.startsWith('--port=')) {
-      port = parseInt(arg.substring(7), 10);
-    } else if (arg.startsWith('--root=')) {
-      root = arg.substring(7);
-    } else if (arg === '--foreground' || arg === '-f') {
-      foreground = true;
-    } else if (arg === '--force') {
-      force = true;
-    } else if (arg === 'stop' || arg === 'status' || arg === 'install' || arg === 'uninstall') {
-      subcommand = arg;
-    }
-  }
-
-  // serve stop
-  if (subcommand === 'stop') {
-    let stopped = false;
-    const skippedUnsafe: Array<{ pid: number; command: string; source: string }> = [];
-
-    const tryStopPid = (pid: number, source: string): boolean => {
-      if (!Number.isInteger(pid) || pid <= 0) return false;
-
-      const command = getProcessCommand(pid);
-      if (!force && (isUnsafeServeStopTarget(command) || !isLikelyNanoBrainServerCommand(command))) {
-        skippedUnsafe.push({ pid, command, source });
-        return false;
-      }
-
-      try {
-        process.kill(pid, 'SIGTERM');
-        cliOutput(`Stopped nano-brain server (${source}, PID: ${pid})`);
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    // Try stopping via PID file
-    try {
-      if (fs.existsSync(SERVE_PID_FILE)) {
-        const pidText = fs.readFileSync(SERVE_PID_FILE, 'utf-8').trim();
-        const pid = parseInt(pidText, 10);
-        if (tryStopPid(pid, 'PID file')) {
-          stopped = true;
-          fs.unlinkSync(SERVE_PID_FILE);
-        } else if (fs.existsSync(SERVE_PID_FILE)) {
-          // Remove stale/invalid PID file and continue with safe fallback
-          fs.unlinkSync(SERVE_PID_FILE);
-        }
-      }
-    } catch {
-      // Process might already be dead
-      if (fs.existsSync(SERVE_PID_FILE)) fs.unlinkSync(SERVE_PID_FILE);
-    }
-
-    // Secondary stop: try to find process by port if PID file failed or was missing
-    if (!stopped) {
-      try {
-        const isPortActive = await detectRunningServer(port);
-        if (isPortActive) {
-          const platform = process.platform;
-          if (platform === 'darwin' || platform === 'linux') {
-            try {
-              const cmd = platform === 'darwin'
-                ? `lsof -ti tcp:${port}`
-                : `lsof -ti tcp:${port} 2>/dev/null || fuser ${port}/tcp 2>/dev/null`;
-              const raw = execSync(cmd, { encoding: 'utf-8' }).trim();
-              const candidatePids = Array.from(
-                new Set(
-                  (raw.match(/\d+/g) || [])
-                    .map((value) => parseInt(value, 10))
-                    .filter((value) => Number.isInteger(value) && value > 0 && value !== port)
-                )
-              );
-
-              const stoppedPids: number[] = [];
-              for (const pid of candidatePids) {
-                if (tryStopPid(pid, `port ${port}`)) {
-                  stoppedPids.push(pid);
-                }
-              }
-
-              if (stoppedPids.length > 0) {
-                cliOutput(`Stopped nano-brain server on port ${port} (PIDs: ${stoppedPids.join(', ')})`);
-                stopped = true;
-              }
-            } catch {
-              // Ignore command failures
-            }
-          }
-        }
-      } catch {
-        // Ignore health check failures
-      }
-    }
-
-    if (!stopped) {
-      if (force) {
-        cliOutput('No running server found');
-      } else if (skippedUnsafe.length > 0) {
-        cliOutput('No safe nano-brain server PID found to stop.');
-        for (const item of skippedUnsafe) {
-          const details = item.command ? ` (${item.command})` : '';
-          cliOutput(`  skipped ${item.source} PID ${item.pid}${details}`);
-        }
-        cliOutput('Use `npx nano-brain serve stop --force` only if you verified the target PID manually.');
-      } else {
-        cliOutput('No running server found');
-      }
-    }
-    return;
-  }
-
-  // serve status
-  if (subcommand === 'status') {
-    let pidAlive = false;
-    let pid: number | null = null;
-    try {
-      pid = parseInt(fs.readFileSync(SERVE_PID_FILE, 'utf-8').trim(), 10);
-      process.kill(pid, 0);
-      pidAlive = true;
-    } catch {}
-    const portActive = await detectRunningServer(port);
-    if (pidAlive && pid) {
-      cliOutput(`nano-brain server is running (PID: ${pid}, port: ${port})`);
-    } else if (portActive) {
-      cliOutput(`nano-brain server is responding on port ${port} but PID file is stale. Run: npx nano-brain serve stop --force`);
-    } else {
-      cliOutput('nano-brain server is not running');
-    }
-    return;
-  }
-
-  // serve install
-  if (subcommand === 'install') {
-    const result = installService({ force, port });
-    if (result.success) {
-      cliOutput(`✅ ${result.message}`);
-      cliOutput(`   The server will start automatically on login.`);
-      cliOutput(`   Port: ${port}`);
-    } else {
-      cliError(`❌ ${result.message}`);
-      process.exit(1);
-    }
-    return;
-  }
-
-  // serve uninstall
-  if (subcommand === 'uninstall') {
-    const result = uninstallService();
-    if (result.success) {
-      cliOutput(`✅ ${result.message}`);
-    } else {
-      cliError(`❌ ${result.message}`);
-      process.exit(1);
-    }
-    return;
-  }
-
-  // serve (start)
-  if (foreground) {
-    return handleMcp(globalOpts, ['--http', `--port=${port}`, '--host=0.0.0.0', '--daemon', ...(root ? [`--root=${root}`] : [])]);
-  }
-
-  // --force: stop existing server before starting
-  if (force) {
-    try {
-      if (fs.existsSync(SERVE_PID_FILE)) {
-        const existingPid = parseInt(fs.readFileSync(SERVE_PID_FILE, 'utf-8').trim(), 10);
-        try { process.kill(existingPid, 'SIGTERM'); } catch {}
-        cliOutput(`Stopped existing server (PID: ${existingPid})`);
-        fs.unlinkSync(SERVE_PID_FILE);
-        await new Promise(r => setTimeout(r, 1000));
-      }
-    } catch {}
-    const portBusy = await detectRunningServer(port);
-    if (portBusy) {
-      const platform = process.platform;
-      if (platform === 'darwin' || platform === 'linux') {
-        try {
-          const cmd = platform === 'darwin' ? `lsof -ti tcp:${port}` : `lsof -ti tcp:${port} 2>/dev/null || fuser ${port}/tcp 2>/dev/null`;
-          const raw = execSync(cmd, { encoding: 'utf-8' }).trim();
-          for (const pidStr of raw.split(/\s+/)) {
-            const pid = parseInt(pidStr, 10);
-            if (pid > 0) { try { process.kill(pid, 'SIGKILL'); } catch {} }
-          }
-          await new Promise(r => setTimeout(r, 500));
-        } catch {}
-      }
-    }
-  }
-
-  // Check if already running via PID file
-  let pidAlive = false;
-  try {
-    if (fs.existsSync(SERVE_PID_FILE)) {
-      const existingPid = parseInt(fs.readFileSync(SERVE_PID_FILE, 'utf-8').trim(), 10);
-      process.kill(existingPid, 0);
-      pidAlive = true;
-      cliOutput(`Server already running (PID: ${existingPid}). Stop first or use: npx nano-brain serve start --force`);
-      return;
-    }
-  } catch {
-    try { fs.unlinkSync(SERVE_PID_FILE); } catch {}
-  }
-
-  // Secondary check: verify if port is already in use by another instance
-  const isPortActive = await detectRunningServer(port);
-  if (isPortActive) {
-    cliOutput(`Port ${port} is in use by an orphaned process. Run: npx nano-brain serve start --force`);
-    return;
-  }
-
-  // Spawn detached child
-  const logsDir = path.join(NANO_BRAIN_HOME, 'logs');
-  fs.mkdirSync(logsDir, { recursive: true });
-
-  const cliPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../bin/cli.js');
-  const args = [cliPath, 'mcp', '--http', `--port=${port}`, '--host=0.0.0.0', '--daemon'];
-  if (root) {
-    args.push(`--root=${root}`);
-  }
-  if (globalOpts.configPath !== DEFAULT_CONFIG) {
-    args.push(`--config=${globalOpts.configPath}`);
-  }
-
-  const logFd = fs.openSync(SERVE_LOG_FILE, 'a');
-  const child = spawn(process.argv[0], args, {
-    detached: true,
-    stdio: ['ignore', logFd, logFd],
-  });
-
-  if (child.pid) {
-    fs.writeFileSync(SERVE_PID_FILE, String(child.pid));
-    child.unref();
-    cliOutput(`nano-brain server started on http://0.0.0.0:${port} (PID: ${child.pid})`);
-    cliOutput(`  SSE endpoint: http://localhost:${port}/sse`);
-    cliOutput(`  Health check: http://localhost:${port}/health`);
-    cliOutput(`  Logs: ${SERVE_LOG_FILE}`);
-    cliOutput(`  Stop: npx nano-brain serve stop`);
-  } else {
-    cliError('Failed to start server');
-    process.exit(1);
-  }
-
-  fs.closeSync(logFd);
-  process.exit(0);
-}
 
 async function handleCollection(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
   const subcommand = commandArgs[0];
@@ -1411,8 +1116,8 @@ async function handleEmbed(globalOpts: GlobalOptions, commandArgs: string[]): Pr
   if (isRunningInContainer()) {
     const serverRunning = await detectRunningServerContainer(DEFAULT_HTTP_PORT);
     if (!serverRunning) {
-      cliError('Error: Daemon not running. Start it on the host:');
-      cliError('  npx nano-brain serve install && launchctl load ~/Library/LaunchAgents/com.nano-brain.server.plist');
+      cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
+      cliError('  docker start nano-brain');
       process.exit(1);
     }
     try {
@@ -1555,8 +1260,8 @@ async function handleSearch(
     : await detectRunningServer(DEFAULT_HTTP_PORT);
 
   if (inContainer && !serverRunning) {
-    cliError('Error: Daemon not running. Start it on the host:');
-    cliError('  npx nano-brain serve install && launchctl load ~/Library/LaunchAgents/com.nano-brain.server.plist');
+    cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
+    cliError('  docker start nano-brain');
     process.exit(1);
   }
 
@@ -1722,8 +1427,8 @@ async function handleWrite(globalOpts: GlobalOptions, commandArgs: string[]): Pr
   if (isRunningInContainer()) {
     const serverRunning = await detectRunningServerContainer(DEFAULT_HTTP_PORT);
     if (!serverRunning) {
-      cliError('Error: Daemon not running. Start it on the host:');
-      cliError('  npx nano-brain serve install && launchctl load ~/Library/LaunchAgents/com.nano-brain.server.plist');
+      cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
+      cliError('  docker start nano-brain');
       process.exit(1);
     }
     try {
@@ -2319,8 +2024,8 @@ async function handleReindex(globalOpts: GlobalOptions, commandArgs: string[]): 
   if (isRunningInContainer()) {
     const serverRunning = await detectRunningServerContainer(DEFAULT_HTTP_PORT);
     if (!serverRunning) {
-      cliError('Error: Daemon not running. Start it on the host:');
-      cliError('  npx nano-brain serve install && launchctl load ~/Library/LaunchAgents/com.nano-brain.server.plist');
+      cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
+      cliError('  docker start nano-brain');
       process.exit(1);
     }
     try {
@@ -4094,7 +3799,7 @@ async function main() {
   // Resolve per-workspace DB path.
   // Daemon mode (serve or mcp --daemon) skips early resolution — startServer() resolves
   // using the correct workspace root from config.yml instead of process.cwd()
-  const isDaemonMode = command === 'serve' || (command === 'mcp' && commandArgs.includes('--daemon'));
+  const isDaemonMode = command === 'mcp' && commandArgs.includes('--daemon');
   if (command !== 'init' && command !== 'docker' && !isDaemonMode) {
     globalOpts.dbPath = resolveDbPath(globalOpts.dbPath, process.cwd());
   }
@@ -4102,8 +3807,6 @@ async function main() {
   switch (command) {
     case 'mcp':
       return handleMcp(globalOpts, commandArgs);
-    case 'serve':
-      return handleServe(globalOpts, commandArgs);
     case 'init':
       return handleInit(globalOpts, commandArgs);
     case 'collection':
