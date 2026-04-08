@@ -174,7 +174,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
 
   const handleFileChange = (filePath: string) => {
     if (stopped) return
-    
+
     log('watcher', 'File change detected: ' + filePath)
     dirty = true
     lastFileChangeAt = Date.now()
@@ -199,17 +199,17 @@ export function startWatcher(options: WatcherOptions): Watcher {
 
   const triggerReindex = async (force?: boolean): Promise<void> => {
     if (isReindexing || stopped) return
-    
+
     if (!force && lastReindexAt && Date.now() - lastReindexAt < reindexCooldownMs) {
       const remainingMs = reindexCooldownMs - (Date.now() - lastReindexAt)
       const remainingMin = Math.ceil(remainingMs / 60000)
       log('watcher', `Reindex skipped: cooldown active (${remainingMin}m remaining)`)
       return
     }
-    
+
     isReindexing = true
     log('watcher', 'Starting reindex')
-    
+
     try {
       for (const collection of collections) {
         try {
@@ -218,10 +218,10 @@ export function startWatcher(options: WatcherOptions): Watcher {
           for (let fileIdx = 0; fileIdx < files.length; fileIdx++) {
             const filePath = files[fileIdx];
             if (!fs.existsSync(filePath)) continue
-            
+
             const content = fs.readFileSync(filePath, 'utf-8')
             const hash = computeHash(content)
-            
+
             const existingDoc = store.findDocument(filePath)
             if (!existingDoc || existingDoc.hash !== hash) {
               const title = extractTitle(content)
@@ -230,12 +230,12 @@ export function startWatcher(options: WatcherOptions): Watcher {
                 : projectHash;
               indexDocument(store, collection.name, filePath, content, title, effectiveProjectHash)
             }
-            
+
             activePaths.push(filePath)
-            
+
             if (fileIdx % 20 === 0) await yieldToEventLoop();
           }
-          
+
           await yieldToEventLoop();
           store.bulkDeactivateExcept(collection.name, activePaths)
           await yieldToEventLoop();
@@ -243,7 +243,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
           log('watcher', `Collection scan failed for ${collection.name}: ${err}`)
         }
       }
-      
+
       await yieldToEventLoop();
       if (codebaseConfig?.enabled) {
         try {
@@ -259,7 +259,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
           log('watcher', `Embedding failed for primary workspace: ${err}`)
         }
       }
-      
+
       if (allWorkspaces && dataDir) {
         for (const [wsPath, wsConfig] of Object.entries(allWorkspaces)) {
           if (!wsConfig.codebase?.enabled) continue;
@@ -283,7 +283,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
           }
         }
       }
-      
+
       dirty = false
       pendingPaths.clear()
       lastReindexAt = Date.now()
@@ -296,33 +296,33 @@ export function startWatcher(options: WatcherOptions): Watcher {
   const startupIntegrityCheck = async () => {
     const health = store.getIndexHealth();
     let mismatches = 0;
-    
+
     for (const collectionInfo of health.collections) {
       const collection = collections.find(c => c.name === collectionInfo.name);
       if (!collection) continue;
-      
+
       const files = await scanCollectionFiles(collection);
-      
+
       for (let fileIdx = 0; fileIdx < files.length; fileIdx++) {
         const filePath = files[fileIdx];
         if (!fs.existsSync(filePath)) continue;
-        
+
         const existingDoc = store.findDocument(filePath);
         if (!existingDoc) continue;
-        
+
         const content = fs.readFileSync(filePath, 'utf-8');
         const hash = computeHash(content);
-        
+
         if (existingDoc.hash !== hash) {
           mismatches++;
           dirty = true;
           pendingPaths.add(filePath);
         }
-        
+
         if (fileIdx % 20 === 0) await yieldToEventLoop();
       }
     }
-    
+
     if (mismatches > 0) {
       log('watcher', 'Integrity check found ' + mismatches + ' mismatches')
       log('watcher', `Integrity check: ${mismatches} file(s) need re-indexing`);
@@ -401,7 +401,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
         await triggerReindex();
       }
     }, pollIntervalMs);
-    
+
     sessionPollInterval = setInterval(async () => {
       if (stopped) return;
       if (storageConfig) {
@@ -411,32 +411,32 @@ export function startWatcher(options: WatcherOptions): Watcher {
           return;
         }
       }
-      
+
       try {
         const sessions = await harvestSessions({
           sessionDir: sessionStorageDir,
           outputDir,
         });
-        
+
         if (sessions.length > 0) {
           log('watcher', 'Session harvest: ' + sessions.length + ' session(s) harvested')
           await triggerReindex();
         }
-        
+
         if (storageConfig && dbPath) {
           const expiredCount = evictExpiredSessions(outputDir, storageConfig.retention, store);
           if (expiredCount > 0) {
             log('watcher', 'Storage eviction: ' + expiredCount + ' expired session(s)')
             log('storage', `Evicted ${expiredCount} expired session(s)`);
           }
-          
+
           const sizeEvictedCount = evictBySize(outputDir, dbPath, storageConfig.maxSize, store);
           if (sizeEvictedCount > 0) {
             log('watcher', 'Storage eviction: ' + sizeEvictedCount + ' session(s) due to size limit')
             log('storage', `Evicted ${sizeEvictedCount} session(s) due to size limit`);
           }
         }
-        
+
         harvestCycleCount++;
         if (harvestCycleCount % 10 === 0) {
           const orphansDeleted = store.cleanOrphanedEmbeddings();
@@ -445,7 +445,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
             log('storage', `Cleaned ${orphansDeleted} orphaned embedding(s)`);
           }
         }
-        
+
         try {
           const purged = store.purgeTelemetry(90);
           if (purged > 0) {
@@ -460,6 +460,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
     }, sessionPollMs);
 
     if (embedder) {
+      let lastQuietSkipLogAt = 0;
       const scheduleNextEmbedCycle = () => {
         if (stopped) return;
         embeddingTimeout = setTimeout(async () => {
@@ -470,8 +471,12 @@ export function startWatcher(options: WatcherOptions): Watcher {
           isEmbedding = true;
           try {
             if (lastFileChangeAt > 0 && Date.now() - lastFileChangeAt < embedQuietPeriodMs) {
-              const sinceSec = Math.round((Date.now() - lastFileChangeAt) / 1000)
-              log('watcher', `Embedding skipped: quiet period active (${sinceSec}s since last change, need ${Math.round(embedQuietPeriodMs / 1000)}s)`)
+              const now = Date.now();
+              if (now - lastQuietSkipLogAt >= 60_000) {
+                const sinceSec = Math.round((now - lastFileChangeAt) / 1000)
+                log('watcher', `Embedding skipped: quiet period active (${sinceSec}s since last change, need ${Math.round(embedQuietPeriodMs / 1000)}s)`)
+                lastQuietSkipLogAt = now;
+              }
               isEmbedding = false;
               scheduleNextEmbedCycle();
               return;
@@ -486,7 +491,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
               for (const [wsPath, wsConfig] of Object.entries(allWorkspaces)) {
                 if (!wsConfig.codebase?.enabled) continue;
                 if (wsPath === workspaceRoot) continue;
-                
+
                 try {
                   const wsStore = openWorkspaceStore(dataDir, wsPath);
                   if (!wsStore) {
@@ -549,7 +554,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
         if (stopped) return;
         learningTimeout = setTimeout(async () => {
           if (stopped) return;
-          
+
           try {
             const banditState = sampler.getState();
             const flatStats = banditState.flatMap(config =>
@@ -561,11 +566,11 @@ export function startWatcher(options: WatcherOptions): Watcher {
               }))
             );
             store.saveBanditStats(flatStats, projectHash);
-            
+
             const configJson = JSON.stringify(sampler.selectSearchConfig());
             const telemetryCount = store.getTelemetryCount();
             store.saveConfigVersion(configJson, telemetryCount > 0 ? telemetryCount : null);
-            
+
             const latestVersion = store.getLatestConfigVersion();
             if (latestVersion && latestVersion.expand_rate !== null) {
               const prevVersion = store.getConfigVersion(latestVersion.version_id - 1);
@@ -577,7 +582,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
                 }
               }
             }
-            
+
             lastLearningRun = Date.now();
             log('watcher', 'Learning cycle complete: saved bandit stats and config version');
 
@@ -763,17 +768,17 @@ export function startWatcher(options: WatcherOptions): Watcher {
   return {
     stop() {
       stopped = true;
-      
+
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
       }
-      
+
       if (pollInterval) {
         clearInterval(pollInterval);
         pollInterval = null;
       }
-      
+
       if (sessionPollInterval) {
         clearInterval(sessionPollInterval);
         sessionPollInterval = null;
@@ -823,21 +828,21 @@ export function startWatcher(options: WatcherOptions): Watcher {
         clearTimeout(mergeTimeout);
         mergeTimeout = null;
       }
-      
+
       if (watcher) {
         watcher.close();
         watcher = null;
       }
     },
-    
+
     isDirty() {
       return dirty;
     },
-    
+
     async triggerReindex(force?: boolean) {
       await triggerReindex(force);
     },
-    
+
     getStats(): WatcherStats {
       return {
         filesWatched: watchedPaths.size,
@@ -852,13 +857,13 @@ export function startWatcher(options: WatcherOptions): Watcher {
 
 function extractTitle(content: string): string {
   const lines = content.split('\n');
-  
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith('# ')) {
       return trimmed.substring(2).trim();
     }
   }
-  
+
   return 'Untitled';
 }

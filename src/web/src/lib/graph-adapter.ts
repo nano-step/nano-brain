@@ -1,157 +1,203 @@
-import Graph from 'graphology';
+import { type Node, type Edge } from '@xyflow/react';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY, type SimulationNodeDatum } from 'd3-force';
 import { ConnectionsResponse, GraphEntity, GraphEntitiesResponse, SymbolsResponse } from '../api/client';
 import { edgeTypeColorMap, fallbackColors, relationshipColorMap, symbolKindColorMap, typeColorMap } from './colors';
 
-function randomLayout(graph: Graph, scale: number) {
-  graph.forEachNode((node) => {
-    graph.setNodeAttribute(node, 'x', (Math.random() - 0.5) * scale);
-    graph.setNodeAttribute(node, 'y', (Math.random() - 0.5) * scale);
-  });
+// ---------- d3-force layout helper ----------
+
+interface SimNode extends SimulationNodeDatum {
+  id: string;
 }
 
-type GraphNodeMeta = {
-  id: string;
-  label: string;
-  entityType: string;
-  size: number;
-  color: string;
-  description?: string | null;
-  firstLearnedAt?: string | null;
-  lastConfirmedAt?: string | null;
-  contradictedAt?: string | null;
-};
+function computeForceLayout(
+  nodes: Node[],
+  edges: Edge[],
+  opts: { width?: number; height?: number; linkDistance?: number; chargeStrength?: number } = {}
+): Node[] {
+  if (nodes.length === 0) return nodes;
+  const w = opts.width ?? 600;
+  const h = opts.height ?? 400;
+  const n = nodes.length;
+  const linkDist = opts.linkDistance ?? (n > 60 ? 200 : n > 30 ? 160 : 120);
+  const charge = opts.chargeStrength ?? (n > 60 ? -250 : n > 30 ? -180 : -120);
+  const centerPull = n > 60 ? 0.03 : n > 30 ? 0.05 : 0.08;
+  const collideBase = n > 60 ? 50 : n > 30 ? 40 : 35;
 
-type SymbolNodeMeta = {
-  id: string;
-  label: string;
-  entityType: string;
-  size: number;
-  color: string;
-  filePath?: string;
-  startLine?: number;
-  clusterId?: number | null;
-};
+  const simNodes: SimNode[] = nodes.map((nd) => ({
+    id: nd.id,
+    x: nd.position.x || (Math.random() - 0.5) * w,
+    y: nd.position.y || (Math.random() - 0.5) * h,
+  }));
+  const simLinks = edges.map((e) => ({ source: e.source, target: e.target }));
 
-export function buildEntityGraph(data: GraphEntitiesResponse, nodeLimit = 500) {
-  const graph = new Graph({ type: 'directed', multi: false });
+  const simulation = forceSimulation(simNodes)
+    .force('link', forceLink(simLinks).id((d: any) => d.id).distance(linkDist).strength(0.5))
+    .force('charge', forceManyBody().strength(charge))
+    .force('center', forceCenter(w / 2, h / 2))
+    .force('x', forceX(w / 2).strength(centerPull))
+    .force('y', forceY(h / 2).strength(centerPull))
+    .force('collide', forceCollide().radius(collideBase).strength(0.7))
+    .stop();
+
+  const ticks = Math.ceil(Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()));
+  for (let i = 0; i < ticks; i++) simulation.tick();
+
+  return nodes.map((nd, i) => ({
+    ...nd,
+    position: { x: simNodes[i]!.x ?? 0, y: simNodes[i]!.y ?? 0 },
+  }));
+}
+
+// ---------- Entity graph (Knowledge Graph) ----------
+
+export function buildEntityGraph(
+  data: GraphEntitiesResponse,
+  nodeLimit = 500
+): { nodes: Node[]; edges: Edge[] } {
   const edgeCounts = new Map<number, number>();
-
   for (const edge of data.edges) {
     edgeCounts.set(edge.sourceId, (edgeCounts.get(edge.sourceId) || 0) + 1);
     edgeCounts.set(edge.targetId, (edgeCounts.get(edge.targetId) || 0) + 1);
   }
 
   // Sort by degree descending, take top N
-  const nodes = [...data.nodes].sort((a, b) => (edgeCounts.get(b.id) || 0) - (edgeCounts.get(a.id) || 0)).slice(0, nodeLimit);
-  const nodeIds = new Set(nodes.map((n) => n.id));
+  const sortedNodes = [...data.nodes]
+    .sort((a, b) => (edgeCounts.get(b.id) || 0) - (edgeCounts.get(a.id) || 0))
+    .slice(0, nodeLimit);
+  const nodeIds = new Set(sortedNodes.map((n) => n.id));
 
-  for (const node of nodes) {
-    const count = edgeCounts.get(node.id) || 0;
-    const size = Math.max(5, Math.min(25, 5 + count * 1.2));
-    graph.addNode(String(node.id), {
+  const nodes: Node[] = sortedNodes.map((node) => {
+    const degree = edgeCounts.get(node.id) || 0;
+    return {
       id: String(node.id),
-      label: node.name,
-      entityType: node.type,
-      size,
-      color: typeColorMap[node.type] || '#64748b',
-      description: node.description,
-      firstLearnedAt: node.firstLearnedAt,
-      lastConfirmedAt: node.lastConfirmedAt,
-      contradictedAt: node.contradictedAt,
-    } satisfies GraphNodeMeta);
-  }
+      type: 'entity',
+      position: { x: 0, y: 0 },
+      data: {
+        label: node.name,
+        entityType: node.type,
+        degree,
+        description: node.description,
+        firstLearnedAt: node.firstLearnedAt,
+        lastConfirmedAt: node.lastConfirmedAt,
+        contradictedAt: node.contradictedAt,
+      },
+    };
+  });
 
-  // Deduplicate edges: keep only one edge per source→target pair (combine labels if multiple types)
-  const seenPairs = new Map<string, string>();
+  // Deduplicate edges: keep only one edge per source→target pair
+  const seenPairs = new Map<string, Edge>();
   for (const edge of data.edges) {
     if (!nodeIds.has(edge.sourceId) || !nodeIds.has(edge.targetId)) continue;
     const source = String(edge.sourceId);
     const target = String(edge.targetId);
     const pairKey = `${source}->${target}`;
-    if (seenPairs.has(pairKey)) {
-      // Append edge type to existing edge label
-      const existing = graph.findEdge(source, target, () => true);
-      if (existing) {
-        const existingLabel = graph.getEdgeAttribute(existing, 'label') as string;
-        if (!existingLabel.includes(edge.edgeType)) {
-          graph.setEdgeAttribute(existing, 'label', `${existingLabel}, ${edge.edgeType}`);
-        }
+    const existing = seenPairs.get(pairKey);
+    if (existing) {
+      const existingLabel = (existing.data as any)?.edgeType ?? '';
+      if (!existingLabel.includes(edge.edgeType)) {
+        (existing.data as any).edgeType = `${existingLabel}, ${edge.edgeType}`;
+        existing.label = (existing.data as any).edgeType;
       }
     } else {
-      seenPairs.set(pairKey, edge.edgeType);
-      if (graph.hasNode(source) && graph.hasNode(target)) {
-        try {
-          graph.addEdge(source, target, {
-            label: edge.edgeType,
-            edgeType: edge.edgeType,
-            size: 1,
-            color: 'rgba(148, 163, 184, 0.4)',
-          });
-        } catch { /* skip */ }
-      }
+      seenPairs.set(pairKey, {
+        id: `e-${edge.id}`,
+        source,
+        target,
+        label: edge.edgeType,
+        data: { edgeType: edge.edgeType },
+        animated: false,
+        style: { stroke: '#64748b', strokeWidth: 2, opacity: 0.6 },
+      });
     }
   }
+  const edges: Edge[] = Array.from(seenPairs.values());
 
-  randomLayout(graph, 800);
-  return graph;
+  const positioned = computeForceLayout(nodes, edges);
+  return { nodes: positioned, edges };
 }
 
-export function buildCodeGraph(files: Array<{ path: string; centrality: number; clusterId: number | null }>, edges: Array<{ source: string; target: string }>, clusterColors: Record<number, string>) {
-  const graph = new Graph();
-  for (const file of files) {
-    const size = Math.max(4, Math.min(20, 4 + file.centrality * 24));
+// ---------- Code dependency graph ----------
+
+export function buildCodeGraph(
+  files: Array<{ path: string; centrality: number; clusterId: number | null }>,
+  rawEdges: Array<{ source: string; target: string }>,
+  clusterColors: Record<number, string>
+): { nodes: Node[]; edges: Edge[] } {
+  const nodes: Node[] = files.map((file) => {
     const clusterColor = file.clusterId !== null ? clusterColors[file.clusterId] : '#64748b';
-    graph.addNode(file.path, {
+    return {
       id: file.path,
-      label: file.path.split('/').slice(-2).join('/'),
-      fullPath: file.path,
-      clusterId: file.clusterId,
-      size,
-      color: clusterColor,
+      type: 'file',
+      position: { x: 0, y: 0 },
+      data: {
+        label: file.path.split('/').slice(-2).join('/'),
+        fullPath: file.path,
+        clusterId: file.clusterId,
+        color: clusterColor ?? '#64748b',
+        centrality: file.centrality,
+      },
+    };
+  });
+
+  const nodeIds = new Set(files.map((f) => f.path));
+  const seenEdges = new Set<string>();
+  const edges: Edge[] = [];
+  for (const edge of rawEdges) {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) continue;
+    const key = `${edge.source}->${edge.target}`;
+    if (seenEdges.has(key)) continue;
+    seenEdges.add(key);
+    edges.push({
+      id: `e-${edge.source}-${edge.target}`,
+      source: edge.source,
+      target: edge.target,
+      label: 'imports',
+      animated: false,
+      style: { stroke: 'rgba(148, 163, 184, 0.35)', strokeWidth: 1, opacity: 0.6 },
     });
   }
 
-  for (const edge of edges) {
-    if (graph.hasNode(edge.source) && graph.hasNode(edge.target) && !graph.hasEdge(edge.source, edge.target)) {
-      try {
-        graph.addEdge(edge.source, edge.target, {
-          label: 'imports',
-          size: 1,
-          color: 'rgba(148, 163, 184, 0.35)',
-        });
-      } catch { /* skip duplicate edge */ }
-    }
-  }
-
-  randomLayout(graph, 900);
-  return graph;
+  const positioned = computeForceLayout(nodes, edges, { width: 900, height: 600 });
+  return { nodes: positioned, edges };
 }
 
-export function buildSymbolGraph(data: SymbolsResponse, clusterMode: boolean) {
-  const graph = new Graph();
+// ---------- Symbol call graph ----------
+
+export function buildSymbolGraph(
+  data: SymbolsResponse,
+  clusterMode: boolean
+): { nodes: Node[]; edges: Edge[] } {
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
 
   if (clusterMode && data.clusters.length > 0) {
     for (const cluster of data.clusters) {
-      graph.addNode(`cluster-${cluster.clusterId}`, {
+      nodes.push({
         id: `cluster-${cluster.clusterId}`,
-        label: `Cluster ${cluster.clusterId} (${cluster.memberCount})`,
-        entityType: 'cluster',
-        size: Math.max(10, Math.min(40, 10 + cluster.memberCount * 0.5)),
-        color: fallbackColors[cluster.clusterId % fallbackColors.length],
-      } satisfies SymbolNodeMeta);
+        type: 'symbol',
+        position: { x: 0, y: 0 },
+        data: {
+          label: `Cluster ${cluster.clusterId} (${cluster.memberCount})`,
+          entityType: 'cluster',
+          color: fallbackColors[cluster.clusterId % fallbackColors.length],
+        },
+      });
     }
 
     for (const sym of data.symbols) {
       if (sym.clusterId === null) {
-        graph.addNode(String(sym.id), {
+        nodes.push({
           id: String(sym.id),
-          label: sym.name,
-          entityType: sym.kind,
-          size: 6,
-          color: symbolKindColorMap[sym.kind] || '#64748b',
-          filePath: sym.filePath,
-          startLine: sym.startLine,
-        } satisfies SymbolNodeMeta);
+          type: 'symbol',
+          position: { x: 0, y: 0 },
+          data: {
+            label: sym.name,
+            entityType: sym.kind,
+            color: symbolKindColorMap[sym.kind] || '#64748b',
+            filePath: sym.filePath,
+            startLine: sym.startLine,
+          },
+        });
       }
     }
 
@@ -167,107 +213,127 @@ export function buildSymbolGraph(data: SymbolsResponse, clusterMode: boolean) {
     }
     for (const [key, count] of clusterEdges) {
       const [srcNode, tgtNode] = key.split('||');
-      if (graph.hasNode(srcNode) && graph.hasNode(tgtNode)) {
-        try {
-          graph.addEdge(srcNode, tgtNode, {
-            label: `${count}`,
-            size: Math.min(5, 1 + count * 0.2),
-            color: 'rgba(148,163,184,0.4)',
-          });
-        } catch { /* duplicate edge */ }
-      }
+      edges.push({
+        id: `e-${key}`,
+        source: srcNode,
+        target: tgtNode,
+        label: `${count}`,
+        animated: false,
+        style: { stroke: 'rgba(148,163,184,0.4)', strokeWidth: Math.min(5, 1 + count * 0.2), opacity: 0.6 },
+      });
     }
   } else {
     for (const sym of data.symbols) {
-      graph.addNode(String(sym.id), {
+      nodes.push({
         id: String(sym.id),
-        label: sym.name,
-        entityType: sym.kind,
-        size: 6,
-        color: symbolKindColorMap[sym.kind] || '#64748b',
-        filePath: sym.filePath,
-        startLine: sym.startLine,
-        clusterId: sym.clusterId,
-      } satisfies SymbolNodeMeta);
+        type: 'symbol',
+        position: { x: 0, y: 0 },
+        data: {
+          label: sym.name,
+          entityType: sym.kind,
+          color: symbolKindColorMap[sym.kind] || '#64748b',
+          filePath: sym.filePath,
+          startLine: sym.startLine,
+          clusterId: sym.clusterId,
+        },
+      });
     }
+
+    const seenEdges = new Set<string>();
     for (const edge of data.edges) {
       const src = String(edge.sourceId);
       const tgt = String(edge.targetId);
-      if (graph.hasNode(src) && graph.hasNode(tgt) && !graph.hasEdge(src, tgt)) {
-        try {
-          graph.addEdge(src, tgt, {
-            label: edge.edgeType,
-            edgeType: edge.edgeType,
-            size: 1,
-            color: edgeTypeColorMap[edge.edgeType] || 'rgba(148, 163, 184, 0.3)',
-          });
-        } catch { /* skip duplicate edge */ }
-      }
+      const key = `${src}->${tgt}`;
+      if (seenEdges.has(key)) continue;
+      seenEdges.add(key);
+      edges.push({
+        id: `e-${edge.id}`,
+        source: src,
+        target: tgt,
+        label: edge.edgeType,
+        data: { edgeType: edge.edgeType },
+        animated: false,
+        style: {
+          stroke: edgeTypeColorMap[edge.edgeType] || 'rgba(148, 163, 184, 0.3)',
+          strokeWidth: 1,
+          opacity: 0.6,
+        },
+      });
     }
   }
 
-  randomLayout(graph, 1000);
-  return graph;
+  const positioned = computeForceLayout(nodes, edges, { width: 1000, height: 600 });
+  return { nodes: positioned, edges };
 }
 
-export function buildConnectionGraph(data: ConnectionsResponse) {
-  const graph = new Graph({ type: 'directed', multi: false });
-  const docNodes = new Set<string>();
-  const seenPairs = new Map<string, string>();
+// ---------- Connection graph ----------
+
+export function buildConnectionGraph(
+  data: ConnectionsResponse
+): { nodes: Node[]; edges: Edge[] } {
+  const docNodes = new Map<string, Node>();
+  const seenPairs = new Map<string, Edge>();
 
   for (const conn of data.connections) {
     const fromId = String(conn.from_doc_id);
     const toId = String(conn.to_doc_id);
 
     if (!docNodes.has(fromId)) {
-      docNodes.add(fromId);
-      graph.addNode(fromId, {
+      docNodes.set(fromId, {
         id: fromId,
-        label: conn.from_title || conn.from_path.split('/').pop() || fromId,
-        entityType: 'document',
-        size: 8,
-        color: '#3b82f6',
-        fullPath: conn.from_path,
+        type: 'document',
+        position: { x: 0, y: 0 },
+        data: {
+          label: conn.from_title || conn.from_path.split('/').pop() || fromId,
+          fullPath: conn.from_path,
+          color: '#3b82f6',
+        },
       });
     }
     if (!docNodes.has(toId)) {
-      docNodes.add(toId);
-      graph.addNode(toId, {
+      docNodes.set(toId, {
         id: toId,
-        label: conn.to_title || conn.to_path.split('/').pop() || toId,
-        entityType: 'document',
-        size: 8,
-        color: '#3b82f6',
-        fullPath: conn.to_path,
+        type: 'document',
+        position: { x: 0, y: 0 },
+        data: {
+          label: conn.to_title || conn.to_path.split('/').pop() || toId,
+          fullPath: conn.to_path,
+          color: '#3b82f6',
+        },
       });
     }
 
     const pairKey = `${fromId}->${toId}`;
-    if (seenPairs.has(pairKey)) {
-      // Merge relationship type into existing edge label
-      const existing = graph.findEdge(fromId, toId, () => true);
-      if (existing) {
-        const existingLabel = graph.getEdgeAttribute(existing, 'label') as string;
-        if (!existingLabel.includes(conn.relationship_type)) {
-          graph.setEdgeAttribute(existing, 'label', `${existingLabel}, ${conn.relationship_type}`);
-        }
+    const existing = seenPairs.get(pairKey);
+    if (existing) {
+      const existingLabel = typeof existing.label === 'string' ? existing.label : '';
+      if (!existingLabel.includes(conn.relationship_type)) {
+        existing.label = `${existingLabel}, ${conn.relationship_type}`;
       }
     } else {
-      seenPairs.set(pairKey, conn.relationship_type);
-      try {
-        graph.addEdge(fromId, toId, {
-          label: conn.relationship_type,
-          edgeType: conn.relationship_type,
-          size: Math.max(1, Math.min(5, conn.strength * 5)),
-          color: relationshipColorMap[conn.relationship_type] || 'rgba(148,163,184,0.4)',
-        });
-      } catch { /* skip */ }
+      seenPairs.set(pairKey, {
+        id: `e-${conn.id}`,
+        source: fromId,
+        target: toId,
+        label: conn.relationship_type,
+        data: { edgeType: conn.relationship_type },
+        animated: false,
+        style: {
+          stroke: relationshipColorMap[conn.relationship_type] || 'rgba(148,163,184,0.4)',
+          strokeWidth: Math.max(1, Math.min(5, conn.strength * 5)),
+          opacity: 0.6,
+        },
+      });
     }
   }
 
-  randomLayout(graph, 800);
-  return graph;
+  const nodes = Array.from(docNodes.values());
+  const edges = Array.from(seenPairs.values());
+  const positioned = computeForceLayout(nodes, edges, { width: 800, height: 500 });
+  return { nodes: positioned, edges };
 }
+
+// ---------- Utility ----------
 
 export function getNodeMeta(entity?: GraphEntity) {
   if (!entity) return undefined;

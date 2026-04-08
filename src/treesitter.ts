@@ -29,20 +29,21 @@ let PythonLang: unknown = null
 
 async function initTreeSitter(): Promise<void> {
   try {
-    // Skip build/Release/ (may contain wrong-platform binaries from npm rebuild in Docker)
-    // and use prebuilds/{platform}-{arch}/ which ships correct binaries for all platforms
-    process.env.PREBUILDS_ONLY = '1'
+    // NOTE: Do NOT set PREBUILDS_ONLY=1 here.
+    // In Docker ARM64, tree-sitter-typescript may not ship linux-arm64 prebuilds.
+    // npm rebuild compiles valid binaries into build/Release/ for the current platform,
+    // and node-gyp-build's default fallback path will find them correctly.
     const ts = await import('tree-sitter')
     Parser = ts.default
-    
+
     const tsLang = await import('tree-sitter-typescript')
     const tsModule = (tsLang as { default: { typescript: unknown; tsx: unknown } }).default
     TypeScriptLang = tsModule.typescript
     JavaScriptLang = tsModule.tsx
-    
+
     const pyLang = await import('tree-sitter-python')
     PythonLang = (pyLang as { default: unknown }).default
-    
+
     treeSitterAvailable = true
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -98,7 +99,7 @@ interface VueScriptExtraction {
 function extractVueScriptContent(content: string): VueScriptExtraction | null {
   const scriptRegex = /<script\b([^>]*)>([\s\S]*?)<\/script>/g
   const scripts: Array<{ attrs: string; content: string; index: number }> = []
-  
+
   let match
   while ((match = scriptRegex.exec(content)) !== null) {
     scripts.push({
@@ -107,9 +108,9 @@ function extractVueScriptContent(content: string): VueScriptExtraction | null {
       index: match.index,
     })
   }
-  
+
   if (scripts.length === 0) return null
-  
+
   let scriptLang: 'ts' | 'js' = 'js'
   for (const script of scripts) {
     const langMatch = script.attrs.match(/lang\s*=\s*["'](\w+)["']/)
@@ -118,15 +119,15 @@ function extractVueScriptContent(content: string): VueScriptExtraction | null {
       break
     }
   }
-  
+
   const firstScript = scripts[0]
   const beforeScript = content.substring(0, firstScript.index)
   const lineOffset = beforeScript.split('\n').length - 1
-  
+
   if (scripts.length === 1) {
     return { scriptContent: firstScript.content, scriptLang, lineOffset }
   }
-  
+
   const combinedContent = scripts.map(s => s.content).join('\n')
   return { scriptContent: combinedContent, scriptLang, lineOffset }
 }
@@ -138,20 +139,20 @@ function getNodeText(node: { text: string }): string {
 function hasExportModifier(node: { parent?: { type: string; children?: Array<{ type: string }> } }): boolean {
   const parent = node.parent
   if (!parent) return false
-  
+
   if (parent.type === 'export_statement') return true
-  
+
   if (parent.type === 'lexical_declaration' || parent.type === 'variable_declaration') {
     const grandparent = parent.parent
     if (grandparent?.type === 'export_statement') return true
   }
-  
+
   if (parent.children) {
     for (const child of parent.children) {
       if (child.type === 'export') return true
     }
   }
-  
+
   return false
 }
 
@@ -207,7 +208,7 @@ function extractObjectProperties(
   symbols: CodeSymbol[]
 ): void {
   if (!objectNode.children) return
-  
+
   for (const child of objectNode.children) {
     if (child.type === 'pair') {
       const keyNode = child.children?.[0]
@@ -241,7 +242,7 @@ function extractObjectProperties(
 
 function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSymbol[] {
   const symbols: CodeSymbol[] = []
-  
+
   walkTree(rootNode, (node) => {
     if (node.type === 'function_declaration') {
       const nameNode = node.childForFieldName?.('name')
@@ -256,16 +257,16 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
         })
       }
     }
-    
+
     if (node.type === 'variable_declarator') {
       const nameNode = node.childForFieldName?.('name')
       const valueNode = node.childForFieldName?.('value')
       if (nameNode && valueNode) {
         const parent = node.parent
         const grandparent = parent?.parent
-        const isExported = grandparent?.type === 'export_statement' || 
+        const isExported = grandparent?.type === 'export_statement' ||
                           (parent?.parent?.type === 'export_statement')
-        
+
         if (valueNode.type === 'arrow_function' || valueNode.type === 'function') {
           symbols.push({
             name: getNodeText(nameNode),
@@ -285,14 +286,14 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
             endLine: node.endPosition.row + 1,
             exported: true,
           })
-          
+
           if (valueNode.type === 'object') {
             extractObjectProperties(valueNode, varName, filePath, symbols)
           }
         }
       }
     }
-    
+
     if (node.type === 'class_declaration') {
       const nameNode = node.childForFieldName?.('name')
       if (nameNode) {
@@ -306,7 +307,7 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
         })
       }
     }
-    
+
     if (node.type === 'method_definition') {
       const nameNode = node.childForFieldName?.('name')
       if (nameNode) {
@@ -323,7 +324,7 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
         })
       }
     }
-    
+
     if (node.type === 'interface_declaration') {
       const nameNode = node.childForFieldName?.('name')
       if (nameNode) {
@@ -337,7 +338,7 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
         })
       }
     }
-    
+
     if (node.type === 'type_alias_declaration') {
       const nameNode = node.childForFieldName?.('name')
       if (nameNode) {
@@ -351,7 +352,7 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
         })
       }
     }
-    
+
     if (node.type === 'enum_declaration') {
       const nameNode = node.childForFieldName?.('name')
       if (nameNode) {
@@ -365,17 +366,17 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
         })
       }
     }
-    
+
     if (node.type === 'expression_statement') {
       const exprNode = node.children?.[0]
       if (exprNode?.type === 'assignment_expression') {
         const leftNode = exprNode.childForFieldName?.('left')
         const rightNode = exprNode.childForFieldName?.('right')
-        
+
         if (leftNode?.type === 'member_expression') {
           const objNode = leftNode.childForFieldName?.('object')
           const propNode = leftNode.childForFieldName?.('property')
-          
+
           if (objNode && propNode && getNodeText(objNode) === 'module' && getNodeText(propNode) === 'exports') {
             if (rightNode?.type === 'object') {
               extractObjectProperties(rightNode, 'module.exports', filePath, symbols)
@@ -385,13 +386,13 @@ function extractTsJsSymbols(rootNode: TreeSitterNode, filePath: string): CodeSym
       }
     }
   })
-  
+
   return symbols
 }
 
 function extractPythonSymbols(rootNode: TreeSitterNode, filePath: string): CodeSymbol[] {
   const symbols: CodeSymbol[] = []
-  
+
   walkTree(rootNode, (node) => {
     if (node.type === 'function_definition') {
       const nameNode = node.childForFieldName?.('name')
@@ -400,7 +401,7 @@ function extractPythonSymbols(rootNode: TreeSitterNode, filePath: string): CodeS
         const insideClass = isInsideClass(node)
         const className = insideClass ? getEnclosingClassName(node) : null
         const name = className ? `${className}.${baseName}` : baseName
-        
+
         symbols.push({
           name,
           kind: insideClass ? 'method' : 'function',
@@ -411,7 +412,7 @@ function extractPythonSymbols(rootNode: TreeSitterNode, filePath: string): CodeS
         })
       }
     }
-    
+
     if (node.type === 'class_definition') {
       const nameNode = node.childForFieldName?.('name')
       if (nameNode) {
@@ -427,7 +428,7 @@ function extractPythonSymbols(rootNode: TreeSitterNode, filePath: string): CodeS
       }
     }
   })
-  
+
   return symbols
 }
 
@@ -437,55 +438,55 @@ export async function parseSymbols(
   language: SupportedLanguage
 ): Promise<CodeSymbol[]> {
   await initPromise
-  
+
   if (!treeSitterAvailable || !Parser) {
     return []
   }
-  
+
   if (language === 'vue') {
     const vueScript = extractVueScriptContent(content)
     if (!vueScript) return []
-    
+
     const lang = getLanguageParser(vueScript.scriptLang)
     if (!lang) return []
-    
+
     try {
       const parser = new Parser()
       parser.setLanguage(lang)
       const tree = parser.parse(vueScript.scriptContent)
       const tsNode = tree.rootNode as unknown as TreeSitterNode
       const symbols = extractTsJsSymbols(tsNode, filePath)
-      
+
       for (const sym of symbols) {
         sym.startLine += vueScript.lineOffset
         sym.endLine += vueScript.lineOffset
       }
-      
+
       return symbols
     } catch (e) {
       log('treesitter', 'Failed to parse Vue script in ' + filePath + ': ' + (e instanceof Error ? e.message : String(e)), 'warn')
       return []
     }
   }
-  
+
   const lang = getLanguageParser(language)
   if (!lang) {
     return []
   }
-  
+
   try {
     const parser = new Parser()
     parser.setLanguage(lang)
     const tree = parser.parse(content)
     const rootNode = tree.rootNode
-    
+
     if ((parseSymbols as any)._dbgCount === undefined) (parseSymbols as any)._dbgCount = 0;
     if ((parseSymbols as any)._dbgCount++ < 3) {
       log('treesitter', 'TS-DBG file=' + filePath.split('/').pop() + ' type=' + rootNode.type + ' childCount=' + rootNode.childCount + ' children=' + (rootNode.children?.length ?? 'NO') + ' hasChildForField=' + typeof rootNode.childForFieldName)
     }
-    
+
     const tsNode = rootNode as unknown as TreeSitterNode
-    
+
     if (language === 'python') {
       return extractPythonSymbols(tsNode, filePath)
     } else {
@@ -547,14 +548,14 @@ function findEnclosingSymbol(node: TreeSitterNode, language: SupportedLanguage):
 
 function extractCallExpressions(rootNode: TreeSitterNode, language: SupportedLanguage): CallInfo[] {
   const calls: CallInfo[] = []
-  
+
   walkTree(rootNode, (node) => {
     if (node.type === 'call_expression') {
       const funcNode = node.childForFieldName?.('function')
       if (funcNode) {
         let name: string | null = null
         let isMemberExpression = false
-        
+
         if (funcNode.type === 'identifier') {
           name = getNodeText(funcNode)
         } else if (funcNode.type === 'member_expression') {
@@ -569,14 +570,14 @@ function extractCallExpressions(rootNode: TreeSitterNode, language: SupportedLan
             name = getNodeText(constructorNode)
           }
         }
-        
+
         if (name) {
           const enclosingSymbol = findEnclosingSymbol(node, language)
           calls.push({ name, line: node.startPosition.row + 1, enclosingSymbol, isMemberExpression })
         }
       }
     }
-    
+
     if ((language === 'ts' || language === 'js') && node.type === 'new_expression') {
       const constructorNode = node.childForFieldName?.('constructor')
       if (constructorNode && constructorNode.type === 'identifier') {
@@ -585,13 +586,13 @@ function extractCallExpressions(rootNode: TreeSitterNode, language: SupportedLan
         calls.push({ name, line: node.startPosition.row + 1, enclosingSymbol, isMemberExpression: false })
       }
     }
-    
+
     if (language === 'python' && node.type === 'call') {
       const funcNode = node.childForFieldName?.('function')
       if (funcNode) {
         let name: string | null = null
         let isMemberExpression = false
-        
+
         if (funcNode.type === 'identifier') {
           name = getNodeText(funcNode)
         } else if (funcNode.type === 'attribute') {
@@ -601,7 +602,7 @@ function extractCallExpressions(rootNode: TreeSitterNode, language: SupportedLan
             isMemberExpression = true
           }
         }
-        
+
         if (name) {
           const enclosingSymbol = findEnclosingSymbol(node, language)
           calls.push({ name, line: node.startPosition.row + 1, enclosingSymbol, isMemberExpression })
@@ -609,7 +610,7 @@ function extractCallExpressions(rootNode: TreeSitterNode, language: SupportedLan
       }
     }
   })
-  
+
   return calls
 }
 
@@ -622,7 +623,7 @@ function findQualifiedTarget(callName: string, isMemberExpression: boolean, symb
     }
     return { name: callName, filePath: directMatch[0].filePath, confidence: 1.0 }
   }
-  
+
   if (isMemberExpression) {
     for (const [symbolName, entries] of symbolTable.entries()) {
       if (symbolName.endsWith(`.${callName}`)) {
@@ -634,7 +635,7 @@ function findQualifiedTarget(callName: string, isMemberExpression: boolean, symb
       }
     }
   }
-  
+
   return null
 }
 
@@ -645,41 +646,41 @@ export async function resolveCallEdges(
   symbolTable: SymbolTable
 ): Promise<SymbolEdge[]> {
   await initPromise
-  
+
   if (!treeSitterAvailable || !Parser) {
     return []
   }
-  
+
   if (language === 'vue') {
     const vueScript = extractVueScriptContent(content)
     if (!vueScript) return []
     return resolveCallEdges(filePath, vueScript.scriptContent, vueScript.scriptLang, symbolTable)
   }
-  
+
   const lang = getLanguageParser(language)
   if (!lang) {
     return []
   }
-  
+
   try {
     const parser = new Parser()
     parser.setLanguage(lang)
     const tree = parser.parse(content)
     const rootNode = tree.rootNode as unknown as TreeSitterNode
-    
+
     const calls = extractCallExpressions(rootNode, language)
     const edges: SymbolEdge[] = []
     const seenEdges = new Set<string>()
-    
+
     for (const call of calls) {
       if (!call.enclosingSymbol) continue
-      
+
       const edgeKey = `${call.enclosingSymbol}:${call.name}`
       if (seenEdges.has(edgeKey)) continue
       seenEdges.add(edgeKey)
-      
+
       const target = findQualifiedTarget(call.name, call.isMemberExpression, symbolTable, filePath)
-      
+
       if (target) {
         edges.push({
           sourceName: call.enclosingSymbol,
@@ -700,7 +701,7 @@ export async function resolveCallEdges(
         })
       }
     }
-    
+
     return edges
   } catch (e) {
     log('treesitter', 'Failed to resolve call edges for ' + filePath + ': ' + (e instanceof Error ? e.message : String(e)), 'warn')
@@ -710,13 +711,13 @@ export async function resolveCallEdges(
 
 function extractHeritageInfo(rootNode: TreeSitterNode, language: SupportedLanguage): Array<{ className: string; baseName: string; type: 'EXTENDS' | 'IMPLEMENTS'; line: number }> {
   const heritage: Array<{ className: string; baseName: string; type: 'EXTENDS' | 'IMPLEMENTS'; line: number }> = []
-  
+
   walkTree(rootNode, (node) => {
     if (language === 'ts' || language === 'js') {
       if (node.type === 'class_declaration') {
         const nameNode = node.childForFieldName?.('name')
         const className = nameNode ? getNodeText(nameNode) : ''
-        
+
         if (node.children) {
           for (const child of node.children) {
             if (child.type === 'class_heritage') {
@@ -744,7 +745,7 @@ function extractHeritageInfo(rootNode: TreeSitterNode, language: SupportedLangua
                       }
                     }
                   }
-                  
+
                   if (heritageChild.type === 'implements_clause') {
                     if (heritageChild.namedChildren) {
                       for (const implType of heritageChild.namedChildren) {
@@ -775,11 +776,11 @@ function extractHeritageInfo(rootNode: TreeSitterNode, language: SupportedLangua
         }
       }
     }
-    
+
     if (language === 'python' && node.type === 'class_definition') {
       const nameNode = node.childForFieldName?.('name')
       const className = nameNode ? getNodeText(nameNode) : ''
-      
+
       const superclassNode = node.childForFieldName?.('superclasses')
       if (superclassNode && superclassNode.type === 'argument_list') {
         if (superclassNode.namedChildren) {
@@ -803,7 +804,7 @@ function extractHeritageInfo(rootNode: TreeSitterNode, language: SupportedLangua
       }
     }
   })
-  
+
   return heritage
 }
 
@@ -814,34 +815,34 @@ export async function resolveHeritageEdges(
   symbolTable: SymbolTable
 ): Promise<SymbolEdge[]> {
   await initPromise
-  
+
   if (!treeSitterAvailable || !Parser) {
     return []
   }
-  
+
   if (language === 'vue') {
     const vueScript = extractVueScriptContent(content)
     if (!vueScript) return []
     return resolveHeritageEdges(filePath, vueScript.scriptContent, vueScript.scriptLang, symbolTable)
   }
-  
+
   const lang = getLanguageParser(language)
   if (!lang) {
     return []
   }
-  
+
   try {
     const parser = new Parser()
     parser.setLanguage(lang)
     const tree = parser.parse(content)
     const rootNode = tree.rootNode as unknown as TreeSitterNode
-    
+
     const heritageInfo = extractHeritageInfo(rootNode, language)
     const edges: SymbolEdge[] = []
-    
+
     for (const info of heritageInfo) {
       const targets = symbolTable.get(info.baseName)
-      
+
       edges.push({
         sourceName: info.className,
         sourceFilePath: filePath,
@@ -851,7 +852,7 @@ export async function resolveHeritageEdges(
         confidence: 1.0,
       })
     }
-    
+
     return edges
   } catch (e) {
     log('treesitter', 'Failed to resolve heritage edges for ' + filePath + ': ' + (e instanceof Error ? e.message : String(e)), 'warn')

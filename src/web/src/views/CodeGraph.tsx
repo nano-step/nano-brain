@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import GraphCanvas from '../components/GraphCanvas';
+import { type NodeTypes } from '@xyflow/react';
+import ReactFlowGraph from '../components/ReactFlowGraph';
 import NodeDetail from '../components/NodeDetail';
 import QueryStatus from '../components/QueryStatus';
 import { SkeletonGraph } from '../components/Skeleton';
@@ -8,6 +9,9 @@ import { fetchCodeDependencies } from '../api/client';
 import { buildCodeGraph } from '../lib/graph-adapter';
 import { fallbackColors } from '../lib/colors';
 import { useAppStore } from '../store/app';
+import FileNode from '../components/nodes/FileNode';
+
+const nodeTypes: NodeTypes = { file: FileNode };
 
 export default function CodeGraph() {
   const workspace = useAppStore((state) => state.workspace);
@@ -27,7 +31,7 @@ export default function CodeGraph() {
     return Object.fromEntries(clusters.entries());
   }, [data]);
 
-  const graph = useMemo(() => {
+  const graphData = useMemo(() => {
     if (!data) return null;
     return buildCodeGraph(data.files, data.edges, clusterColors);
   }, [data, clusterColors]);
@@ -35,6 +39,10 @@ export default function CodeGraph() {
   const selectedFile = data?.files.find((file) => file.path === selectedNode);
   const imports = data?.edges.filter((edge) => edge.source === selectedNode).length ?? 0;
   const dependents = data?.edges.filter((edge) => edge.target === selectedNode).length ?? 0;
+
+  const handleNodeClick = (nodeId: string) => {
+    setSelectedNode(nodeId || null);
+  };
 
   return (
     <div className="space-y-6">
@@ -56,8 +64,13 @@ export default function CodeGraph() {
           <SkeletonGraph />
         ) : (
           <div className="card graph-shell overflow-hidden">
-            {graph ? (
-              <GraphCanvas graph={graph} onNodeClick={(id) => setSelectedNode(id)} />
+            {graphData ? (
+              <ReactFlowGraph
+                nodes={graphData.nodes}
+                edges={graphData.edges}
+                onNodeClick={handleNodeClick}
+                nodeTypes={nodeTypes}
+              />
             ) : (
               <QueryStatus isLoading={false} isError={false} isEmpty={true} emptyText="No dependency data." />
             )}

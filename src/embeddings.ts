@@ -150,13 +150,13 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
     };
   }
 
-  async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
+  private async _sendBatch(inputs: string[]): Promise<EmbeddingResult[]> {
     const response = await fetch(`${this.url}/api/embed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: this.model,
-        input: texts.map(t => this.truncate(t)),
+        input: inputs.map(t => this.truncate(t)),
       }),
       signal: AbortSignal.timeout(180000),
     });
@@ -174,6 +174,44 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
       model: this.model,
       dimensions: emb.length,
     }));
+  }
+
+  async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
+    const MAX_CHARS_PER_BATCH = 100_000; // ~25K tokens safety margin
+    const MAX_ITEMS_PER_BATCH = 50;      // Also limit item count
+    const results: EmbeddingResult[] = [];
+
+    // Split into sub-batches by cumulative character count
+    let currentBatch: string[] = [];
+    let currentChars = 0;
+    let batchCount = 0;
+
+    for (const text of texts) {
+      if (currentBatch.length > 0 &&
+          (currentChars + text.length > MAX_CHARS_PER_BATCH ||
+           currentBatch.length >= MAX_ITEMS_PER_BATCH)) {
+        batchCount++;
+        const embeddings = await this._sendBatch(currentBatch);
+        results.push(...embeddings);
+        currentBatch = [];
+        currentChars = 0;
+      }
+      currentBatch.push(text);
+      currentChars += text.length;
+    }
+
+    // Send remaining
+    if (currentBatch.length > 0) {
+      batchCount++;
+      const embeddings = await this._sendBatch(currentBatch);
+      results.push(...embeddings);
+    }
+
+    if (batchCount > 1) {
+      log('embed', `Ollama sub-batching: ${texts.length} items into ${batchCount} batches`);
+    }
+
+    return results;
   }
 
   getDimensions(): number {

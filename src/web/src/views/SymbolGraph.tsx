@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import GraphCanvas from '../components/GraphCanvas';
+import { type NodeTypes } from '@xyflow/react';
+import ReactFlowGraph from '../components/ReactFlowGraph';
 import NodeDetail from '../components/NodeDetail';
 import QueryStatus from '../components/QueryStatus';
 import { SkeletonGraph } from '../components/Skeleton';
@@ -8,6 +9,9 @@ import { fetchSymbols } from '../api/client';
 import { buildSymbolGraph } from '../lib/graph-adapter';
 import { symbolKindColorMap } from '../lib/colors';
 import { useAppStore } from '../store/app';
+import SymbolNode from '../components/nodes/SymbolNode';
+
+const nodeTypes: NodeTypes = { symbol: SymbolNode };
 
 export default function SymbolGraph() {
   const workspace = useAppStore((state) => state.workspace);
@@ -21,7 +25,7 @@ export default function SymbolGraph() {
   const autoCluster = (data?.symbols.length ?? 0) > 500;
   const useCluster = clusterMode && autoCluster;
 
-  const graph = useMemo(() => {
+  const graphData = useMemo(() => {
     if (!data) return null;
     try {
       return buildSymbolGraph(data, useCluster);
@@ -34,6 +38,10 @@ export default function SymbolGraph() {
 
   const callers = data?.edges.filter((e) => String(e.targetId) === selectedNode).length ?? 0;
   const callees = data?.edges.filter((e) => String(e.sourceId) === selectedNode).length ?? 0;
+
+  const handleNodeClick = (nodeId: string) => {
+    setSelectedNode(nodeId || null);
+  };
 
   return (
     <div className="space-y-6">
@@ -69,8 +77,13 @@ export default function SymbolGraph() {
           <SkeletonGraph />
         ) : (
           <div className="card graph-shell overflow-hidden">
-            {graph && (data?.symbols.length ?? 0) > 0 ? (
-              <GraphCanvas graph={graph} onNodeClick={(id) => setSelectedNode(id)} />
+            {graphData && (data?.symbols.length ?? 0) > 0 ? (
+              <ReactFlowGraph
+                nodes={graphData.nodes}
+                edges={graphData.edges}
+                onNodeClick={handleNodeClick}
+                nodeTypes={nodeTypes}
+              />
             ) : (
               <QueryStatus
                 isLoading={false}

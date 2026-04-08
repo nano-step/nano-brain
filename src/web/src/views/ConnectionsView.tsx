@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import GraphCanvas from '../components/GraphCanvas';
+import { type NodeTypes } from '@xyflow/react';
+import ReactFlowGraph from '../components/ReactFlowGraph';
 import NodeDetail from '../components/NodeDetail';
 import QueryStatus from '../components/QueryStatus';
 import { SkeletonGraph } from '../components/Skeleton';
@@ -8,6 +9,9 @@ import { fetchConnections } from '../api/client';
 import { buildConnectionGraph } from '../lib/graph-adapter';
 import { relationshipColorMap } from '../lib/colors';
 import { useAppStore } from '../store/app';
+import DocumentNode from '../components/nodes/DocumentNode';
+
+const nodeTypes: NodeTypes = { document: DocumentNode };
 
 export default function ConnectionsView() {
   const workspace = useAppStore((state) => state.workspace);
@@ -31,7 +35,7 @@ export default function ConnectionsView() {
       const hasTo = nodes.has(toId);
       const nextSize = nodes.size + (hasFrom ? 0 : 1) + (hasTo ? 0 : 1);
       const allowNewNodes = nodes.size < nodeLimit && nextSize <= nodeLimit;
-      if (hasFrom && hasTo || allowNewNodes) {
+      if ((hasFrom && hasTo) || allowNewNodes) {
         nodes.add(fromId);
         nodes.add(toId);
         limited.push(conn);
@@ -40,7 +44,7 @@ export default function ConnectionsView() {
     return limited;
   }, [allConnections]);
 
-  const graph = useMemo(() => {
+  const graphData = useMemo(() => {
     if (!limitedConnections.length) return null;
     return buildConnectionGraph({ connections: limitedConnections });
   }, [limitedConnections]);
@@ -101,6 +105,10 @@ export default function ConnectionsView() {
   const nodeCount = nodeIds.size;
   const isLimited = nodeCount > nodeLimit;
 
+  const handleNodeClick = (nodeId: string) => {
+    setSelectedNode(nodeId || null);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -122,8 +130,13 @@ export default function ConnectionsView() {
           <SkeletonGraph />
         ) : (
           <div className="card graph-shell overflow-hidden">
-            {graph ? (
-              <GraphCanvas graph={graph} onNodeClick={(id) => setSelectedNode(id)} />
+            {graphData ? (
+              <ReactFlowGraph
+                nodes={graphData.nodes}
+                edges={graphData.edges}
+                onNodeClick={handleNodeClick}
+                nodeTypes={nodeTypes}
+              />
             ) : (
               <QueryStatus isLoading={false} isError={false} isEmpty={true} emptyText="No document connections found. Use the 'memory_connect' tool or MCP 'connect' command to create relationships between memory documents." />
             )}

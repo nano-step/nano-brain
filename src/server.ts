@@ -2908,10 +2908,19 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const server = createMcpServer(deps);
 
   let watcher: ReturnType<typeof startWatcher> | null = null;
+  let watcherStarted = false;
   const startFileWatcher = () => {
-    if (watcher) {
+    if (watcherStarted) {
       return;
     }
+    watcherStarted = true;
+
+    // Stop any existing watcher before creating a new one (defensive cleanup)
+    if (watcher) {
+      try { watcher.stop(); } catch {}
+      watcher = null;
+    }
+
     log('server', 'Starting file watcher');
 
     // Detect overlapping workspaces
@@ -3314,6 +3323,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
           watcher.stop();
           watcher = null;
         }
+        watcherStarted = false;
         try {
           symbolGraphDb.pragma('wal_checkpoint(TRUNCATE)');
         } catch (err) {

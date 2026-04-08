@@ -1567,11 +1567,17 @@ export function createStore(dbPath: string): Store {
           // Table exists with correct dimensions — check consistency
           const vecCount = (db.prepare('SELECT COUNT(*) as count FROM vectors_vec').get() as { count: number }).count;
           const cvCount = (db.prepare('SELECT COUNT(*) as count FROM content_vectors').get() as { count: number }).count;
-          if (vecCount === 0 && cvCount > 0) {
+          // When an external vector provider (e.g. Qdrant) is active, vectors_vec is always
+          // empty by design — vectors live in the external store, not sqlite-vec.
+          // Only treat empty vectors_vec as stale when using sqlite-vec as the provider.
+          const usingExternalVectorStore = vectorStore && !(vectorStore instanceof SqliteVecStore);
+          if (vecCount === 0 && cvCount > 0 && !usingExternalVectorStore) {
             // vectors_vec was rebuilt but content_vectors has stale tracking rows
             log('store', 'ensureVecTable clearing stale content_vectors count=' + cvCount);
             log('store', `vectors_vec empty but content_vectors has ${cvCount} stale rows, clearing for re-embedding`, 'error');
             db.exec(`DELETE FROM content_vectors`);
+          } else if (vecCount === 0 && cvCount > 0 && usingExternalVectorStore) {
+            log('store', `ensureVecTable: vectors_vec empty but external vector store active, skipping content_vectors clear (${cvCount} rows preserved)`);
           }
           return;
         } catch {
