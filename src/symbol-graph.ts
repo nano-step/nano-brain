@@ -47,9 +47,18 @@ export interface EdgeRecord {
 
 export class SymbolGraph {
   private db: Database.Database
+  private workspaceRoot: string | null
 
-  constructor(db: Database.Database) {
+  constructor(db: Database.Database, workspaceRoot?: string) {
     this.db = db
+    this.workspaceRoot = workspaceRoot ?? null
+  }
+
+  private toRelative(filePath: string): string {
+    if (!this.workspaceRoot || !filePath.startsWith('/')) return filePath
+    const prefix = this.workspaceRoot.endsWith('/') ? this.workspaceRoot : this.workspaceRoot + '/'
+    if (filePath.startsWith(prefix)) return filePath.slice(prefix.length)
+    return filePath
   }
 
   insertSymbol(symbol: {
@@ -62,6 +71,7 @@ export class SymbolGraph {
     contentHash: string
     projectHash: string
   }): number {
+    const relFilePath = this.toRelative(symbol.filePath)
     const stmt = this.db.prepare(`
       INSERT INTO code_symbols (name, kind, file_path, start_line, end_line, exported, content_hash, project_hash)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -69,7 +79,7 @@ export class SymbolGraph {
     const result = stmt.run(
       symbol.name,
       symbol.kind,
-      symbol.filePath,
+      relFilePath,
       symbol.startLine,
       symbol.endLine,
       symbol.exported ? 1 : 0,
@@ -106,19 +116,20 @@ export class SymbolGraph {
   }
 
   deleteSymbolsForFile(filePath: string, projectHash: string): void {
+    const relFilePath = this.toRelative(filePath)
     const deleteEdgesStmt = this.db.prepare(`
-      DELETE FROM symbol_edges 
+      DELETE FROM symbol_edges
       WHERE project_hash = ? AND (
         source_id IN (SELECT id FROM code_symbols WHERE file_path = ? AND project_hash = ?)
         OR target_id IN (SELECT id FROM code_symbols WHERE file_path = ? AND project_hash = ?)
       )
     `)
-    deleteEdgesStmt.run(projectHash, filePath, projectHash, filePath, projectHash)
+    deleteEdgesStmt.run(projectHash, relFilePath, projectHash, relFilePath, projectHash)
 
     const deleteSymbolsStmt = this.db.prepare(`
       DELETE FROM code_symbols WHERE file_path = ? AND project_hash = ?
     `)
-    deleteSymbolsStmt.run(filePath, projectHash)
+    deleteSymbolsStmt.run(relFilePath, projectHash)
   }
 
   getSymbolByName(
@@ -127,36 +138,37 @@ export class SymbolGraph {
     filePath?: string
   ): SymbolRecord[] {
     if (filePath) {
+      const relFilePath = this.toRelative(filePath)
       const stmt = this.db.prepare(`
         SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine,
                exported, cluster_id as clusterId
-        FROM code_symbols 
+        FROM code_symbols
         WHERE name = ? AND project_hash = ? AND file_path = ?
       `)
-      const results = stmt.all(name, projectHash, filePath) as SymbolRecord[]
+      const results = stmt.all(name, projectHash, relFilePath) as SymbolRecord[]
       if (results.length > 0) return results
-      
+
       const qualifiedStmt = this.db.prepare(`
         SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine,
                exported, cluster_id as clusterId
-        FROM code_symbols 
+        FROM code_symbols
         WHERE name LIKE '%.' || ? AND project_hash = ? AND file_path = ?
       `)
-      return qualifiedStmt.all(name, projectHash, filePath) as SymbolRecord[]
+      return qualifiedStmt.all(name, projectHash, relFilePath) as SymbolRecord[]
     }
     const stmt = this.db.prepare(`
-      SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine, 
+      SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine,
              exported, cluster_id as clusterId
-      FROM code_symbols 
+      FROM code_symbols
       WHERE name = ? AND project_hash = ?
     `)
     const results = stmt.all(name, projectHash) as SymbolRecord[]
     if (results.length > 0) return results
-    
+
     const qualifiedStmt = this.db.prepare(`
-      SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine, 
+      SELECT id, name, kind, file_path as filePath, start_line as startLine, end_line as endLine,
              exported, cluster_id as clusterId
-      FROM code_symbols 
+      FROM code_symbols
       WHERE name LIKE '%.' || ? AND project_hash = ?
     `)
     return qualifiedStmt.all(name, projectHash) as SymbolRecord[]
@@ -169,7 +181,7 @@ export class SymbolGraph {
     minConfidence?: number
   ): EdgeRecord[] {
     const sql = direction === 'outgoing'
-      ? `SELECT e.id, e.source_id as sourceId, e.target_id as targetId, e.edge_type as edgeType, 
+      ? `SELECT e.id, e.source_id as sourceId, e.target_id as targetId, e.edge_type as edgeType,
                e.confidence, s.name as symbolName, s.kind as symbolKind, s.file_path as symbolFilePath
          FROM symbol_edges e
          JOIN code_symbols s ON s.id = e.target_id
@@ -211,10 +223,11 @@ export class SymbolGraph {
   }
 
   getFileContentHash(filePath: string, projectHash: string): string | null {
+    const relFilePath = this.toRelative(filePath)
     const stmt = this.db.prepare(`
       SELECT content_hash FROM code_symbols WHERE file_path = ? AND project_hash = ? LIMIT 1
     `)
-    const row = stmt.get(filePath, projectHash) as { content_hash: string } | undefined
+    const row = stmt.get(relFilePath, projectHash) as { content_hash: string } | undefined
     return row?.content_hash ?? null
   }
 

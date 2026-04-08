@@ -370,7 +370,7 @@ export function createStore(dbPath: string): Store {
 
   // Schema versioning
   const currentVersion = (db.pragma('user_version') as Array<{ user_version: number }>)[0].user_version;
-  const TARGET_VERSION = 8;
+  const TARGET_VERSION = 9;
 
   if (currentVersion < 1) {
     db.exec(`
@@ -594,6 +594,17 @@ export function createStore(dbPath: string): Store {
     `);
     db.pragma(`user_version = 8`);
     log('store', 'Schema migrated to version 8 (memory connections)');
+  }
+
+  if (currentVersion < 9) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS path_prefixes (
+        project_hash TEXT PRIMARY KEY,
+        prefix TEXT NOT NULL
+      );
+    `);
+    db.pragma(`user_version = 9`);
+    log('store', 'Schema migrated to version 9 (path prefix compression)');
   }
 
   if (vecAvailable) {
@@ -1336,6 +1347,33 @@ export function createStore(dbPath: string): Store {
   `);
 
   let _cached = false;
+  let _workspaceRoot: string | null = null;
+
+  const insertPrefixStmt = db.prepare(`
+    INSERT OR IGNORE INTO path_prefixes (project_hash, prefix) VALUES (?, ?)
+  `);
+
+  const getPrefixStmt = db.prepare(`
+    SELECT prefix FROM path_prefixes WHERE project_hash = ?
+  `);
+
+  /**
+   * Convert an absolute path to a relative path by stripping the workspace prefix.
+   * If the path is already relative (doesn't start with '/'), returns it as-is.
+   * If the path doesn't match the workspace root, returns it as-is.
+   */
+  function toRelativePath(absolutePath: string, workspaceRoot: string): string {
+    if (!absolutePath.startsWith('/')) return absolutePath; // already relative
+    const prefix = workspaceRoot.endsWith('/') ? workspaceRoot : workspaceRoot + '/';
+    if (absolutePath.startsWith(prefix)) {
+      return absolutePath.slice(prefix.length);
+    }
+    // Exact match (path IS the workspace root)
+    if (absolutePath === workspaceRoot || absolutePath === workspaceRoot + '/') {
+      return '';
+    }
+    return absolutePath; // doesn't match prefix, return as-is
+  }
 
   const store: Store = {
     modelStatus: {
@@ -1357,15 +1395,38 @@ export function createStore(dbPath: string): Store {
       db.close();
     },
 
+    registerWorkspacePrefix(projectHash: string, workspaceRoot: string) {
+      _workspaceRoot = workspaceRoot;
+      insertPrefixStmt.run(projectHash, workspaceRoot.endsWith('/') ? workspaceRoot : workspaceRoot + '/');
+    },
+
+    getWorkspaceRoot(): string | null {
+      return _workspaceRoot;
+    },
+
+    toRelative(absolutePath: string): string {
+      if (!_workspaceRoot) return absolutePath;
+      return toRelativePath(absolutePath, _workspaceRoot);
+    },
+
+    resolvePath(relativePath: string, projectHash: string): string {
+      const row = getPrefixStmt.get(projectHash) as { prefix: string } | undefined;
+      if (!row) {
+        throw new Error(`Path prefix not registered for project_hash: ${projectHash}`);
+      }
+      return path.join(row.prefix, relativePath);
+    },
+
     insertContent(hash: string, body: string) {
       insertContentStmt.run(hash, body);
     },
 
     insertDocument(doc: Omit<Document, 'id'>): number {
-      log('store', 'insertDocument collection=' + doc.collection + ' path=' + doc.path);
+      const relativePath = _workspaceRoot ? toRelativePath(doc.path, _workspaceRoot) : doc.path;
+      log('store', 'insertDocument collection=' + doc.collection + ' path=' + relativePath);
       const result = insertDocumentStmt.run(
         doc.collection,
-        doc.path,
+        relativePath,
         doc.title,
         doc.hash,
         doc.agent ?? null,
@@ -1377,7 +1438,7 @@ export function createStore(dbPath: string): Store {
       // For UPSERT (ON CONFLICT DO UPDATE), lastInsertRowid returns a phantom
       // autoincrement value that doesn't correspond to any actual row.
       // Always verify via lookup to get the real id.
-      const existing = findDocumentByPathStmt.get(doc.path) as { id: number } | undefined;
+      const existing = findDocumentByPathStmt.get(relativePath) as { id: number } | undefined;
       if (existing) return existing.id;
       const rowid = Number(result.lastInsertRowid);
       if (rowid > 0) return rowid;
@@ -1392,7 +1453,8 @@ export function createStore(dbPath: string): Store {
       }
 
       if (!row) {
-        row = findDocumentByPathStmt.get(pathOrDocid) as Record<string, unknown> | undefined;
+        const relativePath = _workspaceRoot ? toRelativePath(pathOrDocid, _workspaceRoot) : pathOrDocid;
+        row = findDocumentByPathStmt.get(relativePath) as Record<string, unknown> | undefined;
       }
 
       if (!row) return null;
@@ -1425,11 +1487,16 @@ export function createStore(dbPath: string): Store {
       return lines.slice(start, end).join('\n');
     },
 
-    deactivateDocument(collection: string, path: string) {
-      deactivateDocumentStmt.run(collection, path);
+    deactivateDocument(collection: string, filePath: string) {
+      const relativePath = _workspaceRoot ? toRelativePath(filePath, _workspaceRoot) : filePath;
+      deactivateDocumentStmt.run(collection, relativePath);
     },
 
     bulkDeactivateExcept(collection: string, activePaths: string[]): number {
+      // Convert active paths to relative before comparison
+      const relativePaths = _workspaceRoot
+        ? activePaths.map(p => toRelativePath(p, _workspaceRoot!))
+        : activePaths;
       // Wrap the entire read-deactivate-diff cycle in a transaction to prevent
       // races where another client inserts a document between the before/after snapshots
       const transaction = db.transaction(() => {
@@ -1446,8 +1513,8 @@ export function createStore(dbPath: string): Store {
         const insertBatchInner = db.transaction((paths: string[]) => {
           for (const p of paths) insertPath.run(p);
         });
-        for (let i = 0; i < activePaths.length; i += BATCH_SIZE) {
-          insertBatchInner(activePaths.slice(i, i + BATCH_SIZE));
+        for (let i = 0; i < relativePaths.length; i += BATCH_SIZE) {
+          insertBatchInner(relativePaths.slice(i, i + BATCH_SIZE));
         }
         const updateStmt = db.prepare('UPDATE documents SET active = 0 WHERE collection = ? AND path NOT IN (SELECT path FROM _active_paths)');
         const result = updateStmt.run(collection);
@@ -1915,8 +1982,9 @@ export function createStore(dbPath: string): Store {
     },
 
     deleteDocumentsByPath(filePath: string): number {
+      const relativePath = _workspaceRoot ? toRelativePath(filePath, _workspaceRoot) : filePath;
       const deleteStmt = db.prepare(`DELETE FROM documents WHERE path = ? AND active = 1`);
-      const result = deleteStmt.run(filePath);
+      const result = deleteStmt.run(relativePath);
       return result.changes;
     },
 
@@ -2137,11 +2205,14 @@ export function createStore(dbPath: string): Store {
     },
 
     insertFileEdge(sourcePath: string, targetPath: string, projectHash: string, edgeType: string = 'import') {
-      insertFileEdgeStmt.run(sourcePath, targetPath, edgeType, projectHash);
+      const relSource = _workspaceRoot ? toRelativePath(sourcePath, _workspaceRoot) : sourcePath;
+      const relTarget = _workspaceRoot ? toRelativePath(targetPath, _workspaceRoot) : targetPath;
+      insertFileEdgeStmt.run(relSource, relTarget, edgeType, projectHash);
     },
 
     deleteFileEdges(sourcePath: string, projectHash: string) {
-      deleteFileEdgesStmt.run(sourcePath, projectHash);
+      const relSource = _workspaceRoot ? toRelativePath(sourcePath, _workspaceRoot) : sourcePath;
+      deleteFileEdgesStmt.run(relSource, projectHash);
     },
 
     getFileEdges(projectHash: string): Array<{ source_path: string; target_path: string }> {
@@ -2196,26 +2267,29 @@ export function createStore(dbPath: string): Store {
     },
 
     getFileDependencies(filePath: string, projectHash: string): string[] {
+      const relFilePath = _workspaceRoot ? toRelativePath(filePath, _workspaceRoot) : filePath;
       const rows = db.prepare(`
         SELECT target_path FROM file_edges
         WHERE source_path = ? AND project_hash = ?
-      `).all(filePath, projectHash) as Array<{ target_path: string }>;
+      `).all(relFilePath, projectHash) as Array<{ target_path: string }>;
       return rows.map(r => r.target_path);
     },
 
     getFileDependents(filePath: string, projectHash: string): string[] {
+      const relFilePath = _workspaceRoot ? toRelativePath(filePath, _workspaceRoot) : filePath;
       const rows = db.prepare(`
         SELECT source_path FROM file_edges
         WHERE target_path = ? AND project_hash = ?
-      `).all(filePath, projectHash) as Array<{ source_path: string }>;
+      `).all(relFilePath, projectHash) as Array<{ source_path: string }>;
       return rows.map(r => r.source_path);
     },
 
     getDocumentCentrality(filePath: string): { centrality: number; clusterId: number | null } | null {
+      const relFilePath = _workspaceRoot ? toRelativePath(filePath, _workspaceRoot) : filePath;
       const row = db.prepare(`
         SELECT centrality, cluster_id FROM documents
         WHERE path = ? AND active = 1
-      `).get(filePath) as { centrality: number; cluster_id: number | null } | undefined;
+      `).get(relFilePath) as { centrality: number; cluster_id: number | null } | undefined;
       if (!row) return null;
       return { centrality: row.centrality ?? 0, clusterId: row.cluster_id };
     },
@@ -2277,6 +2351,7 @@ export function createStore(dbPath: string): Store {
       rawExpression: string;
       projectHash: string;
     }) {
+      const relFilePath = _workspaceRoot ? toRelativePath(symbol.filePath, _workspaceRoot) : symbol.filePath;
       const stmt = db.prepare(`
         INSERT OR REPLACE INTO symbols (type, pattern, operation, repo, file_path, line_number, raw_expression, project_hash)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -2286,7 +2361,7 @@ export function createStore(dbPath: string): Store {
         symbol.pattern,
         symbol.operation,
         symbol.repo,
-        symbol.filePath,
+        relFilePath,
         symbol.lineNumber,
         symbol.rawExpression,
         symbol.projectHash
@@ -2294,8 +2369,9 @@ export function createStore(dbPath: string): Store {
     },
 
     deleteSymbols(filePath: string, projectHash: string) {
+      const relFilePath = _workspaceRoot ? toRelativePath(filePath, _workspaceRoot) : filePath;
       const stmt = db.prepare(`DELETE FROM symbols WHERE file_path = ? AND project_hash = ?`);
-      stmt.run(filePath, projectHash);
+      stmt.run(relFilePath, projectHash);
     },
 
     querySymbols(options: {
@@ -3065,9 +3141,12 @@ export function createStore(dbPath: string): Store {
       lastUpdated?: string | null;
       projectHash: string;
     }): number {
+      const relSourceFile = flow.sourceFile && _workspaceRoot
+        ? toRelativePath(flow.sourceFile, _workspaceRoot)
+        : flow.sourceFile ?? null;
       const result = upsertDocFlowStmt.run(
         flow.label, flow.flowType, flow.description ?? null,
-        flow.services ?? null, flow.sourceFile ?? null,
+        flow.services ?? null, relSourceFile,
         flow.lastUpdated ?? null, flow.projectHash
       );
       return Number(result.lastInsertRowid);
@@ -3151,7 +3230,10 @@ export function openWorkspaceStore(dataDir: string, workspacePath: string): Stor
   if (!fs.existsSync(dbPath)) {
     return null;
   }
-  return createStore(dbPath);
+  const store = createStore(dbPath);
+  const projectHash = crypto.createHash('sha256').update(workspacePath).digest('hex').substring(0, 12);
+  store.registerWorkspacePrefix(projectHash, workspacePath);
+  return store;
 }
 
 /**
@@ -3171,6 +3253,296 @@ export function extractProjectHashFromPath(filePath: string, sessionsDir: string
   if (subdirName.length !== 12) return undefined;
   if (!/^[a-f0-9]{12}$/i.test(subdirName)) return undefined;
   return subdirName.toLowerCase();
+}
+
+/**
+ * Migrate existing absolute paths to relative paths.
+ * Detects if migration is needed by checking if any documents.path starts with '/'.
+ * Handles UNIQUE constraint conflicts: if a relative-path row already exists
+ * (from re-indexing), deletes the absolute-path duplicate first, then updates remaining rows.
+ */
+export function migrateToRelativePaths(store: Store, projectHash: string, workspaceRoot: string): void {
+  const db = store.getDb();
+  const prefix = workspaceRoot.endsWith('/') ? workspaceRoot : workspaceRoot + '/';
+
+  // Check if migration is needed: any documents.path starting with '/'
+  const needsMigration = db.prepare(
+    `SELECT COUNT(*) as cnt FROM documents WHERE path LIKE '/%' AND project_hash = ?`
+  ).get(projectHash) as { cnt: number };
+
+  if (needsMigration.cnt === 0) {
+    return; // Already migrated or fresh database
+  }
+
+  log('store', `Migrating ${needsMigration.cnt} documents from absolute to relative paths (prefix=${prefix})`);
+
+  const migrate = db.transaction(() => {
+    // === 1. documents: UNIQUE(collection, path) ===
+    // First, delete absolute-path rows where a relative equivalent already exists
+    const docDupResult = db.prepare(`
+      DELETE FROM documents WHERE id IN (
+        SELECT abs.id FROM documents abs
+        INNER JOIN documents rel
+          ON rel.collection = abs.collection
+          AND rel.path = substr(abs.path, ?)
+        WHERE abs.path LIKE ? AND abs.project_hash = ?
+      )
+    `).run(prefix.length + 1, prefix + '%', projectHash);
+    if (docDupResult.changes > 0) {
+      log('store', `Deleted ${docDupResult.changes} duplicate absolute-path document rows`);
+    }
+
+    // Then update remaining absolute-path rows to relative
+    const docResult = db.prepare(
+      `UPDATE documents SET path = substr(path, ?) WHERE path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+    log('store', `Migrated ${docResult.changes} document paths`);
+
+    // Warn about paths that don't match the prefix
+    const unmatchedDocs = db.prepare(
+      `SELECT path FROM documents WHERE path LIKE '/%' AND project_hash = ? LIMIT 10`
+    ).all(projectHash) as Array<{ path: string }>;
+    for (const doc of unmatchedDocs) {
+      log('store', `Warning: document path does not match workspace prefix, left unchanged: ${doc.path}`, 'warn');
+    }
+
+    // === 2. file_edges: PRIMARY KEY(source_path, target_path, project_hash) ===
+    // Delete absolute-path edges where relative equivalent already exists
+    db.prepare(`
+      DELETE FROM file_edges WHERE rowid IN (
+        SELECT abs.rowid FROM file_edges abs
+        INNER JOIN file_edges rel
+          ON rel.source_path = substr(abs.source_path, ?)
+          AND rel.target_path = CASE
+            WHEN abs.target_path LIKE ? THEN substr(abs.target_path, ?)
+            ELSE abs.target_path
+          END
+          AND rel.project_hash = abs.project_hash
+        WHERE abs.source_path LIKE ? AND abs.project_hash = ?
+      )
+    `).run(prefix.length + 1, prefix + '%', prefix.length + 1, prefix + '%', projectHash);
+
+    // Update remaining absolute source_path
+    db.prepare(
+      `UPDATE file_edges SET source_path = substr(source_path, ?) WHERE source_path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+    // Update remaining absolute target_path
+    db.prepare(
+      `UPDATE file_edges SET target_path = substr(target_path, ?) WHERE target_path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+
+    // === 3. symbols: UNIQUE(type, pattern, operation, repo, file_path, line_number) ===
+    // Delete absolute-path symbols where relative equivalent already exists
+    db.prepare(`
+      DELETE FROM symbols WHERE id IN (
+        SELECT abs.id FROM symbols abs
+        INNER JOIN symbols rel
+          ON rel.type = abs.type
+          AND rel.pattern = abs.pattern
+          AND rel.operation = abs.operation
+          AND rel.repo = abs.repo
+          AND rel.file_path = substr(abs.file_path, ?)
+          AND rel.line_number IS abs.line_number
+        WHERE abs.file_path LIKE ? AND abs.project_hash = ?
+      )
+    `).run(prefix.length + 1, prefix + '%', projectHash);
+
+    // Update remaining absolute-path symbols
+    db.prepare(
+      `UPDATE symbols SET file_path = substr(file_path, ?) WHERE file_path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+
+    // === 4. code_symbols: no unique constraint on file_path, delete absolute duplicates ===
+    db.prepare(`
+      DELETE FROM code_symbols WHERE id IN (
+        SELECT abs.id FROM code_symbols abs
+        INNER JOIN code_symbols rel
+          ON rel.name = abs.name
+          AND rel.kind = abs.kind
+          AND rel.file_path = substr(abs.file_path, ?)
+          AND rel.start_line = abs.start_line
+          AND rel.end_line = abs.end_line
+          AND rel.project_hash = abs.project_hash
+        WHERE abs.file_path LIKE ? AND abs.project_hash = ?
+      )
+    `).run(prefix.length + 1, prefix + '%', projectHash);
+
+    // Update remaining absolute-path code_symbols
+    db.prepare(
+      `UPDATE code_symbols SET file_path = substr(file_path, ?) WHERE file_path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+
+    // === 5. doc_flows: no unique constraint on source_file, delete absolute duplicates ===
+    db.prepare(`
+      DELETE FROM doc_flows WHERE id IN (
+        SELECT abs.id FROM doc_flows abs
+        INNER JOIN doc_flows rel
+          ON rel.label = abs.label
+          AND rel.flow_type = abs.flow_type
+          AND rel.source_file = substr(abs.source_file, ?)
+          AND rel.project_hash = abs.project_hash
+        WHERE abs.source_file LIKE ? AND abs.project_hash = ?
+      )
+    `).run(prefix.length + 1, prefix + '%', projectHash);
+
+    // Update remaining absolute-path doc_flows
+    db.prepare(
+      `UPDATE doc_flows SET source_file = substr(source_file, ?) WHERE source_file LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+
+    // === 6. Rebuild FTS index ===
+    db.exec(`DELETE FROM documents_fts`);
+    db.exec(`
+      INSERT INTO documents_fts(filepath, title, body)
+      SELECT d.collection || '/' || d.path, d.title, c.body
+      FROM documents d
+      JOIN content c ON c.hash = d.hash
+      WHERE d.active = 1
+    `);
+
+    log('store', 'FTS index rebuilt with relative paths');
+  });
+
+  migrate();
+  log('store', 'Migration to relative paths complete');
+}
+
+/**
+ * Clean up duplicate rows where both absolute and relative path versions exist.
+ * This handles databases that already accumulated duplicates before the migration fix.
+ * Safe to call multiple times (idempotent) — does nothing if no duplicates exist.
+ */
+export function cleanupDuplicatePaths(store: Store, projectHash: string, workspaceRoot: string): void {
+  const db = store.getDb();
+  const prefix = workspaceRoot.endsWith('/') ? workspaceRoot : workspaceRoot + '/';
+
+  // Quick check: any absolute paths remaining?
+  const absCount = db.prepare(
+    `SELECT COUNT(*) as cnt FROM documents WHERE path LIKE '/%' AND project_hash = ?`
+  ).get(projectHash) as { cnt: number };
+
+  if (absCount.cnt === 0) {
+    return; // No absolute paths, nothing to clean up
+  }
+
+  log('store', `Cleaning up ${absCount.cnt} absolute-path rows in documents table`);
+
+  const cleanup = db.transaction(() => {
+    // Delete absolute-path documents that have a relative duplicate
+    const docResult = db.prepare(`
+      DELETE FROM documents WHERE id IN (
+        SELECT abs.id FROM documents abs
+        INNER JOIN documents rel
+          ON rel.collection = abs.collection
+          AND rel.path = substr(abs.path, ?)
+          AND rel.path NOT LIKE '/%'
+        WHERE abs.path LIKE ? AND abs.project_hash = ?
+      )
+    `).run(prefix.length + 1, prefix + '%', projectHash);
+    if (docResult.changes > 0) {
+      log('store', `Cleaned up ${docResult.changes} duplicate document rows`);
+    }
+
+    // Delete absolute-path file_edges that have a relative duplicate
+    db.prepare(`
+      DELETE FROM file_edges WHERE rowid IN (
+        SELECT abs.rowid FROM file_edges abs
+        WHERE abs.source_path LIKE ? AND abs.project_hash = ?
+        AND EXISTS (
+          SELECT 1 FROM file_edges rel
+          WHERE rel.source_path = substr(abs.source_path, ?)
+            AND rel.target_path = CASE
+              WHEN abs.target_path LIKE ? THEN substr(abs.target_path, ?)
+              ELSE abs.target_path
+            END
+            AND rel.project_hash = abs.project_hash
+        )
+      )
+    `).run(prefix + '%', projectHash, prefix.length + 1, prefix + '%', prefix.length + 1);
+
+    // Delete absolute-path symbols that have a relative duplicate
+    db.prepare(`
+      DELETE FROM symbols WHERE id IN (
+        SELECT abs.id FROM symbols abs
+        WHERE abs.file_path LIKE ? AND abs.project_hash = ?
+        AND EXISTS (
+          SELECT 1 FROM symbols rel
+          WHERE rel.type = abs.type
+            AND rel.pattern = abs.pattern
+            AND rel.operation = abs.operation
+            AND rel.repo = abs.repo
+            AND rel.file_path = substr(abs.file_path, ?)
+            AND rel.line_number IS abs.line_number
+        )
+      )
+    `).run(prefix + '%', projectHash, prefix.length + 1);
+
+    // Delete absolute-path code_symbols that have a relative duplicate
+    db.prepare(`
+      DELETE FROM code_symbols WHERE id IN (
+        SELECT abs.id FROM code_symbols abs
+        WHERE abs.file_path LIKE ? AND abs.project_hash = ?
+        AND EXISTS (
+          SELECT 1 FROM code_symbols rel
+          WHERE rel.name = abs.name
+            AND rel.kind = abs.kind
+            AND rel.file_path = substr(abs.file_path, ?)
+            AND rel.start_line = abs.start_line
+            AND rel.end_line = abs.end_line
+            AND rel.project_hash = abs.project_hash
+        )
+      )
+    `).run(prefix + '%', projectHash, prefix.length + 1);
+
+    // Delete absolute-path doc_flows that have a relative duplicate
+    db.prepare(`
+      DELETE FROM doc_flows WHERE id IN (
+        SELECT abs.id FROM doc_flows abs
+        WHERE abs.source_file LIKE ? AND abs.project_hash = ?
+        AND EXISTS (
+          SELECT 1 FROM doc_flows rel
+          WHERE rel.label = abs.label
+            AND rel.flow_type = abs.flow_type
+            AND rel.source_file = substr(abs.source_file, ?)
+            AND rel.project_hash = abs.project_hash
+        )
+      )
+    `).run(prefix + '%', projectHash, prefix.length + 1);
+
+    // Now update any remaining absolute paths that DON'T have relative duplicates
+    db.prepare(
+      `UPDATE documents SET path = substr(path, ?) WHERE path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+    db.prepare(
+      `UPDATE file_edges SET source_path = substr(source_path, ?) WHERE source_path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+    db.prepare(
+      `UPDATE file_edges SET target_path = substr(target_path, ?) WHERE target_path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+    db.prepare(
+      `UPDATE symbols SET file_path = substr(file_path, ?) WHERE file_path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+    db.prepare(
+      `UPDATE code_symbols SET file_path = substr(file_path, ?) WHERE file_path LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+    db.prepare(
+      `UPDATE doc_flows SET source_file = substr(source_file, ?) WHERE source_file LIKE ? AND project_hash = ?`
+    ).run(prefix.length + 1, prefix + '%', projectHash);
+
+    // Rebuild FTS index
+    db.exec(`DELETE FROM documents_fts`);
+    db.exec(`
+      INSERT INTO documents_fts(filepath, title, body)
+      SELECT d.collection || '/' || d.path, d.title, c.body
+      FROM documents d
+      JOIN content c ON c.hash = d.hash
+      WHERE d.active = 1
+    `);
+
+    log('store', 'Duplicate path cleanup complete, FTS rebuilt');
+  });
+
+  cleanup();
 }
 
 export function indexDocument(

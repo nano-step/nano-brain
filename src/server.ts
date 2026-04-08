@@ -20,7 +20,7 @@ import { ConsolidationWorker } from './consolidation-worker.js';
 import type { SearchProviders } from './search.js';
 import { hybridSearch, parseSearchConfig } from './search.js';
 import { findCycles } from './graph.js';
-import { createStore, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore, setProjectLabelDataDir, resolveProjectLabel, openDatabase, getLastCorruptionRecovery, clearCorruptionRecovery, closeAllCachedStores } from './store.js';
+import { createStore, extractProjectHashFromPath, resolveWorkspaceDbPath, openWorkspaceStore, setProjectLabelDataDir, resolveProjectLabel, openDatabase, getLastCorruptionRecovery, clearCorruptionRecovery, closeAllCachedStores, migrateToRelativePaths, cleanupDuplicatePaths } from './store.js';
 import { log, initLogger, setStdioMode } from './logger.js';
 import { loadCollectionConfig, getCollections, scanCollectionFiles, getWorkspaceConfig } from './collections.js';
 import { createEmbeddingProvider, detectOllamaUrl, checkOllamaHealth, checkOpenAIHealth } from './embeddings.js';
@@ -2820,6 +2820,9 @@ export async function startServer(options: ServerOptions): Promise<void> {
   log('server', `Database: ${effectiveDbPath}`);
   log('server', 'Config path=' + finalConfigPath);
   const store = createStore(effectiveDbPath);
+  store.registerWorkspacePrefix(currentProjectHash, resolvedWorkspaceRoot);
+  migrateToRelativePaths(store, currentProjectHash, resolvedWorkspaceRoot);
+  cleanupDuplicatePaths(store, currentProjectHash, resolvedWorkspaceRoot);
   const symbolGraphDb = store.getDb();
 
   const validateInterval = (value: number | undefined, name: string, defaultVal: number): number => {

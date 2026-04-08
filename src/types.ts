@@ -637,6 +637,11 @@ export interface Store {
   getDb(): import('better-sqlite3').Database;
   close(): void;
 
+  registerWorkspacePrefix(projectHash: string, workspaceRoot: string): void;
+  getWorkspaceRoot(): string | null;
+  toRelative(absolutePath: string): string;
+  resolvePath(relativePath: string, projectHash: string): string;
+
   insertDocument(doc: Omit<Document, 'id'>): number;
   findDocument(pathOrDocid: string): Document | null;
   getDocumentBody(hash: string, fromLine?: number, maxLines?: number): string | null;

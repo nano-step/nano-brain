@@ -705,7 +705,7 @@ export async function indexSymbolGraph(
     return { symbolsIndexed: 0, edgesCreated: 0, filesProcessed: 0, filesSkipped: files.length }
   }
 
-  const graph = new SymbolGraph(db)
+  const graph = new SymbolGraph(db, workspaceRoot)
   let symbolsIndexed = 0
   let edgesCreated = 0
   let filesProcessed = 0
