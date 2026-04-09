@@ -39,6 +39,7 @@ import { categorize } from './categorizer.js'
 import { categorizeMemory } from './llm-categorizer.js'
 import { parseCategorizationConfig } from './types.js'
 import { ThompsonSampler, DEFAULT_BANDIT_CONFIGS } from './bandits.js'
+import { generateBriefing } from './wake-up.js'
 
 let maintenanceMode = false;
 let maintenanceTimer: NodeJS.Timeout | null = null;
@@ -2219,6 +2220,42 @@ export function createMcpServer(deps: ServerDeps): McpServer {
   );
 
   server.tool(
+    'memory_wake_up',
+    'Generate a compact context briefing for session start. Returns workspace identity + key memories + recent decisions in ~200-500 tokens.',
+    {
+      workspace: z.string().optional().describe('Workspace path, hash, or "all"'),
+      limit: z.number().optional().default(10).describe('Max documents per section (default: 10)'),
+      json: z.boolean().optional().default(false).describe('Return structured JSON instead of formatted text'),
+    },
+    async ({ workspace, limit, json }) => {
+      if (checkReady()) return WARMUP_ERROR;
+      log('mcp', 'memory_wake_up workspace="' + (workspace || '') + '"');
+
+      const wsResult = requireDaemonWorkspace(deps, workspace);
+      if ('error' in wsResult) {
+        return { content: [{ type: 'text', text: wsResult.error }], isError: true };
+      }
+
+      try {
+        const result = generateBriefing(wsResult.store, deps.configPath, wsResult.projectHash, {
+          limit: limit ?? 10,
+          json: json ?? false,
+        });
+        return {
+          content: [{ type: 'text', text: json ? JSON.stringify(result, null, 2) : result.formatted }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: 'Wake-up briefing failed: ' + (err instanceof Error ? err.message : String(err)) }],
+          isError: true,
+        };
+      } finally {
+        if (wsResult.needsClose) wsResult.store.close();
+      }
+    }
+  );
+
+  server.tool(
     'memory_graph_query',
     'Traverse the knowledge graph starting from an entity',
     {
@@ -3258,6 +3295,48 @@ export async function startServer(options: ServerOptions): Promise<void> {
         } catch (err) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/wake-up') {
+        try {
+          const url = new URL(req.url || '', `http://${req.headers.host}`);
+          const workspace = url.searchParams.get('workspace') || undefined;
+          const jsonParam = url.searchParams.get('json') === 'true';
+          const limitParam = parseInt(url.searchParams.get('limit') || '10', 10);
+          const effectiveProjectHash = workspace
+            ? crypto.createHash('sha256').update(workspace).digest('hex').substring(0, 12)
+            : currentProjectHash;
+          const result = generateBriefing(store, deps.configPath, effectiveProjectHash, {
+            limit: limitParam,
+            json: jsonParam,
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(jsonParam ? result : { formatted: result.formatted }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Wake-up briefing failed' }));
+        }
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/wake-up') {
+        const body = await readBody(req);
+        try {
+          const { workspace, json: jsonParam, limit: limitParam } = JSON.parse(body);
+          const effectiveProjectHash = workspace
+            ? crypto.createHash('sha256').update(workspace).digest('hex').substring(0, 12)
+            : currentProjectHash;
+          const result = generateBriefing(store, deps.configPath, effectiveProjectHash, {
+            limit: typeof limitParam === 'number' ? limitParam : 10,
+            json: !!jsonParam,
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(jsonParam ? result : { formatted: result.formatted }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Invalid JSON body' }));
         }
         return;
       }

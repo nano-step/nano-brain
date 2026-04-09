@@ -14,6 +14,7 @@ import { isTreeSitterAvailable } from './treesitter.js';
 import { QdrantVecStore } from './providers/qdrant.js';
 import { createVectorStore } from './vector-store.js';
 import type { SearchResult, CollectionConfig, Store, ConsolidationConfig } from './types.js';
+import { generateBriefing } from './wake-up.js';
 import { createLLMProvider } from './llm-provider.js';
 import { ConsolidationAgent } from './consolidation.js';
 import { ResultCache } from './cache.js';
@@ -268,6 +269,9 @@ nano-brain - Memory system with hybrid search
     -n <lines>      Show last N lines (default: 50)
     --date=<date>   Show log for specific date (YYYY-MM-DD, default: today)
     --clear         Delete all log files
+  wake-up           Generate a compact context briefing for session start
+    --json          Output as JSON
+    --workspace=<path> Generate briefing for specific workspace
   bench             Run performance benchmarks
     --suite=<name>  Run specific suite (search, embed, cache, store)
     --iterations=<n> Override iteration count
@@ -1515,6 +1519,69 @@ async function handleTags(globalOpts: GlobalOptions): Promise<void> {
     cliOutput(`  ${tag}: ${count} document${count === 1 ? '' : 's'}`)
   }
   store.close()
+}
+
+async function handleWakeUp(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
+  log('cli', 'wake-up command invoked');
+  let format: 'text' | 'json' = 'text';
+  let workspaceRoot = process.cwd();
+
+  for (const arg of commandArgs) {
+    if (arg === '--json') {
+      format = 'json';
+    } else if (arg.startsWith('--workspace=')) {
+      workspaceRoot = arg.substring(12);
+    }
+  }
+
+  const inContainer = isRunningInContainer();
+  const serverRunning = inContainer
+    ? await detectRunningServerContainer(DEFAULT_HTTP_PORT)
+    : await detectRunningServer(DEFAULT_HTTP_PORT);
+
+  if (inContainer && !serverRunning) {
+    cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
+    cliError('  docker start nano-brain');
+    process.exit(1);
+  }
+
+  if (serverRunning) {
+    try {
+      const body: Record<string, any> = {};
+      if (format === 'json') body.json = true;
+      body.workspace = workspaceRoot;
+      const proxyFn = inContainer ? proxyPostContainer : proxyPost;
+      const data = await proxyFn(DEFAULT_HTTP_PORT, '/api/wake-up', body);
+      if (format === 'json') {
+        cliOutput(JSON.stringify(data, null, 2));
+      } else {
+        cliOutput(data.formatted || data.briefing || JSON.stringify(data));
+      }
+      return;
+    } catch (err) {
+      if (inContainer) {
+        cliError('Error: Failed to communicate with daemon:', err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+      log('cli', 'HTTP proxy failed for wake-up, falling back to local: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
+  const projectHash = crypto.createHash('sha256').update(workspaceRoot).digest('hex').substring(0, 12);
+  const resolvedDbPath = resolveDbPath(globalOpts.dbPath, workspaceRoot);
+  const store = await createStore(resolvedDbPath);
+
+  const result = generateBriefing(store, globalOpts.configPath, projectHash, {
+    json: format === 'json',
+  });
+
+  if (format === 'json') {
+    cliOutput(JSON.stringify(result, null, 2));
+  } else {
+    cliOutput(result.formatted);
+  }
+
+  store.close();
 }
 
 async function handleFocus(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
@@ -3835,6 +3902,8 @@ async function main() {
       return handleBench(globalOpts, commandArgs);
     case 'tags':
       return handleTags(globalOpts);
+    case 'wake-up':
+      return handleWakeUp(globalOpts, commandArgs);
     case 'focus':
       return handleFocus(globalOpts, commandArgs);
     case 'graph-stats':

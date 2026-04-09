@@ -908,4 +908,14 @@ export interface Store {
     projectHash: string;
   }): number;
   deleteDocFlowsByProject(projectHash: string): number;
+
+  getTopAccessedDocuments(limit: number, projectHash?: string): Array<{
+    id: number; path: string; collection: string; title: string; hash: string;
+    access_count: number; last_accessed_at: string;
+  }>;
+
+  getRecentDocumentsByTags(tags: string[], limit: number, projectHash?: string): Array<{
+    id: number; path: string; collection: string; title: string; hash: string;
+    modified_at: string;
+  }>;
 }

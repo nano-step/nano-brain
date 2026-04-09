@@ -936,6 +936,23 @@ export function createStore(dbPath: string): Store {
     SELECT id, path, hash, access_count, last_accessed_at FROM documents WHERE active = 1
   `);
 
+  const getTopAccessedDocumentsStmt = db.prepare(`
+    SELECT id, path, collection, title, hash, access_count, last_accessed_at
+    FROM documents
+    WHERE active = 1 AND superseded_by IS NULL
+      AND project_hash IN (?, 'global')
+    ORDER BY access_count DESC
+    LIMIT ?
+  `);
+
+  const getTopAccessedDocumentsAllStmt = db.prepare(`
+    SELECT id, path, collection, title, hash, access_count, last_accessed_at
+    FROM documents
+    WHERE active = 1 AND superseded_by IS NULL
+    ORDER BY access_count DESC
+    LIMIT ?
+  `);
+
   const getTagCountForDocumentStmt = db.prepare(`
     SELECT COUNT(*) as cnt FROM document_tags WHERE document_id = ?
   `);
@@ -2762,6 +2779,53 @@ export function createStore(dbPath: string): Store {
         db.prepare(sql).run(...docIds);
       } catch (err) {
         log('store', `Failed to track access: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+      }
+    },
+
+    getTopAccessedDocuments(limit: number, projectHash?: string): Array<{ id: number; path: string; collection: string; title: string; hash: string; access_count: number; last_accessed_at: string }> {
+      try {
+        if (projectHash && projectHash !== 'all') {
+          return getTopAccessedDocumentsStmt.all(projectHash, limit) as Array<{ id: number; path: string; collection: string; title: string; hash: string; access_count: number; last_accessed_at: string }>;
+        }
+        return getTopAccessedDocumentsAllStmt.all(limit) as Array<{ id: number; path: string; collection: string; title: string; hash: string; access_count: number; last_accessed_at: string }>;
+      } catch (err) {
+        log('store', `getTopAccessedDocuments failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+        return [];
+      }
+    },
+
+    getRecentDocumentsByTags(tags: string[], limit: number, projectHash?: string): Array<{ id: number; path: string; collection: string; title: string; hash: string; modified_at: string }> {
+      if (tags.length === 0) return [];
+      try {
+        const tagPlaceholders = tags.map(() => '?').join(',');
+        let sql: string;
+        let params: any[];
+        if (projectHash && projectHash !== 'all') {
+          sql = `SELECT d.id, d.path, d.collection, d.title, d.hash, d.modified_at
+            FROM documents d
+            JOIN document_tags dt ON dt.document_id = d.id
+            WHERE d.active = 1 AND d.superseded_by IS NULL
+              AND dt.tag IN (${tagPlaceholders})
+              AND d.project_hash IN (?, 'global')
+            GROUP BY d.id
+            ORDER BY d.modified_at DESC
+            LIMIT ?`;
+          params = [...tags, projectHash, limit];
+        } else {
+          sql = `SELECT d.id, d.path, d.collection, d.title, d.hash, d.modified_at
+            FROM documents d
+            JOIN document_tags dt ON dt.document_id = d.id
+            WHERE d.active = 1 AND d.superseded_by IS NULL
+              AND dt.tag IN (${tagPlaceholders})
+            GROUP BY d.id
+            ORDER BY d.modified_at DESC
+            LIMIT ?`;
+          params = [...tags, limit];
+        }
+        return db.prepare(sql).all(...params) as Array<{ id: number; path: string; collection: string; title: string; hash: string; modified_at: string }>;
+      } catch (err) {
+        log('store', `getRecentDocumentsByTags failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+        return [];
       }
     },
 
