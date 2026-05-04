@@ -794,10 +794,18 @@ async function handleStatus(globalOpts: GlobalOptions, commandArgs: string[]): P
 
   printTokenUsageSection(store.getTokenUsage());
 
+  const embeddingModel = config?.embedding?.model
+    ? `${config.embedding.model} (${config.embedding.provider ?? 'ollama'})`
+    : 'missing';
+  const rerankerModel = config?.reranker?.model
+    ? `${config.reranker.model} (no endpoint — set reranker.apiKey)`
+    : 'missing';
+  const expanderModel = config?.search?.expansion?.enabled ? 'enabled' : 'disabled';
+
   cliOutput('Models:');
-  cliOutput(`  Embedding: ${health.modelStatus.embedding}`);
-  cliOutput(`  Reranker:  ${health.modelStatus.reranker}`);
-  cliOutput(`  Expander:  ${health.modelStatus.expander}`);
+  cliOutput(`  Embedding: ${embeddingModel}`);
+  cliOutput(`  Reranker:  ${rerankerModel}`);
+  cliOutput(`  Expander:  ${expanderModel}`);
   store.close();
 }
 
