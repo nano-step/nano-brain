@@ -9,4 +9,4 @@ dist/
 coverage/
 dist/web/
 src/web/node_modules/
-.npmrc
+.npmrc.npmrc2

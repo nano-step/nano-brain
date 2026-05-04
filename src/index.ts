@@ -812,9 +812,12 @@ async function handleInit(globalOpts: GlobalOptions, commandArgs: string[]): Pro
   let force = false;
   let all = false;
 
-  for (const arg of commandArgs) {
+  for (let i = 0; i < commandArgs.length; i++) {
+    const arg = commandArgs[i];
     if (arg.startsWith('--root=')) {
       root = arg.substring(7);
+    } else if (arg === '--root' && commandArgs[i + 1]) {
+      root = commandArgs[++i];
     } else if (arg === '--force') {
       force = true;
     } else if (arg === '--all') {
@@ -1063,6 +1066,25 @@ async function handleInit(globalOpts: GlobalOptions, commandArgs: string[]): Pro
       cliError('⚠️  Warning: Could not resume daemon. It will auto-resume in 5 minutes.');
     }
   }
+
+  if (force && serverRunning) {
+    cliOutput('');
+    cliOutput('🔄 Triggering full reindex + embed (force mode)...');
+    try {
+      await proxyPost(DEFAULT_HTTP_PORT, '/api/reindex', { root });
+      cliOutput('  Reindex started in background');
+    } catch (err) {
+      cliOutput('  ⚠️  Could not trigger reindex — run `npx nano-brain reindex` manually');
+    }
+    try {
+      await proxyPost(DEFAULT_HTTP_PORT, '/api/embed', { path: root });
+      cliOutput('  Embed started in background');
+    } catch (err) {
+      cliOutput('  ⚠️  Could not trigger embed — run `npx nano-brain embed` manually');
+    }
+    cliOutput('  (Check progress with `npx nano-brain status`)');
+  }
+
   cliOutput('');
   cliOutput('nano-brain initialized! Run `npx nano-brain status` to verify.');
 }
@@ -2080,9 +2102,12 @@ async function handleDetectChanges(globalOpts: GlobalOptions, commandArgs: strin
 async function handleReindex(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
   let root = process.cwd();
 
-  for (const arg of commandArgs) {
+  for (let i = 0; i < commandArgs.length; i++) {
+    const arg = commandArgs[i];
     if (arg.startsWith('--root=')) {
       root = arg.substring(7);
+    } else if (arg === '--root' && commandArgs[i + 1]) {
+      root = commandArgs[++i];
     }
   }
 
