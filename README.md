@@ -737,12 +737,24 @@ nano-brain cache stats          # Show cache statistics
 
 ### Benchmarking
 
+Measures search quality (P@5, R@10, MRR) and latency across FTS, vector, and hybrid modes.
+
 ```bash
-nano-brain bench                # Run default benchmark suite
-nano-brain bench --suite=search # Run specific suite
-nano-brain bench --iterations=100 --json --save
-nano-brain bench --compare=baseline.json  # Compare with baseline
+nano-brain bench run                    # Run benchmark suite (scale-100)
+nano-brain bench run --scale 500        # Larger corpus
+nano-brain bench compare new.json baseline.json  # Regression check
 ```
+
+Current results on v2026.8.2 (100 docs, Ollama local):
+
+```
+Mode      P@5     R@10    MRR     Latency (p50)
+FTS       0.975   0.985   1.000   1ms
+Vector    0.875   0.925   1.000   29ms
+Hybrid    0.835   0.970   1.000   34ms
+```
+
+See [`benchmarks/README.md`](benchmarks/README.md) for full explanation of metrics, use cases, and regression detection.
 
 ### Logging
 
