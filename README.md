@@ -636,17 +636,15 @@ nano-brain status             # Show index health, collections, model status
 
 ```bash
 nano-brain mcp                                      # Start MCP server (stdio)
-nano-brain mcp --http --port=3100 --host=0.0.0.0   # Start MCP server (HTTP/SSE)
+nano-brain mcp --http                               # Start MCP server (HTTP/SSE, default port 8282)
+nano-brain mcp --http --port=3100 --host=0.0.0.0   # Custom port (e.g. Docker default 3100)
 ```
 
 ### Remote Server (Daemon)
 
 ```bash
-nano-brain serve              # Start SSE server as background daemon (port 3100)
-nano-brain serve status       # Check if server is running
-nano-brain serve stop         # Stop the daemon
-nano-brain serve --foreground # Run in foreground (for debugging)
-nano-brain serve --port=8080  # Custom port
+nano-brain mcp --http --daemon --port=8282   # Start HTTP/SSE server as background daemon
+nano-brain mcp --http --daemon --port=3100   # Custom port (e.g. Docker default)
 ```
 
 ### Docker Deployment
@@ -665,6 +663,10 @@ Environment variables for volume mounts:
 - `NANO_BRAIN_APP` — Path to nano-brain source (default: current directory)
 - `NANO_BRAIN_HOME` — Path to data directory (default: `~/.nano-brain`)
 - `NANO_BRAIN_WORKSPACE` — Path to your project workspace to index as codebase (mounted read-only, passed as `--root`)
+
+Runtime environment variables:
+- `OPENCODE_STORAGE_DIR` — Override OpenCode session storage path (useful in Docker where container homedir differs from host). Example: `/Users/tamlh/.local/share/opencode/storage`
+- `NANO_BRAIN_EMBEDDING_CONCURRENCY` — Number of parallel embedding requests to Ollama (default: `3`)
 
 ### Search
 
@@ -691,7 +693,7 @@ nano-brain tags                     # List all tags with counts
 
 ```bash
 nano-brain update               # Reindex all collections
-nano-brain index-codebase       # Index codebase in current workspace
+nano-brain reindex              # Index codebase in current workspace
 nano-brain reset --confirm      # Reset all data (requires confirmation)
 nano-brain reset --dry-run      # Preview what would be deleted
 ```
@@ -740,12 +742,17 @@ nano-brain cache stats          # Show cache statistics
 Measures search quality (P@5, R@10, MRR) and latency across FTS, vector, and hybrid modes.
 
 ```bash
+nano-brain bench generate               # Generate fixtures (scale-100)
+nano-brain bench generate --scale=1000  # Larger corpus (valid: 100,1000,5000,10000,100000)
 nano-brain bench run                    # Run benchmark suite (scale-100)
-nano-brain bench run --scale 500        # Larger corpus
+nano-brain bench run --scale=1000       # Run at larger scale
 nano-brain bench compare new.json baseline.json  # Regression check
+nano-brain bench compare new.json baseline.json --save=baseline.json --force  # Save + force
 ```
 
-Current results on v2026.8.2 (100 docs, Ollama local):
+See [`benchmarks/README.md`](benchmarks/README.md) for full explanation of metrics, corpus generation, and regression detection.
+
+Current results on v2026.8.3 (100 docs, Ollama local):
 
 ```
 Mode      P@5     R@10    MRR     Latency (p50)
@@ -753,8 +760,6 @@ FTS       0.975   0.985   1.000   1ms
 Vector    0.875   0.925   1.000   29ms
 Hybrid    0.835   0.970   1.000   34ms
 ```
-
-See [`benchmarks/README.md`](benchmarks/README.md) for full explanation of metrics, use cases, and regression detection.
 
 ### Logging
 
@@ -765,6 +770,23 @@ nano-brain logs -n 100          # Show last 100 lines
 nano-brain logs --date=2026-03-01  # Show log for specific date
 nano-brain logs --clear         # Delete all log files
 nano-brain logs path            # Print log directory path
+```
+
+### Code Intelligence
+
+```bash
+nano-brain context <symbol>            # 360° view of a code symbol (callers, callees, flows)
+nano-brain code-impact <symbol>        # Analyze impact of changing a symbol
+nano-brain detect-changes              # Map current git changes to affected symbols and flows
+nano-brain wake-up                     # Generate a compact context briefing for session start
+```
+
+### Memory Intelligence
+
+```bash
+nano-brain consolidate                 # Run consolidation job manually
+nano-brain categorize-backfill         # Backfill LLM categorization on existing documents
+nano-brain learning rollback [id]      # Manage self-learning system; rollback to a previous config version
 ```
 
 ## Project Structure
