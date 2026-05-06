@@ -54,6 +54,8 @@ export function getHttpPort(): number {
 }
 
 export function resolveOpenCodeStorageDir(): string {
+  // Explicit override (useful in Docker where homedir != host homedir)
+  if (process.env.OPENCODE_STORAGE_DIR) return process.env.OPENCODE_STORAGE_DIR;
   // XDG path (Linux): ~/.local/share/opencode/storage
   const xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
   const xdgPath = path.join(xdgData, 'opencode', 'storage');
