@@ -35,17 +35,21 @@ export async function handleWrite(globalOpts: GlobalOptions, commandArgs: string
     }
   }
 
-  if (isInsideContainer()) {
-    const serverRunning = await detectRunningServer(DEFAULT_HTTP_PORT);
-    if (!serverRunning) {
-      cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
-      cliError('  docker start nano-brain');
-      process.exit(1);
-    }
+  const inContainer = isInsideContainer();
+  const serverRunning = await detectRunningServer(DEFAULT_HTTP_PORT);
+
+  if (inContainer && !serverRunning) {
+    cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
+    cliError('  docker start nano-brain');
+    process.exit(1);
+  }
+
+  if (serverRunning) {
     try {
       const result = await proxyPost(DEFAULT_HTTP_PORT, '/api/write', {
         content,
         tags: tags?.join(','),
+        supersedes,
       });
       if (result.error) {
         cliError('Error:', result.error);
@@ -54,8 +58,11 @@ export async function handleWrite(globalOpts: GlobalOptions, commandArgs: string
       cliOutput(`✅ ${result.message}`);
       return;
     } catch (err) {
-      cliError('Error: Failed to communicate with daemon:', err instanceof Error ? err.message : String(err));
-      process.exit(1);
+      if (inContainer) {
+        cliError('Error: Failed to communicate with daemon:', err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+      log('cli', 'HTTP proxy failed, falling back to local: ' + (err instanceof Error ? err.message : String(err)));
     }
   }
 
