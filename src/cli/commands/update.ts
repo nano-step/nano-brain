@@ -3,11 +3,43 @@ import { loadCollectionConfig, getCollections, scanCollectionFiles } from '../..
 import * as fs from 'fs';
 import * as path from 'path';
 import { log, cliOutput, cliError } from '../../logger.js';
+import { isInsideContainer } from '../../host.js';
 import type { GlobalOptions } from '../types.js';
-import { DEFAULT_OUTPUT_DIR } from '../utils.js';
+import {
+  DEFAULT_HTTP_PORT,
+  DEFAULT_OUTPUT_DIR,
+  detectRunningServer,
+  proxyPost,
+  getHttpHost,
+  getHttpPort,
+} from '../utils.js';
 
 export async function handleUpdate(globalOpts: GlobalOptions): Promise<void> {
   log('cli', 'update start');
+
+  const inContainer = isInsideContainer();
+  const serverRunning = await detectRunningServer(DEFAULT_HTTP_PORT);
+
+  if (inContainer && !serverRunning) {
+    cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
+    cliError('  docker start nano-brain');
+    process.exit(1);
+  }
+
+  if (serverRunning) {
+    try {
+      await proxyPost(DEFAULT_HTTP_PORT, '/api/update', {});
+      cliOutput('✅ Update triggered');
+      return;
+    } catch (err) {
+      if (inContainer) {
+        cliError('Error: Failed to communicate with daemon:', err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+      log('cli', 'HTTP proxy failed for update, falling back to local: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
   const store = await createStore(globalOpts.dbPath);
   const config = loadCollectionConfig(globalOpts.configPath);
 

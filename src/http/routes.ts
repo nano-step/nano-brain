@@ -18,7 +18,8 @@ import { resolveWorkspaceDbPath, openDatabase } from '../store.js';
 import type { SqliteEventStore } from '../event-store.js';
 import { sseSessions, handleSseConnect, handleSseMessage } from './sse.js';
 import { createMcpServer } from '../mcp/index.js';
-import { getWorkspaceConfig, loadCollectionConfig } from '../collections.js';
+import { getWorkspaceConfig, loadCollectionConfig, getCollections, scanCollectionFiles } from '../collections.js';
+import { indexDocument, extractProjectHashFromPath } from '../store.js';
 
 export interface HttpContext {
   deps: ServerDeps;
@@ -352,6 +353,41 @@ export async function handleRequest(
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/update') {
+    try {
+      const config = loadCollectionConfig(finalConfigPath);
+      const collections = config ? getCollections(config) : [];
+      const sessionsDir = path.join(outputDir, 'sessions');
+
+      ;(async () => {
+        let indexed = 0;
+        let skipped = 0;
+        for (const collection of collections) {
+          const files = await scanCollectionFiles(collection);
+          for (const file of files) {
+            try {
+              const content = fs.readFileSync(file, 'utf-8');
+              const title = path.basename(file, path.extname(file));
+              const effectiveProjectHash = collection.name === 'sessions'
+                ? extractProjectHashFromPath(file, sessionsDir)
+                : undefined;
+              const result = indexDocument(store, collection.name, file, content, title, effectiveProjectHash);
+              result.skipped ? skipped++ : indexed++;
+            } catch { /* skip unreadable files */ }
+          }
+        }
+        log('server', `[api/update] Complete: ${indexed} indexed, ${skipped} skipped`);
+      })().catch(err => log('server', `[api/update] Error: ${err instanceof Error ? err.message : String(err)}`));
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'started', workspace: resolvedWorkspaceRoot, message: 'Update started' }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid request' }));
     }
     return;
   }
