@@ -8,10 +8,8 @@ import type { GlobalOptions } from '../types.js';
 import { isInsideContainer } from '../../host.js';
 import {
   DEFAULT_HTTP_PORT,
-  detectRunningServer,
+  assertContainerServer,
   proxyPost,
-  getHttpHost,
-  getHttpPort,
   resolveDbPath,
 } from '../utils.js';
 
@@ -29,13 +27,8 @@ export async function handleReindex(globalOpts: GlobalOptions, commandArgs: stri
 
   log('cli', 'reindex root=' + root);
 
+  await assertContainerServer();
   if (isInsideContainer()) {
-    const serverRunning = await detectRunningServer(DEFAULT_HTTP_PORT);
-    if (!serverRunning) {
-      cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
-      cliError('  docker start nano-brain');
-      process.exit(1);
-    }
     try {
       const result = await proxyPost(DEFAULT_HTTP_PORT, '/api/reindex', { root });
       if (result.error) {

@@ -12,10 +12,8 @@ import type { GlobalOptions } from '../types.js';
 import { isInsideContainer } from '../../host.js';
 import {
   DEFAULT_HTTP_PORT,
-  detectRunningServer,
+  assertContainerServer,
   proxyPost,
-  getHttpHost,
-  getHttpPort,
 } from '../utils.js';
 
 export async function handleEmbed(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
@@ -29,13 +27,8 @@ export async function handleEmbed(globalOpts: GlobalOptions, commandArgs: string
 
   log('cli', 'embed start force=' + force);
 
+  await assertContainerServer();
   if (isInsideContainer()) {
-    const serverRunning = await detectRunningServer(DEFAULT_HTTP_PORT);
-    if (!serverRunning) {
-      cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
-      cliError('  docker start nano-brain');
-      process.exit(1);
-    }
     try {
       const result = await proxyPost(DEFAULT_HTTP_PORT, '/api/embed', {});
       if (result.error) {

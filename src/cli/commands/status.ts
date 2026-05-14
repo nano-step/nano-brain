@@ -10,7 +10,7 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import { log, cliOutput, cliError } from '../../logger.js';
 import type { GlobalOptions } from '../types.js';
-import { DEFAULT_HTTP_PORT, detectRunningServer, proxyGet, resolveDbPath, getHttpHost, getHttpPort } from '../utils.js';
+import { DEFAULT_HTTP_PORT, assertContainerServer, proxyGet, resolveDbPath } from '../utils.js';
 import { isInsideContainer } from '../../host.js';
 
 function extractWorkspaceName(dbFilename: string): string {
@@ -125,13 +125,7 @@ async function printEmbeddingServerStatus(config: ReturnType<typeof loadCollecti
 export async function handleStatus(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
   log('cli', 'status command invoked');
   const inContainer = isInsideContainer();
-  const serverRunning = await detectRunningServer(DEFAULT_HTTP_PORT);
-
-  if (inContainer && !serverRunning) {
-    cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
-    cliError('  docker start nano-brain');
-    process.exit(1);
-  }
+  const serverRunning = await assertContainerServer();
   let serverInfo: { uptime: number; ready: boolean; index?: { documentCount: number; embeddedCount: number; pendingEmbeddings: number }; models?: { reranker?: string } } | null = null;
   if (serverRunning) {
     try {

@@ -1,6 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import * as http from 'http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -99,6 +100,23 @@ export async function startServer(options: ServerOptions): Promise<void> {
   log('server', 'Database path=' + effectiveDbPath);
   log('server', `Database: ${effectiveDbPath}`);
   log('server', 'Config path=' + finalConfigPath);
+
+  // Bind HTTP port early so container CLIs can detect "starting" vs "not running"
+  // during the (potentially long) DB integrity check that follows.
+  let requestHandler: http.RequestListener = (_req, res) => {
+    const url = _req.url ?? '/';
+    if (_req.method === 'GET' && (url === '/health' || url.startsWith('/health?'))) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'starting', ready: false }));
+      return;
+    }
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'server is starting up, please retry in a moment' }));
+  };
+  if (httpPort) {
+    httpServer = createHttpServer(httpPort, httpHost, (req, res) => requestHandler(req, res));
+  }
+
   const store = createStore(effectiveDbPath);
   store.registerWorkspacePrefix(currentProjectHash, resolvedWorkspaceRoot);
   migrateToRelativePaths(store, currentProjectHash, resolvedWorkspaceRoot);
@@ -323,9 +341,12 @@ export async function startServer(options: ServerOptions): Promise<void> {
       eventStore,
     };
 
-    httpServer = createHttpServer(httpPort, httpHost, async (req, res) => {
-      await handleRequest(req, res, httpCtx);
-    });
+    // Swap the early "starting" handler to the full handler now that bootstrap is complete
+    requestHandler = async (req, res) => { await handleRequest(req, res, httpCtx); };
+    if (!httpServer) {
+      // Fallback: HTTP server wasn't started early (shouldn't happen in httpPort mode)
+      httpServer = createHttpServer(httpPort, httpHost, (req, res) => requestHandler(req, res));
+    }
   } else {
     setStdioMode(true);
     const transport = new StdioServerTransport();
