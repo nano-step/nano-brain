@@ -370,7 +370,7 @@ export async function handleRequest(
           const files = await scanCollectionFiles(collection);
           for (const file of files) {
             try {
-              const content = fs.readFileSync(file, 'utf-8');
+              const content = await fs.promises.readFile(file, 'utf-8');
               const title = path.basename(file, path.extname(file));
               const effectiveProjectHash = collection.name === 'sessions'
                 ? extractProjectHashFromPath(file, sessionsDir)
