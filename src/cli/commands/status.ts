@@ -10,7 +10,8 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import { log, cliOutput, cliError } from '../../logger.js';
 import type { GlobalOptions } from '../types.js';
-import { DEFAULT_HTTP_PORT, detectRunningServer, proxyGet, resolveDbPath } from '../utils.js';
+import { DEFAULT_HTTP_PORT, detectRunningServer, proxyGet, resolveDbPath, getHttpHost, getHttpPort } from '../utils.js';
+import { isInsideContainer } from '../../host.js';
 
 function extractWorkspaceName(dbFilename: string): string {
   const base = path.basename(dbFilename, '.sqlite');
@@ -123,7 +124,14 @@ async function printEmbeddingServerStatus(config: ReturnType<typeof loadCollecti
 
 export async function handleStatus(globalOpts: GlobalOptions, commandArgs: string[]): Promise<void> {
   log('cli', 'status command invoked');
+  const inContainer = isInsideContainer();
   const serverRunning = await detectRunningServer(DEFAULT_HTTP_PORT);
+
+  if (inContainer && !serverRunning) {
+    cliError(`Error: nano-brain server not reachable at ${getHttpHost()}:${getHttpPort()}. Ensure the Docker container is running:`);
+    cliError('  docker start nano-brain');
+    process.exit(1);
+  }
   let serverInfo: { uptime: number; ready: boolean; index?: { documentCount: number; embeddedCount: number; pendingEmbeddings: number }; models?: { reranker?: string } } | null = null;
   if (serverRunning) {
     try {
@@ -143,6 +151,39 @@ export async function handleStatus(globalOpts: GlobalOptions, commandArgs: strin
       log('cli', 'HTTP proxy failed for server info: ' + (err instanceof Error ? err.message : String(err)));
     }
   }
+  if (inContainer) {
+    cliOutput(`nano-brain Status`);
+    cliOutput('═══════════════════════════════════════════════════');
+    cliOutput('');
+    if (serverInfo) {
+      const uptimeSec = Math.floor(serverInfo.uptime);
+      const hours = Math.floor(uptimeSec / 3600);
+      const mins = Math.floor((uptimeSec % 3600) / 60);
+      const secs = uptimeSec % 60;
+      const uptimeStr = hours > 0 ? `${hours}h ${mins}m ${secs}s` : mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      cliOutput('Server:');
+      cliOutput(`  Status:   running (port ${DEFAULT_HTTP_PORT})`);
+      cliOutput(`  Uptime:   ${uptimeStr}`);
+      cliOutput(`  Ready:    ${serverInfo.ready ? 'yes' : 'no'}`);
+      cliOutput('');
+      if (serverInfo.index) {
+        cliOutput('Index:');
+        cliOutput(`  Documents:          ${serverInfo.index.documentCount.toLocaleString()}`);
+        cliOutput(`  Embedded:           ${serverInfo.index.embeddedCount.toLocaleString()}`);
+        cliOutput(`  Pending embeddings: ${serverInfo.index.pendingEmbeddings.toLocaleString()}`);
+        cliOutput('');
+      }
+      if (serverInfo.models) {
+        const reranker = serverInfo.models.reranker && serverInfo.models.reranker !== 'disabled'
+          ? `✅ ${serverInfo.models.reranker}`
+          : 'disabled';
+        cliOutput('Models:');
+        cliOutput(`  Reranker:  ${reranker}`);
+      }
+    }
+    return;
+  }
+
   const showAll = commandArgs.includes('--all');
   const config = loadCollectionConfig(globalOpts.configPath);
   const dataDir = path.dirname(globalOpts.dbPath);
