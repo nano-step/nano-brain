@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Features — nano-brain</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/nano-step-logo.png">
+  <style>
+    .page-hero { padding: 64px 0 48px; }
+    .feature-section { padding: 56px 0; border-top: 1px solid var(--border); }
+    .feature-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+    @media (max-width: 768px) { .feature-layout { grid-template-columns: 1fr; } }
+    .feature-number {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-subtle);
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+    .signal-list { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+    .signal-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    .signal-rank {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+      min-width: 20px;
+    }
+    .signal-name { font-size: 14px; font-weight: 500; }
+    .signal-desc { font-size: 13px; color: var(--text-muted); margin-left: auto; text-align: right; }
+    .job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-top: 20px; }
+    .job-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .job-name { font-family: var(--mono); font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+    .job-interval { font-size: 12px; color: var(--accent); }
+    .job-desc { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .lang-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .lang-tag {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .schema-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
+    .schema-table th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .schema-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      color: var(--text-muted);
+    }
+    .schema-table td:first-child { color: var(--accent); }
+    .schema-table td:last-child { font-family: var(--font); color: var(--text-subtle); font-size: 12px; }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="index.html">
+      <img src="assets/nano-step-logo.png" alt="nano-step">
+      <span class="nav-brand-name">nano-brain</span>
+      <span class="nav-brand-version">v2026.8.19</span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="features.html" class="active">Features</a>
+      <a href="docs.html">Docs</a>
+      <a href="changelog.html">Changelog</a>
+    </div>
+    <div class="nav-actions">
+      <a class="nav-badge" href="https://www.npmjs.com/package/nano-brain" target="_blank">
+        <span class="nav-badge-dot"></span>npm v2026.8.19
+      </a>
+      <a class="nav-badge" href="https://github.com/nano-step/nano-brain" target="_blank">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<div class="page-hero">
+  <div class="container">
+    <p class="eyebrow">Feature deep-dive</p>
+    <h1 style="font-size:clamp(28px,4vw,44px);margin-bottom:12px">Under the hood</h1>
+    <p class="lead">Six subsystems. All running in the background. All adapting over time.</p>
+  </div>
+</div>
+
+<!-- 1. HYBRID SEARCH -->
+<div class="feature-section">
+  <div class="container">
+    <div class="feature-layout">
+      <div>
+        <div class="feature-number">01</div>
+        <p class="eyebrow">Search</p>
+        <h2 style="margin-bottom:12px">Hybrid search pipeline</h2>
+        <p style="color:var(--text-muted);font-size:15px;line-height:1.7;margin-bottom:16px">
+          Every query passes through six ranked signals before returning results. The blend weights are not hardcoded — they are tuned continuously by Thompson Sampling bandits using retrieval telemetry.
+        </p>
+        <p style="color:var(--text-muted);font-size:15px;line-height:1.7">
+          BM25 handles exact-match and keyword recall via SQLite FTS5. Vector search handles semantic similarity via 768-dim embeddings in Qdrant. RRF fusion (k=60) blends both scores. PageRank adds a centrality boost from the file dependency graph. Supersede demotion deprioritizes stale documents. VoyageAI neural reranking (<code>rerank-2.5-lite</code>) makes the final pass.
+        </p>
+      </div>
+      <div>
+        <div class="signal-list">
+          <div class="signal-item">
+            <span class="signal-rank">1</span>
+            <span class="signal-name">BM25 / FTS5</span>
+            <span class="signal-desc">SQLite · exact match</span>
+          </div>
+          <div class="signal-item">
+            <span class="signal-rank">2</span>
+            <span class="signal-name">Vector similarity</span>
+            <span class="signal-desc">Qdrant · 768-dim cosine</span>
+          </div>
+          <div class="signal-item" style="border-color:rgba(56,189,248,0.25);background:var(--accent-glow)">
+            <span class="signal-rank">3</span>
+            <span class="signal-name">RRF fusion</span>
+            <span class="signal-desc">k=60 · blends 1+2</span>
+          </div>
+          <div class="signal-item">
+            <span class="signal-rank">4</span>
+            <span class="signal-name">PageRank boost</span>
+            <span class="signal-desc">File dependency graph</span>
+          </div>
+          <div class="signal-item">
+            <span class="signal-rank">5</span>
+            <span class="signal-name">Supersede demotion</span>
+            <span class="signal-desc">Stale doc filter</span>
+          </div>
+          <div class="signal-item" style="border-color:rgba(56,189,248,0.25);background:var(--accent-glow)">
+            <span class="signal-rank">6</span>
+            <span class="signal-name">Neural reranking</span>
+            <span class="signal-desc">VoyageAI rerank-2.5-lite</span>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--text-subtle);margin-top:12px;font-family:var(--mono)">
+          Weights tuned by Thompson Sampling from search telemetry
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. CODE INTELLIGENCE -->
+<div class="feature-section">
+  <div class="container">
+    <div class="feature-layout">
+      <div>
+        <div class="feature-number">02</div>
+        <p class="eyebrow">Code Intelligence</p>
+        <h2 style="margin-bottom:12px">AST-level code understanding</h2>
+        <p style="color:var(--text-muted);font-size:15px;line-height:1.7;margin-bottom:16px">
+          Tree-sitter parses TypeScript, JavaScript, and Python source files into ASTs. nano-brain extracts symbol definitions, builds a call graph (caller→callee edges), and maps the file dependency graph (imports/exports).
+        </p>
+        <p style="color:var(--text-muted);font-size:15px;line-height:1.7;margin-bottom:20px">
+          These graphs power three MCP tools: <code>code_context</code> gives a 360° view of any symbol; <code>code_impact</code> does BFS traversal to find everything affected by a change; <code>code_detect_changes</code> maps a git diff to affected symbols in seconds.
+        </p>
+        <div class="lang-grid">
+          <div class="lang-tag">TypeScript</div>
+          <div class="lang-tag">JavaScript</div>
+          <div class="lang-tag">Python</div>
+          <div class="lang-tag" style="color:var(--text-muted);border-style:dashed">More planned</div>
+        </div>
+      </div>
+      <div>
+        <pre style="font-size:13px"><span style="color:#64748b"># 360° view of a symbol</span>
+<span style="color:var(--accent)">></span> code_context("resolveWorkspace")
+
+<span style="color:#34d399">Symbol:</span> resolveWorkspace
+<span style="color:#64748b">File:</span>    src/mcp/tools/memory.ts:441
+<span style="color:#64748b">Type:</span>    function · exported
+
+<span style="color:#34d399">Callers (5):</span>
+  memory_search     memory.ts:89
+  memory_vsearch    memory.ts:124
+  memory_write      memory.ts:466
+  code_context      code.ts:33
+  code_impact       code.ts:71
+
+<span style="color:#34d399">Callees (3):</span>
+  openWorkspaceStore  store/index.ts:1201
+  resolveDbPath       cli/utils.ts:18
+  log                 logger.ts:44
+
+<span style="color:#64748b">PageRank centrality:</span> 0.847 (top 3%)
+<span style="color:#64748b">Cluster:</span>            workspace-resolution</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. BACKGROUND JOBS -->
+<div class="feature-section">
+  <div class="container">
+    <div class="feature-number">03</div>
+    <p class="eyebrow">Background jobs</p>
+    <h2 style="margin-bottom:12px">9 jobs, always running</h2>
+    <p class="lead" style="margin-bottom:8px">nano-brain indexes, embeds, consolidates, and prunes automatically. No manual triggers needed.</p>
+    <p style="color:var(--text-muted);font-size:14px;margin-bottom:28px">All intervals configurable in <code>~/.nano-brain/config.yml</code> under <code>intervals:</code>.</p>
+
+    <div class="job-grid">
+      <div class="job-item">
+        <div class="job-name">File reindex</div>
+        <div class="job-interval">every 5 min</div>
+        <div class="job-desc">Hash-based dirty detection, incremental re-processing</div>
+      </div>
+      <div class="job-item">
+        <div class="job-name">Session harvest</div>
+        <div class="job-interval">every 2 min</div>
+        <div class="job-desc">Ingest OpenCode + Claude Code session files</div>
+      </div>
+      <div class="job-item">
+        <div class="job-name">Embedding</div>
+        <div class="job-interval">60s adaptive</div>
+        <div class="job-desc">Generate embeddings for un-embedded chunks</div>
+      </div>
+      <div class="job-item">
+        <div class="job-name">LLM consolidation</div>
+        <div class="job-interval">every 1 hour</div>
+        <div class="job-desc">Merge, deduplicate, and distill memory entries</div>
+      </div>
+      <div class="job-item">
+        <div class="job-name">Importance scoring</div>
+        <div class="job-interval">every 30 min</div>
+        <div class="job-desc">Score documents by retrieval frequency and recency</div>
+      </div>
+      <div class="job-item">
+        <div class="job-name">Entity pruning</div>
+        <div class="job-interval">every 6 hours</div>
+        <div class="job-desc">Soft-delete contradicted (30d) and orphan (90d) entities</div>
+      </div>
+      <div class="job-item">
+        <div class="job-name">Sequence analysis</div>
+        <div class="job-interval">every 30 min</div>
+        <div class="job-desc">Detect recurring query patterns and workflows</div>
+      </div>
+      <div class="job-item">
+        <div class="job-name">Learning cycle</div>
+        <div class="job-interval">every 10 min</div>
+        <div class="job-desc">Update Thompson Sampling bandits from telemetry</div>
+      </div>
+      <div class="job-item">
+        <div class="job-name">Consolidation reconcile</div>
+        <div class="job-interval">continuous</div>
+        <div class="job-desc">Execute pending consolidation decisions automatically</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 4. STORAGE -->
+<div class="feature-section">
+  <div class="container">
+    <div class="feature-layout">
+      <div>
+        <div class="feature-number">04</div>
+        <p class="eyebrow">Storage</p>
+        <h2 style="margin-bottom:12px">SQLite + Qdrant, zero config</h2>
+        <p style="color:var(--text-muted);font-size:15px;line-height:1.7;margin-bottom:16px">
+          All persistence is SQLite (<code>better-sqlite3</code>, WAL mode). Each workspace gets its own database file under <code>~/.nano-brain/data/</code>, keyed by a 12-char SHA-256 of the workspace path.
+        </p>
+        <p style="color:var(--text-muted);font-size:15px;line-height:1.7;margin-bottom:16px">
+          Vectors are stored in Qdrant (768-dim collections). Content is content-addressed — documents are deduplicated by SHA-256, so re-indexing is always safe and idempotent.
+        </p>
+        <p style="color:var(--text-muted);font-size:15px;line-height:1.7">
+          The 18-table schema covers documents, chunks, FTS5 index, symbol graph, entity graph, telemetry, and bandit variants.
+        </p>
+      </div>
+      <div>
+        <table class="schema-table">
+          <thead>
+            <tr>
+              <th>Table</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>documents</td><td>Content-addressed document metadata</td></tr>
+            <tr><td>chunks</td><td>Heading-aware text chunks (900 tok)</td></tr>
+            <tr><td>content</td><td>Raw content (SHA-256 dedup)</td></tr>
+            <tr><td>documents_fts</td><td>SQLite FTS5 full-text index</td></tr>
+            <tr><td>symbols</td><td>AST-extracted code symbols</td></tr>
+            <tr><td>call_edges</td><td>Caller→callee call graph</td></tr>
+            <tr><td>file_deps</td><td>Import/export dependency graph</td></tr>
+            <tr><td>entities</td><td>LLM-extracted knowledge graph nodes</td></tr>
+            <tr><td>relationships</td><td>Entity relationship edges</td></tr>
+            <tr><td>telemetry</td><td>Search event log for bandit training</td></tr>
+            <tr><td>bandit_variants</td><td>Thompson Sampling state</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5. MEMORY INTELLIGENCE -->
+<div class="feature-section">
+  <div class="container">
+    <div class="feature-number">05</div>
+    <p class="eyebrow">Memory Intelligence v2</p>
+    <h2 style="margin-bottom:12px">Memory that improves itself</h2>
+    <p class="lead" style="margin-bottom:36px">Three adaptive layers make nano-brain smarter the more you use it.</p>
+    <div class="grid-3">
+      <div class="card">
+        <h3 style="margin-bottom:8px">Entity Pruning</h3>
+        <p style="font-size:14px;color:var(--text-muted);line-height:1.6">Automatically soft-deletes contradicted entities (30 days TTL) and orphan entities (90 days TTL). Hard-deletes after 30-day retention. Prevents the knowledge graph from accumulating stale information.</p>
+        <div style="margin-top:12px">
+          <span class="badge">6h interval</span>
+          <span class="badge">batch 100</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:8px">LLM Categorization</h3>
+        <p style="font-size:14px;color:var(--text-muted);line-height:1.6">After every <code>memory_write</code>, a background LLM call assigns <code>llm:</code> category tags. Fire-and-forget, non-blocking. Makes memories discoverable by topic without manual tagging.</p>
+        <div style="margin-top:12px">
+          <span class="badge">async</span>
+          <span class="badge">llm: tags</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:8px">Preference Learning</h3>
+        <p style="font-size:14px;color:var(--text-muted);line-height:1.6">Thompson Sampling bandits track which content types you retrieve most. RRF blend weights and reranking thresholds adapt over time. Every search trains the model; every session makes the next one better.</p>
+        <div style="margin-top:12px">
+          <span class="badge">Thompson Sampling</span>
+          <span class="badge">10m cycle</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 6. WORKSPACE ISOLATION -->
+<div class="feature-section">
+  <div class="container">
+    <div class="feature-number">06</div>
+    <p class="eyebrow">Workspace isolation</p>
+    <h2 style="margin-bottom:12px">One DB per project, enforced</h2>
+    <p style="color:var(--text-muted);font-size:15px;line-height:1.7;max-width:600px;margin-bottom:24px">
+      Every workspace path gets its own SQLite database named <code>{dir}-{hash12}.sqlite</code>. Since v2026.8.19, the server validates <code>--root</code> against <code>config.workspaces</code> — unconfigured paths fall back to the closest configured workspace instead of creating a new orphaned database.
+    </p>
+    <pre style="max-width:560px;font-size:13px"><span style="color:#64748b"># ~/.nano-brain/config.yml</span>
+workspaces:
+  /Users/you/projects/my-app:
+    codebase:
+      enabled: true
+      extensions: [.ts, .tsx, .py]
+  /Users/you/projects/api:
+    codebase:
+      enabled: true
+      maxFileSize: 200KB
+
+<span style="color:#64748b"># Resulting databases in ~/.nano-brain/data/</span>
+<span style="color:#34d399">my-app-d1915ee19311.sqlite</span>   ← configured ✓
+<span style="color:#34d399">api-8a3c4f7b2190.sqlite</span>      ← configured ✓
+<span style="color:#f87171"># No more orphaned databases</span>    ← v2026.8.19 fix</pre>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="assets/nano-step-logo.png" alt="nano-step">
+      <span>nano-brain by <a href="https://github.com/nano-step" target="_blank" style="color:var(--text-muted)">nano-step</a> · MIT License</span>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/nano-step/nano-brain" target="_blank">GitHub</a>
+      <a href="https://www.npmjs.com/package/nano-brain" target="_blank">npm</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="docs.html">Docs</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
