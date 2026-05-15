@@ -58,6 +58,10 @@ export interface WatcherOptions {
   harvesterConfig?: HarvesterConfig
   /** Entity/fact extraction config passed to harvest cycle */
   extractionConfig?: import('../types.js').ExtractionConfig
+  /** LLM provider for scheduled entity extraction from memory documents */
+  llmProvider?: import('./consolidation.js').LLMProvider
+  /** How often to run entity extraction on unprocessed memory docs (ms, default 1800000) */
+  entityExtractionIntervalMs?: number
 }
 
 export interface Watcher {
@@ -180,6 +184,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
   let pruningSoftDeleteTimeout: NodeJS.Timeout | null = null;
   let pruningHardDeleteTimeout: NodeJS.Timeout | null = null;
   let mergeTimeout: NodeJS.Timeout | null = null;
+  let entityExtractionTimeout: NodeJS.Timeout | null = null;
 
   const handleFileChange = (filePath: string) => {
     if (stopped) return
@@ -657,6 +662,89 @@ export function startWatcher(options: WatcherOptions): Watcher {
       scheduleConsolidation();
     }
 
+    const llmProvider = options.llmProvider;
+    if (llmProvider) {
+      const entityExtractionIntervalMs = options.entityExtractionIntervalMs ?? 1800000;
+      const runEntityExtractionCycle = async () => {
+        const db = store.getDb();
+        const docs = db.prepare(`
+          SELECT d.id, d.title, d.hash, c.body
+          FROM documents d
+          JOIN content c ON d.hash = c.hash
+          WHERE d.collection = 'memory'
+            AND d.active = 1
+            AND d.id NOT IN (
+              SELECT document_id FROM consolidation_log WHERE action = 'ENTITY_EXTRACTED'
+            )
+          ORDER BY d.modified_at DESC
+          LIMIT 10
+        `).all() as Array<{id: number; title: string; hash: string; body: string}>;
+
+        if (docs.length === 0) return;
+        log('watcher', 'Entity extraction: processing ' + docs.length + ' memory documents');
+
+        const { extractEntitiesFromMemory } = await import('../entity-extraction.js');
+        for (const doc of docs) {
+          try {
+            const result = await extractEntitiesFromMemory(doc.body, llmProvider);
+            for (const entity of result.entities) {
+              store.insertOrUpdateEntity({
+                name: entity.name,
+                type: entity.type,
+                description: entity.description,
+                projectHash,
+                firstLearnedAt: new Date().toISOString(),
+                lastConfirmedAt: new Date().toISOString(),
+              });
+            }
+            for (const rel of result.relationships) {
+              const src = store.getEntityByName(rel.sourceName, undefined, projectHash);
+              const tgt = store.getEntityByName(rel.targetName, undefined, projectHash);
+              if (src && tgt) {
+                store.insertEdge({ sourceId: src.id, targetId: tgt.id, edgeType: rel.edgeType, projectHash });
+              }
+            }
+            store.addConsolidationLog({
+              documentId: doc.id,
+              action: 'ENTITY_EXTRACTED',
+              reason: 'Extracted ' + result.entities.length + ' entities, ' + result.relationships.length + ' relationships',
+              model: 'llm',
+              tokensUsed: 0,
+            });
+            if (result.entities.length > 0) {
+              log('watcher', 'Entity extraction: doc ' + doc.id + ' → ' + result.entities.length + ' entities');
+            }
+          } catch (err) {
+            log('watcher', 'Entity extraction failed for doc ' + doc.id + ': ' + (err instanceof Error ? err.message : String(err)), 'warn');
+            store.addConsolidationLog({
+              documentId: doc.id,
+              action: 'ENTITY_EXTRACTED',
+              reason: 'failed: ' + (err instanceof Error ? err.message : String(err)),
+              model: 'llm',
+              tokensUsed: 0,
+            });
+          }
+        }
+      };
+
+      const scheduleEntityExtraction = () => {
+        if (stopped) return;
+        entityExtractionTimeout = setTimeout(async () => {
+          if (stopped) return;
+          try {
+            await runEntityExtractionCycle();
+          } catch (err) {
+            log('watcher', 'Entity extraction cycle failed: ' + (err instanceof Error ? err.message : String(err)), 'warn');
+          } finally {
+            scheduleEntityExtraction();
+          }
+        }, entityExtractionIntervalMs);
+      };
+      scheduleEntityExtraction();
+      // Run once shortly after startup to populate Knowledge Graph from existing memory docs
+      setTimeout(() => runEntityExtractionCycle().catch(() => {}), 30000);
+    }
+
     const importanceScorer = options.importanceScorer;
     if (importanceScorer) {
       const importanceInterval = options.importanceIntervalMs ?? 1800000;
@@ -850,6 +938,11 @@ export function startWatcher(options: WatcherOptions): Watcher {
       if (mergeTimeout) {
         clearTimeout(mergeTimeout);
         mergeTimeout = null;
+      }
+
+      if (entityExtractionTimeout) {
+        clearTimeout(entityExtractionTimeout);
+        entityExtractionTimeout = null;
       }
 
       if (watcher) {
