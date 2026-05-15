@@ -26,7 +26,8 @@ export function isFTSWorkerReady(): boolean {
 export function initFTSWorker(dbPath: string): Promise<void> {
   dbPathCached = dbPath;
   return new Promise((resolve, reject) => {
-    const workerPath = new URL('./fts-worker.ts', import.meta.url);
+    const isSource = new URL(import.meta.url).pathname.endsWith('.ts');
+    const workerPath = new URL(`./fts-worker.${isSource ? 'ts' : 'js'}`, import.meta.url);
 
     // tsx registers itself as the loader for the main process, but worker threads
     // need their own registration. Try multiple approaches for compatibility:
@@ -45,7 +46,7 @@ export function initFTSWorker(dbPath: string): Promise<void> {
 
     worker = new Worker(workerPath, {
       workerData: { dbPath },
-      execArgv: ['--import', tsxImportPath],
+      execArgv: isSource ? ['--import', tsxImportPath] : [],
     });
 
     const initTimeout = setTimeout(() => {
