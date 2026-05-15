@@ -298,6 +298,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       projectHash: currentProjectHash,
       vectorStore,
       harvesterConfig: config?.harvester,
+      llmProvider: config?.consolidation?.enabled ? createLLMProvider(config.consolidation as import('../types.js').ConsolidationConfig) ?? undefined : undefined,
     });
     watcher = watcherRef.value;
   };
