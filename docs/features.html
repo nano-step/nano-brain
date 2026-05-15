@@ -116,7 +116,7 @@
         <p class="eyebrow">Search</p>
         <h2 style="margin-bottom:12px">Hybrid search pipeline</h2>
         <p style="color:var(--text-muted);font-size:15px;line-height:1.7;margin-bottom:16px">
-          Every query passes through six ranked signals before returning results. The blend weights are not hardcoded — they are tuned continuously by Thompson Sampling bandits using retrieval telemetry.
+          Every query passes through up to 11 ranked stages before returning results. The blend weights are not hardcoded — they are tuned continuously by Thompson Sampling bandits using retrieval telemetry.
         </p>
         <p style="color:var(--text-muted);font-size:15px;line-height:1.7">
           BM25 handles exact-match and keyword recall via SQLite FTS5. Vector search handles semantic similarity via 768-dim embeddings in Qdrant. RRF fusion (k=60) blends both scores. PageRank adds a centrality boost from the file dependency graph. Supersede demotion deprioritizes stale documents. VoyageAI neural reranking (<code>rerank-2.5-lite</code>) makes the final pass.
@@ -132,7 +132,7 @@
           <div class="signal-item">
             <span class="signal-rank">2</span>
             <span class="signal-name">Vector similarity</span>
-            <span class="signal-desc">Qdrant · 768-dim cosine</span>
+            <span class="signal-desc">Qdrant · cosine</span>
           </div>
           <div class="signal-item" style="border-color:rgba(56,189,248,0.25);background:var(--accent-glow)">
             <span class="signal-rank">3</span>
@@ -141,18 +141,43 @@
           </div>
           <div class="signal-item">
             <span class="signal-rank">4</span>
-            <span class="signal-name">PageRank boost</span>
-            <span class="signal-desc">File dependency graph</span>
+            <span class="signal-name">Top rank bonus</span>
+            <span class="signal-desc">FTS top-3 boost</span>
           </div>
           <div class="signal-item">
             <span class="signal-rank">5</span>
+            <span class="signal-name">Centrality boost</span>
+            <span class="signal-desc">PageRank from dep graph</span>
+          </div>
+          <div class="signal-item">
+            <span class="signal-rank">6</span>
+            <span class="signal-name">Usage boost</span>
+            <span class="signal-desc">Retrieval frequency</span>
+          </div>
+          <div class="signal-item">
+            <span class="signal-rank">7</span>
+            <span class="signal-name">Category weight</span>
+            <span class="signal-desc">Preference learning</span>
+          </div>
+          <div class="signal-item">
+            <span class="signal-rank">8</span>
             <span class="signal-name">Supersede demotion</span>
             <span class="signal-desc">Stale doc filter</span>
           </div>
+          <div class="signal-item">
+            <span class="signal-rank">9</span>
+            <span class="signal-name">Length normalization</span>
+            <span class="signal-desc">Penalize short chunks</span>
+          </div>
+          <div class="signal-item">
+            <span class="signal-rank">10</span>
+            <span class="signal-name">Recency boost</span>
+            <span class="signal-desc">Favor recent sessions</span>
+          </div>
           <div class="signal-item" style="border-color:rgba(56,189,248,0.25);background:var(--accent-glow)">
-            <span class="signal-rank">6</span>
+            <span class="signal-rank">11</span>
             <span class="signal-name">Neural reranking</span>
-            <span class="signal-desc">VoyageAI rerank-2.5-lite</span>
+            <span class="signal-desc">Cohere / VoyageAI (optional)</span>
           </div>
         </div>
         <p style="font-size:12px;color:var(--text-subtle);margin-top:12px;font-family:var(--mono)">
@@ -181,7 +206,8 @@
           <div class="lang-tag">TypeScript</div>
           <div class="lang-tag">JavaScript</div>
           <div class="lang-tag">Python</div>
-          <div class="lang-tag" style="color:var(--text-muted);border-style:dashed">More planned</div>
+          <div class="lang-tag">Ruby</div>
+          <div class="lang-tag">Vue</div>
         </div>
       </div>
       <div>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>nano-brain — Persistent Memory & Code Intelligence for AI Agents</title>
-  <meta name="description" content="A persistent memory MCP server for AI coding agents. Hybrid search (BM25 + vector + RRF + PageRank), code intelligence, 22+ MCP tools.">
+  <meta name="description" content="A persistent memory MCP server for AI coding agents. Hybrid search (BM25 + vector + RRF), code intelligence, 30 MCP tools, TypeScript/JavaScript/Python/Ruby/Vue.">
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="assets/nano-step-logo.png">
   <style>
@@ -281,7 +281,7 @@
     <div class="hero-pills">
       <span class="badge badge-accent">MCP Server</span>
       <span class="badge badge-green">v2026.8.19 stable</span>
-      <span class="badge">22+ Tools</span>
+      <span class="badge">30 MCP Tools</span>
       <span class="badge">SQLite + Qdrant</span>
     </div>
 
@@ -329,20 +329,20 @@
 <div class="stats-bar">
   <div class="stats-inner">
     <div class="stat">
-      <div class="stat-value">22<span>+</span></div>
+      <div class="stat-value">30</div>
       <div class="stat-label">MCP Tools</div>
     </div>
     <div class="stat">
-      <div class="stat-value">6</div>
-      <div class="stat-label">Search ranking signals</div>
+      <div class="stat-value">10<span>+</span></div>
+      <div class="stat-label">Search pipeline stages</div>
     </div>
     <div class="stat">
-      <div class="stat-value">27</div>
+      <div class="stat-value">32</div>
       <div class="stat-label">CLI commands</div>
     </div>
     <div class="stat">
-      <div class="stat-value">9</div>
-      <div class="stat-label">Background jobs</div>
+      <div class="stat-value">5</div>
+      <div class="stat-label">Background workers</div>
     </div>
     <div class="stat">
       <div class="stat-value">3</div>
@@ -435,8 +435,8 @@
 <section class="section">
   <div class="container">
     <p class="eyebrow">Architecture</p>
-    <h2 style="margin-bottom:12px">6-stage search pipeline</h2>
-    <p class="lead" style="margin-bottom:32px">Every query passes through ranked signals before returning results.</p>
+    <h2 style="margin-bottom:12px">11-stage search pipeline</h2>
+    <p class="lead" style="margin-bottom:32px">Every query passes through up to 11 ranked stages before returning results.</p>
 
     <div class="pipeline">
       <div class="pipeline-steps">
@@ -501,27 +501,42 @@ nano-brain mcp --http --port 8282</pre>
 
       <div id="tab-opencode" class="tab-content">
         <pre style="border:none;border-radius:0;background:var(--surface)"><span class="c-comment"># ~/.config/opencode/opencode.json</span>
+<span class="c-comment"># Option A: Local (stdio)</span>
 {
   "mcp": {
     "nano-brain": {
-      "type": "stdio",
-      "command": "nano-brain",
-      "args": ["mcp"]
+      "type": "local",
+      "command": ["npx", "nano-brain", "mcp"],
+      "enabled": true
+    }
+  }
+}
+
+<span class="c-comment"># Option B: Docker/remote (recommended for teams)</span>
+{
+  "mcp": {
+    "nano-brain": {
+      "type": "remote",
+      "url": "http://localhost:3100/mcp",
+      "enabled": true
     }
   }
 }</pre>
       </div>
 
       <div id="tab-claude" class="tab-content">
-        <pre style="border:none;border-radius:0;background:var(--surface)"><span class="c-comment"># ~/.claude.json</span>
+        <pre style="border:none;border-radius:0;background:var(--surface)"><span class="c-comment"># .mcp.json (project root) — via SSE to running server</span>
 {
   "mcpServers": {
     "nano-brain": {
-      "command": "nano-brain",
-      "args": ["mcp"]
+      "command": "npx",
+      "args": ["mcp-remote", "http://localhost:3100/sse"]
     }
   }
-}</pre>
+}
+
+<span class="c-comment"># Or start Docker server first:</span>
+<span class="c-prompt">$</span> <span class="c-cmd">npx nano-brain docker start</span></pre>
       </div>
     </div>
   </div>
@@ -531,7 +546,7 @@ nano-brain mcp --http --port 8282</pre>
 <section class="section">
   <div class="container">
     <p class="eyebrow">MCP Tools</p>
-    <h2 style="margin-bottom:12px">22+ tools across 4 categories</h2>
+    <h2 style="margin-bottom:12px">30 tools across 4 categories</h2>
     <p class="lead" style="margin-bottom:8px">Every tool is accessible via stdio, HTTP, or SSE transport.</p>
 
     <div style="margin-top:32px">
@@ -565,12 +580,18 @@ nano-brain mcp --http --port 8282</pre>
       <h3 style="font-size:14px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px">Graph & Intelligence</h3>
       <div class="tools-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
         <div class="tool-item">memory_focus<div class="tool-item-cat">File dependency</div></div>
-        <div class="tool-item">memory_symbols<div class="tool-item-cat">Cross-repo symbols</div></div>
-        <div class="tool-item">memory_impact<div class="tool-item-cat">Cross-repo impact</div></div>
+        <div class="tool-item">memory_graph_stats<div class="tool-item-cat">Graph overview</div></div>
         <div class="tool-item">memory_graph_query<div class="tool-item-cat">BFS traversal</div></div>
+        <div class="tool-item">memory_connect<div class="tool-item-cat">Connect entities</div></div>
+        <div class="tool-item">memory_connections<div class="tool-item-cat">List connections</div></div>
         <div class="tool-item">memory_related<div class="tool-item-cat">Related via graph</div></div>
         <div class="tool-item">memory_timeline<div class="tool-item-cat">Temporal view</div></div>
+        <div class="tool-item">memory_traverse<div class="tool-item-cat">Graph traversal</div></div>
+        <div class="tool-item">memory_expand<div class="tool-item-cat">Expand context</div></div>
+        <div class="tool-item">memory_symbols<div class="tool-item-cat">Cross-repo symbols</div></div>
+        <div class="tool-item">memory_impact<div class="tool-item-cat">Cross-repo impact</div></div>
         <div class="tool-item">memory_importance<div class="tool-item-cat">Importance scores</div></div>
+        <div class="tool-item">memory_learning_status<div class="tool-item-cat">Learning stats</div></div>
         <div class="tool-item">memory_wake_up<div class="tool-item-cat">Session context</div></div>
       </div>
     </div>

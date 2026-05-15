@@ -158,7 +158,7 @@
         <div class="sidebar-section">
           <div class="sidebar-title">CLI Reference</div>
           <div class="sidebar-links">
-            <a href="#cli">All 27 commands</a>
+            <a href="#cli">All 32 commands</a>
           </div>
         </div>
       </aside>
@@ -198,26 +198,41 @@ nano-brain init</pre>
 
           <h3>OpenCode</h3>
           <pre><span style="color:#64748b"># ~/.config/opencode/opencode.json</span>
+<span style="color:#64748b"># Option A: Local (stdio)</span>
 {
   "mcp": {
     "nano-brain": {
-      "type": "stdio",
-      "command": "nano-brain",
-      "args": ["mcp"]
+      "type": "local",
+      "command": ["npx", "nano-brain", "mcp"],
+      "enabled": true
+    }
+  }
+}
+
+<span style="color:#64748b"># Option B: Docker remote (recommended)</span>
+{
+  "mcp": {
+    "nano-brain": {
+      "type": "remote",
+      "url": "http://localhost:3100/mcp",
+      "enabled": true
     }
   }
 }</pre>
 
           <h3>Claude Code</h3>
-          <pre><span style="color:#64748b"># ~/.claude.json</span>
+          <pre><span style="color:#64748b"># .mcp.json (project root)</span>
 {
   "mcpServers": {
     "nano-brain": {
-      "command": "nano-brain",
-      "args": ["mcp"]
+      "command": "npx",
+      "args": ["mcp-remote", "http://localhost:3100/sse"]
     }
   }
-}</pre>
+}
+
+<span style="color:#64748b"># Start server first:</span>
+npx nano-brain docker start</pre>
 
           <h3>HTTP / SSE (Docker or remote)</h3>
           <pre><span style="color:#64748b"># Start HTTP server</span>
@@ -338,11 +353,12 @@ docker run -d -p 6333:6333 qdrant/qdrant</pre>
         <div class="doc-section" id="tools-search">
           <h2>MCP Tools — Search & Retrieval</h2>
           <div class="cmd-list">
-            <div class="cmd-item"><code>memory_search</code><span>BM25 keyword search. Fast, exact matching via SQLite FTS5.</span></div>
+            <div class="cmd-item"><code>memory_search</code><span>BM25 keyword search via SQLite FTS5.</span></div>
             <div class="cmd-item"><code>memory_vsearch</code><span>Semantic vector search via Qdrant embeddings.</span></div>
-            <div class="cmd-item"><code>memory_query</code><span>Full hybrid search — BM25 + vector + RRF + PageRank + reranking.</span></div>
+            <div class="cmd-item"><code>memory_query</code><span>Full hybrid search — BM25 + vector + RRF + 11 ranking stages.</span></div>
             <div class="cmd-item"><code>memory_get</code><span>Retrieve a document by path or docid (e.g. <code>#abc123</code>).</span></div>
             <div class="cmd-item"><code>memory_multi_get</code><span>Batch retrieve documents by glob pattern.</span></div>
+            <div class="cmd-item"><code>memory_expand</code><span>Expand context around a retrieved document.</span></div>
           </div>
         </div>
 
@@ -379,20 +395,23 @@ docker run -d -p 6333:6333 qdrant/qdrant</pre>
           <div class="cmd-list">
             <div class="cmd-item"><code>memory_focus</code><span>File dependency context: imports, exports, centrality, cluster.</span></div>
             <div class="cmd-item"><code>memory_graph_stats</code><span>Dependency graph overview: files, symbols, edges, cycles.</span></div>
-            <div class="cmd-item"><code>memory_symbols</code><span>Cross-repo symbol query (Redis keys, MySQL tables, API endpoints).</span></div>
-            <div class="cmd-item"><code>memory_impact</code><span>Cross-repo impact analysis: writers vs. readers of a symbol.</span></div>
             <div class="cmd-item"><code>memory_graph_query</code><span>BFS traversal from an entity through the knowledge graph.</span></div>
+            <div class="cmd-item"><code>memory_connect</code><span>Connect two entities in the knowledge graph.</span></div>
+            <div class="cmd-item"><code>memory_connections</code><span>List all connections of an entity.</span></div>
             <div class="cmd-item"><code>memory_related</code><span>Find related memories via entity graph connections.</span></div>
             <div class="cmd-item"><code>memory_timeline</code><span>Temporal view of entity changes over time.</span></div>
-            <div class="cmd-item"><code>memory_expand</code><span>Expand context around a retrieved document.</span></div>
             <div class="cmd-item"><code>memory_traverse</code><span>Graph traversal with depth and filter controls.</span></div>
+            <div class="cmd-item"><code>memory_symbols</code><span>Cross-repo symbol query (Redis keys, MySQL tables, API endpoints).</span></div>
+            <div class="cmd-item"><code>memory_impact</code><span>Cross-repo impact analysis: writers vs. readers of a symbol.</span></div>
+            <div class="cmd-item"><code>memory_importance</code><span>View document importance scores.</span></div>
+            <div class="cmd-item"><code>memory_learning_status</code><span>View learning system status (telemetry, bandit variants).</span></div>
           </div>
         </div>
 
         <!-- CLI -->
         <div class="doc-section" id="cli">
-          <h2>CLI — 27 commands</h2>
-          <p>All commands accept <code>--db=&lt;path&gt;</code> and <code>--config=&lt;path&gt;</code> global flags.</p>
+          <h2>CLI — 32 commands</h2>
+          <p>All commands accept <code>--db=&lt;path&gt;</code> and <code>--config=&lt;path&gt;</code> global flags. Run <code>nano-brain --help</code> for full usage.</p>
 
           <h3>Server</h3>
           <div class="cmd-list">
