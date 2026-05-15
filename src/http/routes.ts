@@ -474,6 +474,12 @@ export async function handleRequest(
     return;
   }
 
+  if (req.url === '/favicon.ico') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   if (req.url?.startsWith('/api/v1/') || req.url?.startsWith('/web/') || req.url === '/web') {
     const origin = req.headers.origin;
     if (!origin || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {

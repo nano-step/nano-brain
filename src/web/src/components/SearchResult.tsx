@@ -6,6 +6,24 @@ type SearchResultProps = {
   onToggle: () => void;
 };
 
+function HighlightedSnippet({ text, className }: { text: string; className?: string }) {
+  const parts = text.split(/(<mark>.*?<\/mark>)/g);
+  return (
+    <span className={className}>
+      {parts.map((part, i) => {
+        if (part.startsWith('<mark>') && part.endsWith('</mark>')) {
+          return (
+            <mark key={i} className="rounded bg-sky-500/20 px-0.5 text-sky-300 not-italic">
+              {part.slice(6, -7)}
+            </mark>
+          );
+        }
+        return part;
+      })}
+    </span>
+  );
+}
+
 export default function SearchResult({ result, expanded, onToggle }: SearchResultProps) {
   const scoreWidth = Math.min(100, Math.max(5, result.score * 100));
 
@@ -27,7 +45,7 @@ export default function SearchResult({ result, expanded, onToggle }: SearchResul
           </div>
         </div>
       </div>
-      <p className="mt-3 text-sm text-[#c2c2d6]">{result.snippet}</p>
+      <p className="mt-3 text-sm text-[#c2c2d6]"><HighlightedSnippet text={result.snippet} /></p>
       <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#8888a0]">
         <span className="rounded-full border border-[#2a2a38] px-2 py-1">{result.collection}</span>
         <span className="rounded-full border border-[#2a2a38] px-2 py-1">doc: {result.docid}</span>
@@ -35,7 +53,7 @@ export default function SearchResult({ result, expanded, onToggle }: SearchResul
       {expanded && (
         <div className="mt-4 border-t border-[#1f1f2c] pt-3 text-sm text-[#e4e4ed]">
           <p className="text-xs uppercase text-[#8888a0]">Expanded</p>
-          <p className="mt-2 text-sm text-[#c2c2d6]">{result.snippet}</p>
+          <HighlightedSnippet text={result.snippet} className="mt-2 text-sm text-[#c2c2d6]" />
           <div className="mt-3 text-xs text-[#8888a0]">Doc ID: {result.docid}</div>
         </div>
       )}

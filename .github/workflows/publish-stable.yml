@@ -22,6 +22,9 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
+      - name: Build web UI
+        run: npm run build:web
+
       - name: Read version
         id: version
         run: |
