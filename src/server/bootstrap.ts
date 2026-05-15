@@ -28,6 +28,16 @@ import { sseSessions } from '../http/sse.js';
 import type { WatcherConfig } from '../types.js';
 import { ThompsonSampler, DEFAULT_BANDIT_CONFIGS } from '../bandits.js';
 
+export function resolveConfiguredWorkspace(root: string, configuredWorkspaces: string[]): { resolved: string; fallback: boolean } {
+  if (configuredWorkspaces.length === 0) return { resolved: root, fallback: false };
+  if (configuredWorkspaces.includes(root)) return { resolved: root, fallback: false };
+  const prefixMatch = configuredWorkspaces
+    .filter(ws => root.startsWith(ws + path.sep) || root.startsWith(ws + '/'))
+    .sort((a, b) => b.length - a.length)[0];
+  if (prefixMatch) return { resolved: prefixMatch, fallback: true };
+  return { resolved: configuredWorkspaces[0], fallback: true };
+}
+
 export function createRejectionThreshold(limit: number, windowMs: number): { handler: (err: unknown) => void; getCount: () => number; setOnExit: (fn: () => void) => void } {
   let count = 0;
   let onExit: (() => void) | null = null;
@@ -81,13 +91,23 @@ export async function startServer(options: ServerOptions): Promise<void> {
   initLogger(config ?? undefined);
   const collections = config ? getCollections(config) : [];
   const storageConfig = parseStorageConfig(config?.storage);
+  const configuredWorkspaces = Object.keys(config?.workspaces ?? {});
   let resolvedWorkspaceRoot: string;
-  if (daemon && config?.workspaces && Object.keys(config.workspaces).length > 0) {
-    const configuredWorkspaces = Object.keys(config.workspaces);
-    resolvedWorkspaceRoot = configuredWorkspaces[0];
-    log('server', `Daemon mode: primary workspace = ${resolvedWorkspaceRoot}`);
+  if (daemon && configuredWorkspaces.length > 0) {
+    const { resolved, fallback } = resolveConfiguredWorkspace(root || process.cwd(), configuredWorkspaces);
+    resolvedWorkspaceRoot = resolved;
+    if (fallback) {
+      log('server', `Daemon mode: cwd did not match any configured workspace — using ${resolvedWorkspaceRoot}`, 'warn');
+    } else {
+      log('server', `Daemon mode: primary workspace = ${resolvedWorkspaceRoot}`);
+    }
   } else {
-    resolvedWorkspaceRoot = root || process.cwd();
+    const requested = root || process.cwd();
+    const { resolved, fallback } = resolveConfiguredWorkspace(requested, configuredWorkspaces);
+    resolvedWorkspaceRoot = resolved;
+    if (fallback) {
+      log('server', `Workspace ${requested} is not in config.workspaces — falling back to ${resolved}`, 'warn');
+    }
   }
   const wsConfig = getWorkspaceConfig(config, resolvedWorkspaceRoot);
   const resolvedCodebaseConfig = wsConfig.codebase;

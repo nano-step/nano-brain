@@ -63,7 +63,7 @@ export async function main() {
   log('cli', 'command=' + command);
 
   const isDaemonMode = command === 'mcp' && commandArgs.includes('--daemon');
-  if (command !== 'init' && command !== 'docker' && !isDaemonMode) {
+  if (command !== 'init' && command !== 'docker' && command !== 'mcp' && !isDaemonMode) {
     globalOpts.dbPath = resolveDbPath(globalOpts.dbPath, process.cwd());
   }
 
