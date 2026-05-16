@@ -44,6 +44,7 @@ export function getCollections(config: CollectionConfig): Collection[] {
       path: collectionData.path,
       pattern: collectionData.pattern || '**/*.md',
       context: collectionData.context,
+      excludeFolders: collectionData.excludeFolders,
     });
   }
   
@@ -195,8 +196,9 @@ export async function scanCollectionFiles(collection: Collection): Promise<strin
   }
   
   const gitignorePatterns = loadGitignorePatterns(expandedPath);
-  const ignore = [...BUILTIN_EXCLUDE_PATTERNS, ...gitignorePatterns];
-  
+  const folderExcludes = (collection.excludeFolders ?? []).map(f => `**/${f}/**`);
+  const ignore = [...BUILTIN_EXCLUDE_PATTERNS, ...gitignorePatterns, ...folderExcludes];
+
   const files = await fg(collection.pattern, {
     cwd: expandedPath,
     absolute: true,

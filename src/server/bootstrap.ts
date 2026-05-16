@@ -1,5 +1,6 @@
 import * as os from 'os';
 import * as path from 'path';
+import * as fs from 'fs';
 import * as crypto from 'crypto';
 import * as http from 'http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -109,6 +110,13 @@ export async function startServer(options: ServerOptions): Promise<void> {
       log('server', `Workspace ${requested} is not in config.workspaces — falling back to ${resolved}`, 'warn');
     }
   }
+
+  // Warn when the resolved workspace isn't explicitly configured — the DB is created but
+  // the file watcher won't watch this path unless it's in config.yml workspaces.
+  if (!configuredWorkspaces.includes(resolvedWorkspaceRoot)) {
+    log('server', `Workspace not in config — DB will be created but not indexed by file watcher. Add it to config.yml workspaces: to persist.`, 'warn');
+  }
+
   const wsConfig = getWorkspaceConfig(config, resolvedWorkspaceRoot);
   const resolvedCodebaseConfig = wsConfig.codebase;
   const currentProjectHash = crypto.createHash('sha256').update(resolvedWorkspaceRoot).digest('hex').substring(0, 12);
@@ -298,6 +306,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       projectHash: currentProjectHash,
       vectorStore,
       harvesterConfig: config?.harvester,
+      llmProvider: config?.consolidation?.enabled ? createLLMProvider(config.consolidation as import('../types.js').ConsolidationConfig) ?? undefined : undefined,
     });
     watcher = watcherRef.value;
   };
@@ -325,7 +334,11 @@ export async function startServer(options: ServerOptions): Promise<void> {
 
     if (watcherRef.value) watcherRef.value.stop();
     await shutdownFTSWorker();
-    try { symbolGraphDb.pragma('wal_checkpoint(PASSIVE)'); } catch { /* ignore checkpoint errors */ }
+    // RESTART checkpoint: blocks until all readers finish, then resets the WAL write
+    // position so the next open starts with a clean WAL. PASSIVE is insufficient —
+    // it returns immediately if any reader holds a lock, leaving WAL frames unflushed
+    // and causing SQLite to detect "corruption" on next startup after a SIGKILL.
+    try { symbolGraphDb.pragma('wal_checkpoint(RESTART)'); } catch { /* ignore checkpoint errors */ }
     symbolGraphDb.close();
     closeAllCachedStores();
     process.exit(0);

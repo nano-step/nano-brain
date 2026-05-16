@@ -14,6 +14,21 @@ collections:
     pattern: "**/*.md"
     update: auto
 
+# Obsidian vault integration — WikiLinks become memory_connections,
+# notes are searchable and entity-extracted like memory docs.
+# nano-brain auto-detects Obsidian vaults by collection name containing
+# "obsidian" OR by the presence of a .obsidian/ directory in the path.
+#
+# obsidian-main:
+#   path: ~/Documents/MyVault
+#   pattern: "**/*.md"
+#   update: auto
+#   excludeFolders:          # skip these folders during indexing
+#     - ".trash"
+#     - "templates"
+#     - "attachments"
+#     - "excalidraw"
+
 vector:
   provider: qdrant
   url: http://qdrant:6333

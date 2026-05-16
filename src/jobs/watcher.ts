@@ -1,4 +1,5 @@
 import { watch, type FSWatcher } from 'chokidar';
+import { parse as parseYaml } from 'yaml';
 import type { Store, Collection, StorageConfig, CodebaseConfig, PruningConfig, MergeConfig } from '../types.js'
 import type { VectorStore } from '../providers/vector-store.js'
 import { scanCollectionFiles } from '../collections.js';
@@ -16,7 +17,90 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 
-const yieldToEventLoop = () => new Promise<void>(resolve => setImmediate(resolve));
+const yieldToEventLoop = () => new Promise<void>(resolve => setImmediate(resolve))
+
+// ── Obsidian helpers ──────────────────────────────────────────────────────────
+
+export function parseWikiLinks(content: string): string[] {
+  const seen = new Set<string>();
+  const re = /\[\[([^\]|#\n]+?)(?:[|#][^\]]*?)?\]\]/g;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    const target = m[1].trim();
+    if (target) seen.add(target);
+  }
+  return Array.from(seen);
+}
+
+export function parseFrontmatter(content: string): Record<string, string | string[]> {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return {};
+  try {
+    const parsed = parseYaml(match[1]);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const result: Record<string, string | string[]> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        result[k] = v.map(String);
+      } else if (v !== null && v !== undefined) {
+        result[k] = String(v);
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+async function processObsidianWikiLinks(store: Store, collectionName: string, projectHash: string): Promise<void> {
+  const db = store.getDb();
+
+  // Step 1: fetch only metadata (no body) to build the title lookup — avoids OOM
+  // on large vaults where loading all bodies at once can exhaust heap.
+  const metaDocs = db.prepare(
+    `SELECT id, path, title FROM documents WHERE collection = ? AND active = 1`
+  ).all(collectionName) as Array<{id: number; path: string; title: string}>;
+
+  if (metaDocs.length === 0) return;
+
+  const titleMap = new Map<string, number>();
+  for (const doc of metaDocs) {
+    const base = path.basename(doc.path, path.extname(doc.path)).toLowerCase();
+    titleMap.set(base, doc.id);
+    if (doc.title) titleMap.set(doc.title.toLowerCase(), doc.id);
+  }
+
+  // Step 2: stream bodies one row at a time via .iterate() — no full-result array in memory.
+  const bodyStmt = db.prepare(
+    `SELECT d.id, d.path, c.body FROM documents d
+     JOIN content c ON d.hash = c.hash
+     WHERE d.collection = ? AND d.active = 1`
+  );
+
+  let created = 0;
+  for (const doc of bodyStmt.iterate(collectionName) as IterableIterator<{id: number; path: string; body: string}>) {
+    const links = parseWikiLinks(doc.body);
+    for (const link of links) {
+      const targetId = titleMap.get(link.toLowerCase());
+      if (!targetId || targetId === doc.id) continue;
+      try {
+        store.insertConnection({
+          fromDocId: doc.id,
+          toDocId: targetId,
+          relationshipType: 'related',
+          description: `WikiLink: [[${link}]]`,
+          strength: 1.0,
+          createdBy: 'extraction',
+          projectHash,
+        });
+        created++;
+      } catch { /* ignore duplicate conflicts */ }
+    }
+  }
+  if (created > 0) {
+    log('watcher', `Obsidian: created ${created} WikiLink connection(s) in ${collectionName}`);
+  }
+};
 
 export interface WatcherOptions {
   store: Store
@@ -58,6 +142,10 @@ export interface WatcherOptions {
   harvesterConfig?: HarvesterConfig
   /** Entity/fact extraction config passed to harvest cycle */
   extractionConfig?: import('../types.js').ExtractionConfig
+  /** LLM provider for scheduled entity extraction from memory documents */
+  llmProvider?: import('./consolidation.js').LLMProvider
+  /** How often to run entity extraction on unprocessed memory docs (ms, default 1800000) */
+  entityExtractionIntervalMs?: number
 }
 
 export interface Watcher {
@@ -180,6 +268,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
   let pruningSoftDeleteTimeout: NodeJS.Timeout | null = null;
   let pruningHardDeleteTimeout: NodeJS.Timeout | null = null;
   let mergeTimeout: NodeJS.Timeout | null = null;
+  let entityExtractionTimeout: NodeJS.Timeout | null = null;
 
   const handleFileChange = (filePath: string) => {
     if (stopped) return
@@ -237,7 +326,18 @@ export function startWatcher(options: WatcherOptions): Watcher {
               const effectiveProjectHash = collection.name === 'sessions'
                 ? extractProjectHashFromPath(filePath, outputDir) ?? projectHash
                 : projectHash;
-              indexDocument(store, collection.name, filePath, content, title, effectiveProjectHash)
+              const result = indexDocument(store, collection.name, filePath, content, title, effectiveProjectHash)
+              // Store frontmatter tags for newly indexed or updated documents
+              if (!result.skipped) {
+                const fm = parseFrontmatter(content);
+                const rawTags = Array.isArray(fm.tags) ? fm.tags : fm.tags ? [fm.tags as string] : [];
+                if (rawTags.length > 0) {
+                  const doc = store.findDocument(filePath);
+                  if (doc) {
+                    try { store.insertTags(doc.id, rawTags); } catch { /* non-fatal */ }
+                  }
+                }
+              }
             }
 
             activePaths.push(filePath)
@@ -250,6 +350,18 @@ export function startWatcher(options: WatcherOptions): Watcher {
           await yieldToEventLoop();
         } catch (err) {
           log('watcher', `Collection scan failed for ${collection.name}: ${err}`)
+        }
+      }
+
+      // Process WikiLinks for obsidian collections (identified by name or .obsidian dir)
+      for (const collection of collections) {
+        const isObsidian = collection.name.toLowerCase().includes('obsidian')
+          || await fs.promises.access(path.join(collection.path.replace(/^~/, os.homedir()), '.obsidian')).then(() => true).catch(() => false);
+        if (!isObsidian) continue;
+        try {
+          await processObsidianWikiLinks(store, collection.name, projectHash);
+        } catch (err) {
+          log('watcher', `Obsidian WikiLink processing failed for ${collection.name}: ${err}`);
         }
       }
 
@@ -403,6 +515,13 @@ export function startWatcher(options: WatcherOptions): Watcher {
         handleFileChange(filePath)
       }
     })
+    // Trigger startup reindex once chokidar finishes its initial scan.
+    // This indexes pre-existing files that ignoreInitial:true silently skips.
+    watcher.once('ready', () => {
+      triggerReindex(true).catch(err => {
+        log('watcher', `Startup collection reindex failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+      });
+    });
   }
 
   const setupPolling = () => {
@@ -657,6 +776,97 @@ export function startWatcher(options: WatcherOptions): Watcher {
       scheduleConsolidation();
     }
 
+    const llmProvider = options.llmProvider;
+    if (llmProvider) {
+      const entityExtractionIntervalMs = options.entityExtractionIntervalMs ?? 1800000;
+      const runEntityExtractionCycle = async () => {
+        const db = store.getDb();
+        const docs = db.prepare(`
+          SELECT d.id, d.title, d.hash, c.body
+          FROM documents d
+          JOIN content c ON d.hash = c.hash
+          WHERE (d.collection = 'memory' OR d.collection LIKE '%obsidian%')
+            AND d.active = 1
+            AND d.id NOT IN (
+              SELECT document_id FROM consolidation_log WHERE action = 'ENTITY_EXTRACTED'
+            )
+          ORDER BY d.modified_at DESC
+          LIMIT 10
+        `).all() as Array<{id: number; title: string; hash: string; body: string}>;
+
+        if (docs.length === 0) return;
+        log('watcher', 'Entity extraction: processing ' + docs.length + ' memory documents');
+
+        const { extractEntitiesFromMemory } = await import('../entity-extraction.js');
+        for (const doc of docs) {
+          try {
+            const result = await extractEntitiesFromMemory(doc.body, llmProvider);
+            for (const entity of result.entities) {
+              store.insertOrUpdateEntity({
+                name: entity.name,
+                type: entity.type,
+                description: entity.description,
+                projectHash,
+                firstLearnedAt: new Date().toISOString(),
+                lastConfirmedAt: new Date().toISOString(),
+              });
+            }
+            for (const rel of result.relationships) {
+              const src = store.getEntityByName(rel.sourceName, undefined, projectHash);
+              const tgt = store.getEntityByName(rel.targetName, undefined, projectHash);
+              if (src && tgt) {
+                store.insertEdge({ sourceId: src.id, targetId: tgt.id, edgeType: rel.edgeType, projectHash });
+              }
+            }
+            store.addConsolidationLog({
+              documentId: doc.id,
+              action: 'ENTITY_EXTRACTED',
+              reason: 'Extracted ' + result.entities.length + ' entities, ' + result.relationships.length + ' relationships',
+              model: 'llm',
+              tokensUsed: 0,
+            });
+            if (result.entities.length > 0) {
+              log('watcher', 'Entity extraction: doc ' + doc.id + ' → ' + result.entities.length + ' entities');
+            }
+          } catch (err) {
+            log('watcher', 'Entity extraction failed for doc ' + doc.id + ': ' + (err instanceof Error ? err.message : String(err)), 'warn');
+            store.addConsolidationLog({
+              documentId: doc.id,
+              action: 'ENTITY_EXTRACTED',
+              reason: 'failed: ' + (err instanceof Error ? err.message : String(err)),
+              model: 'llm',
+              tokensUsed: 0,
+            });
+          }
+        }
+      };
+
+      const scheduleEntityExtraction = (delay = entityExtractionIntervalMs) => {
+        if (stopped) return;
+        entityExtractionTimeout = setTimeout(async () => {
+          if (stopped) return;
+          try {
+            const db = store.getDb();
+            const pending = (db.prepare(`
+              SELECT COUNT(*) as n FROM documents d
+              JOIN content c ON d.hash = c.hash
+              WHERE (d.collection = 'memory' OR d.collection LIKE '%obsidian%') AND d.active = 1
+                AND d.id NOT IN (SELECT document_id FROM consolidation_log WHERE action = 'ENTITY_EXTRACTED')
+            `).get() as { n: number }).n;
+            await runEntityExtractionCycle();
+            // If more docs remain, run again after a short delay instead of waiting full interval
+            scheduleEntityExtraction(pending > 10 ? 5000 : entityExtractionIntervalMs);
+          } catch (err) {
+            log('watcher', 'Entity extraction cycle failed: ' + (err instanceof Error ? err.message : String(err)), 'warn');
+            scheduleEntityExtraction();
+          }
+        }, delay);
+      };
+      // Start first cycle 30s after startup (backfills existing docs immediately),
+      // then fast-drains remaining batches if >10 pending, else runs every 30min.
+      scheduleEntityExtraction(30000);
+    }
+
     const importanceScorer = options.importanceScorer;
     if (importanceScorer) {
       const importanceInterval = options.importanceIntervalMs ?? 1800000;
@@ -850,6 +1060,11 @@ export function startWatcher(options: WatcherOptions): Watcher {
       if (mergeTimeout) {
         clearTimeout(mergeTimeout);
         mergeTimeout = null;
+      }
+
+      if (entityExtractionTimeout) {
+        clearTimeout(entityExtractionTimeout);
+        entityExtractionTimeout = null;
       }
 
       if (watcher) {
