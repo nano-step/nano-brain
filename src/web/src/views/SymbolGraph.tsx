@@ -20,7 +20,7 @@ export default function SymbolGraph() {
     queryFn: () => fetchSymbols(workspace),
   });
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [clusterMode, setClusterMode] = useState(true);
+  const [clusterMode, setClusterMode] = useState(false);
 
   const autoCluster = (data?.symbols.length ?? 0) > 500;
   const useCluster = clusterMode && autoCluster;

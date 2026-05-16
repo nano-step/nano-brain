@@ -176,19 +176,36 @@ export function buildSymbolGraph(
   const edges: Edge[] = [];
 
   if (clusterMode && data.clusters.length > 0) {
+    // Derive a human-readable label for each cluster from the most common file basename
+    const clusterFileCount = new Map<number, Map<string, number>>();
+    for (const sym of data.symbols) {
+      if (sym.clusterId == null || !sym.filePath) continue;
+      const base = sym.filePath.split('/').pop() ?? sym.filePath;
+      const m = clusterFileCount.get(sym.clusterId) ?? new Map<string, number>();
+      m.set(base, (m.get(base) ?? 0) + 1);
+      clusterFileCount.set(sym.clusterId, m);
+    }
+    const clusterLabel = (id: number, memberCount: number) => {
+      const m = clusterFileCount.get(id);
+      if (!m) return `Group ${id} (${memberCount})`;
+      const topFile = [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+      return `${topFile} group (${memberCount})`;
+    };
+
     for (const cluster of data.clusters) {
       nodes.push({
         id: `cluster-${cluster.clusterId}`,
         type: 'symbol',
         position: { x: 0, y: 0 },
         data: {
-          label: `Cluster ${cluster.clusterId} (${cluster.memberCount})`,
+          label: clusterLabel(cluster.clusterId, cluster.memberCount),
           entityType: 'cluster',
           color: fallbackColors[cluster.clusterId % fallbackColors.length],
         },
       });
     }
 
+    // Symbols without a cluster show as individual nodes
     for (const sym of data.symbols) {
       if (sym.clusterId === null) {
         nodes.push({
@@ -206,15 +223,37 @@ export function buildSymbolGraph(
       }
     }
 
-    const clusterEdges = new Map<string, number>();
     const symbolById = new Map(data.symbols.map((sym) => [sym.id, sym]));
+    const clusterEdges = new Map<string, number>();
+    const seenSymEdges = new Set<string>();
+
     for (const edge of data.edges) {
       const src = symbolById.get(edge.sourceId);
       const tgt = symbolById.get(edge.targetId);
-      if (!src || !tgt || src.clusterId == null || tgt.clusterId == null) continue;
-      if (src.clusterId === tgt.clusterId) continue;
-      const key = `cluster-${src.clusterId}||cluster-${tgt.clusterId}`;
-      clusterEdges.set(key, (clusterEdges.get(key) || 0) + 1);
+      if (!src || !tgt) continue;
+
+      const srcNode = src.clusterId != null ? `cluster-${src.clusterId}` : String(src.id);
+      const tgtNode = tgt.clusterId != null ? `cluster-${tgt.clusterId}` : String(tgt.id);
+      if (srcNode === tgtNode) continue; // skip intra-cluster / self
+
+      if (src.clusterId != null || tgt.clusterId != null) {
+        // At least one side is clustered → aggregate as cluster edge
+        const key = `${srcNode}||${tgtNode}`;
+        clusterEdges.set(key, (clusterEdges.get(key) || 0) + 1);
+      } else {
+        // Both unclustered → draw individual symbol edge
+        const key = `${srcNode}->${tgtNode}`;
+        if (seenSymEdges.has(key)) continue;
+        seenSymEdges.add(key);
+        edges.push({
+          id: `e-${edge.id}`,
+          source: srcNode,
+          target: tgtNode,
+          label: edge.edgeType,
+          animated: false,
+          style: { stroke: edgeTypeColorMap[edge.edgeType] || 'rgba(148,163,184,0.3)', strokeWidth: 1, opacity: 0.5 },
+        });
+      }
     }
     for (const [key, count] of clusterEdges) {
       const [srcNode, tgtNode] = key.split('||');
