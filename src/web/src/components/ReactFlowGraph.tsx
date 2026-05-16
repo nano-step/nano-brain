@@ -63,7 +63,10 @@ function ReactFlowGraphInner({ nodes: inputNodes, edges: inputEdges, onNodeClick
   useEffect(() => {
     if (!selectedNodeId) {
       setEdges((eds) => eds.map((e) => ({
-        ...e, animated: false, style: { ...e.style, opacity: 0.6, strokeWidth: 2 },
+        ...e, animated: false,
+        label: e.data?.edgeType ?? e.label,
+        style: { ...e.style, opacity: 0.6, strokeWidth: 2 },
+        labelStyle: { opacity: 1 },
       })));
       return;
     }
@@ -79,8 +82,8 @@ function ReactFlowGraphInner({ nodes: inputNodes, edges: inputEdges, onNodeClick
     setEdges((eds) => eds.map((e) => {
       const connected = e.source === selectedNodeId || e.target === selectedNodeId;
       return connected
-        ? { ...e, animated: true, style: { ...e.style, opacity: 0.9, strokeWidth: 3 } }
-        : { ...e, animated: false, style: { ...e.style, opacity: 0.04, strokeWidth: 1 } };
+        ? { ...e, animated: true, label: e.data?.edgeType ?? e.label, style: { ...e.style, opacity: 0.9, strokeWidth: 3 }, labelStyle: { opacity: 1 } }
+        : { ...e, animated: false, label: '', style: { ...e.style, opacity: 0.04, strokeWidth: 1 }, labelStyle: { opacity: 0 } };
     }));
   }, [selectedNodeId, buildNeighbors, setNodes, setEdges]);
 
