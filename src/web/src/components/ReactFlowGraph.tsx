@@ -76,10 +76,22 @@ const ReactFlowGraphInner = memo(function ReactFlowGraphInner({ nodes: inputNode
     const neighbors = buildNeighbors(selectedNodeId);
 
     // Node dimming is handled via data.dimmed in each node component — no opacity on style
-    setNodes((nds) => nds.map((n) => ({
-      ...n,
-      data: { ...n.data, dimmed: !neighbors.has(n.id), focused: n.id === selectedNodeId },
-    })));
+    setNodes((nds) => {
+      const updated = nds.map((n) => ({
+        ...n,
+        data: { ...n.data, dimmed: !neighbors.has(n.id), focused: n.id === selectedNodeId },
+      }));
+      // Zoom to fit selected + neighbors after state updates settle
+      requestAnimationFrame(() => {
+        fitView({
+          nodes: updated.filter(n => neighbors.has(n.id)),
+          padding: 0.4,
+          duration: 400,
+          maxZoom: 2,
+        });
+      });
+      return updated;
+    });
 
     setEdges((eds) => eds.map((e) => {
       const connected = e.source === selectedNodeId || e.target === selectedNodeId;
@@ -87,7 +99,7 @@ const ReactFlowGraphInner = memo(function ReactFlowGraphInner({ nodes: inputNode
         ? { ...e, animated: true, label: ((e.data as any)?.edgeType as string | undefined) ?? e.label, style: { ...e.style, opacity: 0.9, strokeWidth: 3 }, labelStyle: { opacity: 1 } }
         : { ...e, animated: false, label: '', style: { ...e.style, opacity: 0.04, strokeWidth: 1 }, labelStyle: { opacity: 0 } };
     }));
-  }, [selectedNodeId, buildNeighbors, setNodes, setEdges]);
+  }, [selectedNodeId, buildNeighbors, setNodes, setEdges, fitView]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
