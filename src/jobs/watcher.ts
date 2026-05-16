@@ -1,4 +1,5 @@
 import { watch, type FSWatcher } from 'chokidar';
+import { parse as parseYaml } from 'yaml';
 import type { Store, Collection, StorageConfig, CodebaseConfig, PruningConfig, MergeConfig } from '../types.js'
 import type { VectorStore } from '../providers/vector-store.js'
 import { scanCollectionFiles } from '../collections.js';
@@ -34,41 +35,50 @@ export function parseWikiLinks(content: string): string[] {
 export function parseFrontmatter(content: string): Record<string, string | string[]> {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return {};
-  const result: Record<string, string | string[]> = {};
-  for (const line of match[1].split(/\r?\n/)) {
-    const idx = line.indexOf(':');
-    if (idx === -1) continue;
-    const key = line.slice(0, idx).trim();
-    const raw = line.slice(idx + 1).trim();
-    if (raw.startsWith('[') && raw.endsWith(']')) {
-      result[key] = raw.slice(1, -1).split(',').map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
-    } else {
-      result[key] = raw.replace(/^['"]|['"]$/g, '');
+  try {
+    const parsed = parseYaml(match[1]);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const result: Record<string, string | string[]> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        result[k] = v.map(String);
+      } else if (v !== null && v !== undefined) {
+        result[k] = String(v);
+      }
     }
+    return result;
+  } catch {
+    return {};
   }
-  return result;
 }
 
 async function processObsidianWikiLinks(store: Store, collectionName: string, projectHash: string): Promise<void> {
   const db = store.getDb();
-  const docs = db.prepare(
-    `SELECT d.id, d.path, d.title, c.body FROM documents d
-     JOIN content c ON d.hash = c.hash
-     WHERE d.collection = ? AND d.active = 1`
-  ).all(collectionName) as Array<{id: number; path: string; title: string; body: string}>;
 
-  if (docs.length === 0) return;
+  // Step 1: fetch only metadata (no body) to build the title lookup — avoids OOM
+  // on large vaults where loading all bodies at once can exhaust heap.
+  const metaDocs = db.prepare(
+    `SELECT id, path, title FROM documents WHERE collection = ? AND active = 1`
+  ).all(collectionName) as Array<{id: number; path: string; title: string}>;
 
-  // Build lookup: basename-without-ext → doc id
+  if (metaDocs.length === 0) return;
+
   const titleMap = new Map<string, number>();
-  for (const doc of docs) {
+  for (const doc of metaDocs) {
     const base = path.basename(doc.path, path.extname(doc.path)).toLowerCase();
     titleMap.set(base, doc.id);
     if (doc.title) titleMap.set(doc.title.toLowerCase(), doc.id);
   }
 
+  // Step 2: stream bodies one row at a time via .iterate() — no full-result array in memory.
+  const bodyStmt = db.prepare(
+    `SELECT d.id, d.path, c.body FROM documents d
+     JOIN content c ON d.hash = c.hash
+     WHERE d.collection = ? AND d.active = 1`
+  );
+
   let created = 0;
-  for (const doc of docs) {
+  for (const doc of bodyStmt.iterate(collectionName) as IterableIterator<{id: number; path: string; body: string}>) {
     const links = parseWikiLinks(doc.body);
     for (const link of links) {
       const targetId = titleMap.get(link.toLowerCase());
@@ -335,7 +345,7 @@ export function startWatcher(options: WatcherOptions): Watcher {
       // Process WikiLinks for obsidian collections (identified by name or .obsidian dir)
       for (const collection of collections) {
         const isObsidian = collection.name.toLowerCase().includes('obsidian')
-          || fs.existsSync(path.join(collection.path.replace(/^~/, os.homedir()), '.obsidian'));
+          || await fs.promises.access(path.join(collection.path.replace(/^~/, os.homedir()), '.obsidian')).then(() => true).catch(() => false);
         if (!isObsidian) continue;
         try {
           await processObsidianWikiLinks(store, collection.name, projectHash);
@@ -494,6 +504,13 @@ export function startWatcher(options: WatcherOptions): Watcher {
         handleFileChange(filePath)
       }
     })
+    // Trigger startup reindex once chokidar finishes its initial scan.
+    // This indexes pre-existing files that ignoreInitial:true silently skips.
+    watcher.once('ready', () => {
+      triggerReindex(true).catch(err => {
+        log('watcher', `Startup collection reindex failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
+      });
+    });
   }
 
   const setupPolling = () => {
@@ -947,13 +964,6 @@ export function startWatcher(options: WatcherOptions): Watcher {
 
   setupWatcher();
   setupPolling();
-  // Force a full collection reindex on startup so pre-existing files (invisible to
-  // chokidar due to ignoreInitial:true) are indexed into the DB immediately.
-  setTimeout(() => {
-    triggerReindex(true).catch(err => {
-      log('watcher', `Startup collection reindex failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
-    });
-  }, 5000);
   startupIntegrityCheck().catch(err => {
     log('watcher', `Startup integrity check failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
   });
