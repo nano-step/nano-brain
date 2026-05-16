@@ -17,7 +17,7 @@ export type SymbolNodeData = {
 const SymbolNode = memo(function SymbolNode({ data }: { data: SymbolNodeData }) {
   if (data.dimmed) {
     return (
-      <div style={{ width: 8, height: 8, borderRadius: '50%', background: data.color, opacity: 0.2 }}>
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: data.color, opacity: 0.2, pointerEvents: 'none' }}>
         <Handle type="target" position={Position.Top} style={HANDLE_STYLE} />
         <Handle type="source" position={Position.Bottom} style={HANDLE_STYLE} />
       </div>

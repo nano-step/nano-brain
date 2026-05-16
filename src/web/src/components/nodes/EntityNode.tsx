@@ -24,7 +24,7 @@ const EntityNode = memo(function EntityNode({ data }: { data: EntityNodeData }) 
   // Collapsed dot for unrelated nodes — no label, no space taken by text
   if (data.dimmed) {
     return (
-      <div style={{ width: 10, height: 10, borderRadius: '50%', background: tc.border, opacity: 0.2 }}>
+      <div style={{ width: 10, height: 10, borderRadius: '50%', background: tc.border, opacity: 0.2, pointerEvents: 'none' }}>
         <Handle type="target" position={Position.Top} style={HANDLE_STYLE} />
         <Handle type="source" position={Position.Bottom} style={HANDLE_STYLE} />
       </div>
