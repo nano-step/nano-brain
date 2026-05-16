@@ -748,9 +748,9 @@ export function startWatcher(options: WatcherOptions): Watcher {
           }
         }, delay);
       };
-      scheduleEntityExtraction();
-      // Run once shortly after startup to populate Knowledge Graph from existing memory docs
-      setTimeout(() => runEntityExtractionCycle().catch(() => {}), 30000);
+      // Start first cycle 30s after startup (backfills existing docs immediately),
+      // then fast-drains remaining batches if >10 pending, else runs every 30min.
+      scheduleEntityExtraction(30000);
     }
 
     const importanceScorer = options.importanceScorer;
