@@ -69,10 +69,11 @@ export async function handleDbClean(globalOpts: GlobalOptions, commandArgs: stri
   log('cli', 'db:clean command invoked');
 
   const dryRun = commandArgs.includes('--dry-run');
+  const listOnly = commandArgs.includes('--list-only');
   const confirm = commandArgs.includes('--confirm');
 
-  if (!dryRun && !confirm) {
-    cliError('⚠️  Run with --dry-run to preview, or --confirm to delete orphaned databases.');
+  if (!dryRun && !listOnly && !confirm) {
+    cliError('⚠️  Run with --list-only to inspect, --dry-run to preview deletion, or --confirm to delete.');
     process.exit(1);
   }
 
@@ -127,6 +128,10 @@ export async function handleDbClean(globalOpts: GlobalOptions, commandArgs: stri
 
   cliOutput(`Total reclaimable: ${formatBytes(totalSize)}`);
   cliOutput('');
+
+  if (listOnly) {
+    return;
+  }
 
   if (dryRun) {
     cliOutput('Dry run — nothing deleted. Run with --confirm to delete.');

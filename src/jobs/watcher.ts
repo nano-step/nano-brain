@@ -326,7 +326,18 @@ export function startWatcher(options: WatcherOptions): Watcher {
               const effectiveProjectHash = collection.name === 'sessions'
                 ? extractProjectHashFromPath(filePath, outputDir) ?? projectHash
                 : projectHash;
-              indexDocument(store, collection.name, filePath, content, title, effectiveProjectHash)
+              const result = indexDocument(store, collection.name, filePath, content, title, effectiveProjectHash)
+              // Store frontmatter tags for newly indexed or updated documents
+              if (!result.skipped) {
+                const fm = parseFrontmatter(content);
+                const rawTags = Array.isArray(fm.tags) ? fm.tags : fm.tags ? [fm.tags as string] : [];
+                if (rawTags.length > 0) {
+                  const doc = store.findDocument(filePath);
+                  if (doc) {
+                    try { store.insertTags(doc.id, rawTags); } catch { /* non-fatal */ }
+                  }
+                }
+              }
             }
 
             activePaths.push(filePath)

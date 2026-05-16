@@ -64,6 +64,7 @@ export interface Collection {
   path: string;
   pattern: string;
   context?: Record<string, string>;
+  excludeFolders?: string[];
 }
 
 export interface CollectionConfig {
@@ -73,6 +74,7 @@ export interface CollectionConfig {
     pattern?: string
     context?: Record<string, string>
     update?: string
+    excludeFolders?: string[]
   }>
   storage?: {
     maxSize?: string
