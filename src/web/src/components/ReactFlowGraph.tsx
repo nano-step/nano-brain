@@ -36,28 +36,41 @@ function ReactFlowGraphInner({ nodes: inputNodes, edges: inputEdges, onNodeClick
     setEdges(inputEdges);
   }, [inputEdges, setEdges]);
 
-  // Edge highlighting on node selection
+  // Focus mode: dim nodes and edges not connected to selected node
   useEffect(() => {
     if (!selectedNodeId) {
-      setEdges((eds) =>
-        eds.map((e) => ({
-          ...e,
-          animated: false,
-          style: { ...e.style, opacity: 0.6, strokeWidth: 2 },
-        }))
-      );
+      setNodes((nds) => nds.map((n) => ({ ...n, style: { ...n.style, opacity: 1 } })));
+      setEdges((eds) => eds.map((e) => ({ ...e, animated: false, style: { ...e.style, opacity: 0.6, strokeWidth: 2 } })));
       return;
     }
+
+    // Build 1-hop neighbor set
+    const neighbors = new Set<string>([selectedNodeId]);
+    for (const e of inputEdges) {
+      if (e.source === selectedNodeId) neighbors.add(e.target);
+      if (e.target === selectedNodeId) neighbors.add(e.source);
+    }
+
+    setNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        style: {
+          ...n.style,
+          opacity: neighbors.has(n.id) ? 1 : 0.08,
+          transition: 'opacity 0.15s ease',
+        },
+      }))
+    );
+
     setEdges((eds) =>
       eds.map((e) => {
         const connected = e.source === selectedNodeId || e.target === selectedNodeId;
-        if (connected) {
-          return { ...e, animated: true, style: { ...e.style, opacity: 0.9, strokeWidth: 3 } };
-        }
-        return { ...e, animated: false, style: { ...e.style, opacity: 0.15, strokeWidth: 1 } };
+        return connected
+          ? { ...e, animated: true, style: { ...e.style, opacity: 0.9, strokeWidth: 3 } }
+          : { ...e, animated: false, style: { ...e.style, opacity: 0.04, strokeWidth: 1 } };
       })
     );
-  }, [selectedNodeId, setEdges]);
+  }, [selectedNodeId, inputEdges, setNodes, setEdges]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {

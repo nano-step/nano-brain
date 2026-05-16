@@ -18,10 +18,12 @@ function computeForceLayout(
   const w = opts.width ?? 1400;
   const h = opts.height ?? 900;
   const n = nodes.length;
-  const linkDist = opts.linkDistance ?? (n > 100 ? 220 : n > 50 ? 180 : n > 20 ? 160 : 140);
-  const charge = opts.chargeStrength ?? (n > 100 ? -500 : n > 50 ? -400 : n > 20 ? -320 : -260);
+  const linkDist = opts.linkDistance ?? (n > 100 ? 260 : n > 50 ? 220 : n > 20 ? 190 : 160);
+  const charge = opts.chargeStrength ?? (n > 100 ? -700 : n > 50 ? -550 : n > 20 ? -420 : -320);
   const centerPull = n > 100 ? 0.02 : n > 50 ? 0.03 : 0.04;
-  const collideBase = n > 100 ? 70 : n > 50 ? 65 : n > 20 ? 60 : 55;
+  // Collision radius must be large enough to cover node circle + label text.
+  // Strength=1.0 enforces hard exclusion — no two nodes can overlap at rest.
+  const collideBase = n > 100 ? 110 : n > 50 ? 100 : n > 20 ? 90 : 80;
 
   const simNodes: SimNode[] = nodes.map((nd) => ({
     id: nd.id,
@@ -36,11 +38,14 @@ function computeForceLayout(
     .force('center', forceCenter(w / 2, h / 2))
     .force('x', forceX(w / 2).strength(centerPull))
     .force('y', forceY(h / 2).strength(centerPull))
-    .force('collide', forceCollide().radius(collideBase).strength(0.7))
+    .force('collide', forceCollide().radius(collideBase).strength(1.0).iterations(4))
     .stop();
 
-  const ticks = Math.ceil(Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()));
-  for (let i = 0; i < ticks; i++) simulation.tick();
+  // Run enough ticks to reach equilibrium; add extra passes for dense graphs
+  // where collision resolution needs more iterations to stabilise.
+  const baseTicks = Math.ceil(Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()));
+  const extraTicks = n > 100 ? 60 : n > 50 ? 40 : 20;
+  for (let i = 0; i < baseTicks + extraTicks; i++) simulation.tick();
 
   return nodes.map((nd, i) => ({
     ...nd,
