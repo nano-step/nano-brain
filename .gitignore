@@ -12,3 +12,5 @@ src/web/node_modules/
 .npmrc.npmrc2
 .npmrc
 .npmrc2
+_bmad/config.user.yaml
+/skills/
