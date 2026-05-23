@@ -18,8 +18,13 @@ func registerRoutes(s *Server) {
 	api.POST("/init", handlers.InitWorkspace(s.queries, s.db, s.logger))
 	api.GET("/workspaces", handlers.ListWorkspaces(s.queries, s.logger))
 
+	var enqueuer handlers.ChunkEnqueuer
+	if s.embedQueue != nil {
+		enqueuer = s.embedQueue
+	}
+
 	data := api.Group("", workspaceMiddleware())
-	data.POST("/write", handlers.WriteDocument(s.queries, s.db, s.embedQueue, s.logger, defaultMaxFileSize))
+	data.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize))
 	data.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
 
 	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.logger))
