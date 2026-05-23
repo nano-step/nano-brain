@@ -59,6 +59,15 @@ func main() {
 		case "db:migrate":
 			runDBMigrateCmd(args[1:])
 			return
+		case "logs":
+			runLogsCmd(args[1:])
+			return
+		case "docker":
+			runDockerCmd(args[1:])
+			return
+		case "status":
+			runStatusCmd(args[1:])
+			return
 		}
 	}
 

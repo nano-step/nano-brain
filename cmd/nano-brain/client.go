@@ -5,33 +5,34 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-func getBaseURL() string {
+func resolveHostPort() (string, int) {
 	host := os.Getenv("NANO_BRAIN_HOST")
 	if host == "" {
 		host = "localhost"
 	}
-	port := os.Getenv("NANO_BRAIN_PORT")
-	if port == "" {
-		port = "3100"
+	port := 3100
+	if p := os.Getenv("NANO_BRAIN_PORT"); p != "" {
+		if v, err := strconv.Atoi(p); err == nil && v > 0 && v <= 65535 {
+			port = v
+		}
 	}
-	return fmt.Sprintf("http://%s:%s", host, port)
+	return host, port
+}
+
+func getBaseURL() string {
+	host, port := resolveHostPort()
+	return fmt.Sprintf("http://%s:%d", host, port)
 }
 
 func doRequest(method, url string, body io.Reader) ([]byte, int, error) {
-	host := os.Getenv("NANO_BRAIN_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-	port := os.Getenv("NANO_BRAIN_PORT")
-	if port == "" {
-		port = "3100"
-	}
+	host, port := resolveHostPort()
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -45,7 +46,7 @@ func doRequest(method, url string, body io.Reader) ([]byte, int, error) {
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") ||
 			strings.Contains(err.Error(), "dial tcp") {
-			return nil, 0, fmt.Errorf("cannot connect to nano-brain server at %s:%s", host, port)
+			return nil, 0, fmt.Errorf("cannot connect to nano-brain server at %s:%d", host, port)
 		}
 		return nil, 0, fmt.Errorf("request failed: %w", err)
 	}

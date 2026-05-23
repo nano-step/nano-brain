@@ -17,6 +17,7 @@ import (
 func runDBMigrateCmd(args []string) {
 	var fromV1 string
 	var workspace string
+	var jsonFlag bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -34,6 +35,8 @@ func runDBMigrateCmd(args []string) {
 			}
 			i++
 			workspace = args[i]
+		case "--json":
+			jsonFlag = true
 		default:
 			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
 			os.Exit(1)
@@ -41,8 +44,8 @@ func runDBMigrateCmd(args []string) {
 	}
 
 	if fromV1 == "" {
-		fmt.Fprintln(os.Stderr, "Usage: nano-brain db:migrate --from-v1 <sqlite-path> [--workspace <hash>]")
-		os.Exit(1)
+		runGooseMigrateCmd(jsonFlag)
+		return
 	}
 
 	if workspace == "" {
