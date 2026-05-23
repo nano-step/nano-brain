@@ -14,6 +14,8 @@ type mockWriter struct {
 	mu   sync.Mutex
 	docs []UpsertParams
 	fail map[string]bool
+	// Track content hashes seen across all calls for idempotency validation
+	hashes []string
 }
 
 func (w *mockWriter) UpsertDocument(_ context.Context, p UpsertParams) error {
@@ -23,6 +25,7 @@ func (w *mockWriter) UpsertDocument(_ context.Context, p UpsertParams) error {
 		return fmt.Errorf("injected error for %s", p.SourcePath)
 	}
 	w.docs = append(w.docs, p)
+	w.hashes = append(w.hashes, p.ContentHash)
 	return nil
 }
 
@@ -268,5 +271,122 @@ func TestMigrate_CancelledContext(t *testing.T) {
 	}
 	if len(w.docs) != 0 {
 		t.Fatalf("writer should have 0 docs, got %d", len(w.docs))
+	}
+}
+
+func TestMigrate_Idempotent(t *testing.T) {
+	db := createV1DB(t)
+	defer db.Close()
+
+	insertDoc(t, db, "a.md", "Doc A", "content-a", "", "notes")
+	insertDoc(t, db, "b.md", "Doc B", "content-b", `["tag1"]`, "")
+	insertDoc(t, db, "c.md", "Doc C", "content-c", "", "")
+
+	w := &mockWriter{}
+	m := migratorFromDB(t, db, w)
+
+	res1, err := m.Migrate(context.Background(), "ws123", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res1.Migrated != 3 {
+		t.Fatalf("first run migrated: got %d, want 3", res1.Migrated)
+	}
+
+	hashes1 := append([]string{}, w.hashes...)
+	if len(hashes1) != 3 {
+		t.Fatalf("first run hashes: got %d, want 3", len(hashes1))
+	}
+
+	w.hashes = nil
+	w.docs = nil
+
+	res2, err := m.Migrate(context.Background(), "ws123", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.Migrated != 3 {
+		t.Fatalf("second run migrated: got %d, want 3", res2.Migrated)
+	}
+
+	hashes2 := w.hashes
+	if len(hashes2) != 3 {
+		t.Fatalf("second run hashes: got %d, want 3", len(hashes2))
+	}
+
+	if len(hashes1) != len(hashes2) {
+		t.Fatalf("hash count mismatch: first=%d, second=%d", len(hashes1), len(hashes2))
+	}
+
+	for i := range hashes1 {
+		if hashes1[i] != hashes2[i] {
+			t.Errorf("hash[%d] differs: first=%q, second=%q", i, hashes1[i], hashes2[i])
+		}
+	}
+}
+
+func TestMigrate_PartialRerun(t *testing.T) {
+	db := createV1DB(t)
+	defer db.Close()
+
+	insertDoc(t, db, "a.md", "Doc A", "content-a", "", "")
+	insertDoc(t, db, "fail.md", "Fail", "content-fail", "", "")
+	insertDoc(t, db, "c.md", "Doc C", "content-c", "", "")
+
+	w := &mockWriter{fail: map[string]bool{"fail.md": true}}
+	m := migratorFromDB(t, db, w)
+
+	res1, err := m.Migrate(context.Background(), "ws123", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res1.Migrated != 2 {
+		t.Fatalf("first run migrated: got %d, want 2", res1.Migrated)
+	}
+	if res1.Failed != 1 {
+		t.Fatalf("first run failed: got %d, want 1", res1.Failed)
+	}
+
+	hashes1 := append([]string{}, w.hashes...)
+	if len(hashes1) != 2 {
+		t.Fatalf("first run hashes (successful): got %d, want 2", len(hashes1))
+	}
+
+	failHash := contentHash("content-fail")
+	hashSet1 := make(map[string]bool)
+	for _, h := range hashes1 {
+		hashSet1[h] = true
+	}
+
+	w.hashes = nil
+	w.docs = nil
+	w.fail = map[string]bool{}
+
+	res2, err := m.Migrate(context.Background(), "ws123", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.Migrated != 3 {
+		t.Fatalf("second run migrated: got %d, want 3", res2.Migrated)
+	}
+
+	hashes2 := w.hashes
+	if len(hashes2) != 3 {
+		t.Fatalf("second run hashes (all successful): got %d, want 3", len(hashes2))
+	}
+
+	hashSet2 := make(map[string]bool)
+	for _, h := range hashes2 {
+		hashSet2[h] = true
+	}
+
+	if !hashSet2[failHash] {
+		t.Errorf("second run should include fail content hash: got %v", hashes2)
+	}
+
+	for h := range hashSet1 {
+		if !hashSet2[h] {
+			t.Errorf("hash from first run missing in second run: %q", h)
+		}
 	}
 }
