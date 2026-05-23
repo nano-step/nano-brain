@@ -21,6 +21,8 @@ func registerRoutes(s *Server) {
 	data.GET("/collections", handlers.ListCollectionsHandler(s.queries, s.logger))
 	data.PUT("/collections/:name", handlers.RenameCollectionHandler(s.queries, s.watcher, s.logger))
 	data.DELETE("/collections/:name", handlers.RemoveCollection(s.queries, s.watcher, s.logger))
+
+	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger))
 }
 
 const defaultMaxFileSize int64 = 307200
