@@ -38,6 +38,9 @@ type Server struct {
 	mcpServer      *mcpsdk.Server
 	harvestMu      sync.RWMutex
 	harvestRunner  handlers.HarvestRunner
+	configMu       sync.RWMutex
+	fullCfg        *config.Config
+	configPath     string
 	logger         zerolog.Logger
 	cfg            config.ServerConfig
 	embedCfg       config.EmbeddingConfig
@@ -48,14 +51,14 @@ type Server struct {
 	startTime      time.Time
 }
 
-func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg config.SearchConfig, harvesterCfg config.HarvesterConfig, intervalsCfg config.IntervalsConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
+func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
 
 	var ss *search.SearchService
 	if queries != nil {
-		ss = search.NewSearchService(queries, embedder, searchCfg, logger)
+		ss = search.NewSearchService(queries, embedder, fullCfg.Search, logger)
 	}
 
 	mcpServer := internalmcp.NewMCPServer(version)
@@ -64,7 +67,7 @@ func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg con
 	if eq != nil {
 		eqInfo = eq
 	}
-	mcpAdapter := internalmcp.NewAdapter(queries, db, embedder, ss, eqInfo, embedCfg, searchCfg, pool, logger)
+	mcpAdapter := internalmcp.NewAdapter(queries, db, embedder, ss, eqInfo, fullCfg.Embedding, fullCfg.Search, pool, logger)
 	internalmcp.RegisterTools(mcpServer, mcpAdapter)
 
 	s := &Server{
@@ -77,12 +80,14 @@ func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg con
 		embedder:       embedder,
 		searchService:  ss,
 		mcpServer:      mcpServer,
+		fullCfg:        fullCfg,
+		configPath:     configPath,
 		logger:         logger,
-		cfg:            cfg,
-		embedCfg:       embedCfg,
-		searchCfg:      searchCfg,
-		harvesterCfg:   harvesterCfg,
-		intervalsCfg:   intervalsCfg,
+		cfg:            fullCfg.Server,
+		embedCfg:       fullCfg.Embedding,
+		searchCfg:      fullCfg.Search,
+		harvesterCfg:   fullCfg.Harvester,
+		intervalsCfg:   fullCfg.Intervals,
 		version:        version,
 		startTime:      time.Now(),
 	}
@@ -125,4 +130,31 @@ func (s *Server) getHarvestRunner() handlers.HarvestRunner {
 	s.harvestMu.RLock()
 	defer s.harvestMu.RUnlock()
 	return s.harvestRunner
+}
+
+func (s *Server) currentConfig() *config.Config {
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+	cp := *s.fullCfg
+	return &cp
+}
+
+func (s *Server) applyReloadedConfig(newCfg *config.Config, result *config.ReloadResult) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
+	s.fullCfg = newCfg
+	s.searchCfg = newCfg.Search
+	s.embedCfg = newCfg.Embedding
+	s.intervalsCfg = newCfg.Intervals
+	s.harvesterCfg = newCfg.Harvester
+
+	if s.searchService != nil {
+		s.searchService.UpdateConfig(newCfg.Search)
+	}
+
+	level, err := zerolog.ParseLevel(newCfg.Logging.Level)
+	if err == nil {
+		zerolog.SetGlobalLevel(level)
+	}
 }

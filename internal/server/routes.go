@@ -46,6 +46,7 @@ func registerRoutes(s *Server) {
 	data.POST("/wake-up", wakeUp)
 
 	s.echo.POST("/api/harvest", handlers.TriggerHarvest(s.getHarvestRunner))
+	s.echo.POST("/api/reload-config", handlers.ReloadConfig(s.configPath, s.currentConfig, s.applyReloadedConfig, s.logger))
 
 	sseHandler := mcp.NewSSEHandler(s.mcpServer)
 	streamableHandler := mcp.NewStreamableHTTPHandler(s.mcpServer)
