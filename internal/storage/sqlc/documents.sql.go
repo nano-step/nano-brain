@@ -176,7 +176,7 @@ ON CONFLICT (content_hash, workspace_hash) DO UPDATE SET
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
-    supersedes_id = EXCLUDED.supersedes_id,
+    supersedes_id = COALESCE(EXCLUDED.supersedes_id, documents.supersedes_id),
     updated_at = now()
 RETURNING id, content_hash, collection, workspace_hash
 `
@@ -232,7 +232,7 @@ ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
-    supersedes_id = EXCLUDED.supersedes_id,
+    supersedes_id = COALESCE(EXCLUDED.supersedes_id, documents.supersedes_id),
     updated_at = now()
 RETURNING id, content_hash, collection, workspace_hash
 `

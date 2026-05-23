@@ -448,17 +448,14 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 					s = 1
 				}
 				e := endLine
-				if e < 1 || e > total {
-					e = total
-				}
-				if s > total {
-					s = total
-				}
-				if s > e {
-					content = ""
-				} else {
-					content = strings.Join(lines[s-1:e], "\n")
-				}
+			if e < 1 || e > total {
+				e = total
+			}
+			if s > total || s > e {
+				content = ""
+			} else {
+				content = strings.Join(lines[s-1:e], "\n")
+			}
 			}
 
 			supersedes := ""
