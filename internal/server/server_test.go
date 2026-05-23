@@ -25,7 +25,7 @@ func (m *mockPool) Ping(_ context.Context) error {
 func newTestServer(pool *mockPool) *server.Server {
 	cfg := config.ServerConfig{Host: "127.0.0.1", Port: 3100}
 	logger := zerolog.Nop()
-	return server.New(cfg, pool, nil, nil, nil, nil, nil, logger, "test-v1")
+	return server.New(cfg, config.EmbeddingConfig{}, pool, nil, nil, nil, nil, nil, logger, "test-v1")
 }
 
 func TestHealthEndpointHealthyDB(t *testing.T) {
@@ -98,7 +98,7 @@ func TestStatusEndpointShape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	requiredFields := []string{"pg_status", "migration_version", "embedding_queue_depth", "active_provider", "workspace_count"}
+	requiredFields := []string{"pg_status", "migration_version", "embedding_queue_depth", "active_provider", "workspace_count", "queue_depth", "queue_capacity", "queue_status", "queue_pending"}
 	for _, field := range requiredFields {
 		if _, ok := body[field]; !ok {
 			t.Errorf("missing required field: %s", field)
@@ -155,7 +155,7 @@ func TestRouteRegistration(t *testing.T) {
 		paths[r.Path] = true
 	}
 
-	for _, path := range []string{"/health", "/api/status", "/api/v1/init", "/api/v1/workspaces", "/api/v1/collections", "/api/v1/collections/:name"} {
+	for _, path := range []string{"/health", "/api/status", "/api/v1/init", "/api/v1/workspaces", "/api/v1/embed", "/api/v1/collections", "/api/v1/collections/:name"} {
 		if !paths[path] {
 			t.Errorf("route %s not registered", path)
 		}

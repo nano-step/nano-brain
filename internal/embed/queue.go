@@ -90,6 +90,27 @@ func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
 	}
 }
 
+// Depth returns the current channel length.
+func (q *Queue) Depth() int { return len(q.ch) }
+
+// Capacity returns the channel capacity.
+func (q *Queue) Capacity() int { return channelCapacity }
+
+// Status is advisory; reads are not atomic across fields.
+func (q *Queue) Status() string {
+	if q.pending.Load() >= rejectionThreshold {
+		return "rejecting"
+	}
+	depth := len(q.ch)
+	if depth == 0 {
+		return "nominal"
+	}
+	if float64(depth) >= float64(channelCapacity)*0.6 {
+		return "backpressure"
+	}
+	return "busy"
+}
+
 // IsPressured returns true when the total pending backlog reaches the rejection threshold.
 func (q *Queue) IsPressured() bool {
 	return q.pending.Load() >= rejectionThreshold

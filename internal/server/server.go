@@ -21,7 +21,6 @@ type PoolChecker interface {
 	Ping(ctx context.Context) error
 }
 
-// Server wraps Echo and holds dependencies.
 type Server struct {
 	echo       *echo.Echo
 	pool       PoolChecker
@@ -32,12 +31,12 @@ type Server struct {
 	embedder   embed.Embedder
 	logger     zerolog.Logger
 	cfg        config.ServerConfig
+	embedCfg   config.EmbeddingConfig
 	version    string
 	startTime  time.Time
 }
 
-// New creates a new Server with all routes and middleware registered.
-func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
+func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -52,6 +51,7 @@ func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Qu
 		embedder:   embedder,
 		logger:     logger,
 		cfg:        cfg,
+		embedCfg:   embedCfg,
 		version:    version,
 		startTime:  time.Now(),
 	}
