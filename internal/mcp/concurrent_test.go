@@ -122,9 +122,7 @@ func setupMockedTestClient(t *testing.T) (*mcpsdk.ClientSession, context.Context
 	return session, ctx
 }
 
-// TestConcurrentToolRegistration_RaceFree verifies that registering all 9
-// tools and listing them is race-free under the race detector.
-func TestConcurrentToolRegistration_RaceFree(t *testing.T) {
+func TestToolRegistration_ListToolsUnderRaceDetector(t *testing.T) {
 	server := internalmcp.NewMCPServer("test")
 	adapter := internalmcp.NewAdapter(nil, nil, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
