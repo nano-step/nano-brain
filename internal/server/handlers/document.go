@@ -165,7 +165,7 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger
 
 		if enqueuer != nil {
 			if enqueuer.IsPressured() {
-				c.Response().Header().Set("Retry-After", "5")
+				c.Response().Header().Set("Retry-After", "30")
 				return c.JSON(http.StatusServiceUnavailable, WriteResponse{
 					ID:            row.ID.String(),
 					Hash:          row.ContentHash,

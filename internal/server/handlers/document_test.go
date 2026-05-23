@@ -345,3 +345,47 @@ func TestWriteDocument_EnqueuesChunks(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteDocument_Backpressure503(t *testing.T) {
+	q := &mockDocumentQuerier{
+		upsertDocumentFn: func(_ context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error) {
+			return sqlc.UpsertDocumentRow{
+				ID:            uuid.New(),
+				ContentHash:   arg.ContentHash,
+				Collection:    arg.Collection,
+				WorkspaceHash: arg.WorkspaceHash,
+			}, nil
+		},
+	}
+
+	enq := &mockEnqueuer{pressured: true}
+
+	e := echo.New()
+	body := `{"content":"hello world","workspace":"ws1"}`
+	c, rec := newWriteContext(e, body, "ws1")
+
+	h := handlers.WriteDocument(q, nil, enq, zerolog.Nop(), testMaxFileSize)
+	if err := h(c); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	retryAfter := rec.Header().Get("Retry-After")
+	if retryAfter != "30" {
+		t.Errorf("expected Retry-After=30, got %q", retryAfter)
+	}
+
+	var resp handlers.WriteResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Warning == "" {
+		t.Error("expected non-empty warning in response")
+	}
+	if resp.ID == "" {
+		t.Error("expected document to still be saved (non-empty ID)")
+	}
+}

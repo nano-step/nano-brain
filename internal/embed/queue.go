@@ -33,8 +33,6 @@ type QueueQuerier interface {
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
-	CountPendingChunks(ctx context.Context, workspaceHash string) (int64, error)
-	ListWorkspaces(ctx context.Context) ([]sqlc.Workspace, error)
 }
 
 type Queue struct {
@@ -47,9 +45,10 @@ type Queue struct {
 	concurrency int
 	backoff     backoffState
 	mu          sync.Mutex
-	pending     atomic.Int64
-	retries     map[uuid.UUID]int
-	retriesMu   sync.Mutex
+	pending        atomic.Int64
+	retries        map[uuid.UUID]int
+	retriesMu      sync.Mutex
+	lastCapacityLog time.Time
 }
 
 type backoffState struct {
@@ -130,7 +129,6 @@ func (q *Queue) Run(ctx context.Context) error {
 }
 
 func (q *Queue) scanPending(ctx context.Context) {
-	q.initPendingCounter(ctx)
 	total := 0
 	for {
 		ids, err := q.queries.GetAllPendingChunks(ctx, scanBatchSize)
@@ -152,27 +150,9 @@ func (q *Queue) scanPending(ctx context.Context) {
 	q.logger.Info().Int("total", total).Msg("scan complete")
 }
 
-func (q *Queue) initPendingCounter(ctx context.Context) {
-	workspaces, err := q.queries.ListWorkspaces(ctx)
-	if err != nil {
-		q.logger.Error().Err(err).Msg("failed to list workspaces for pending count init")
-		return
-	}
-	var totalPending int64
-	for _, ws := range workspaces {
-		count, err := q.queries.CountPendingChunks(ctx, ws.Hash)
-		if err != nil {
-			q.logger.Error().Err(err).Str("workspace", ws.Hash).Msg("failed to count pending chunks")
-			continue
-		}
-		totalPending += count
-	}
-	q.pending.Store(totalPending)
-	q.logger.Info().Int64("pending_total", totalPending).Msg("initialized pending counter")
-}
-
 func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 	if ctx.Err() != nil {
+		q.pending.Add(-1)
 		return
 	}
 
@@ -185,6 +165,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		delay += jitter
 		select {
 		case <-ctx.Done():
+			q.pending.Add(-1)
 			return
 		case <-time.After(delay):
 		}
@@ -193,6 +174,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 	chunk, err := q.queries.GetChunkByID(ctx, chunkID)
 	if err != nil {
 		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("failed to fetch chunk")
+		q.pending.Add(-1)
 		return
 	}
 
@@ -215,6 +197,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 	})
 	if err != nil {
 		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("insert embedding failed")
+		q.pending.Add(-1)
 		return
 	}
 
@@ -223,6 +206,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		WorkspaceHash: chunk.WorkspaceHash,
 	}); err != nil {
 		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("mark embedded failed")
+		q.pending.Add(-1)
 		return
 	}
 
@@ -275,6 +259,7 @@ func (q *Queue) handleRetry(ctx context.Context, chunkID uuid.UUID, workspaceHas
 	case q.ch <- chunkID:
 		q.logger.Debug().Str("chunk_id", chunkID.String()).Int("retry", count).Msg("chunk re-enqueued for retry")
 	default:
+		q.pending.Add(-1)
 		q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("retry re-enqueue failed, will be picked up on scan")
 	}
 }
@@ -289,10 +274,24 @@ func (q *Queue) checkCapacity() {
 	depth := len(q.ch)
 	threshold90 := int(float64(channelCapacity) * 0.9)
 	threshold60 := int(float64(channelCapacity) * 0.6)
+
+	if depth < threshold60 {
+		return
+	}
+
+	now := time.Now()
+	q.mu.Lock()
+	if now.Sub(q.lastCapacityLog) < time.Minute {
+		q.mu.Unlock()
+		return
+	}
+	q.lastCapacityLog = now
+	q.mu.Unlock()
+
 	if depth >= threshold90 {
 		q.logger.Error().Int("queue_depth", depth).Int64("pending_total", q.pending.Load()).
 			Msg("queue at 90% capacity")
-	} else if depth >= threshold60 {
+	} else {
 		q.logger.Warn().Int("queue_depth", depth).Int64("pending_total", q.pending.Load()).
 			Msg("queue at 60% capacity")
 	}
