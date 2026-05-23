@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -35,6 +36,7 @@ type Server struct {
 	embedder       embed.Embedder
 	searchService  *search.SearchService
 	mcpServer      *mcpsdk.Server
+	harvestMu      sync.RWMutex
 	harvestRunner  handlers.HarvestRunner
 	logger         zerolog.Logger
 	cfg            config.ServerConfig
@@ -114,5 +116,13 @@ func (s *Server) Echo() *echo.Echo {
 }
 
 func (s *Server) SetHarvestRunner(r handlers.HarvestRunner) {
+	s.harvestMu.Lock()
 	s.harvestRunner = r
+	s.harvestMu.Unlock()
+}
+
+func (s *Server) getHarvestRunner() handlers.HarvestRunner {
+	s.harvestMu.RLock()
+	defer s.harvestMu.RUnlock()
+	return s.harvestRunner
 }

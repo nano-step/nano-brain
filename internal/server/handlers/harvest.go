@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"github.com/rs/zerolog"
 )
 
 type HarvestRunner interface {
@@ -18,13 +17,14 @@ type HarvestResponse struct {
 	Errors    int `json:"errors"`
 }
 
-func TriggerHarvest(runnerPtr *HarvestRunner, logger zerolog.Logger) echo.HandlerFunc {
+func TriggerHarvest(getRunner func() HarvestRunner) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		if runnerPtr == nil || *runnerPtr == nil {
+		runner := getRunner()
+		if runner == nil {
 			return echo.NewHTTPError(http.StatusServiceUnavailable, "no harvesters configured")
 		}
 
-		harvested, skipped, errCount := (*runnerPtr).RunOnce(c.Request().Context())
+		harvested, skipped, errCount := runner.RunOnce(c.Request().Context())
 
 		return c.JSON(http.StatusOK, HarvestResponse{
 			Harvested: harvested,
