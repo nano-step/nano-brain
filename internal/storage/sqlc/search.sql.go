@@ -86,6 +86,148 @@ func (q *Queries) BM25Search(ctx context.Context, arg BM25SearchParams) ([]BM25S
 	return items, nil
 }
 
+const bM25SearchAll = `-- name: BM25SearchAll :many
+SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(ts_rank_cd(c.search_vector, websearch_to_tsquery('english', $1::text)) AS double precision) AS score
+FROM chunks c
+JOIN documents d ON c.document_id = d.id
+WHERE c.search_vector @@ websearch_to_tsquery('english', $1::text)
+ORDER BY score DESC, c.id ASC
+LIMIT $2
+`
+
+type BM25SearchAllParams struct {
+	Query      string
+	MaxResults int32
+}
+
+type BM25SearchAllRow struct {
+	ID            uuid.UUID
+	DocumentID    uuid.UUID
+	WorkspaceHash string
+	Content       string
+	ChunkIndex    int32
+	Metadata      pqtype.NullRawMessage
+	SourcePath    string
+	Title         string
+	Collection    string
+	Tags          []string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Score         float64
+}
+
+func (q *Queries) BM25SearchAll(ctx context.Context, arg BM25SearchAllParams) ([]BM25SearchAllRow, error) {
+	rows, err := q.db.QueryContext(ctx, bM25SearchAll, arg.Query, arg.MaxResults)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BM25SearchAllRow
+	for rows.Next() {
+		var i BM25SearchAllRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DocumentID,
+			&i.WorkspaceHash,
+			&i.Content,
+			&i.ChunkIndex,
+			&i.Metadata,
+			&i.SourcePath,
+			&i.Title,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const bM25SearchAllWithTags = `-- name: BM25SearchAllWithTags :many
+SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(ts_rank_cd(c.search_vector, websearch_to_tsquery('english', $1::text)) AS double precision) AS score
+FROM chunks c
+JOIN documents d ON c.document_id = d.id
+WHERE c.search_vector @@ websearch_to_tsquery('english', $1::text)
+  AND d.tags && $2::text[]
+ORDER BY score DESC, c.id ASC
+LIMIT $3
+`
+
+type BM25SearchAllWithTagsParams struct {
+	Query      string
+	Tags       []string
+	MaxResults int32
+}
+
+type BM25SearchAllWithTagsRow struct {
+	ID            uuid.UUID
+	DocumentID    uuid.UUID
+	WorkspaceHash string
+	Content       string
+	ChunkIndex    int32
+	Metadata      pqtype.NullRawMessage
+	SourcePath    string
+	Title         string
+	Collection    string
+	Tags          []string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Score         float64
+}
+
+func (q *Queries) BM25SearchAllWithTags(ctx context.Context, arg BM25SearchAllWithTagsParams) ([]BM25SearchAllWithTagsRow, error) {
+	rows, err := q.db.QueryContext(ctx, bM25SearchAllWithTags, arg.Query, pq.Array(arg.Tags), arg.MaxResults)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BM25SearchAllWithTagsRow
+	for rows.Next() {
+		var i BM25SearchAllWithTagsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DocumentID,
+			&i.WorkspaceHash,
+			&i.Content,
+			&i.ChunkIndex,
+			&i.Metadata,
+			&i.SourcePath,
+			&i.Title,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const bM25SearchWithTags = `-- name: BM25SearchWithTags :many
 SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
        d.source_path, d.title, d.collection, d.tags,

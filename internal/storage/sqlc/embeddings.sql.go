@@ -266,3 +266,74 @@ func (q *Queries) VectorSearch(ctx context.Context, arg VectorSearchParams) ([]V
 	}
 	return items, nil
 }
+
+const vectorSearchAll = `-- name: VectorSearchAll :many
+SELECT e.id, e.chunk_id, e.workspace_hash,
+       c.content, c.metadata, c.document_id,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(1 - (e.embedding <=> $1::vector) AS double precision) AS score
+FROM embeddings e
+JOIN chunks c ON e.chunk_id = c.id
+JOIN documents d ON c.document_id = d.id
+ORDER BY e.embedding <=> $1::vector
+LIMIT $2
+`
+
+type VectorSearchAllParams struct {
+	QueryEmbedding pgvector_go.Vector
+	MaxResults     int32
+}
+
+type VectorSearchAllRow struct {
+	ID            uuid.UUID
+	ChunkID       uuid.UUID
+	WorkspaceHash string
+	Content       string
+	Metadata      pqtype.NullRawMessage
+	DocumentID    uuid.UUID
+	SourcePath    string
+	Title         string
+	Collection    string
+	Tags          []string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Score         float64
+}
+
+func (q *Queries) VectorSearchAll(ctx context.Context, arg VectorSearchAllParams) ([]VectorSearchAllRow, error) {
+	rows, err := q.db.QueryContext(ctx, vectorSearchAll, arg.QueryEmbedding, arg.MaxResults)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VectorSearchAllRow
+	for rows.Next() {
+		var i VectorSearchAllRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChunkID,
+			&i.WorkspaceHash,
+			&i.Content,
+			&i.Metadata,
+			&i.DocumentID,
+			&i.SourcePath,
+			&i.Title,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
