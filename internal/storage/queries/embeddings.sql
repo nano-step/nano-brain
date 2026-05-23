@@ -30,6 +30,12 @@ SELECT count(*) FROM chunks WHERE workspace_hash = $1 AND embed_status = 'embed_
 -- name: ResetEmbedStatus :exec
 UPDATE chunks SET embed_status = 'pending' WHERE workspace_hash = $1;
 
+-- name: GetAllPendingChunks :many
+SELECT id FROM chunks
+WHERE embed_status = 'pending'
+ORDER BY created_at ASC
+LIMIT $1;
+
 -- name: VectorSearch :many
 SELECT e.id, e.chunk_id, e.workspace_hash,
        c.content, c.metadata, c.document_id,

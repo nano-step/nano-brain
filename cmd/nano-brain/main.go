@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/health"
 	"github.com/nano-brain/nano-brain/internal/server"
 	"github.com/nano-brain/nano-brain/internal/storage"
@@ -87,7 +88,17 @@ func main() {
 
 	fw := watcher.New(db, queries, logger, *cfg)
 
-	srv := server.New(cfg.Server, pool, db, queries, fw, logger, Version)
+	var eq *embed.Queue
+	if cfg.Embedding.Provider != "" {
+		embedder, embedErr := embed.NewFromConfig(cfg.Embedding)
+		if embedErr != nil {
+			logger.Warn().Err(embedErr).Msg("embedding disabled — provider not configured")
+		} else {
+			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency)
+		}
+	}
+
+	srv := server.New(cfg.Server, pool, db, queries, fw, eq, logger, Version)
 
 	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
 		for _, ws := range workspaces {
@@ -116,6 +127,12 @@ func main() {
 	g.Go(func() error {
 		return fw.Run(gctx)
 	})
+
+	if eq != nil {
+		g.Go(func() error {
+			return eq.Run(gctx)
+		})
+	}
 
 	g.Go(func() error {
 		<-gctx.Done()

@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
@@ -22,33 +23,35 @@ type PoolChecker interface {
 
 // Server wraps Echo and holds dependencies.
 type Server struct {
-	echo      *echo.Echo
-	pool      PoolChecker
-	db        *sql.DB
-	queries   *sqlc.Queries
-	watcher   *watcher.Watcher
-	logger    zerolog.Logger
-	cfg       config.ServerConfig
-	version   string
-	startTime time.Time
+	echo       *echo.Echo
+	pool       PoolChecker
+	db         *sql.DB
+	queries    *sqlc.Queries
+	watcher    *watcher.Watcher
+	embedQueue *embed.Queue
+	logger     zerolog.Logger
+	cfg        config.ServerConfig
+	version    string
+	startTime  time.Time
 }
 
 // New creates a new Server with all routes and middleware registered.
-func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, logger zerolog.Logger, version string) *Server {
+func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, logger zerolog.Logger, version string) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
 
 	s := &Server{
-		echo:      e,
-		pool:      pool,
-		db:        db,
-		queries:   queries,
-		watcher:   fw,
-		logger:    logger,
-		cfg:       cfg,
-		version:   version,
-		startTime: time.Now(),
+		echo:       e,
+		pool:       pool,
+		db:         db,
+		queries:    queries,
+		watcher:    fw,
+		embedQueue: eq,
+		logger:     logger,
+		cfg:        cfg,
+		version:    version,
+		startTime:  time.Now(),
 	}
 
 	registerMiddleware(s)

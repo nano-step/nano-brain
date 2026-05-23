@@ -16,6 +16,10 @@ DELETE FROM chunks WHERE document_id = $1 AND workspace_hash = $2;
 -- name: CountChunksByDocumentID :one
 SELECT count(*) FROM chunks WHERE document_id = $1 AND workspace_hash = $2;
 
+-- name: GetChunkByID :one
+SELECT id, document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, embed_status, created_at
+FROM chunks WHERE id = $1;
+
 -- name: ListChunksByDocumentID :many
 SELECT id, document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, created_at
 FROM chunks WHERE document_id = $1 AND workspace_hash = $2 ORDER BY chunk_index;
