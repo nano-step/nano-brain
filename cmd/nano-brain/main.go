@@ -50,6 +50,9 @@ func main() {
 		case "vsearch":
 			runVSearchCmd(args[1:])
 			return
+		case "harvest":
+			runHarvestCmd(args[1:])
+			return
 		}
 	}
 
@@ -182,6 +185,7 @@ func main() {
 	}
 
 	if hr != nil {
+		srv.SetHarvestRunner(hr)
 		g.Go(func() error {
 			return hr.Run(gctx)
 		})
