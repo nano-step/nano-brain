@@ -132,6 +132,12 @@ func (s *Server) getHarvestRunner() handlers.HarvestRunner {
 	return s.harvestRunner
 }
 
+func (s *Server) getHealthCfg() (config.HarvesterConfig, config.IntervalsConfig) {
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+	return s.harvesterCfg, s.intervalsCfg
+}
+
 func (s *Server) currentConfig() *config.Config {
 	s.configMu.RLock()
 	defer s.configMu.RUnlock()
@@ -139,15 +145,12 @@ func (s *Server) currentConfig() *config.Config {
 	return &cp
 }
 
-func (s *Server) applyReloadedConfig(newCfg *config.Config, result *config.ReloadResult) {
+func (s *Server) applyReloadedConfig(newCfg *config.Config, _ *config.ReloadResult) {
 	s.configMu.Lock()
 	defer s.configMu.Unlock()
 
 	s.fullCfg = newCfg
 	s.searchCfg = newCfg.Search
-	s.embedCfg = newCfg.Embedding
-	s.intervalsCfg = newCfg.Intervals
-	s.harvesterCfg = newCfg.Harvester
 
 	if s.searchService != nil {
 		s.searchService.UpdateConfig(newCfg.Search)

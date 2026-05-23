@@ -27,12 +27,11 @@ type Health struct {
 	logger       zerolog.Logger
 	version      string
 	startTime    time.Time
-	harvesterCfg config.HarvesterConfig
-	intervalsCfg config.IntervalsConfig
+	getCfg       func() (config.HarvesterConfig, config.IntervalsConfig)
 }
 
-func NewHealth(pool PoolChecker, logger zerolog.Logger, version string, startTime time.Time, queue EmbedQueueInfo, harvesterCfg config.HarvesterConfig, intervalsCfg config.IntervalsConfig) *Health {
-	return &Health{pool: pool, queue: queue, logger: logger, version: version, startTime: startTime, harvesterCfg: harvesterCfg, intervalsCfg: intervalsCfg}
+func NewHealth(pool PoolChecker, logger zerolog.Logger, version string, startTime time.Time, queue EmbedQueueInfo, getCfg func() (config.HarvesterConfig, config.IntervalsConfig)) *Health {
+	return &Health{pool: pool, queue: queue, logger: logger, version: version, startTime: startTime, getCfg: getCfg}
 }
 
 type healthResponse struct {
@@ -93,13 +92,15 @@ func (h *Health) Status(c echo.Context) error {
 		pgStatus = "unreachable"
 	}
 
+	harvesterCfg, intervalsCfg := h.getCfg()
+
 	harvestStatus := harvesterStatusResponse{
-		PollIntervalSeconds: h.intervalsCfg.SessionPoll,
+		PollIntervalSeconds: intervalsCfg.SessionPoll,
 	}
-	harvestStatus.OpenCode.Enabled = h.harvesterCfg.OpenCode.SessionDir != ""
-	harvestStatus.OpenCode.SessionDir = h.harvesterCfg.OpenCode.SessionDir
-	harvestStatus.ClaudeCode.Enabled = h.harvesterCfg.ClaudeCode.Enabled
-	harvestStatus.ClaudeCode.SessionDir = h.harvesterCfg.ClaudeCode.SessionDir
+	harvestStatus.OpenCode.Enabled = harvesterCfg.OpenCode.SessionDir != ""
+	harvestStatus.OpenCode.SessionDir = harvesterCfg.OpenCode.SessionDir
+	harvestStatus.ClaudeCode.Enabled = harvesterCfg.ClaudeCode.Enabled
+	harvestStatus.ClaudeCode.SessionDir = harvesterCfg.ClaudeCode.SessionDir
 
 	resp := statusResponse{
 		PGStatus:            pgStatus,

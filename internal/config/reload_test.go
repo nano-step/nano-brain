@@ -151,6 +151,67 @@ logging:
 	}
 }
 
+func TestReloadPhantomFieldsRequireRestart(t *testing.T) {
+	dir := t.TempDir()
+	current := validDefaults()
+	path := writeYAML(t, dir, `embedding:
+  concurrency: 10
+  provider: "ollama"
+  url: "http://localhost:11434"
+  model: "nomic-embed-text"
+storage:
+  max_file_size: 500000000
+  max_size: 10737418240
+watcher:
+  debounce_ms: 5000
+  reindex_interval: 600
+intervals:
+  session_poll: 60
+`)
+
+	_, result, err := Reload(path, current)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	restartSet := make(map[string]bool)
+	for _, s := range result.RequiresRestart {
+		restartSet[s] = true
+	}
+	reloadedSet := make(map[string]bool)
+	for _, s := range result.Reloaded {
+		reloadedSet[s] = true
+	}
+
+	for _, field := range []string{
+		"embedding.concurrency",
+		"storage.max_file_size",
+		"watcher.debounce_ms",
+		"watcher.reindex_interval",
+		"intervals.session_poll",
+	} {
+		if !restartSet[field] {
+			t.Errorf("%s should require restart, reloaded=%v restart=%v", field, result.Reloaded, result.RequiresRestart)
+		}
+		if reloadedSet[field] {
+			t.Errorf("%s should NOT be in reloaded", field)
+		}
+	}
+}
+
+func TestReloadInvalidLoggingLevel(t *testing.T) {
+	dir := t.TempDir()
+	current := validDefaults()
+	path := writeYAML(t, dir, `logging:
+  level: "banana"
+`)
+
+	_, _, err := Reload(path, current)
+	if err == nil {
+		t.Fatal("expected error for invalid logging.level, got nil")
+	}
+}
+
 func TestReloadFileNotFound(t *testing.T) {
 	current := validDefaults()
 	path := "/nonexistent/path/config.yml"

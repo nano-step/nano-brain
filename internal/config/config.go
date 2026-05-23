@@ -12,6 +12,7 @@ import (
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/structs"
+	"github.com/rs/zerolog"
 )
 
 // Config holds all application configuration.
@@ -236,6 +237,12 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Watcher.ReindexInterval < 1 {
 		errs = append(errs, errors.New("watcher.reindex_interval must be >= 1"))
+	}
+
+	if cfg.Logging.Level != "" {
+		if _, err := zerolog.ParseLevel(cfg.Logging.Level); err != nil {
+			errs = append(errs, fmt.Errorf("logging.level %q is not valid", cfg.Logging.Level))
+		}
 	}
 
 	if len(errs) > 0 {
