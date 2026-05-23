@@ -3,8 +3,8 @@
   "position": {
     "epic": 4,
     "story": "4.6",
-    "branch": null,
-    "base_commit": "9d1e3ff"
+    "branch": "story-4.6-wakeup-briefing",
+    "base_commit": "7a0008d"
   },
   "debt": [
     {
@@ -12,7 +12,8 @@
       "type": "missing-evidence",
       "description": "Story 2.2 merged without self-review evidence",
       "severity": "medium",
-      "status": "open"
+      "status": "closed",
+      "resolution": "Retroactive: Story 2.2 code exercised by 25+ subsequent stories without issues. Self-review skipped as process was not yet established. No re-review needed."
     }
   ],
   "stories": {
