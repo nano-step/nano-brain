@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/rs/zerolog"
 )
 
@@ -21,15 +22,17 @@ type EmbedQueueInfo interface {
 }
 
 type Health struct {
-	pool      PoolChecker
-	queue     EmbedQueueInfo
-	logger    zerolog.Logger
-	version   string
-	startTime time.Time
+	pool         PoolChecker
+	queue        EmbedQueueInfo
+	logger       zerolog.Logger
+	version      string
+	startTime    time.Time
+	harvesterCfg config.HarvesterConfig
+	intervalsCfg config.IntervalsConfig
 }
 
-func NewHealth(pool PoolChecker, logger zerolog.Logger, version string, startTime time.Time, queue EmbedQueueInfo) *Health {
-	return &Health{pool: pool, queue: queue, logger: logger, version: version, startTime: startTime}
+func NewHealth(pool PoolChecker, logger zerolog.Logger, version string, startTime time.Time, queue EmbedQueueInfo, harvesterCfg config.HarvesterConfig, intervalsCfg config.IntervalsConfig) *Health {
+	return &Health{pool: pool, queue: queue, logger: logger, version: version, startTime: startTime, harvesterCfg: harvesterCfg, intervalsCfg: intervalsCfg}
 }
 
 type healthResponse struct {
@@ -41,16 +44,29 @@ type healthResponse struct {
 	Reason         string `json:"reason,omitempty"`
 }
 
+type harvesterStatusResponse struct {
+	PollIntervalSeconds int `json:"poll_interval_seconds"`
+	OpenCode            struct {
+		Enabled    bool   `json:"enabled"`
+		SessionDir string `json:"session_dir"`
+	} `json:"opencode"`
+	ClaudeCode struct {
+		Enabled    bool   `json:"enabled"`
+		SessionDir string `json:"session_dir"`
+	} `json:"claude_code"`
+}
+
 type statusResponse struct {
-	PGStatus             string `json:"pg_status"`
-	MigrationVersion     int    `json:"migration_version"`
-	EmbeddingQueueDepth  int    `json:"embedding_queue_depth"`
-	ActiveProvider       string `json:"active_provider"`
-	WorkspaceCount       int    `json:"workspace_count"`
-	QueueDepth           int    `json:"queue_depth"`
-	QueueCapacity        int    `json:"queue_capacity"`
-	QueueStatus          string `json:"queue_status"`
-	QueuePending         int64  `json:"queue_pending"`
+	PGStatus             string                    `json:"pg_status"`
+	MigrationVersion     int                       `json:"migration_version"`
+	EmbeddingQueueDepth  int                       `json:"embedding_queue_depth"`
+	ActiveProvider       string                    `json:"active_provider"`
+	WorkspaceCount       int                       `json:"workspace_count"`
+	QueueDepth           int                       `json:"queue_depth"`
+	QueueCapacity        int                       `json:"queue_capacity"`
+	QueueStatus          string                    `json:"queue_status"`
+	QueuePending         int64                     `json:"queue_pending"`
+	HarvesterStatus      harvesterStatusResponse   `json:"harvester_status"`
 }
 
 func (h *Health) Health(c echo.Context) error {
@@ -77,12 +93,21 @@ func (h *Health) Status(c echo.Context) error {
 		pgStatus = "unreachable"
 	}
 
+	harvestStatus := harvesterStatusResponse{
+		PollIntervalSeconds: h.intervalsCfg.SessionPoll,
+	}
+	harvestStatus.OpenCode.Enabled = h.harvesterCfg.OpenCode.SessionDir != ""
+	harvestStatus.OpenCode.SessionDir = h.harvesterCfg.OpenCode.SessionDir
+	harvestStatus.ClaudeCode.Enabled = h.harvesterCfg.ClaudeCode.Enabled
+	harvestStatus.ClaudeCode.SessionDir = h.harvesterCfg.ClaudeCode.SessionDir
+
 	resp := statusResponse{
 		PGStatus:            pgStatus,
 		MigrationVersion:    1,
 		EmbeddingQueueDepth: 0,
 		ActiveProvider:      "none",
 		WorkspaceCount:      0,
+		HarvesterStatus:     harvestStatus,
 	}
 
 	if h.queue != nil {

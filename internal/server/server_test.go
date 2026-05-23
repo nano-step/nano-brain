@@ -24,8 +24,10 @@ func (m *mockPool) Ping(_ context.Context) error {
 
 func newTestServer(pool *mockPool) *server.Server {
 	cfg := config.ServerConfig{Host: "127.0.0.1", Port: 3100}
+	harvesterCfg := config.HarvesterConfig{}
+	intervalsCfg := config.IntervalsConfig{SessionPoll: 120}
 	logger := zerolog.Nop()
-	return server.New(cfg, config.EmbeddingConfig{}, config.SearchConfig{RrfK: 60, Limit: 20}, pool, nil, nil, nil, nil, nil, logger, "test-v1")
+	return server.New(cfg, config.EmbeddingConfig{}, config.SearchConfig{RrfK: 60, Limit: 20}, harvesterCfg, intervalsCfg, pool, nil, nil, nil, nil, nil, logger, "test-v1")
 }
 
 func TestHealthEndpointHealthyDB(t *testing.T) {
@@ -98,7 +100,7 @@ func TestStatusEndpointShape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	requiredFields := []string{"pg_status", "migration_version", "embedding_queue_depth", "active_provider", "workspace_count", "queue_depth", "queue_capacity", "queue_status", "queue_pending"}
+	requiredFields := []string{"pg_status", "migration_version", "embedding_queue_depth", "active_provider", "workspace_count", "queue_depth", "queue_capacity", "queue_status", "queue_pending", "harvester_status"}
 	for _, field := range requiredFields {
 		if _, ok := body[field]; !ok {
 			t.Errorf("missing required field: %s", field)

@@ -25,24 +25,26 @@ type PoolChecker interface {
 }
 
 type Server struct {
-	echo          *echo.Echo
-	pool          PoolChecker
-	db            *sql.DB
-	queries       *sqlc.Queries
-	watcher       *watcher.Watcher
-	embedQueue    *embed.Queue
-	embedder      embed.Embedder
-	searchService *search.SearchService
-	mcpServer     *mcpsdk.Server
-	logger        zerolog.Logger
-	cfg           config.ServerConfig
-	embedCfg      config.EmbeddingConfig
-	searchCfg     config.SearchConfig
-	version       string
-	startTime     time.Time
+	echo           *echo.Echo
+	pool           PoolChecker
+	db             *sql.DB
+	queries        *sqlc.Queries
+	watcher        *watcher.Watcher
+	embedQueue     *embed.Queue
+	embedder       embed.Embedder
+	searchService  *search.SearchService
+	mcpServer      *mcpsdk.Server
+	logger         zerolog.Logger
+	cfg            config.ServerConfig
+	embedCfg       config.EmbeddingConfig
+	searchCfg      config.SearchConfig
+	harvesterCfg   config.HarvesterConfig
+	intervalsCfg   config.IntervalsConfig
+	version        string
+	startTime      time.Time
 }
 
-func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg config.SearchConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
+func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg config.SearchConfig, harvesterCfg config.HarvesterConfig, intervalsCfg config.IntervalsConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -62,21 +64,23 @@ func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg con
 	internalmcp.RegisterTools(mcpServer, mcpAdapter)
 
 	s := &Server{
-		echo:          e,
-		pool:          pool,
-		db:            db,
-		queries:       queries,
-		watcher:       fw,
-		embedQueue:    eq,
-		embedder:      embedder,
-		searchService: ss,
-		mcpServer:     mcpServer,
-		logger:        logger,
-		cfg:           cfg,
-		embedCfg:      embedCfg,
-		searchCfg:     searchCfg,
-		version:       version,
-		startTime:     time.Now(),
+		echo:           e,
+		pool:           pool,
+		db:             db,
+		queries:        queries,
+		watcher:        fw,
+		embedQueue:     eq,
+		embedder:       embedder,
+		searchService:  ss,
+		mcpServer:      mcpServer,
+		logger:         logger,
+		cfg:            cfg,
+		embedCfg:       embedCfg,
+		searchCfg:      searchCfg,
+		harvesterCfg:   harvesterCfg,
+		intervalsCfg:   intervalsCfg,
+		version:        version,
+		startTime:      time.Now(),
 	}
 
 	registerMiddleware(s)
