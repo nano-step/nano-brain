@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -21,8 +20,6 @@ type BM25SearchRequest struct {
 	MaxResults int      `json:"max_results,omitempty"`
 	Tags       []string `json:"tags,omitempty"`
 }
-
-const maxSnippetLen = 700
 
 func BM25Search(q BM25SearchQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
@@ -55,11 +52,14 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			ID            string
 			DocumentID    string
 			WorkspaceHash string
+			Title         string
 			Content       string
 			SourcePath    string
 			Collection    string
 			Tags          []string
-			Score         float32
+			CreatedAt     time.Time
+			UpdatedAt     time.Time
+			Score         float64
 		}
 
 		var matched []bm25Row
@@ -77,9 +77,11 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			for _, r := range rows {
 				matched = append(matched, bm25Row{
 					ID: r.ID.String(), DocumentID: r.DocumentID.String(),
-					WorkspaceHash: r.WorkspaceHash, Content: r.Content,
-					SourcePath: r.SourcePath, Collection: r.Collection,
-					Tags: r.Tags, Score: r.Score,
+					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+					Content: r.Content, SourcePath: r.SourcePath,
+					Collection: r.Collection, Tags: r.Tags,
+					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					Score: r.Score,
 				})
 			}
 		} else {
@@ -95,31 +97,29 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			for _, r := range rows {
 				matched = append(matched, bm25Row{
 					ID: r.ID.String(), DocumentID: r.DocumentID.String(),
-					WorkspaceHash: r.WorkspaceHash, Content: r.Content,
-					SourcePath: r.SourcePath, Collection: r.Collection,
-					Tags: r.Tags, Score: r.Score,
+					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+					Content: r.Content, SourcePath: r.SourcePath,
+					Collection: r.Collection, Tags: r.Tags,
+					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					Score: r.Score,
 				})
 			}
 		}
 
 		results := make([]SearchResult, 0, len(matched))
 		for _, r := range matched {
-			content := r.Content
-			if len(content) > maxSnippetLen {
-				runes := []rune(content)
-				if len(runes) > maxSnippetLen {
-					content = string(runes[:maxSnippetLen])
-				}
-			}
 			results = append(results, SearchResult{
 				ID:            r.ID,
-				Content:       content,
-				Score:         float64(r.Score),
-				SourcePath:    r.SourcePath,
+				Title:         r.Title,
+				Snippet:       truncateSnippet(r.Content, maxSnippetLen),
+				Score:         r.Score,
+				Tags:          r.Tags,
 				Collection:    r.Collection,
-				Tags:          strings.Join(r.Tags, ","),
 				WorkspaceHash: r.WorkspaceHash,
+				SourcePath:    r.SourcePath,
 				DocumentID:    r.DocumentID,
+				CreatedAt:     r.CreatedAt,
+				UpdatedAt:     r.UpdatedAt,
 			})
 		}
 

@@ -39,7 +39,8 @@ LIMIT $1;
 -- name: VectorSearch :many
 SELECT e.id, e.chunk_id, e.workspace_hash,
        c.content, c.metadata, c.document_id,
-       d.source_path, d.collection, d.tags,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
        CAST(1 - (e.embedding <=> sqlc.arg(query_embedding)::vector) AS double precision) AS score
 FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id

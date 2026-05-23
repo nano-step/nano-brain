@@ -256,8 +256,8 @@ func TestBM25Search_SnippetTruncation(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Results[0].Content) != 700 {
-		t.Errorf("expected content truncated to 700 chars, got %d", len(resp.Results[0].Content))
+	if len(resp.Results[0].Snippet) != 700 {
+		t.Errorf("expected snippet truncated to 700 chars, got %d", len(resp.Results[0].Snippet))
 	}
 }
 
@@ -326,8 +326,8 @@ func TestBM25Search_WithTags(t *testing.T) {
 	if resp.Total != 1 {
 		t.Errorf("expected total=1, got %d", resp.Total)
 	}
-	if resp.Results[0].Tags != "decision" {
-		t.Errorf("expected tags=decision, got %q", resp.Results[0].Tags)
+	if len(resp.Results[0].Tags) != 1 || resp.Results[0].Tags[0] != "decision" {
+		t.Errorf("expected tags=[decision], got %v", resp.Results[0].Tags)
 	}
 }
 
@@ -362,7 +362,7 @@ func TestBM25Search_UTF8Truncation(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	runes := []rune(resp.Results[0].Content)
+	runes := []rune(resp.Results[0].Snippet)
 	if len(runes) != 700 {
 		t.Errorf("expected 700 runes after truncation, got %d", len(runes))
 	}

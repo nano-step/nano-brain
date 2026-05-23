@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -196,7 +197,8 @@ func (q *Queries) ResetEmbedStatus(ctx context.Context, workspaceHash string) er
 const vectorSearch = `-- name: VectorSearch :many
 SELECT e.id, e.chunk_id, e.workspace_hash,
        c.content, c.metadata, c.document_id,
-       d.source_path, d.collection, d.tags,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
        CAST(1 - (e.embedding <=> $1::vector) AS double precision) AS score
 FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
@@ -220,8 +222,11 @@ type VectorSearchRow struct {
 	Metadata      pqtype.NullRawMessage
 	DocumentID    uuid.UUID
 	SourcePath    string
+	Title         string
 	Collection    string
 	Tags          []string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 	Score         float64
 }
 
@@ -242,8 +247,11 @@ func (q *Queries) VectorSearch(ctx context.Context, arg VectorSearchParams) ([]V
 			&i.Metadata,
 			&i.DocumentID,
 			&i.SourcePath,
+			&i.Title,
 			&i.Collection,
 			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
 			&i.Score,
 		); err != nil {
 			return nil, err
