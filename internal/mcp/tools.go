@@ -209,7 +209,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				UpdatedAt     time.Time `json:"updated_at"`
 			}
 
-			var results []resultRow
+			results := make([]resultRow, 0)
 			limit := int32(maxResults)
 
 			if len(tags) > 0 {
@@ -371,6 +371,10 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 			content := argString(args, "content")
 			if content == "" {
 				return errResult("content is required"), nil
+			}
+			const maxContentSize = 5 * 1024 * 1024 // 5 MB
+			if int64(len(content)) > maxContentSize {
+				return errResult("content exceeds maximum allowed size (5 MB)"), nil
 			}
 
 			collection := argString(args, "collection")
@@ -541,9 +545,7 @@ func registerMemoryStatus(server *mcpsdk.Server, a *Adapter) {
 		&mcpsdk.Tool{
 			Name:        "memory_status",
 			Description: "Server and embedding queue status",
-			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace hash (optional)"},
-			}, nil),
+			InputSchema: toolSchema(map[string]map[string]any{}, nil),
 		},
 		func(ctx context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			pgStatus := "healthy"
