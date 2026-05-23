@@ -210,8 +210,16 @@ validate:quick   (always — every lane)
 test:integration   (normal + high-risk)
   go test -race -tags=integration ./...
 
-test:e2e   (high-risk or when UI behavior changes)
-  go test -race -tags=e2e ./...
+smoke:e2e   (normal + high-risk, for user-feature and bug-fix change types)
+  Build binary → start real server → curl endpoints → verify responses.
+  This is NOT a Go test file. It is a real usage test:
+  1. go build -o ./bin/nano-brain ./cmd/nano-brain/
+  2. Start server with real PG (NANO_BRAIN_DATABASE_URL, NANO_BRAIN_SERVER_PORT=3199)
+  3. Wait for GET /health → {"ready":true}
+  4. Exercise changed endpoints via curl (POST/GET with real payloads)
+  5. Verify HTTP status codes and response JSON structure
+  6. Kill server
+  Agent performs these steps manually (no script required), pastes evidence.
 
 test:release   (before deploy)
   ./nano-brain status
@@ -219,10 +227,10 @@ test:release   (before deploy)
 
 **Lane → required layers:**
 
-| Lane | validate:quick | test:integration | test:e2e |
+| Lane | validate:quick | test:integration | smoke:e2e |
 |------|:-:|:-:|:-:|
 | tiny | ✓ | — | — |
-| normal | ✓ | ✓ | — |
+| normal | ✓ | ✓ | ✓ (if user-feature or bug-fix) |
 | high-risk | ✓ | ✓ | ✓ |
 
 Agents must not claim a layer passes until it has been run and output verified.
@@ -232,14 +240,14 @@ Agents must not claim a layer passes until it has been run and output verified.
 The validation ladder is necessary but not sufficient. The **change type**
 determines whether user-flow testing and review gate apply.
 
-| Change type | E2E required? | Review gate? | Example |
+| Change type | smoke:e2e required? | Review gate? | Example |
 |-------------|:-:|:-:|---|
-| **user-feature** (new behavior, new surface) | ✅ | ✅ | new endpoint, new UI page |
-| **bug-fix** (user-visible defect) | ✅ | ✅ | "OTP not arriving", broken response |
-| **infrastructure** (migrations, config, deploy) | ❌ smoke test sufficient | ⚠️ self-verify | DB migration, env var change |
+| **user-feature** (new behavior, new surface) | ✅ build+start+curl | ✅ | new endpoint, new UI page |
+| **bug-fix** (user-visible defect) | ✅ build+start+curl | ✅ | nil panic, broken response |
+| **infrastructure** (migrations, config, deploy) | ❌ validate:quick sufficient | ⚠️ self-verify | DB migration, env var change |
 | **refactor** (same I/O) | ❌ existing tests pass | ⚠️ self-verify | extract helper, rename internal symbol |
 | **docs** (markdown / comments only) | ❌ | ❌ | README, ADR write-up |
-| **dependency-bump** | ❌ smoke test | ⚠️ self-verify | upgrade library version |
+| **dependency-bump** | ❌ validate:quick | ⚠️ self-verify | upgrade library version |
 
 **Combined gate:** Lane × Change Type. Both must pass to proceed.
 
@@ -254,19 +262,51 @@ For change types marked **⚠️ self-verify**:
 - No independent review agent required.
 - Still subject to PR bot review (see below).
 
-## User-Flow Testing
+## User-Flow Testing (smoke:e2e)
 
 After validation ladder passes, run at least one test that exercises the
-changed behavior through the **user's actual entry point**. Choose the tool
-that matches the changed surface:
+changed behavior through the **user's actual entry point**. This means
+**real usage**: build the binary, start the server, call the API, verify
+the response.
 
-| Changed surface | Tool | Command |
+### How to run smoke:e2e
+
+```bash
+# 1. Build
+go build -o ./bin/nano-brain ./cmd/nano-brain/
+
+# 2. Start server (background, non-default port to avoid conflicts)
+NANO_BRAIN_DATABASE_URL="postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable" \
+NANO_BRAIN_SERVER_PORT=3199 \
+NANO_BRAIN_EMBEDDING_PROVIDER="" \
+./bin/nano-brain &
+SERVER_PID=$!
+
+# 3. Wait for health
+for i in $(seq 1 15); do curl -sf http://localhost:3199/health >/dev/null && break; sleep 1; done
+
+# 4. Exercise endpoints (example: init workspace + write + search)
+curl -sf -X POST http://localhost:3199/api/v1/init -H 'Content-Type: application/json' \
+  -d '{"root_path":"/tmp/e2e-test"}'
+# ... exercise changed endpoints, verify HTTP status + JSON structure ...
+
+# 5. Kill server
+kill $SERVER_PID; wait $SERVER_PID 2>/dev/null
+```
+
+### What to verify per endpoint type
+
+| Changed surface | Verify | Example |
 |---|---|---|
-| Bot / chat handler | Command simulator | `# N/A` |
-| Web UI | Playwright / Cypress | `# N/A` |
-| REST API | API integration test | `# N/A` |
-| Backend-only (no user surface) | Existing integration tests | `# N/A` |
-| LLM / external service call | Live smoke script | `./nano-brain status` |
+| New REST endpoint | HTTP status + response JSON shape | POST /api/v1/query → 200 + `{results:[...]}` |
+| Bug fix (REST) | Previously broken request now works | POST /api/v1/write without embedding → 201 (was panic) |
+| Backend-only (no user surface) | Existing tests sufficient | `go test` covers it |
+| LLM / external service | Health check + basic call | GET /health + POST /api/v1/embed |
+
+### Evidence format
+
+Paste the curl commands and responses in the story Evidence section or PR description.
+Agent MUST NOT claim smoke:e2e passes without showing the actual curl output.
 
 **Lane × user-flow requirement:**
 

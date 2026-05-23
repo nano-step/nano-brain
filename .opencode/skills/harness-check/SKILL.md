@@ -103,6 +103,54 @@ The orchestrator (Sisyphus) MUST invoke this skill at these points:
 | Agent about to start next feature | ⑤ NEXT-READY |
 | Last story of epic complete | ⑥ RETRO-GATE |
 
+## smoke:e2e Gate (MANDATORY for user-feature and bug-fix)
+
+For any story that adds or changes a REST API endpoint, the agent MUST run a
+real E2E smoke test before claiming the story is complete.
+
+### When required
+
+- Change type = **user-feature** or **bug-fix** → MUST run smoke:e2e
+- Change type = infrastructure/refactor/docs/deps → SKIP (document reason)
+
+### How to run
+
+```bash
+# 1. Build binary
+go build -o ./bin/nano-brain ./cmd/nano-brain/
+
+# 2. Start server on non-default port
+NANO_BRAIN_DATABASE_URL="postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable" \
+NANO_BRAIN_SERVER_PORT=3199 \
+NANO_BRAIN_EMBEDDING_PROVIDER="" \
+./bin/nano-brain &
+SERVER_PID=$!
+
+# 3. Wait for health
+for i in $(seq 1 15); do curl -sf http://localhost:3199/health >/dev/null && break; sleep 1; done
+
+# 4. Exercise the changed endpoints via curl
+#    - Verify HTTP status codes (200, 201, 400, etc.)
+#    - Verify response JSON structure (required fields present)
+#    - If bug fix: verify the previously broken request now works
+
+# 5. Kill server
+kill $SERVER_PID; wait $SERVER_PID 2>/dev/null
+```
+
+### Evidence
+
+Paste curl commands + responses in the PR description or story evidence.
+**If a bug is found during smoke:e2e** → fix it BEFORE continuing to the next story.
+
+### FAIL conditions
+
+- Server doesn't start → FAIL
+- Health endpoint doesn't respond within 15s → FAIL
+- Changed endpoint returns wrong status code → FAIL
+- Response JSON missing required fields → FAIL
+- Server panics on any request → FAIL (critical bug)
+
 ## Reference
 
 - Gate specification: `docs/HARNESS_GATES.md`
