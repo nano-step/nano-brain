@@ -91,6 +91,9 @@ func RunStress(ctx context.Context, writer StressWriter, cfg StressConfig) (*Str
 			barrier.Wait()
 
 			for di := 0; di < cfg.DocsPerWriter; di++ {
+				if gctx.Err() != nil {
+					return gctx.Err()
+				}
 				title := fmt.Sprintf("stress-g%d-d%d", gi, di)
 				hash := fmt.Sprintf("%x", sha256.Sum256([]byte(title)))
 
@@ -125,10 +128,9 @@ func RunStress(ctx context.Context, writer StressWriter, cfg StressConfig) (*Str
 		return nil, fmt.Errorf("counting documents after stress: %w", err)
 	}
 
-	expected := int64(cfg.Concurrency * cfg.DocsPerWriter)
 	actualNew := countAfter - countBefore
 	violations := 0
-	if actualNew != expected {
+	if actualNew != int64(written) {
 		violations = 1
 	}
 

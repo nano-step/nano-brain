@@ -78,8 +78,8 @@ func TestRunStress_WithErrors(t *testing.T) {
 	if len(result.Errors) != 2 {
 		t.Errorf("expected 2 errors, got %d: %v", len(result.Errors), result.Errors)
 	}
-	if result.Violations != 1 {
-		t.Errorf("expected 1 violation (count mismatch), got %d", result.Violations)
+	if result.Violations != 0 {
+		t.Errorf("expected 0 violations (DB matches successful writes), got %d", result.Violations)
 	}
 }
 
