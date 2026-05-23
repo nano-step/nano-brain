@@ -183,6 +183,19 @@ phase_pre_work() {
     else
         add_check "SKIP" "1.5 Go not installed"
     fi
+    
+    # 1.6 Feature branch created off b-main (NOT master)
+    current_branch=$(git branch --show-current 2>/dev/null || echo "")
+    if [[ -n "$current_branch" && "$current_branch" != "b-main" ]]; then
+        parent_is_bmain=$(git merge-base --is-ancestor b-main "$current_branch" 2>/dev/null && echo "yes" || echo "no")
+        if [[ "$parent_is_bmain" == "yes" ]]; then
+            add_check "PASS" "1.6 Branch '$current_branch' is based on b-main"
+        else
+            add_check "FAIL" "1.6 Branch '$current_branch' is NOT based on b-main"
+        fi
+    else
+        add_check "SKIP" "1.6 On b-main or branch unknown (check after creating feature branch)"
+    fi
 }
 
 phase_in_progress() {
@@ -329,6 +342,20 @@ phase_pre_merge() {
         fi
     else
         add_check "SKIP" "3.8 gh CLI not installed"
+    fi
+    
+    # 3.9 PR targets b-main (NOT master)
+    if cmd_exists gh; then
+        base_ref=$(gh pr view --json baseRefName --jq '.baseRefName' 2>/dev/null || echo "")
+        if [[ "$base_ref" == "b-main" ]]; then
+            add_check "PASS" "3.9 PR targets b-main"
+        elif [[ -n "$base_ref" ]]; then
+            add_check "FAIL" "3.9 PR targets '$base_ref' — MUST target b-main"
+        else
+            add_check "SKIP" "3.9 No open PR found"
+        fi
+    else
+        add_check "SKIP" "3.9 gh CLI not installed"
     fi
 }
 

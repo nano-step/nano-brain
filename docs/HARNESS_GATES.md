@@ -4,6 +4,8 @@ Gate specification for the nano-brain v2 Go project. Each gate defines the check
 
 **Core rules:**
 - 1 feature = 1 PR = 1 GitHub issue
+- **All story PRs target `b-main`** — NEVER target `master` directly
+- `master` is updated ONLY via a final release PR when v2 is complete
 - Agent MUST NOT start the next feature until all gates pass
 - PASS = all checks in current phase ✅ → proceed
 - FAIL = any check ❌ → BLOCK, must fix before continuing
@@ -37,6 +39,7 @@ Run before starting any new feature.
 | 1.3 | GitHub issue exists for new feature | `gh issue view <N>` |
 | 1.4 | Branch `b-main` up-to-date | `git log origin/b-main..HEAD` = empty |
 | 1.5 | Validation ladder clean on `b-main` | `go build ./... && go test -race -short ./...` |
+| 1.6 | Feature branch created off `b-main` (NOT master) | `git log --oneline b-main..HEAD` — parent is b-main |
 
 **SKIP rules:** First feature of the project → skip 1.1 and 1.2.
 
@@ -98,6 +101,7 @@ Run before creating or merging a PR. All checks must be green.
 | 3.6 | Gemini PR review — no unresolved substantive comments | `gh pr reviews` |
 | 3.7 | CI workflow pass | `gh pr checks` all green |
 | 3.8 | PR linked to GitHub issue | PR body contains `Closes #N` |
+| 3.9 | PR targets `b-main` (NOT master) | `gh pr view --json baseRefName` = `b-main` |
 
 ---
 
