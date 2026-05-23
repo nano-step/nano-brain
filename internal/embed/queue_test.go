@@ -501,6 +501,65 @@ func TestQueue_PendingDecrementsOnInsertEmbeddingError(t *testing.T) {
 	}
 }
 
+func TestQueue_Depth(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	if eq.Depth() != 0 {
+		t.Errorf("initial depth = %d, want 0", eq.Depth())
+	}
+
+	eq.Enqueue(uuid.New())
+	eq.Enqueue(uuid.New())
+	if eq.Depth() != 2 {
+		t.Errorf("depth after 2 enqueues = %d, want 2", eq.Depth())
+	}
+
+	<-eq.ch
+	if eq.Depth() != 1 {
+		t.Errorf("depth after 1 dequeue = %d, want 1", eq.Depth())
+	}
+}
+
+func TestQueue_Capacity(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	if eq.Capacity() != channelCapacity {
+		t.Errorf("capacity = %d, want %d", eq.Capacity(), channelCapacity)
+	}
+}
+
+func TestQueue_Status_Nominal(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	if s := eq.Status(); s != "nominal" {
+		t.Errorf("status = %q, want nominal", s)
+	}
+}
+
+func TestQueue_Status_Busy(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	eq.ch <- uuid.New()
+	if s := eq.Status(); s != "busy" {
+		t.Errorf("status = %q, want busy", s)
+	}
+}
+
+func TestQueue_Status_Backpressure(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	threshold := int(float64(channelCapacity) * 0.6)
+	for i := 0; i < threshold; i++ {
+		eq.ch <- uuid.New()
+	}
+	if s := eq.Status(); s != "backpressure" {
+		t.Errorf("status = %q, want backpressure", s)
+	}
+}
+
+func TestQueue_Status_Rejecting(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	eq.pending.Store(rejectionThreshold)
+	if s := eq.Status(); s != "rejecting" {
+		t.Errorf("status = %q, want rejecting", s)
+	}
+}
+
 func TestQueue_PendingDecrementsOnMarkEmbeddedError(t *testing.T) {
 	mq := &mockQuerier{
 		markChunkEmbeddedFn: func(_ context.Context, _ sqlc.MarkChunkEmbeddedParams) error {

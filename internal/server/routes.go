@@ -5,7 +5,11 @@ import (
 )
 
 func registerRoutes(s *Server) {
-	h := handlers.NewHealth(s.pool, s.logger, s.version, s.startTime)
+	var queueInfo handlers.EmbedQueueInfo
+	if s.embedQueue != nil {
+		queueInfo = s.embedQueue
+	}
+	h := handlers.NewHealth(s.pool, s.logger, s.version, s.startTime, queueInfo)
 
 	s.echo.GET("/health", h.Health)
 	s.echo.GET("/api/status", h.Status)
@@ -16,6 +20,7 @@ func registerRoutes(s *Server) {
 
 	data := api.Group("", workspaceMiddleware())
 	data.POST("/write", handlers.WriteDocument(s.queries, s.db, s.embedQueue, s.logger, defaultMaxFileSize))
+	data.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedQueue, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
 
 	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.logger))
 	data.GET("/collections", handlers.ListCollectionsHandler(s.queries, s.logger))

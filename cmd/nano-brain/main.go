@@ -100,7 +100,7 @@ func main() {
 		}
 	}
 
-	srv := server.New(cfg.Server, pool, db, queries, fw, eq, embedder, logger, Version)
+	srv := server.New(cfg.Server, cfg.Embedding, pool, db, queries, fw, eq, embedder, logger, Version)
 
 	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
 		for _, ws := range workspaces {
