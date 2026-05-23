@@ -24,6 +24,7 @@ type DocumentQuerier interface {
 
 type ChunkEnqueuer interface {
 	Enqueue(chunkID uuid.UUID) bool
+	IsPressured() bool
 }
 
 type WriteRequest struct {
@@ -41,6 +42,7 @@ type WriteResponse struct {
 	Collection    string `json:"collection"`
 	WorkspaceHash string `json:"workspace_hash"`
 	ChunkCount    int    `json:"chunk_count"`
+	Warning       string `json:"warning,omitempty"`
 }
 
 func writeChunks(ctx context.Context, q DocumentQuerier, docID uuid.UUID, workspace string, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
@@ -162,6 +164,17 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger
 		}
 
 		if enqueuer != nil {
+			if enqueuer.IsPressured() {
+				c.Response().Header().Set("Retry-After", "5")
+				return c.JSON(http.StatusServiceUnavailable, WriteResponse{
+					ID:            row.ID.String(),
+					Hash:          row.ContentHash,
+					Collection:    row.Collection,
+					WorkspaceHash: row.WorkspaceHash,
+					ChunkCount:    len(chunks),
+					Warning:       "embedding queue backpressure active, document saved but embedding delayed",
+				})
+			}
 			for _, id := range chunkIDs {
 				if !enqueuer.Enqueue(id) {
 					logger.Warn().Str("chunk_id", id.String()).Msg("embedding queue full, chunk will be picked up on next scan")

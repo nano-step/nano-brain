@@ -280,8 +280,9 @@ func TestWriteDocument_HashVerification(t *testing.T) {
 }
 
 type mockEnqueuer struct {
-	mu       sync.Mutex
-	enqueued []uuid.UUID
+	mu        sync.Mutex
+	enqueued  []uuid.UUID
+	pressured bool
 }
 
 func (m *mockEnqueuer) Enqueue(id uuid.UUID) bool {
@@ -289,6 +290,12 @@ func (m *mockEnqueuer) Enqueue(id uuid.UUID) bool {
 	defer m.mu.Unlock()
 	m.enqueued = append(m.enqueued, id)
 	return true
+}
+
+func (m *mockEnqueuer) IsPressured() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.pressured
 }
 
 func TestWriteDocument_EnqueuesChunks(t *testing.T) {
