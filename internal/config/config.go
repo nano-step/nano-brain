@@ -25,6 +25,7 @@ type Config struct {
 	Watcher   WatcherConfig   `koanf:"watcher"`
 	Search    SearchConfig    `koanf:"search"`
 	Storage   StorageConfig   `koanf:"storage"`
+	Telemetry TelemetryConfig `koanf:"telemetry"`
 	Logging   LoggingConfig   `koanf:"logging"`
 }
 
@@ -89,6 +90,10 @@ type SearchConfig struct {
 type StorageConfig struct {
 	MaxFileSize int64 `koanf:"max_file_size"`
 	MaxSize     int64 `koanf:"max_size"`
+}
+
+type TelemetryConfig struct {
+	RetentionDays int `koanf:"retention_days"`
 }
 
 // LoggingConfig holds logging configuration.
@@ -237,6 +242,10 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Watcher.ReindexInterval < 1 {
 		errs = append(errs, errors.New("watcher.reindex_interval must be >= 1"))
+	}
+
+	if cfg.Telemetry.RetentionDays < 1 {
+		errs = append(errs, errors.New("telemetry.retention_days must be >= 1"))
 	}
 
 	if cfg.Logging.Level != "" {

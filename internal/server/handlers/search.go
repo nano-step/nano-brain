@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/telemetry"
 	pgvector_go "github.com/pgvector/pgvector-go"
 	"github.com/rs/zerolog"
 )
@@ -63,7 +64,7 @@ type SearchResponse struct {
 	QueryMs int64          `json:"query_ms"`
 }
 
-func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger) echo.HandlerFunc {
+func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, rec ...*telemetry.Recorder) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if embedder == nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "vector search requires embedding provider")
@@ -128,10 +129,16 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger) ec
 			})
 		}
 
+		elapsed := time.Since(start).Milliseconds()
+
+		if len(rec) > 0 && rec[0] != nil {
+			rec[0].Record(c.Request().Context(), req.Query, len(results), elapsed, "", workspace)
+		}
+
 		return c.JSON(http.StatusOK, SearchResponse{
 			Results: results,
 			Total:   len(results),
-			QueryMs: time.Since(start).Milliseconds(),
+			QueryMs: elapsed,
 		})
 	}
 }

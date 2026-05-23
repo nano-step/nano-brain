@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/search"
+	"github.com/nano-brain/nano-brain/internal/telemetry"
 	"github.com/rs/zerolog"
 )
 
@@ -20,7 +21,7 @@ type QueryRequest struct {
 	MaxResults int    `json:"max_results,omitempty"`
 }
 
-func Query(searcher HybridSearcher, logger zerolog.Logger) echo.HandlerFunc {
+func Query(searcher HybridSearcher, logger zerolog.Logger, rec ...*telemetry.Recorder) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req QueryRequest
 		if err := c.Bind(&req); err != nil {
@@ -68,10 +69,16 @@ func Query(searcher HybridSearcher, logger zerolog.Logger) echo.HandlerFunc {
 			})
 		}
 
+		elapsed := time.Since(start).Milliseconds()
+
+		if len(rec) > 0 && rec[0] != nil {
+			rec[0].Record(c.Request().Context(), req.Query, len(out), elapsed, "", workspace)
+		}
+
 		return c.JSON(http.StatusOK, SearchResponse{
 			Results: out,
 			Total:   len(out),
-			QueryMs: time.Since(start).Milliseconds(),
+			QueryMs: elapsed,
 		})
 	}
 }

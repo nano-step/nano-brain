@@ -71,6 +71,10 @@ type TelemetryLog struct {
 	EventType     string
 	Payload       pqtype.NullRawMessage
 	CreatedAt     time.Time
+	QueryText     string
+	ResultCount   int32
+	LatencyMs     int32
+	Collection    string
 }
 
 type Workspace struct {

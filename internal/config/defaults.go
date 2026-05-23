@@ -53,6 +53,9 @@ func getDefaults() *Config {
 			MaxFileSize: 314572800,  // 300MB
 			MaxSize:     10737418240, // 10GB
 		},
+		Telemetry: TelemetryConfig{
+			RetentionDays: 90,
+		},
 		Logging: LoggingConfig{
 			Level: "info",
 			File:  "",

@@ -54,6 +54,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Storage.MaxFileSize != 314572800 {
 		t.Errorf("expected Storage.MaxFileSize=314572800, got %d", cfg.Storage.MaxFileSize)
 	}
+	if cfg.Telemetry.RetentionDays != 90 {
+		t.Errorf("expected Telemetry.RetentionDays=90, got %d", cfg.Telemetry.RetentionDays)
+	}
 	if cfg.Logging.Level != "info" {
 		t.Errorf("expected Logging.Level=info, got %q", cfg.Logging.Level)
 	}
@@ -199,6 +202,11 @@ func TestInvalidRangeRejectsStartup(t *testing.T) {
 			name:    "invalid_search_limit_zero",
 			envVars: map[string]string{"NANO_BRAIN_SEARCH_LIMIT": "0"},
 			errMsg:  "search.limit must be >= 1",
+		},
+		{
+			name:    "invalid_telemetry_retention_zero",
+			envVars: map[string]string{"NANO_BRAIN_TELEMETRY_RETENTION_DAYS": "0"},
+			errMsg:  "telemetry.retention_days must be >= 1",
 		},
 	}
 
