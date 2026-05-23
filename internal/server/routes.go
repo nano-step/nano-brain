@@ -29,6 +29,10 @@ func registerRoutes(s *Server) {
 
 	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger))
 	data.POST("/search", handlers.BM25Search(s.queries, s.logger))
+
+	if s.searchService != nil {
+		data.POST("/query", handlers.Query(s.searchService, s.searchCfg.Limit, s.logger))
+	}
 }
 
 const defaultMaxFileSize int64 = 307200

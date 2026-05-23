@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/search"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
@@ -22,38 +23,47 @@ type PoolChecker interface {
 }
 
 type Server struct {
-	echo       *echo.Echo
-	pool       PoolChecker
-	db         *sql.DB
-	queries    *sqlc.Queries
-	watcher    *watcher.Watcher
-	embedQueue *embed.Queue
-	embedder   embed.Embedder
-	logger     zerolog.Logger
-	cfg        config.ServerConfig
-	embedCfg   config.EmbeddingConfig
-	version    string
-	startTime  time.Time
+	echo          *echo.Echo
+	pool          PoolChecker
+	db            *sql.DB
+	queries       *sqlc.Queries
+	watcher       *watcher.Watcher
+	embedQueue    *embed.Queue
+	embedder      embed.Embedder
+	searchService *search.SearchService
+	logger        zerolog.Logger
+	cfg           config.ServerConfig
+	embedCfg      config.EmbeddingConfig
+	searchCfg     config.SearchConfig
+	version       string
+	startTime     time.Time
 }
 
-func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
+func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg config.SearchConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
 
+	var ss *search.SearchService
+	if queries != nil {
+		ss = search.NewSearchService(queries, embedder, searchCfg, logger)
+	}
+
 	s := &Server{
-		echo:       e,
-		pool:       pool,
-		db:         db,
-		queries:    queries,
-		watcher:    fw,
-		embedQueue: eq,
-		embedder:   embedder,
-		logger:     logger,
-		cfg:        cfg,
-		embedCfg:   embedCfg,
-		version:    version,
-		startTime:  time.Now(),
+		echo:          e,
+		pool:          pool,
+		db:            db,
+		queries:       queries,
+		watcher:       fw,
+		embedQueue:    eq,
+		embedder:      embedder,
+		searchService: ss,
+		logger:        logger,
+		cfg:           cfg,
+		embedCfg:      embedCfg,
+		searchCfg:     searchCfg,
+		version:       version,
+		startTime:     time.Now(),
 	}
 
 	registerMiddleware(s)
