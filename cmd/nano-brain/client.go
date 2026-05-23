@@ -6,7 +6,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 func getBaseURL() string {
 	host := os.Getenv("NANO_BRAIN_HOST")
@@ -20,7 +23,7 @@ func getBaseURL() string {
 	return fmt.Sprintf("http://%s:%s", host, port)
 }
 
-func doRequest(method, url string, body io.Reader) ([]byte, error) {
+func doRequest(method, url string, body io.Reader) ([]byte, int, error) {
 	host := os.Getenv("NANO_BRAIN_HOST")
 	if host == "" {
 		host = "localhost"
@@ -32,30 +35,30 @@ func doRequest(method, url string, body io.Reader) ([]byte, error) {
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") ||
 			strings.Contains(err.Error(), "dial tcp") {
-			return nil, fmt.Errorf("cannot connect to nano-brain server at %s:%s", host, port)
+			return nil, 0, fmt.Errorf("cannot connect to nano-brain server at %s:%s", host, port)
 		}
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, 0, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, 0, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
-		return data, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(data))
+		return data, resp.StatusCode, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(data))
 	}
 
-	return data, nil
+	return data, resp.StatusCode, nil
 }

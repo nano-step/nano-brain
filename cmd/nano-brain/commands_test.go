@@ -44,7 +44,7 @@ func TestDoRequest_Success(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	data, err := doRequest("GET", ts.URL+"/test", nil)
+	data, _, err := doRequest("GET", ts.URL+"/test", nil)
 	if err != nil {
 		t.Fatalf("doRequest() error = %v", err)
 	}
@@ -60,7 +60,7 @@ func TestDoRequest_ServerError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	data, err := doRequest("GET", ts.URL+"/test", nil)
+	data, _, err := doRequest("GET", ts.URL+"/test", nil)
 	if err == nil {
 		t.Fatal("expected error for 500 response")
 	}
@@ -75,7 +75,7 @@ func TestDoRequest_ServerError(t *testing.T) {
 func TestDoRequest_ConnectionRefused(t *testing.T) {
 	t.Setenv("NANO_BRAIN_HOST", "localhost")
 	t.Setenv("NANO_BRAIN_PORT", "19999")
-	_, err := doRequest("GET", "http://localhost:19999/test", nil)
+	_, _, err := doRequest("GET", "http://localhost:19999/test", nil)
 	if err == nil {
 		t.Fatal("expected error for connection refused")
 	}
@@ -92,7 +92,7 @@ func TestDoRequest_NotFound_ReturnsBody(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	data, err := doRequest("POST", ts.URL+"/api/v1/query", strings.NewReader(`{}`))
+	data, _, err := doRequest("POST", ts.URL+"/api/v1/query", strings.NewReader(`{}`))
 	if err == nil {
 		t.Fatal("expected error for 404")
 	}
@@ -162,7 +162,7 @@ func TestInitCmdBuildsCorrectBody(t *testing.T) {
 		t.Setenv("NANO_BRAIN_PORT", parts[1])
 	}
 
-	resp, err := doRequest("POST", ts.URL+"/api/v1/init",
+	resp, _, err := doRequest("POST", ts.URL+"/api/v1/init",
 		bytes.NewReader([]byte(`{"root_path":"/test/path","workspace":"myhash"}`)))
 	if err != nil {
 		t.Fatalf("doRequest failed: %v", err)
@@ -192,7 +192,7 @@ func TestWriteCmdWithTagsBuildsCorrectBody(t *testing.T) {
 	}
 	data, _ := json.Marshal(writeBody)
 
-	resp, err := doRequest("POST", ts.URL+"/api/v1/write", bytes.NewReader(data))
+	resp, _, err := doRequest("POST", ts.URL+"/api/v1/write", bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("doRequest failed: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestStubCmdHandles404(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	_, err := doRequest("POST", ts.URL+"/api/v1/query",
+	_, _, err := doRequest("POST", ts.URL+"/api/v1/query",
 		bytes.NewReader([]byte(`{"query":"test","workspace":"ws123"}`)))
 	if err == nil {
 		t.Fatal("expected error for 404")

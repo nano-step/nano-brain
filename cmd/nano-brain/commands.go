@@ -49,7 +49,7 @@ func runInitCmd(args []string) {
 		os.Exit(1)
 	}
 
-	resp, err := doRequest("POST", getBaseURL()+"/api/v1/init", bytes.NewReader(data))
+	resp, _, err := doRequest("POST", getBaseURL()+"/api/v1/init", bytes.NewReader(data))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -137,7 +137,7 @@ func runWriteCmd(args []string) {
 		os.Exit(1)
 	}
 
-	resp, err := doRequest("POST", getBaseURL()+"/api/v1/write", bytes.NewReader(data))
+	resp, _, err := doRequest("POST", getBaseURL()+"/api/v1/write", bytes.NewReader(data))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -200,9 +200,9 @@ func runStubCmd(endpoint string, args []string) {
 		os.Exit(1)
 	}
 
-	resp, reqErr := doRequest("POST", getBaseURL()+"/api/v1/"+endpoint, bytes.NewReader(data))
+	resp, statusCode, reqErr := doRequest("POST", getBaseURL()+"/api/v1/"+endpoint, bytes.NewReader(data))
 	if reqErr != nil {
-		if strings.Contains(reqErr.Error(), "server returned 404") {
+		if statusCode == 404 {
 			name := strings.ToUpper(endpoint[:1]) + endpoint[1:]
 			fmt.Fprintf(os.Stderr, "%s endpoint not yet implemented\n", name)
 			os.Exit(2)
