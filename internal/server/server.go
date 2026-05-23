@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/search"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
@@ -31,6 +33,7 @@ type Server struct {
 	embedQueue    *embed.Queue
 	embedder      embed.Embedder
 	searchService *search.SearchService
+	mcpServer     *mcpsdk.Server
 	logger        zerolog.Logger
 	cfg           config.ServerConfig
 	embedCfg      config.EmbeddingConfig
@@ -58,6 +61,7 @@ func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg con
 		embedQueue:    eq,
 		embedder:      embedder,
 		searchService: ss,
+		mcpServer:     internalmcp.NewMCPServer(version),
 		logger:        logger,
 		cfg:           cfg,
 		embedCfg:      embedCfg,

@@ -1,6 +1,8 @@
 package server
 
 import (
+	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 )
 
@@ -42,6 +44,16 @@ func registerRoutes(s *Server) {
 	wakeUp := handlers.WakeUpHandler(s.queries, s.logger)
 	api.GET("/wake-up", wakeUp)
 	data.POST("/wake-up", wakeUp)
+
+	sseHandler := mcp.NewSSEHandler(s.mcpServer)
+	streamableHandler := mcp.NewStreamableHTTPHandler(s.mcpServer)
+
+	s.echo.GET("/sse", echo.WrapHandler(sseHandler))
+	s.echo.POST("/sse", echo.WrapHandler(sseHandler))
+
+	s.echo.GET("/mcp", echo.WrapHandler(streamableHandler))
+	s.echo.POST("/mcp", echo.WrapHandler(streamableHandler))
+	s.echo.DELETE("/mcp", echo.WrapHandler(streamableHandler))
 }
 
 const defaultMaxFileSize int64 = 307200
