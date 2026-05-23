@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -23,17 +24,32 @@ type Embedder interface {
 }
 
 type SearchService struct {
-	queries  Querier
-	embedder Embedder
-	config   config.SearchConfig
-	logger   zerolog.Logger
+	queries     Querier
+	embedder    Embedder
+	config      config.SearchConfig
+	configMutex sync.RWMutex
+	logger      zerolog.Logger
 }
 
 func NewSearchService(queries Querier, embedder Embedder, cfg config.SearchConfig, logger zerolog.Logger) *SearchService {
 	return &SearchService{queries: queries, embedder: embedder, config: cfg, logger: logger}
 }
 
+// UpdateConfig updates the search configuration with thread-safe locking.
+func (s *SearchService) UpdateConfig(cfg config.SearchConfig) {
+	s.configMutex.Lock()
+	defer s.configMutex.Unlock()
+	s.config = cfg
+}
+
 func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int) ([]Result, error) {
+	// Read config under lock at the start, then release before I/O
+	s.configMutex.RLock()
+	rrfK := s.config.RrfK
+	recencyWeight := s.config.RecencyWeight
+	recencyHalfLifeDays := s.config.RecencyHalfLifeDays
+	s.configMutex.RUnlock()
+
 	fetchLimit := int32(maxResults * 3)
 	if fetchLimit < 30 {
 		fetchLimit = 30
@@ -123,9 +139,9 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 		return nil, fmt.Errorf("all search legs failed: bm25: %v, vector: %v", bm25Err, vectorErr)
 	}
 
-	merged := RRFMerge(bm25Results, vectorResults, s.config.RrfK)
+	merged := RRFMerge(bm25Results, vectorResults, rrfK)
 
-	boosted := ApplyRecencyBoost(merged, s.config.RecencyWeight, s.config.RecencyHalfLifeDays, time.Now())
+	boosted := ApplyRecencyBoost(merged, recencyWeight, recencyHalfLifeDays, time.Now())
 
 	if len(boosted) > maxResults {
 		boosted = boosted[:maxResults]

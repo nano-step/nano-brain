@@ -41,6 +41,15 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Search.RrfK != 60 {
 		t.Errorf("expected Search.RrfK=60, got %v", cfg.Search.RrfK)
 	}
+	if cfg.Search.RecencyWeight != 0.3 {
+		t.Errorf("expected Search.RecencyWeight=0.3, got %v", cfg.Search.RecencyWeight)
+	}
+	if cfg.Search.RecencyHalfLifeDays != 180 {
+		t.Errorf("expected Search.RecencyHalfLifeDays=180, got %d", cfg.Search.RecencyHalfLifeDays)
+	}
+	if cfg.Search.Limit != 20 {
+		t.Errorf("expected Search.Limit=20, got %d", cfg.Search.Limit)
+	}
 	if cfg.Storage.MaxFileSize != 314572800 {
 		t.Errorf("expected Storage.MaxFileSize=314572800, got %d", cfg.Storage.MaxFileSize)
 	}
@@ -174,6 +183,16 @@ func TestInvalidRangeRejectsStartup(t *testing.T) {
 			name:    "invalid_recency_weight_too_high",
 			envVars: map[string]string{"NANO_BRAIN_SEARCH_RECENCY_WEIGHT": "1.5"},
 			errMsg:  "search.recency_weight must be between 0 and 1",
+		},
+		{
+			name:    "invalid_recency_half_life_days_zero",
+			envVars: map[string]string{"NANO_BRAIN_SEARCH_RECENCY_HALF_LIFE_DAYS": "0"},
+			errMsg:  "search.recency_half_life_days must be >= 1",
+		},
+		{
+			name:    "invalid_recency_half_life_days_negative",
+			envVars: map[string]string{"NANO_BRAIN_SEARCH_RECENCY_HALF_LIFE_DAYS": "-1"},
+			errMsg:  "search.recency_half_life_days must be >= 1",
 		},
 	}
 
