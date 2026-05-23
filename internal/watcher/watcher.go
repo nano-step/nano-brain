@@ -21,7 +21,7 @@ import (
 )
 
 type WatcherQuerier interface {
-	UpsertDocument(ctx context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error)
+	UpsertDocumentBySourcePath(ctx context.Context, arg sqlc.UpsertDocumentBySourcePathParams) (sqlc.UpsertDocumentBySourcePathRow, error)
 	DeleteChunksByDocumentID(ctx context.Context, arg sqlc.DeleteChunksByDocumentIDParams) error
 	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
 	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.GetDocumentBySourcePathRow, error)
@@ -138,6 +138,8 @@ func (w *Watcher) Run(ctx context.Context) error {
 		Int("poll_interval_s", w.pollInterval).
 		Msg("file watcher started")
 
+	w.processAll(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -169,7 +171,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 }
 
 func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
-	if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove) == 0 {
+	if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) == 0 {
 		return
 	}
 
@@ -188,6 +190,12 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 		w.logger.Info().Str("file", event.Name).Msg("file removed (deletion not handled, skipping)")
 	}
 
+	if !debounce.Stop() {
+		select {
+		case <-debounce.C:
+		default:
+		}
+	}
 	debounce.Reset(time.Duration(w.debounceMs) * time.Millisecond)
 }
 
@@ -277,7 +285,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	title := filepath.Base(filePath)
 	meta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
 
-	params := sqlc.UpsertDocumentParams{
+	params := sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: col.workspaceHash,
 		ContentHash:   contentHash,
 		Title:         title,
@@ -307,7 +315,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		Msg("indexed file")
 }
 
-func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, params sqlc.UpsertDocumentParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {
+func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -315,7 +323,7 @@ func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, 
 	defer tx.Rollback() //nolint:errcheck // Rollback after Commit is a no-op in database/sql.
 
 	tq := sqlc.New(tx)
-	docRow, err := tq.UpsertDocument(ctx, params)
+	docRow, err := tq.UpsertDocumentBySourcePath(ctx, params)
 	if err != nil {
 		return fmt.Errorf("upsert document: %w", err)
 	}
@@ -330,8 +338,8 @@ func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, 
 	return nil
 }
 
-func (w *Watcher) upsertWithoutTx(ctx context.Context, workspace string, params sqlc.UpsertDocumentParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {
-	docRow, err := w.queries.UpsertDocument(ctx, params)
+func (w *Watcher) upsertWithoutTx(ctx context.Context, workspace string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {
+	docRow, err := w.queries.UpsertDocumentBySourcePath(ctx, params)
 	if err != nil {
 		return fmt.Errorf("upsert document: %w", err)
 	}

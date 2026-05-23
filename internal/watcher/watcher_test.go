@@ -29,10 +29,10 @@ func newMockQuerier() *mockQuerier {
 	return &mockQuerier{sourcePathHash: make(map[string]string)}
 }
 
-func (m *mockQuerier) UpsertDocument(_ context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error) {
+func (m *mockQuerier) UpsertDocumentBySourcePath(_ context.Context, arg sqlc.UpsertDocumentBySourcePathParams) (sqlc.UpsertDocumentBySourcePathRow, error) {
 	m.upsertDocCalls.Add(1)
 	m.sourcePathHash[arg.SourcePath] = arg.ContentHash
-	return sqlc.UpsertDocumentRow{
+	return sqlc.UpsertDocumentBySourcePathRow{
 		ID:            uuid.New(),
 		ContentHash:   arg.ContentHash,
 		Collection:    arg.Collection,

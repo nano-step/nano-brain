@@ -165,3 +165,56 @@ func (q *Queries) UpsertDocument(ctx context.Context, arg UpsertDocumentParams) 
 	)
 	return i, err
 }
+
+const upsertDocumentBySourcePath = `-- name: UpsertDocumentBySourcePath :one
+INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
+    content_hash = EXCLUDED.content_hash,
+    title = EXCLUDED.title,
+    content = EXCLUDED.content,
+    collection = EXCLUDED.collection,
+    tags = EXCLUDED.tags,
+    metadata = EXCLUDED.metadata,
+    updated_at = now()
+RETURNING id, content_hash, collection, workspace_hash
+`
+
+type UpsertDocumentBySourcePathParams struct {
+	WorkspaceHash string
+	ContentHash   string
+	Title         string
+	Content       string
+	SourcePath    string
+	Collection    string
+	Tags          []string
+	Metadata      pqtype.NullRawMessage
+}
+
+type UpsertDocumentBySourcePathRow struct {
+	ID            uuid.UUID
+	ContentHash   string
+	Collection    string
+	WorkspaceHash string
+}
+
+func (q *Queries) UpsertDocumentBySourcePath(ctx context.Context, arg UpsertDocumentBySourcePathParams) (UpsertDocumentBySourcePathRow, error) {
+	row := q.db.QueryRowContext(ctx, upsertDocumentBySourcePath,
+		arg.WorkspaceHash,
+		arg.ContentHash,
+		arg.Title,
+		arg.Content,
+		arg.SourcePath,
+		arg.Collection,
+		pq.Array(arg.Tags),
+		arg.Metadata,
+	)
+	var i UpsertDocumentBySourcePathRow
+	err := row.Scan(
+		&i.ID,
+		&i.ContentHash,
+		&i.Collection,
+		&i.WorkspaceHash,
+	)
+	return i, err
+}
