@@ -1,8 +1,12 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -18,6 +22,69 @@ func versionHeaderMiddleware(version string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			c.Response().Header().Set(versionHeader, version)
+			return next(c)
+		}
+	}
+}
+
+func workspaceMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			var workspace string
+
+			method := c.Request().Method
+			if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
+				body, err := io.ReadAll(c.Request().Body)
+				if err != nil {
+					return echo.NewHTTPError(http.StatusBadRequest, "failed to read request body")
+				}
+				c.Request().Body = io.NopCloser(bytes.NewReader(body))
+
+				var req struct {
+					Workspace string `json:"workspace"`
+				}
+				_ = json.Unmarshal(body, &req)
+				workspace = req.Workspace
+			} else {
+				workspace = c.QueryParam("workspace")
+			}
+
+			if workspace == "" {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"error":   "workspace_required",
+					"message": "A workspace identifier is required. Pass workspace in request body (POST) or query string (GET). Use 'all' for cross-workspace queries.",
+				})
+			}
+
+			c.Set("workspace", workspace)
+			return next(c)
+		}
+	}
+}
+
+func contentTypeMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			method := c.Request().Method
+			if method != http.MethodPost && method != http.MethodPut && method != http.MethodPatch {
+				return next(c)
+			}
+
+			r := c.Request()
+			hasBody := r.ContentLength > 0 ||
+				strings.EqualFold(r.Header.Get("Transfer-Encoding"), "chunked")
+			if !hasBody {
+				return next(c)
+			}
+
+			ct := r.Header.Get(echo.HeaderContentType)
+			if !strings.HasPrefix(ct, "application/json") {
+				return c.JSON(http.StatusUnsupportedMediaType, map[string]string{
+					"error":   "unsupported_media_type",
+					"message": ErrUnsupportedMediaType.Error(),
+				})
+			}
+
 			return next(c)
 		}
 	}
@@ -45,6 +112,10 @@ func httpErrorHandler(s *Server) echo.HTTPErrorHandler {
 		case errors.Is(err, ErrWorkspaceRequired):
 			code = http.StatusBadRequest
 			errType = "workspace_required"
+			msg = err.Error()
+		case errors.Is(err, ErrUnsupportedMediaType):
+			code = http.StatusUnsupportedMediaType
+			errType = "unsupported_media_type"
 			msg = err.Error()
 		}
 
