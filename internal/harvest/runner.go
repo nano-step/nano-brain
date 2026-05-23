@@ -2,6 +2,7 @@ package harvest
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -14,6 +15,7 @@ type Harvester interface {
 
 // Runner periodically invokes one or more Harvesters.
 type Runner struct {
+	mu         sync.Mutex
 	harvesters []Harvester
 	enqueuer   ChunkEnqueuer
 	interval   time.Duration
@@ -55,9 +57,13 @@ func (r *Runner) Run(ctx context.Context) error {
 }
 
 // RunOnce executes a single harvest cycle synchronously and returns aggregate counts.
+// Serialized by mutex to prevent overlapping ticker and API-triggered harvests.
 func (r *Runner) RunOnce(ctx context.Context) (harvested, skipped, errCount int) {
-	for _, h := range r.harvesters {
-		h, s, e := h.HarvestAll(ctx, r.enqueuer)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, harv := range r.harvesters {
+		h, s, e := harv.HarvestAll(ctx, r.enqueuer)
 		harvested += h
 		skipped += s
 		errCount += e
@@ -66,13 +72,10 @@ func (r *Runner) RunOnce(ctx context.Context) (harvested, skipped, errCount int)
 		Int("harvested", harvested).
 		Int("skipped", skipped).
 		Int("errors", errCount).
-		Msg("harvest cycle complete (on-demand)")
+		Msg("harvest cycle complete")
 	return
 }
 
 func (r *Runner) tick(ctx context.Context) {
-	harvested, skipped, errCount := r.RunOnce(ctx)
-	_ = harvested
-	_ = skipped
-	_ = errCount
+	r.RunOnce(ctx)
 }
