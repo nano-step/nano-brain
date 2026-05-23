@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -94,17 +95,13 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger) ec
 
 		results := make([]SearchResult, 0, len(rows))
 		for _, r := range rows {
-			tags := ""
-			if len(r.Tags) > 0 {
-				tags = joinTags(r.Tags)
-			}
 			results = append(results, SearchResult{
 				ID:            r.ID.String(),
 				Content:       r.Content,
 				Score:         r.Score,
 				SourcePath:    r.SourcePath,
 				Collection:    r.Collection,
-				Tags:          tags,
+				Tags:          strings.Join(r.Tags, ","),
 				WorkspaceHash: r.WorkspaceHash,
 				DocumentID:    r.DocumentID.String(),
 			})
@@ -116,15 +113,4 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger) ec
 			QueryMs: time.Since(start).Milliseconds(),
 		})
 	}
-}
-
-func joinTags(tags []string) string {
-	if len(tags) == 0 {
-		return ""
-	}
-	result := tags[0]
-	for _, t := range tags[1:] {
-		result += "," + t
-	}
-	return result
 }
