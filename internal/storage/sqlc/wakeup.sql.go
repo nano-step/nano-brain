@@ -19,10 +19,11 @@ SELECT c.name,
        d.last_updated
 FROM collections c
 LEFT JOIN (
-    SELECT collection, workspace_hash, count(*) AS cnt, max(updated_at) AS last_updated
-    FROM documents
-    GROUP BY collection, workspace_hash
-) d ON c.name = d.collection AND c.workspace_hash = d.workspace_hash
+    SELECT collection, count(*) AS cnt, max(updated_at) AS last_updated
+    FROM documents doc
+    WHERE doc.workspace_hash = $1
+    GROUP BY collection
+) d ON c.name = d.collection
 WHERE c.workspace_hash = $1
 ORDER BY c.name
 `

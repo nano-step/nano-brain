@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -54,21 +55,34 @@ const defaultWakeUpLimit = 10
 
 func WakeUpHandler(q WakeUpQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		var req WakeUpRequest
 		workspace := c.QueryParam("workspace")
 		if workspace == "" {
 			workspace, _ = c.Get("workspace").(string)
 		}
 		if workspace == "" {
-			var req WakeUpRequest
-			if err := c.Bind(&req); err == nil {
-				workspace = req.Workspace
-			}
+			_ = c.Bind(&req)
+			workspace = req.Workspace
 		}
 		if workspace == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "workspace is required")
 		}
 
 		limit := defaultWakeUpLimit
+		if lq := c.QueryParam("limit"); lq != "" {
+			if v, err := strconv.Atoi(lq); err == nil {
+				limit = v
+			}
+		} else if req.Limit > 0 {
+			limit = req.Limit
+		}
+		if limit <= 0 {
+			limit = defaultWakeUpLimit
+		}
+		if limit > 50 {
+			limit = 50
+		}
+
 		ctx := c.Request().Context()
 
 		docs, err := q.RecentDocuments(ctx, sqlc.RecentDocumentsParams{

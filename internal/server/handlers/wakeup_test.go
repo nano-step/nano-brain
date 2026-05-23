@@ -235,6 +235,78 @@ func TestWakeUp_RecentMemoriesOrdering(t *testing.T) {
 	}
 }
 
+func TestWakeUp_LimitParam_GET(t *testing.T) {
+	now := time.Now()
+	var capturedLimit int32
+	q := &mockWakeUpQuerier{
+		recentDocsFn: func(_ context.Context, arg sqlc.RecentDocumentsParams) ([]sqlc.RecentDocumentsRow, error) {
+			capturedLimit = arg.Limit
+			return []sqlc.RecentDocumentsRow{
+				{ID: uuid.New(), Title: "Doc1", Tags: []string{}, UpdatedAt: now, Snippet: "a"},
+				{ID: uuid.New(), Title: "Doc2", Tags: []string{}, UpdatedAt: now, Snippet: "b"},
+				{ID: uuid.New(), Title: "Doc3", Tags: []string{}, UpdatedAt: now, Snippet: "c"},
+			}, nil
+		},
+		docStatsFn: func(_ context.Context, _ string) (sqlc.WorkspaceDocStatsRow, error) {
+			return sqlc.WorkspaceDocStatsRow{TotalDocuments: 5, LastUpdated: now}, nil
+		},
+		chunkCountFn: func(_ context.Context, _ string) (int64, error) {
+			return 10, nil
+		},
+		collectionsLastFn: func(_ context.Context, _ string) ([]sqlc.ListCollectionsWithLastUpdatedRow, error) {
+			return []sqlc.ListCollectionsWithLastUpdatedRow{}, nil
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/wake-up?workspace=ws1&limit=3", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := handlers.WakeUpHandler(q, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if capturedLimit != 3 {
+		t.Errorf("expected limit=3 passed to query, got %d", capturedLimit)
+	}
+}
+
+func TestWakeUp_LimitCapped(t *testing.T) {
+	var capturedLimit int32
+	q := &mockWakeUpQuerier{
+		recentDocsFn: func(_ context.Context, arg sqlc.RecentDocumentsParams) ([]sqlc.RecentDocumentsRow, error) {
+			capturedLimit = arg.Limit
+			return []sqlc.RecentDocumentsRow{}, nil
+		},
+		docStatsFn: func(_ context.Context, _ string) (sqlc.WorkspaceDocStatsRow, error) {
+			return sqlc.WorkspaceDocStatsRow{TotalDocuments: 0, LastUpdated: nil}, nil
+		},
+		chunkCountFn: func(_ context.Context, _ string) (int64, error) {
+			return 0, nil
+		},
+		collectionsLastFn: func(_ context.Context, _ string) ([]sqlc.ListCollectionsWithLastUpdatedRow, error) {
+			return []sqlc.ListCollectionsWithLastUpdatedRow{}, nil
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/wake-up?workspace=ws1&limit=999", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := handlers.WakeUpHandler(q, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatal(err)
+	}
+	if capturedLimit != 50 {
+		t.Errorf("expected limit capped at 50, got %d", capturedLimit)
+	}
+}
+
 func TestWakeUp_POST_WithWorkspaceInBody(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/wake-up", strings.NewReader(`{"workspace":"ws1"}`))
