@@ -6,7 +6,6 @@ import (
 	"flag"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -47,7 +46,8 @@ func main() {
 		Int("port", cfg.Server.Port).
 		Msg("nano-brain starting")
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	pool, err := storage.NewPool(ctx, cfg.Database, logger)
 	if err != nil {
@@ -80,7 +80,7 @@ func main() {
 		}
 	}
 
-	g, gctx := errgroup.WithContext(context.Background())
+	g, gctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -94,13 +94,8 @@ func main() {
 	})
 
 	g.Go(func() error {
-		quit := make(chan os.Signal, 1)
-		signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
-		select {
-		case sig := <-quit:
-			logger.Info().Str("signal", sig.String()).Msg("shutdown signal received")
-		case <-gctx.Done():
-		}
+		<-gctx.Done()
+		logger.Info().Msg("shutdown signal received")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)

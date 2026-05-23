@@ -20,7 +20,9 @@ type mockQuerier struct {
 	upsertDocCalls   atomic.Int64
 	upsertChunkCalls atomic.Int64
 	deleteChunkCalls atomic.Int64
-	sourcePathHash   map[string]string
+	// sourcePathHash is not synchronized — safe only in sequential test paths.
+	// Add sync.Mutex if tests evolve to exercise concurrent watcher+mock.
+	sourcePathHash map[string]string
 }
 
 func newMockQuerier() *mockQuerier {

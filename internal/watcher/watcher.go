@@ -109,7 +109,12 @@ func (w *Watcher) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create fsnotify watcher: %w", err)
 	}
-	defer fsw.Close()
+	defer func() {
+		fsw.Close()
+		w.mu.Lock()
+		w.fsw = nil
+		w.mu.Unlock()
+	}()
 
 	w.mu.Lock()
 	w.fsw = fsw
@@ -142,12 +147,14 @@ func (w *Watcher) Run(ctx context.Context) error {
 
 		case event, ok := <-fsw.Events:
 			if !ok {
+				debounce.Stop()
 				return nil
 			}
 			w.handleFSEvent(event, debounce)
 
 		case err, ok := <-fsw.Errors:
 			if !ok {
+				debounce.Stop()
 				return nil
 			}
 			w.logger.Error().Err(err).Msg("fsnotify error")
@@ -175,6 +182,9 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 	w.mu.Unlock()
 
 	if event.Op&fsnotify.Remove != 0 {
+		// TODO(story-2.x): Implement stale document cleanup. When a file is deleted,
+		// its document+chunks remain in the DB. Consider diffing globbed files against
+		// DB documents in scanCollection to purge orphans.
 		w.logger.Info().Str("file", event.Name).Msg("file removed (deletion not handled, skipping)")
 	}
 
@@ -302,16 +312,15 @@ func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, 
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
+	defer tx.Rollback() //nolint:errcheck // Rollback after Commit is a no-op in database/sql.
 
 	tq := sqlc.New(tx)
 	docRow, err := tq.UpsertDocument(ctx, params)
 	if err != nil {
-		_ = tx.Rollback()
 		return fmt.Errorf("upsert document: %w", err)
 	}
 
 	if err := w.writeChunks(ctx, tq, docRow.ID, workspace, chunks, meta); err != nil {
-		_ = tx.Rollback()
 		return fmt.Errorf("write chunks: %w", err)
 	}
 
