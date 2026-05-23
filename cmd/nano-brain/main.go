@@ -12,6 +12,7 @@ import (
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/harvest"
 	"github.com/nano-brain/nano-brain/internal/health"
 	"github.com/nano-brain/nano-brain/internal/server"
 	"github.com/nano-brain/nano-brain/internal/storage"
@@ -134,6 +135,26 @@ func main() {
 		g.Go(func() error {
 			return eq.Run(gctx)
 		})
+	}
+
+	if cfg.Harvester.OpenCode.SessionDir != "" {
+		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode harvester")
+		} else {
+			oh := harvest.NewOpenCodeHarvester(db, logger, cfg.Harvester.OpenCode.SessionDir, wsHash)
+			interval := time.Duration(cfg.Intervals.SessionPoll) * time.Second
+			hr := harvest.NewRunner(oh, eq, interval, logger)
+			g.Go(func() error {
+				return hr.Run(gctx)
+			})
+			logger.Info().
+				Str("session_dir", cfg.Harvester.OpenCode.SessionDir).
+				Dur("interval", interval).
+				Msg("opencode session harvester started")
+		}
+	} else {
+		logger.Info().Msg("opencode session harvester disabled (no session_dir configured)")
 	}
 
 	g.Go(func() error {
