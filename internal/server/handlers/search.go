@@ -24,9 +24,7 @@ type VSearchQuerier interface {
 
 type VSearchRequest struct {
 	Query      string `json:"query"`
-	Workspace  string `json:"workspace"`
 	MaxResults int    `json:"max_results,omitempty"`
-	Collection string `json:"collection,omitempty"`
 }
 
 type SearchResult struct {
@@ -38,7 +36,6 @@ type SearchResult struct {
 	Tags          string  `json:"tags,omitempty"`
 	WorkspaceHash string  `json:"workspace_hash"`
 	DocumentID    string  `json:"document_id"`
-	ChunkIndex    int32   `json:"chunk_index,omitempty"`
 }
 
 type SearchResponse struct {
@@ -76,7 +73,10 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger) ec
 
 		start := time.Now()
 
-		vec, err := embedder.Embed(c.Request().Context(), req.Query)
+		embedCtx, cancel := context.WithTimeout(c.Request().Context(), 10*time.Second)
+		defer cancel()
+
+		vec, err := embedder.Embed(embedCtx, req.Query)
 		if err != nil {
 			logger.Error().Err(err).Msg("embedding query failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to embed query")

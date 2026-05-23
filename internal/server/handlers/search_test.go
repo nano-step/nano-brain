@@ -300,3 +300,31 @@ func TestVSearch_EmbedError(t *testing.T) {
 		t.Errorf("expected 500, got %d", he.Code)
 	}
 }
+
+func TestVSearch_DBError(t *testing.T) {
+	emb := &mockEmbedder{
+		embedFn:   func(_ context.Context, _ string) ([]float32, error) { return testVector(), nil },
+		dimension: 3,
+	}
+	q := &mockVSearchQuerier{
+		vectorSearchFn: func(_ context.Context, _ sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error) {
+			return nil, errors.New("db down")
+		},
+	}
+
+	e := echo.New()
+	c, _ := newVSearchContext(e, `{"query":"test","workspace":"ws1"}`, "ws1")
+
+	h := handlers.VectorSearch(q, emb, zerolog.Nop())
+	err := h(c)
+	if err == nil {
+		t.Fatal("expected error for DB failure")
+	}
+	he, ok := err.(*echo.HTTPError)
+	if !ok {
+		t.Fatalf("expected echo.HTTPError, got %T", err)
+	}
+	if he.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", he.Code)
+	}
+}
