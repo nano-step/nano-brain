@@ -16,8 +16,7 @@ import (
 type WorkspaceQuerier interface {
 	UpsertWorkspace(ctx context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error)
 	UpsertCollection(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error)
-	ListWorkspaces(ctx context.Context) ([]sqlc.Workspace, error)
-	CountDocumentsByWorkspace(ctx context.Context, workspaceHash string) (int64, error)
+	ListWorkspacesWithStats(ctx context.Context) ([]sqlc.ListWorkspacesWithStatsRow, error)
 }
 
 type initRequest struct {
@@ -31,12 +30,13 @@ type initResponse struct {
 }
 
 type workspaceItem struct {
-	WorkspaceHash string    `json:"workspace_hash"`
-	RootPath      string    `json:"root_path"`
-	Name          string    `json:"name"`
-	DocumentCount int64     `json:"document_count"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	WorkspaceHash       string     `json:"workspace_hash"`
+	RootPath            string     `json:"root_path"`
+	Name                string     `json:"name"`
+	DocumentCount       int64      `json:"document_count"`
+	LastDocumentUpdated *time.Time `json:"last_document_updated"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
 }
 
 func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath string) (sqlc.Workspace, error) {
@@ -137,27 +137,26 @@ func InitWorkspace(q WorkspaceQuerier, db *sql.DB, logger zerolog.Logger) echo.H
 
 func ListWorkspaces(q WorkspaceQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		workspaces, err := q.ListWorkspaces(c.Request().Context())
+		rows, err := q.ListWorkspacesWithStats(c.Request().Context())
 		if err != nil {
 			logger.Error().Err(err).Msg("list workspaces failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to list workspaces")
 		}
 
-		items := make([]workspaceItem, 0, len(workspaces))
-		for _, ws := range workspaces {
-			count, err := q.CountDocumentsByWorkspace(c.Request().Context(), ws.Hash)
-			if err != nil {
-				logger.Error().Err(err).Str("hash", ws.Hash).Msg("count documents failed")
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to count documents")
+		items := make([]workspaceItem, 0, len(rows))
+		for _, r := range rows {
+			item := workspaceItem{
+				WorkspaceHash: r.Hash,
+				RootPath:      r.Path,
+				Name:          r.Name,
+				DocumentCount: r.DocumentCount,
+				CreatedAt:     r.CreatedAt,
+				UpdatedAt:     r.UpdatedAt,
 			}
-			items = append(items, workspaceItem{
-				WorkspaceHash: ws.Hash,
-				RootPath:      ws.Path,
-				Name:          ws.Name,
-				DocumentCount: count,
-				CreatedAt:     ws.CreatedAt,
-				UpdatedAt:     ws.UpdatedAt,
-			})
+			if t, ok := r.LastDocumentUpdated.(time.Time); ok {
+				item.LastDocumentUpdated = &t
+			}
+			items = append(items, item)
 		}
 
 		return c.JSON(http.StatusOK, items)

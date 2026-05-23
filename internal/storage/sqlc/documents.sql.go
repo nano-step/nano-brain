@@ -151,6 +151,42 @@ func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash st
 	return items, nil
 }
 
+const listTagsByWorkspace = `-- name: ListTagsByWorkspace :many
+SELECT unnest(tags) AS tag, COUNT(*) AS count
+FROM documents
+WHERE workspace_hash = $1 AND tags IS NOT NULL AND array_length(tags, 1) > 0
+GROUP BY tag
+ORDER BY count DESC, tag
+`
+
+type ListTagsByWorkspaceRow struct {
+	Tag   interface{}
+	Count int64
+}
+
+func (q *Queries) ListTagsByWorkspace(ctx context.Context, workspaceHash string) ([]ListTagsByWorkspaceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTagsByWorkspace, workspaceHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTagsByWorkspaceRow
+	for rows.Next() {
+		var i ListTagsByWorkspaceRow
+		if err := rows.Scan(&i.Tag, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateDocumentsCollection = `-- name: UpdateDocumentsCollection :exec
 UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = $3
 `

@@ -15,3 +15,10 @@ SELECT * FROM workspaces ORDER BY name;
 
 -- name: CountDocumentsByWorkspace :one
 SELECT COUNT(*) FROM documents WHERE workspace_hash = $1;
+
+-- name: ListWorkspacesWithStats :many
+SELECT w.*,
+    (SELECT COUNT(*) FROM documents d WHERE d.workspace_hash = w.hash) AS document_count,
+    (SELECT MAX(d.updated_at) FROM documents d WHERE d.workspace_hash = w.hash) AS last_document_updated
+FROM workspaces w
+ORDER BY w.name;

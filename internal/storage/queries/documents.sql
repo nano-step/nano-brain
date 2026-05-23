@@ -41,3 +41,10 @@ FROM documents WHERE workspace_hash = $1 ORDER BY updated_at DESC;
 
 -- name: UpdateDocumentsCollection :exec
 UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = $3;
+
+-- name: ListTagsByWorkspace :many
+SELECT unnest(tags) AS tag, COUNT(*) AS count
+FROM documents
+WHERE workspace_hash = $1 AND tags IS NOT NULL AND array_length(tags, 1) > 0
+GROUP BY tag
+ORDER BY count DESC, tag;

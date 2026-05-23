@@ -7,6 +7,9 @@ package sqlc
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 const countDocumentsByWorkspace = `-- name: CountDocumentsByWorkspace :one
@@ -58,6 +61,57 @@ func (q *Queries) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 			&i.Path,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkspacesWithStats = `-- name: ListWorkspacesWithStats :many
+SELECT w.id, w.hash, w.name, w.path, w.created_at, w.updated_at,
+    (SELECT COUNT(*) FROM documents d WHERE d.workspace_hash = w.hash) AS document_count,
+    (SELECT MAX(d.updated_at) FROM documents d WHERE d.workspace_hash = w.hash) AS last_document_updated
+FROM workspaces w
+ORDER BY w.name
+`
+
+type ListWorkspacesWithStatsRow struct {
+	ID                  uuid.UUID
+	Hash                string
+	Name                string
+	Path                string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	DocumentCount       int64
+	LastDocumentUpdated interface{}
+}
+
+func (q *Queries) ListWorkspacesWithStats(ctx context.Context) ([]ListWorkspacesWithStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkspacesWithStats)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkspacesWithStatsRow
+	for rows.Next() {
+		var i ListWorkspacesWithStatsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hash,
+			&i.Name,
+			&i.Path,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DocumentCount,
+			&i.LastDocumentUpdated,
 		); err != nil {
 			return nil, err
 		}
