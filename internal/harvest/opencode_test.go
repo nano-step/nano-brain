@@ -351,3 +351,65 @@ func TestHarvestAllNoSessionSubdir(t *testing.T) {
 		t.Errorf("no session subdir: got h=%d s=%d e=%d", harvested, skipped, errCount)
 	}
 }
+
+func TestOpenCodeHarvesterDedupHashDeterminism(t *testing.T) {
+	sess := &sessionFile{
+		ID:        "ses_dedup",
+		Title:     "Dedup Test",
+		Directory: "/work",
+	}
+	sess.Time.Created = 1700000000000
+
+	msg := renderedMessage{
+		Role:      "user",
+		Content:   "Test content",
+		CreatedAt: time.UnixMilli(1700000000000),
+	}
+
+	md1 := renderMarkdown(sess, []renderedMessage{msg})
+	md2 := renderMarkdown(sess, []renderedMessage{msg})
+
+	h1 := sha256.Sum256([]byte(md1))
+	h2 := sha256.Sum256([]byte(md2))
+
+	hash1 := hex.EncodeToString(h1[:])
+	hash2 := hex.EncodeToString(h2[:])
+
+	if hash1 != hash2 {
+		t.Error("identical input must produce identical SHA-256 hash")
+	}
+}
+
+func TestOpenCodeHarvesterDedupHashChange(t *testing.T) {
+	sess := &sessionFile{
+		ID:        "ses_dedup",
+		Title:     "Dedup Test",
+		Directory: "/work",
+	}
+	sess.Time.Created = 1700000000000
+
+	msg1 := renderedMessage{
+		Role:      "user",
+		Content:   "Original content",
+		CreatedAt: time.UnixMilli(1700000000000),
+	}
+
+	msg2 := renderedMessage{
+		Role:      "user",
+		Content:   "Modified content",
+		CreatedAt: time.UnixMilli(1700000000000),
+	}
+
+	md1 := renderMarkdown(sess, []renderedMessage{msg1})
+	md2 := renderMarkdown(sess, []renderedMessage{msg2})
+
+	h1 := sha256.Sum256([]byte(md1))
+	h2 := sha256.Sum256([]byte(md2))
+
+	hash1 := hex.EncodeToString(h1[:])
+	hash2 := hex.EncodeToString(h2[:])
+
+	if hash1 == hash2 {
+		t.Error("different content must produce different SHA-256 hash")
+	}
+}
