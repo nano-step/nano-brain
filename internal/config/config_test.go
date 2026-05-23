@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -40,6 +41,15 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.Search.RrfK != 60 {
 		t.Errorf("expected Search.RrfK=60, got %v", cfg.Search.RrfK)
+	}
+	if cfg.Search.RecencyWeight != 0.3 {
+		t.Errorf("expected Search.RecencyWeight=0.3, got %v", cfg.Search.RecencyWeight)
+	}
+	if cfg.Search.RecencyHalfLifeDays != 180 {
+		t.Errorf("expected Search.RecencyHalfLifeDays=180, got %d", cfg.Search.RecencyHalfLifeDays)
+	}
+	if cfg.Search.Limit != 20 {
+		t.Errorf("expected Search.Limit=20, got %d", cfg.Search.Limit)
 	}
 	if cfg.Storage.MaxFileSize != 314572800 {
 		t.Errorf("expected Storage.MaxFileSize=314572800, got %d", cfg.Storage.MaxFileSize)
@@ -175,6 +185,21 @@ func TestInvalidRangeRejectsStartup(t *testing.T) {
 			envVars: map[string]string{"NANO_BRAIN_SEARCH_RECENCY_WEIGHT": "1.5"},
 			errMsg:  "search.recency_weight must be between 0 and 1",
 		},
+		{
+			name:    "invalid_recency_half_life_days_zero",
+			envVars: map[string]string{"NANO_BRAIN_SEARCH_RECENCY_HALF_LIFE_DAYS": "0"},
+			errMsg:  "search.recency_half_life_days must be >= 1",
+		},
+		{
+			name:    "invalid_recency_half_life_days_negative",
+			envVars: map[string]string{"NANO_BRAIN_SEARCH_RECENCY_HALF_LIFE_DAYS": "-1"},
+			errMsg:  "search.recency_half_life_days must be >= 1",
+		},
+		{
+			name:    "invalid_search_limit_zero",
+			envVars: map[string]string{"NANO_BRAIN_SEARCH_LIMIT": "0"},
+			errMsg:  "search.limit must be >= 1",
+		},
 	}
 
 	for _, tt := range tests {
@@ -224,6 +249,44 @@ func TestGeneratesDefaultConfigFile(t *testing.T) {
 
 	if cfg.Server.Port != 3100 {
 		t.Errorf("generated config has unexpected port: %d", cfg.Server.Port)
+	}
+}
+
+func TestRecencyWeightBoundaryValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{
+			name:  "recency_weight_zero",
+			value: "0.0",
+		},
+		{
+			name:  "recency_weight_one",
+			value: "1.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+			t.Setenv("NANO_BRAIN_SEARCH_RECENCY_WEIGHT", tt.value)
+
+			cfg, err := Load(configPath)
+			if err != nil {
+				t.Errorf("expected no error for recency_weight=%s, got: %v", tt.value, err)
+			}
+
+			weight, err := strconv.ParseFloat(tt.value, 64)
+			if err != nil {
+				t.Fatalf("test setup error: %v", err)
+			}
+			if cfg.Search.RecencyWeight != weight {
+				t.Errorf("expected Search.RecencyWeight=%v, got %v", weight, cfg.Search.RecencyWeight)
+			}
+		})
 	}
 }
 
