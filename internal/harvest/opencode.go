@@ -20,14 +20,6 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
-// HarvesterQuerier defines the database operations the harvester needs.
-type HarvesterQuerier interface {
-	UpsertDocument(ctx context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error)
-	DeleteChunksByDocumentID(ctx context.Context, arg sqlc.DeleteChunksByDocumentIDParams) error
-	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
-	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
-}
-
 // ChunkEnqueuer enqueues chunk IDs for embedding.
 type ChunkEnqueuer interface {
 	Enqueue(chunkID uuid.UUID) bool
@@ -133,6 +125,7 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 	if err != nil {
 		return false, fmt.Errorf("begin tx: %w", err)
 	}
+	defer tx.Rollback() // no-op after commit
 	tq := sqlc.New(tx)
 
 	meta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
@@ -149,7 +142,6 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 		Metadata:      meta,
 	})
 	if err != nil {
-		_ = tx.Rollback()
 		return false, fmt.Errorf("upsert document: %w", err)
 	}
 
@@ -157,7 +149,6 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 		DocumentID:    docRow.ID,
 		WorkspaceHash: h.workspace,
 	}); err != nil {
-		_ = tx.Rollback()
 		return false, fmt.Errorf("delete old chunks: %w", err)
 	}
 
@@ -177,7 +168,6 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 			Metadata:      chunkMeta,
 		})
 		if err != nil {
-			_ = tx.Rollback()
 			return false, fmt.Errorf("upsert chunk: %w", err)
 		}
 		chunkIDs = append(chunkIDs, id)
