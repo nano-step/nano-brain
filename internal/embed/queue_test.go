@@ -195,7 +195,7 @@ func TestQueue_BackoffMax(t *testing.T) {
 	}
 }
 
-func TestQueue_RunStartupScan(t *testing.T) {
+func TestQueue_ScanPendingSingleBatch(t *testing.T) {
 	pending := []uuid.UUID{uuid.New(), uuid.New()}
 	mq := &mockQuerier{
 		getAllPendingChunksFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
@@ -208,6 +208,58 @@ func TestQueue_RunStartupScan(t *testing.T) {
 
 	if len(eq.ch) != 2 {
 		t.Errorf("channel len = %d, want 2", len(eq.ch))
+	}
+}
+
+func TestQueue_ScanPendingMultiBatch(t *testing.T) {
+	callCount := 0
+	mq := &mockQuerier{
+		getAllPendingChunksFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+			callCount++
+			if callCount == 1 {
+				ids := make([]uuid.UUID, scanBatchSize)
+				for i := range ids {
+					ids[i] = uuid.New()
+				}
+				return ids, nil
+			}
+			return []uuid.UUID{uuid.New(), uuid.New()}, nil
+		},
+	}
+
+	eq := newTestQueue(&mockEmbedder{}, mq)
+	eq.scanPending(context.Background())
+
+	if callCount != 2 {
+		t.Errorf("GetAllPendingChunks called %d times, want 2", callCount)
+	}
+	if len(eq.ch) != scanBatchSize+2 {
+		t.Errorf("channel len = %d, want %d", len(eq.ch), scanBatchSize+2)
+	}
+}
+
+func TestQueue_ScanPendingStopsWhenQueueFull(t *testing.T) {
+	mq := &mockQuerier{
+		getAllPendingChunksFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+			ids := make([]uuid.UUID, scanBatchSize)
+			for i := range ids {
+				ids[i] = uuid.New()
+			}
+			return ids, nil
+		},
+	}
+
+	eq := newTestQueue(&mockEmbedder{}, mq)
+
+	prefill := channelCapacity - 5
+	for i := 0; i < prefill; i++ {
+		eq.ch <- uuid.New()
+	}
+
+	eq.scanPending(context.Background())
+
+	if len(eq.ch) != channelCapacity {
+		t.Errorf("channel len = %d, want %d (full)", len(eq.ch), channelCapacity)
 	}
 }
 
@@ -228,6 +280,30 @@ func TestQueue_RunContextCancellation(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run did not return after context cancellation")
+	}
+}
+
+func TestQueue_ProcessChunk_EmbedHasDeadline(t *testing.T) {
+	chunkID := uuid.New()
+	var capturedDeadline time.Time
+	var hasDeadline bool
+	me := &mockEmbedder{
+		embedFn: func(ctx context.Context, text string) ([]float32, error) {
+			capturedDeadline, hasDeadline = ctx.Deadline()
+			return []float32{0.1, 0.2, 0.3}, nil
+		},
+	}
+	mq := &mockQuerier{}
+
+	eq := newTestQueue(me, mq)
+	eq.processChunk(context.Background(), chunkID)
+
+	if !hasDeadline {
+		t.Fatal("embed context should have a deadline")
+	}
+	remaining := time.Until(capturedDeadline)
+	if remaining > embedTimeout || remaining < 0 {
+		t.Errorf("deadline remaining = %v, expected within (0, %v]", remaining, embedTimeout)
 	}
 }
 

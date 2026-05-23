@@ -14,12 +14,14 @@ import (
 )
 
 const (
-	channelCapacity     = 10000
-	defaultConcurrency  = 4
-	startupScanLimit    = 1000
-	backoffBase         = 60 * time.Second
-	backoffMultiplier   = 1.5
-	backoffMax          = 300 * time.Second
+	channelCapacity    = 10000
+	defaultConcurrency = 4
+	scanBatchSize      = 1000
+	rescanInterval     = 5 * time.Minute
+	embedTimeout       = 2 * time.Minute
+	backoffBase        = 60 * time.Second
+	backoffMultiplier  = 1.5
+	backoffMax         = 300 * time.Second
 )
 
 type QueueQuerier interface {
@@ -75,6 +77,9 @@ func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
 func (q *Queue) Run(ctx context.Context) error {
 	q.scanPending(ctx)
 
+	rescanTicker := time.NewTicker(rescanInterval)
+	defer rescanTicker.Stop()
+
 	sem := make(chan struct{}, q.concurrency)
 	var wg sync.WaitGroup
 	for {
@@ -82,6 +87,8 @@ func (q *Queue) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			wg.Wait()
 			return nil
+		case <-rescanTicker.C:
+			q.scanPending(ctx)
 		case chunkID := <-q.ch:
 			sem <- struct{}{}
 			wg.Add(1)
@@ -95,18 +102,25 @@ func (q *Queue) Run(ctx context.Context) error {
 }
 
 func (q *Queue) scanPending(ctx context.Context) {
-	ids, err := q.queries.GetAllPendingChunks(ctx, startupScanLimit)
-	if err != nil {
-		q.logger.Error().Err(err).Msg("startup scan failed")
-		return
-	}
-	enqueued := 0
-	for _, id := range ids {
-		if q.Enqueue(id) {
-			enqueued++
+	total := 0
+	for {
+		ids, err := q.queries.GetAllPendingChunks(ctx, scanBatchSize)
+		if err != nil {
+			q.logger.Error().Err(err).Msg("failed to scan pending chunks")
+			return
+		}
+		for _, id := range ids {
+			if !q.Enqueue(id) {
+				q.logger.Info().Int("total", total).Msg("scan complete (queue full)")
+				return
+			}
+			total++
+		}
+		if len(ids) < scanBatchSize {
+			break
 		}
 	}
-	q.logger.Info().Int("count", enqueued).Msg("startup scan: re-queued pending chunks")
+	q.logger.Info().Int("total", total).Msg("scan complete")
 }
 
 func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
@@ -134,7 +148,9 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		return
 	}
 
-	vec, err := q.embedder.Embed(ctx, chunk.Content)
+	embedCtx, cancel := context.WithTimeout(ctx, embedTimeout)
+	defer cancel()
+	vec, err := q.embedder.Embed(embedCtx, chunk.Content)
 	if err != nil {
 		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("embedding failed")
 		q.increaseBackoff()
