@@ -67,7 +67,7 @@ func (q *Queries) GetAllPendingChunks(ctx context.Context, limit int32) ([]uuid.
 }
 
 const getPendingChunks = `-- name: GetPendingChunks :many
-SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.created_at, c.embed_status FROM chunks c
+SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.created_at, c.embed_status, c.search_vector FROM chunks c
 WHERE c.workspace_hash = $1
 AND c.embed_status = 'pending'
 ORDER BY c.created_at ASC
@@ -100,6 +100,7 @@ func (q *Queries) GetPendingChunks(ctx context.Context, arg GetPendingChunksPara
 			&i.Metadata,
 			&i.CreatedAt,
 			&i.EmbedStatus,
+			&i.SearchVector,
 		); err != nil {
 			return nil, err
 		}
