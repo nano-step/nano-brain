@@ -256,3 +256,63 @@ func TestRenderClaudeCodeMarkdownToolUseHashStability(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeCodeHarvesterDedupHashDeterminism(t *testing.T) {
+	msgs := []claudeCodeMessage{
+		{
+			Type:      "user",
+			Timestamp: "2026-01-01T10:00:00Z",
+			Content:   "What is the capital of France?",
+		},
+		{
+			Type:      "tool_use",
+			Timestamp: "2026-01-01T10:00:01Z",
+			ToolName:  "search",
+			ToolInput: json.RawMessage(`{"query":"capital of France"}`),
+		},
+	}
+
+	md1 := renderClaudeCodeMarkdown("ses_test", msgs)
+	md2 := renderClaudeCodeMarkdown("ses_test", msgs)
+
+	h1 := sha256.Sum256([]byte(md1))
+	h2 := sha256.Sum256([]byte(md2))
+
+	hash1 := hex.EncodeToString(h1[:])
+	hash2 := hex.EncodeToString(h2[:])
+
+	if hash1 != hash2 {
+		t.Error("identical input must produce identical SHA-256 hash")
+	}
+}
+
+func TestClaudeCodeHarvesterDedupHashChange(t *testing.T) {
+	msgs1 := []claudeCodeMessage{
+		{
+			Type:      "user",
+			Timestamp: "2026-01-01T10:00:00Z",
+			Content:   "Original question",
+		},
+	}
+
+	msgs2 := []claudeCodeMessage{
+		{
+			Type:      "user",
+			Timestamp: "2026-01-01T10:00:00Z",
+			Content:   "Modified question",
+		},
+	}
+
+	md1 := renderClaudeCodeMarkdown("ses_test", msgs1)
+	md2 := renderClaudeCodeMarkdown("ses_test", msgs2)
+
+	h1 := sha256.Sum256([]byte(md1))
+	h2 := sha256.Sum256([]byte(md2))
+
+	hash1 := hex.EncodeToString(h1[:])
+	hash2 := hex.EncodeToString(h2[:])
+
+	if hash1 == hash2 {
+		t.Error("different content must produce different SHA-256 hash")
+	}
+}
