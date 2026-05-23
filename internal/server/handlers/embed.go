@@ -23,8 +23,7 @@ type EmbedQuerier interface {
 }
 
 type embedRequest struct {
-	Workspace string `json:"workspace"`
-	Force     bool   `json:"force"`
+	Force bool `json:"force"`
 }
 
 type EmbedResponse struct {
@@ -32,7 +31,7 @@ type EmbedResponse struct {
 	Remaining int64 `json:"remaining"`
 }
 
-func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, queue *embed.Queue, provider, model string, logger zerolog.Logger) echo.HandlerFunc {
+func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model string, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if embedder == nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "embedding not configured")

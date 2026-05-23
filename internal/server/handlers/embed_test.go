@@ -99,7 +99,7 @@ func TestTriggerEmbed_Success(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, nil, "test-provider", "test-model", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "test-provider", "test-model", zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestTriggerEmbed_NoPending(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, nil, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "p", "m", zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestTriggerEmbed_NoEmbedder(t *testing.T) {
 	e := echo.New()
 	c, _ := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, nil, nil, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, nil, "p", "m", zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for nil embedder")
@@ -180,7 +180,7 @@ func TestTriggerEmbed_Force(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1","force":true}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, nil, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "p", "m", zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestTriggerEmbed_PartialFailure(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, nil, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "p", "m", zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestTriggerEmbed_HasMore(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, nil, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "p", "m", zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}

@@ -20,7 +20,7 @@ func registerRoutes(s *Server) {
 
 	data := api.Group("", workspaceMiddleware())
 	data.POST("/write", handlers.WriteDocument(s.queries, s.db, s.embedQueue, s.logger, defaultMaxFileSize))
-	data.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedQueue, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
+	data.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
 
 	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.logger))
 	data.GET("/collections", handlers.ListCollectionsHandler(s.queries, s.logger))
