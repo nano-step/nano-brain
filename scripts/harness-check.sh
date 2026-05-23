@@ -307,26 +307,37 @@ phase_pre_merge() {
         add_check "SKIP" "3.5 Review gate evidence not yet created"
     fi
     
-    # 3.6 PR checks (CI)
+    # 3.6 PR review comments — check for unresolved critical/high comments
     if cmd_exists gh; then
-        pr_checks=$(gh pr checks 2>/dev/null || echo "")
-        if echo "$pr_checks" | grep -qE "pass|✓"; then
-            add_check "PASS" "3.6 CI checks passing"
+        pr_number=$(gh pr view --json number --jq '.number' 2>/dev/null || echo "")
+        if [[ -n "$pr_number" ]]; then
+            # Get all review comments from the PR
+            comments=$(gh pr view "$pr_number" --comments 2>/dev/null || echo "")
+            if [[ -n "$comments" ]]; then
+                # Check for unresolved critical/high markers (Gemini often uses severity labels)
+                critical_unresolved=$(echo "$comments" | grep -ciE "critical|high.*severity|must.fix|blocking|unresolved.*critical|unresolved.*high" 2>/dev/null || true)
+                if [[ "$critical_unresolved" -gt 0 ]]; then
+                    add_check "FAIL" "3.6 PR has unresolved critical/high comments — must fix before merge ($critical_unresolved matches)"
+                else
+                    add_check "PASS" "3.6 No critical/high PR comments detected"
+                fi
+            else
+                add_check "PASS" "3.6 No PR comments found"
+            fi
         else
-            add_check "SKIP" "3.6 No open PR or CI not yet complete"
+            add_check "SKIP" "3.6 No open PR found"
         fi
     else
         add_check "SKIP" "3.6 gh CLI not installed"
     fi
     
-    # 3.7 PR reviews approved
+    # 3.7 CI workflow pass
     if cmd_exists gh; then
-        pr_reviews=$(gh pr reviews --json state 2>/dev/null || echo "")
-        reviews=$(echo "$pr_reviews" | grep -c "APPROVED" || true)
-        if [[ $reviews -gt 0 ]]; then
-            add_check "PASS" "3.7 PR has approvals ($reviews)"
+        pr_checks=$(gh pr checks 2>/dev/null || echo "")
+        if echo "$pr_checks" | grep -qE "pass|✓"; then
+            add_check "PASS" "3.7 CI checks passing"
         else
-            add_check "SKIP" "3.7 No PR approvals yet (may be pending)"
+            add_check "SKIP" "3.7 No open PR or CI not yet complete"
         fi
     else
         add_check "SKIP" "3.7 gh CLI not installed"
@@ -356,6 +367,20 @@ phase_pre_merge() {
         fi
     else
         add_check "SKIP" "3.9 gh CLI not installed"
+    fi
+    
+    # 3.10 Self-review evidence exists for current story
+    current_branch=$(git branch --show-current 2>/dev/null || echo "")
+    story_id=$(echo "$current_branch" | sed 's/story\///' | sed 's/-.*//g' 2>/dev/null || echo "")
+    if [[ -n "$story_id" ]]; then
+        evidence_file=$(find docs/evidence -name "*self-review*${story_id}*" -type f 2>/dev/null | head -1)
+        if [[ -n "$evidence_file" ]]; then
+            add_check "PASS" "3.10 Self-review evidence found: $evidence_file"
+        else
+            add_check "FAIL" "3.10 No self-review evidence for story $story_id"
+        fi
+    else
+        add_check "SKIP" "3.10 Cannot determine story ID from branch name"
     fi
 }
 
