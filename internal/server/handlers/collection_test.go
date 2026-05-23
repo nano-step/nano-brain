@@ -25,6 +25,7 @@ type mockCollectionQuerier struct {
 	renameFn            func(ctx context.Context, arg sqlc.RenameCollectionParams) (sqlc.Collection, error)
 	deleteFn            func(ctx context.Context, arg sqlc.DeleteCollectionParams) error
 	countDocsFn         func(ctx context.Context, arg sqlc.CountDocumentsByCollectionParams) (int64, error)
+	updateDocsFn        func(ctx context.Context, arg sqlc.UpdateDocumentsCollectionParams) error
 }
 
 func (m *mockCollectionQuerier) UpsertCollection(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error) {
@@ -47,6 +48,12 @@ func (m *mockCollectionQuerier) DeleteCollection(ctx context.Context, arg sqlc.D
 }
 func (m *mockCollectionQuerier) CountDocumentsByCollection(ctx context.Context, arg sqlc.CountDocumentsByCollectionParams) (int64, error) {
 	return m.countDocsFn(ctx, arg)
+}
+func (m *mockCollectionQuerier) UpdateDocumentsCollection(ctx context.Context, arg sqlc.UpdateDocumentsCollectionParams) error {
+	if m.updateDocsFn == nil {
+		return nil
+	}
+	return m.updateDocsFn(ctx, arg)
 }
 
 func newCollectionContext(e *echo.Echo, method, target, body, workspace string) (echo.Context, *httptest.ResponseRecorder) {

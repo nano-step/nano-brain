@@ -91,7 +91,11 @@ func runCollectionAdd(args []string) {
 		"path":         path,
 		"glob_pattern": glob,
 	}
-	data, _ := json.Marshal(body)
+	data, err := json.Marshal(body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to marshal request: %v\n", err)
+		os.Exit(1)
+	}
 
 	resp, err := http.Post(collectionBaseURL()+"/api/v1/collections", "application/json", bytes.NewReader(data))
 	if err != nil {
@@ -209,7 +213,11 @@ func runCollectionRename(args []string) {
 		"workspace": workspace,
 		"new_name":  newName,
 	}
-	data, _ := json.Marshal(body)
+	data, err := json.Marshal(body)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to marshal request: %v\n", err)
+		os.Exit(1)
+	}
 
 	reqURL := fmt.Sprintf("%s/api/v1/collections/%s", collectionBaseURL(), url.PathEscape(oldName))
 	req, _ := http.NewRequest(http.MethodPut, reqURL, bytes.NewReader(data))

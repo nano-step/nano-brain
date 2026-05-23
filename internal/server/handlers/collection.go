@@ -24,6 +24,7 @@ type CollectionQuerier interface {
 	RenameCollection(ctx context.Context, arg sqlc.RenameCollectionParams) (sqlc.Collection, error)
 	DeleteCollection(ctx context.Context, arg sqlc.DeleteCollectionParams) error
 	CountDocumentsByCollection(ctx context.Context, arg sqlc.CountDocumentsByCollectionParams) (int64, error)
+	UpdateDocumentsCollection(ctx context.Context, arg sqlc.UpdateDocumentsCollectionParams) error
 }
 
 type AddCollectionRequest struct {
@@ -169,22 +170,31 @@ func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, logger ze
 		if req.NewName == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "new_name is required")
 		}
-		if !validCollectionName.MatchString(req.NewName) {
-			return echo.NewHTTPError(http.StatusBadRequest, "new_name must be 1-128 characters: letters, digits, underscores, hyphens only")
-		}
+	if !validCollectionName.MatchString(req.NewName) {
+		return echo.NewHTTPError(http.StatusBadRequest, "new_name must be 1-128 characters: letters, digits, underscores, hyphens only")
+	}
 
-		col, err := q.RenameCollection(c.Request().Context(), sqlc.RenameCollectionParams{
-			Name:          name,
-			Name_2:        req.NewName,
-			WorkspaceHash: workspace,
-		})
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return echo.NewHTTPError(http.StatusNotFound, "collection not found")
-			}
-			logger.Error().Err(err).Str("old", name).Str("new", req.NewName).Msg("rename collection failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to rename collection")
+	if err := q.UpdateDocumentsCollection(c.Request().Context(), sqlc.UpdateDocumentsCollectionParams{
+		Collection:    name,
+		Collection_2:  req.NewName,
+		WorkspaceHash: workspace,
+	}); err != nil {
+		logger.Error().Err(err).Str("old", name).Str("new", req.NewName).Msg("update documents collection failed")
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update documents for rename")
+	}
+
+	col, err := q.RenameCollection(c.Request().Context(), sqlc.RenameCollectionParams{
+		Name:          name,
+		Name_2:        req.NewName,
+		WorkspaceHash: workspace,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusNotFound, "collection not found")
 		}
+		logger.Error().Err(err).Str("old", name).Str("new", req.NewName).Msg("rename collection failed")
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to rename collection")
+	}
 
 		if fw != nil {
 			if err := fw.Watch(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern); err != nil {
