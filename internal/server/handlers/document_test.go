@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -70,7 +71,7 @@ func TestWriteDocument_Success(t *testing.T) {
 	body := `{"content":"hello world","workspace":"ws1"}`
 	c, rec := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -125,7 +126,7 @@ func TestWriteDocument_ChunksCreated(t *testing.T) {
 	body := `{"content":"hello world","workspace":"ws1"}`
 	c, rec := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -183,7 +184,7 @@ func TestWriteDocument_EmptyContent(t *testing.T) {
 	body := `{"content":"","workspace":"ws1"}`
 	c, _ := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for empty content")
@@ -205,7 +206,7 @@ func TestWriteDocument_ContentTooLarge(t *testing.T) {
 	body := `{"content":"` + large + `","workspace":"ws1"}`
 	c, _ := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for oversized content")
@@ -237,7 +238,7 @@ func TestWriteDocument_DefaultCollection(t *testing.T) {
 	body := `{"content":"hello","workspace":"ws1"}`
 	c, _ := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -268,12 +269,72 @@ func TestWriteDocument_HashVerification(t *testing.T) {
 	body := `{"content":"` + content + `"}`
 	c, _ := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
 
 	if capturedHash != expectedHash {
 		t.Errorf("expected hash %s, got %s", expectedHash, capturedHash)
+	}
+}
+
+type mockEnqueuer struct {
+	mu       sync.Mutex
+	enqueued []uuid.UUID
+}
+
+func (m *mockEnqueuer) Enqueue(id uuid.UUID) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.enqueued = append(m.enqueued, id)
+	return true
+}
+
+func TestWriteDocument_EnqueuesChunks(t *testing.T) {
+	var chunkIDs []uuid.UUID
+	q := &mockDocumentQuerier{
+		upsertDocumentFn: func(_ context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error) {
+			return sqlc.UpsertDocumentRow{
+				ID:            uuid.New(),
+				ContentHash:   arg.ContentHash,
+				Collection:    arg.Collection,
+				WorkspaceHash: arg.WorkspaceHash,
+			}, nil
+		},
+		upsertChunkFn: func(_ context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error) {
+			id := uuid.New()
+			chunkIDs = append(chunkIDs, id)
+			return id, nil
+		},
+	}
+
+	enq := &mockEnqueuer{}
+
+	e := echo.New()
+	body := `{"content":"hello world","workspace":"ws1"}`
+	c, rec := newWriteContext(e, body, "ws1")
+
+	h := handlers.WriteDocument(q, nil, enq, zerolog.Nop(), testMaxFileSize)
+	if err := h(c); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rec.Code)
+	}
+
+	enq.mu.Lock()
+	defer enq.mu.Unlock()
+
+	if len(enq.enqueued) == 0 {
+		t.Fatal("expected enqueuer to be called at least once")
+	}
+	if len(enq.enqueued) != len(chunkIDs) {
+		t.Errorf("enqueued %d chunks, want %d", len(enq.enqueued), len(chunkIDs))
+	}
+	for i, id := range enq.enqueued {
+		if id != chunkIDs[i] {
+			t.Errorf("enqueued[%d] = %s, want %s", i, id, chunkIDs[i])
+		}
 	}
 }

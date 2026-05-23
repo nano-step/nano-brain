@@ -22,6 +22,10 @@ type DocumentQuerier interface {
 	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
 }
 
+type ChunkEnqueuer interface {
+	Enqueue(chunkID uuid.UUID) bool
+}
+
 type WriteRequest struct {
 	Content    string          `json:"content"`
 	Tags       []string        `json:"tags"`
@@ -39,15 +43,16 @@ type WriteResponse struct {
 	ChunkCount    int    `json:"chunk_count"`
 }
 
-func writeChunks(ctx context.Context, q DocumentQuerier, docID uuid.UUID, workspace string, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {
+func writeChunks(ctx context.Context, q DocumentQuerier, docID uuid.UUID, workspace string, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
 	if err := q.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
 		DocumentID:    docID,
 		WorkspaceHash: workspace,
 	}); err != nil {
-		return err
+		return nil, err
 	}
+	ids := make([]uuid.UUID, 0, len(chunks))
 	for _, ch := range chunks {
-		if _, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
+		id, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
 			DocumentID:    docID,
 			WorkspaceHash: workspace,
 			ContentHash:   ch.Hash,
@@ -56,14 +61,16 @@ func writeChunks(ctx context.Context, q DocumentQuerier, docID uuid.UUID, worksp
 			StartLine:     sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
 			EndLine:       sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
 			Metadata:      meta,
-		}); err != nil {
-			return err
+		})
+		if err != nil {
+			return nil, err
 		}
+		ids = append(ids, id)
 	}
-	return nil
+	return ids, nil
 }
 
-func WriteDocument(q DocumentQuerier, db *sql.DB, logger zerolog.Logger, maxFileSize int64) echo.HandlerFunc {
+func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger zerolog.Logger, maxFileSize int64) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req WriteRequest
 		if err := c.Bind(&req); err != nil {
@@ -116,6 +123,7 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, logger zerolog.Logger, maxFile
 		chunkMeta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
 
 		var row sqlc.UpsertDocumentRow
+		var chunkIDs []uuid.UUID
 		if db != nil {
 			tx, err := db.BeginTx(c.Request().Context(), nil)
 			if err != nil {
@@ -129,7 +137,8 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, logger zerolog.Logger, maxFile
 				logger.Error().Err(err).Str("workspace", workspace).Str("hash", contentHash).Msg("upsert document failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to write document")
 			}
-			if err := writeChunks(c.Request().Context(), tq, row.ID, workspace, chunks, chunkMeta); err != nil {
+			chunkIDs, err = writeChunks(c.Request().Context(), tq, row.ID, workspace, chunks, chunkMeta)
+			if err != nil {
 				_ = tx.Rollback()
 				logger.Error().Err(err).Msg("write chunks failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to write document")
@@ -139,17 +148,24 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, logger zerolog.Logger, maxFile
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to write document")
 			}
 		} else {
-			// no-tx path: used in tests where db is nil. Not used in production.
-			// Lacks atomicity — acceptable for unit tests with mock queriers.
 			var err error
 			row, err = q.UpsertDocument(c.Request().Context(), params)
 			if err != nil {
 				logger.Error().Err(err).Str("workspace", workspace).Str("hash", contentHash).Msg("upsert document failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to write document")
 			}
-			if err := writeChunks(c.Request().Context(), q, row.ID, workspace, chunks, chunkMeta); err != nil {
+			chunkIDs, err = writeChunks(c.Request().Context(), q, row.ID, workspace, chunks, chunkMeta)
+			if err != nil {
 				logger.Error().Err(err).Msg("write chunks failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to write document")
+			}
+		}
+
+		if enqueuer != nil {
+			for _, id := range chunkIDs {
+				if !enqueuer.Enqueue(id) {
+					logger.Warn().Str("chunk_id", id.String()).Msg("embedding queue full, chunk will be picked up on next scan")
+				}
 			}
 		}
 

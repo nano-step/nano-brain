@@ -44,6 +44,44 @@ func (q *Queries) DeleteChunksByDocumentID(ctx context.Context, arg DeleteChunks
 	return err
 }
 
+const getChunkByID = `-- name: GetChunkByID :one
+SELECT id, document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, embed_status, created_at
+FROM chunks WHERE id = $1
+`
+
+type GetChunkByIDRow struct {
+	ID            uuid.UUID
+	DocumentID    uuid.UUID
+	WorkspaceHash string
+	ContentHash   string
+	Content       string
+	ChunkIndex    int32
+	StartLine     sql.NullInt32
+	EndLine       sql.NullInt32
+	Metadata      pqtype.NullRawMessage
+	EmbedStatus   string
+	CreatedAt     time.Time
+}
+
+func (q *Queries) GetChunkByID(ctx context.Context, id uuid.UUID) (GetChunkByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getChunkByID, id)
+	var i GetChunkByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.DocumentID,
+		&i.WorkspaceHash,
+		&i.ContentHash,
+		&i.Content,
+		&i.ChunkIndex,
+		&i.StartLine,
+		&i.EndLine,
+		&i.Metadata,
+		&i.EmbedStatus,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listChunksByDocumentID = `-- name: ListChunksByDocumentID :many
 SELECT id, document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, created_at
 FROM chunks WHERE document_id = $1 AND workspace_hash = $2 ORDER BY chunk_index

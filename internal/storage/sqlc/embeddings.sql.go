@@ -36,6 +36,36 @@ func (q *Queries) CountPendingChunks(ctx context.Context, workspaceHash string) 
 	return count, err
 }
 
+const getAllPendingChunks = `-- name: GetAllPendingChunks :many
+SELECT id FROM chunks
+WHERE embed_status = 'pending'
+ORDER BY created_at ASC
+LIMIT $1
+`
+
+func (q *Queries) GetAllPendingChunks(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, getAllPendingChunks, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPendingChunks = `-- name: GetPendingChunks :many
 SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.created_at, c.embed_status FROM chunks c
 WHERE c.workspace_hash = $1

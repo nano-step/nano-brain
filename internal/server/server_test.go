@@ -25,7 +25,7 @@ func (m *mockPool) Ping(_ context.Context) error {
 func newTestServer(pool *mockPool) *server.Server {
 	cfg := config.ServerConfig{Host: "127.0.0.1", Port: 3100}
 	logger := zerolog.Nop()
-	return server.New(cfg, pool, nil, nil, nil, logger, "test-v1")
+	return server.New(cfg, pool, nil, nil, nil, nil, logger, "test-v1")
 }
 
 func TestHealthEndpointHealthyDB(t *testing.T) {
