@@ -18,11 +18,16 @@ import (
 )
 
 type mockBM25Querier struct {
-	bm25SearchFn func(ctx context.Context, arg sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error)
+	bm25SearchFn         func(ctx context.Context, arg sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error)
+	bm25SearchWithTagsFn func(ctx context.Context, arg sqlc.BM25SearchWithTagsParams) ([]sqlc.BM25SearchWithTagsRow, error)
 }
 
 func (m *mockBM25Querier) BM25Search(ctx context.Context, arg sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error) {
 	return m.bm25SearchFn(ctx, arg)
+}
+
+func (m *mockBM25Querier) BM25SearchWithTags(ctx context.Context, arg sqlc.BM25SearchWithTagsParams) ([]sqlc.BM25SearchWithTagsRow, error) {
+	return m.bm25SearchWithTagsFn(ctx, arg)
 }
 
 func newBM25Context(e *echo.Echo, body string, workspace string) (echo.Context, *httptest.ResponseRecorder) {
@@ -253,5 +258,112 @@ func TestBM25Search_SnippetTruncation(t *testing.T) {
 	}
 	if len(resp.Results[0].Content) != 700 {
 		t.Errorf("expected content truncated to 700 chars, got %d", len(resp.Results[0].Content))
+	}
+}
+
+func TestBM25Search_MissingWorkspace(t *testing.T) {
+	q := &mockBM25Querier{}
+
+	e := echo.New()
+	c, _ := newBM25Context(e, `{"query":"test"}`, "")
+
+	h := handlers.BM25Search(q, zerolog.Nop())
+	err := h(c)
+	if err == nil {
+		t.Fatal("expected error for missing workspace")
+	}
+	he, ok := err.(*echo.HTTPError)
+	if !ok {
+		t.Fatalf("expected echo.HTTPError, got %T", err)
+	}
+	if he.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", he.Code)
+	}
+}
+
+func TestBM25Search_WithTags(t *testing.T) {
+	chunkID := uuid.New()
+	docID := uuid.New()
+	var capturedTags []string
+
+	q := &mockBM25Querier{
+		bm25SearchWithTagsFn: func(_ context.Context, arg sqlc.BM25SearchWithTagsParams) ([]sqlc.BM25SearchWithTagsRow, error) {
+			capturedTags = arg.Tags
+			return []sqlc.BM25SearchWithTagsRow{
+				{
+					ID:            chunkID,
+					DocumentID:    docID,
+					WorkspaceHash: "ws1",
+					Content:       "tagged content",
+					SourcePath:    "/tagged.md",
+					Collection:    "memory",
+					Tags:          []string{"decision"},
+					Score:         0.9,
+				},
+			}, nil
+		},
+	}
+
+	e := echo.New()
+	c, rec := newBM25Context(e, `{"query":"test","tags":["decision"],"workspace":"ws1"}`, "ws1")
+
+	h := handlers.BM25Search(q, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	if len(capturedTags) != 1 || capturedTags[0] != "decision" {
+		t.Errorf("expected tags=[decision], got %v", capturedTags)
+	}
+
+	var resp handlers.SearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Total != 1 {
+		t.Errorf("expected total=1, got %d", resp.Total)
+	}
+	if resp.Results[0].Tags != "decision" {
+		t.Errorf("expected tags=decision, got %q", resp.Results[0].Tags)
+	}
+}
+
+func TestBM25Search_UTF8Truncation(t *testing.T) {
+	content := strings.Repeat("\u4e16\u754c", 400)
+
+	q := &mockBM25Querier{
+		bm25SearchFn: func(_ context.Context, _ sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error) {
+			return []sqlc.BM25SearchRow{
+				{
+					ID:            uuid.New(),
+					DocumentID:    uuid.New(),
+					WorkspaceHash: "ws1",
+					Content:       content,
+					SourcePath:    "/utf8.md",
+					Collection:    "default",
+					Score:         0.5,
+				},
+			}, nil
+		},
+	}
+
+	e := echo.New()
+	c, rec := newBM25Context(e, `{"query":"test","workspace":"ws1"}`, "ws1")
+
+	h := handlers.BM25Search(q, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+
+	var resp handlers.SearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	runes := []rune(resp.Results[0].Content)
+	if len(runes) != 700 {
+		t.Errorf("expected 700 runes after truncation, got %d", len(runes))
 	}
 }

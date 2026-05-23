@@ -85,3 +85,82 @@ func (q *Queries) BM25Search(ctx context.Context, arg BM25SearchParams) ([]BM25S
 	}
 	return items, nil
 }
+
+const bM25SearchWithTags = `-- name: BM25SearchWithTags :many
+SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       ts_rank_cd(c.search_vector, websearch_to_tsquery('english', $1::text)) AS score
+FROM chunks c
+JOIN documents d ON c.document_id = d.id
+WHERE c.workspace_hash = $2
+  AND c.search_vector @@ websearch_to_tsquery('english', $1::text)
+  AND d.tags && $3::text[]
+ORDER BY score DESC
+LIMIT $4
+`
+
+type BM25SearchWithTagsParams struct {
+	Query         string
+	WorkspaceHash string
+	Tags          []string
+	MaxResults    int32
+}
+
+type BM25SearchWithTagsRow struct {
+	ID            uuid.UUID
+	DocumentID    uuid.UUID
+	WorkspaceHash string
+	Content       string
+	ChunkIndex    int32
+	Metadata      pqtype.NullRawMessage
+	SourcePath    string
+	Title         string
+	Collection    string
+	Tags          []string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Score         float32
+}
+
+func (q *Queries) BM25SearchWithTags(ctx context.Context, arg BM25SearchWithTagsParams) ([]BM25SearchWithTagsRow, error) {
+	rows, err := q.db.QueryContext(ctx, bM25SearchWithTags,
+		arg.Query,
+		arg.WorkspaceHash,
+		pq.Array(arg.Tags),
+		arg.MaxResults,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BM25SearchWithTagsRow
+	for rows.Next() {
+		var i BM25SearchWithTagsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DocumentID,
+			&i.WorkspaceHash,
+			&i.Content,
+			&i.ChunkIndex,
+			&i.Metadata,
+			&i.SourcePath,
+			&i.Title,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

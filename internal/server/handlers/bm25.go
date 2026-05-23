@@ -13,11 +13,13 @@ import (
 
 type BM25SearchQuerier interface {
 	BM25Search(ctx context.Context, arg sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error)
+	BM25SearchWithTags(ctx context.Context, arg sqlc.BM25SearchWithTagsParams) ([]sqlc.BM25SearchWithTagsRow, error)
 }
 
 type BM25SearchRequest struct {
-	Query      string `json:"query"`
-	MaxResults int    `json:"max_results,omitempty"`
+	Query      string   `json:"query"`
+	MaxResults int      `json:"max_results,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
 }
 
 const maxSnippetLen = 700
@@ -46,32 +48,78 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger) echo.HandlerFunc {
 		}
 
 		start := time.Now()
+		ctx := c.Request().Context()
+		limit := int32(maxResults)
 
-		rows, err := q.BM25Search(c.Request().Context(), sqlc.BM25SearchParams{
-			Query:         req.Query,
-			WorkspaceHash: workspace,
-			MaxResults:    int32(maxResults),
-		})
-		if err != nil {
-			logger.Error().Err(err).Str("workspace", workspace).Msg("bm25 search failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "bm25 search failed")
+		type bm25Row struct {
+			ID            string
+			DocumentID    string
+			WorkspaceHash string
+			Content       string
+			SourcePath    string
+			Collection    string
+			Tags          []string
+			Score         float32
 		}
 
-		results := make([]SearchResult, 0, len(rows))
-		for _, r := range rows {
+		var matched []bm25Row
+		if len(req.Tags) > 0 {
+			rows, err := q.BM25SearchWithTags(ctx, sqlc.BM25SearchWithTagsParams{
+				Query:         req.Query,
+				WorkspaceHash: workspace,
+				Tags:          req.Tags,
+				MaxResults:    limit,
+			})
+			if err != nil {
+				logger.Error().Err(err).Str("workspace", workspace).Msg("bm25 search failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "bm25 search failed")
+			}
+			for _, r := range rows {
+				matched = append(matched, bm25Row{
+					ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+					WorkspaceHash: r.WorkspaceHash, Content: r.Content,
+					SourcePath: r.SourcePath, Collection: r.Collection,
+					Tags: r.Tags, Score: r.Score,
+				})
+			}
+		} else {
+			rows, err := q.BM25Search(ctx, sqlc.BM25SearchParams{
+				Query:         req.Query,
+				WorkspaceHash: workspace,
+				MaxResults:    limit,
+			})
+			if err != nil {
+				logger.Error().Err(err).Str("workspace", workspace).Msg("bm25 search failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "bm25 search failed")
+			}
+			for _, r := range rows {
+				matched = append(matched, bm25Row{
+					ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+					WorkspaceHash: r.WorkspaceHash, Content: r.Content,
+					SourcePath: r.SourcePath, Collection: r.Collection,
+					Tags: r.Tags, Score: r.Score,
+				})
+			}
+		}
+
+		results := make([]SearchResult, 0, len(matched))
+		for _, r := range matched {
 			content := r.Content
 			if len(content) > maxSnippetLen {
-				content = content[:maxSnippetLen]
+				runes := []rune(content)
+				if len(runes) > maxSnippetLen {
+					content = string(runes[:maxSnippetLen])
+				}
 			}
 			results = append(results, SearchResult{
-				ID:            r.ID.String(),
+				ID:            r.ID,
 				Content:       content,
 				Score:         float64(r.Score),
 				SourcePath:    r.SourcePath,
 				Collection:    r.Collection,
 				Tags:          strings.Join(r.Tags, ","),
 				WorkspaceHash: r.WorkspaceHash,
-				DocumentID:    r.DocumentID.String(),
+				DocumentID:    r.DocumentID,
 			})
 		}
 
