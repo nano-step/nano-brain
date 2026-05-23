@@ -24,6 +24,7 @@ type DocumentQuerier interface {
 
 type ChunkEnqueuer interface {
 	Enqueue(chunkID uuid.UUID) bool
+	IsPressured() bool
 }
 
 type WriteRequest struct {
@@ -41,6 +42,7 @@ type WriteResponse struct {
 	Collection    string `json:"collection"`
 	WorkspaceHash string `json:"workspace_hash"`
 	ChunkCount    int    `json:"chunk_count"`
+	Warning       string `json:"warning,omitempty"`
 }
 
 func writeChunks(ctx context.Context, q DocumentQuerier, docID uuid.UUID, workspace string, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
@@ -161,10 +163,19 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger
 			}
 		}
 
+		warning := ""
 		if enqueuer != nil {
-			for _, id := range chunkIDs {
-				if !enqueuer.Enqueue(id) {
-					logger.Warn().Str("chunk_id", id.String()).Msg("embedding queue full, chunk will be picked up on next scan")
+			if enqueuer.IsPressured() {
+				warning = "embedding queue backpressure active, document saved but embedding delayed"
+				logger.Warn().Int("chunk_count", len(chunkIDs)).Msg("skipping enqueue due to backpressure")
+			} else {
+				for _, id := range chunkIDs {
+					if !enqueuer.Enqueue(id) {
+						logger.Warn().Str("chunk_id", id.String()).Msg("embedding queue full, chunk will be picked up on next scan")
+						if warning == "" {
+							warning = "some chunks could not be enqueued for embedding, will be picked up on next scan"
+						}
+					}
 				}
 			}
 		}
@@ -175,6 +186,7 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger
 			Collection:    row.Collection,
 			WorkspaceHash: row.WorkspaceHash,
 			ChunkCount:    len(chunks),
+			Warning:       warning,
 		})
 	}
 }

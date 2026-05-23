@@ -280,8 +280,9 @@ func TestWriteDocument_HashVerification(t *testing.T) {
 }
 
 type mockEnqueuer struct {
-	mu       sync.Mutex
-	enqueued []uuid.UUID
+	mu        sync.Mutex
+	enqueued  []uuid.UUID
+	pressured bool
 }
 
 func (m *mockEnqueuer) Enqueue(id uuid.UUID) bool {
@@ -289,6 +290,12 @@ func (m *mockEnqueuer) Enqueue(id uuid.UUID) bool {
 	defer m.mu.Unlock()
 	m.enqueued = append(m.enqueued, id)
 	return true
+}
+
+func (m *mockEnqueuer) IsPressured() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.pressured
 }
 
 func TestWriteDocument_EnqueuesChunks(t *testing.T) {
@@ -336,5 +343,44 @@ func TestWriteDocument_EnqueuesChunks(t *testing.T) {
 		if id != chunkIDs[i] {
 			t.Errorf("enqueued[%d] = %s, want %s", i, id, chunkIDs[i])
 		}
+	}
+}
+
+func TestWriteDocument_BackpressureWarning(t *testing.T) {
+	q := &mockDocumentQuerier{
+		upsertDocumentFn: func(_ context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error) {
+			return sqlc.UpsertDocumentRow{
+				ID:            uuid.New(),
+				ContentHash:   arg.ContentHash,
+				Collection:    arg.Collection,
+				WorkspaceHash: arg.WorkspaceHash,
+			}, nil
+		},
+	}
+
+	enq := &mockEnqueuer{pressured: true}
+
+	e := echo.New()
+	body := `{"content":"hello world","workspace":"ws1"}`
+	c, rec := newWriteContext(e, body, "ws1")
+
+	h := handlers.WriteDocument(q, nil, enq, zerolog.Nop(), testMaxFileSize)
+	if err := h(c); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp handlers.WriteResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Warning == "" {
+		t.Error("expected non-empty warning in response")
+	}
+	if resp.ID == "" {
+		t.Error("expected document to still be saved (non-empty ID)")
 	}
 }

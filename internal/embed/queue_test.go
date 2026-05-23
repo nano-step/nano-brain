@@ -38,13 +38,15 @@ func (m *mockEmbedder) callCount() int {
 }
 
 type mockQuerier struct {
-	mu                     sync.Mutex
-	getChunkByIDFn         func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error)
-	getAllPendingChunksFn   func(ctx context.Context, limit int32) ([]uuid.UUID, error)
-	insertEmbeddingFn      func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
-	markChunkEmbeddedFn    func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
-	insertEmbeddingCalls   int
-	markChunkEmbeddedCalls int
+	mu                        sync.Mutex
+	getChunkByIDFn            func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error)
+	getAllPendingChunksFn      func(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	insertEmbeddingFn         func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
+	markChunkEmbeddedFn       func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
+	markChunkEmbedFailedFn    func(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
+	insertEmbeddingCalls      int
+	markChunkEmbeddedCalls    int
+	markChunkEmbedFailedCalls int
 }
 
 func (m *mockQuerier) GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
@@ -81,6 +83,16 @@ func (m *mockQuerier) MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkE
 	m.mu.Unlock()
 	if m.markChunkEmbeddedFn != nil {
 		return m.markChunkEmbeddedFn(ctx, arg)
+	}
+	return nil
+}
+
+func (m *mockQuerier) MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error {
+	m.mu.Lock()
+	m.markChunkEmbedFailedCalls++
+	m.mu.Unlock()
+	if m.markChunkEmbedFailedFn != nil {
+		return m.markChunkEmbedFailedFn(ctx, arg)
 	}
 	return nil
 }
@@ -123,6 +135,7 @@ func TestQueue_ProcessChunk_Success(t *testing.T) {
 	mq := &mockQuerier{}
 
 	eq := newTestQueue(me, mq)
+	eq.pending.Store(1)
 	eq.processChunk(context.Background(), chunkID)
 
 	if me.callCount() != 1 {
@@ -148,6 +161,7 @@ func TestQueue_ProcessChunk_EmbedFailure(t *testing.T) {
 	mq := &mockQuerier{}
 
 	eq := newTestQueue(me, mq)
+	eq.pending.Store(1)
 	eq.processChunk(context.Background(), chunkID)
 
 	mq.mu.Lock()
@@ -296,6 +310,7 @@ func TestQueue_ProcessChunk_EmbedHasDeadline(t *testing.T) {
 	mq := &mockQuerier{}
 
 	eq := newTestQueue(me, mq)
+	eq.pending.Store(1)
 	eq.processChunk(context.Background(), chunkID)
 
 	if !hasDeadline {
@@ -318,5 +333,186 @@ func TestNewQueue_NegativeConcurrency(t *testing.T) {
 	eq := NewQueue(&mockEmbedder{}, &mockQuerier{}, zerolog.Nop(), "p", "m", -1)
 	if eq.concurrency != defaultConcurrency {
 		t.Errorf("concurrency = %d, want %d", eq.concurrency, defaultConcurrency)
+	}
+}
+
+func TestQueue_RetryAndFail(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{
+		embedFn: func(_ context.Context, _ string) ([]float32, error) {
+			return nil, fmt.Errorf("provider down")
+		},
+	}
+	mq := &mockQuerier{}
+	eq := newTestQueue(me, mq)
+
+	eq.pending.Store(1)
+
+	for i := 0; i < maxRetries; i++ {
+		eq.resetBackoff()
+		eq.processChunk(context.Background(), chunkID)
+	}
+
+	mq.mu.Lock()
+	failedCalls := mq.markChunkEmbedFailedCalls
+	mq.mu.Unlock()
+	if failedCalls != 1 {
+		t.Errorf("MarkChunkEmbedFailed calls = %d, want 1", failedCalls)
+	}
+
+	if eq.pending.Load() != 0 {
+		t.Errorf("pending = %d, want 0 after embed_failed", eq.pending.Load())
+	}
+
+	eq.retriesMu.Lock()
+	_, exists := eq.retries[chunkID]
+	eq.retriesMu.Unlock()
+	if exists {
+		t.Error("retry entry should be cleared after marking embed_failed")
+	}
+}
+
+func TestQueue_PendingCounter(t *testing.T) {
+	me := &mockEmbedder{}
+	mq := &mockQuerier{}
+	eq := newTestQueue(me, mq)
+
+	id1 := uuid.New()
+	id2 := uuid.New()
+
+	if !eq.Enqueue(id1) {
+		t.Fatal("enqueue id1 failed")
+	}
+	if eq.pending.Load() != 1 {
+		t.Errorf("pending after enqueue = %d, want 1", eq.pending.Load())
+	}
+
+	if !eq.Enqueue(id2) {
+		t.Fatal("enqueue id2 failed")
+	}
+	if eq.pending.Load() != 2 {
+		t.Errorf("pending after second enqueue = %d, want 2", eq.pending.Load())
+	}
+
+	<-eq.ch
+	eq.processChunk(context.Background(), id1)
+	if eq.pending.Load() != 1 {
+		t.Errorf("pending after success = %d, want 1", eq.pending.Load())
+	}
+}
+
+func TestQueue_BackpressureReject(t *testing.T) {
+	me := &mockEmbedder{}
+	mq := &mockQuerier{}
+	eq := newTestQueue(me, mq)
+
+	eq.pending.Store(rejectionThreshold)
+
+	if eq.Enqueue(uuid.New()) {
+		t.Fatal("expected Enqueue to return false at rejection threshold")
+	}
+
+	if eq.pending.Load() != rejectionThreshold {
+		t.Errorf("pending should not change on rejection, got %d", eq.pending.Load())
+	}
+}
+
+func TestQueue_IsPressured(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+
+	if eq.IsPressured() {
+		t.Fatal("should not be pressured at zero pending")
+	}
+
+	eq.pending.Store(rejectionThreshold - 1)
+	if eq.IsPressured() {
+		t.Fatal("should not be pressured below threshold")
+	}
+
+	eq.pending.Store(rejectionThreshold)
+	if !eq.IsPressured() {
+		t.Fatal("should be pressured at threshold")
+	}
+
+	eq.pending.Store(rejectionThreshold + 100)
+	if !eq.IsPressured() {
+		t.Fatal("should be pressured above threshold")
+	}
+}
+
+func TestQueue_RetryReenqueue(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{
+		embedFn: func(_ context.Context, _ string) ([]float32, error) {
+			return nil, fmt.Errorf("provider down")
+		},
+	}
+	mq := &mockQuerier{}
+	eq := newTestQueue(me, mq)
+	eq.pending.Store(1)
+	eq.resetBackoff()
+
+	eq.processChunk(context.Background(), chunkID)
+
+	eq.retriesMu.Lock()
+	count := eq.retries[chunkID]
+	eq.retriesMu.Unlock()
+	if count != 1 {
+		t.Errorf("retry count = %d, want 1", count)
+	}
+
+	mq.mu.Lock()
+	failedCalls := mq.markChunkEmbedFailedCalls
+	mq.mu.Unlock()
+	if failedCalls != 0 {
+		t.Errorf("MarkChunkEmbedFailed should not be called on first failure, got %d", failedCalls)
+	}
+}
+
+func TestQueue_PendingDecrementsOnGetChunkError(t *testing.T) {
+	mq := &mockQuerier{
+		getChunkByIDFn: func(_ context.Context, _ uuid.UUID) (sqlc.GetChunkByIDRow, error) {
+			return sqlc.GetChunkByIDRow{}, fmt.Errorf("not found")
+		},
+	}
+	eq := newTestQueue(&mockEmbedder{}, mq)
+	eq.pending.Store(1)
+
+	eq.processChunk(context.Background(), uuid.New())
+
+	if eq.pending.Load() != 0 {
+		t.Errorf("pending = %d, want 0 after GetChunkByID error", eq.pending.Load())
+	}
+}
+
+func TestQueue_PendingDecrementsOnInsertEmbeddingError(t *testing.T) {
+	mq := &mockQuerier{
+		insertEmbeddingFn: func(_ context.Context, _ sqlc.InsertEmbeddingParams) (sqlc.Embedding, error) {
+			return sqlc.Embedding{}, fmt.Errorf("db error")
+		},
+	}
+	eq := newTestQueue(&mockEmbedder{}, mq)
+	eq.pending.Store(1)
+
+	eq.processChunk(context.Background(), uuid.New())
+
+	if eq.pending.Load() != 0 {
+		t.Errorf("pending = %d, want 0 after InsertEmbedding error", eq.pending.Load())
+	}
+}
+
+func TestQueue_PendingDecrementsOnMarkEmbeddedError(t *testing.T) {
+	mq := &mockQuerier{
+		markChunkEmbeddedFn: func(_ context.Context, _ sqlc.MarkChunkEmbeddedParams) error {
+			return fmt.Errorf("db error")
+		},
+	}
+	eq := newTestQueue(&mockEmbedder{}, mq)
+	eq.pending.Store(1)
+
+	eq.processChunk(context.Background(), uuid.New())
+
+	if eq.pending.Load() != 0 {
+		t.Errorf("pending = %d, want 0 after MarkChunkEmbedded error", eq.pending.Load())
 	}
 }
