@@ -13,6 +13,7 @@ require (
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/lib/pq v1.12.3
 	github.com/natefinch/lumberjack v2.0.0+incompatible
+	github.com/pgvector/pgvector-go v0.2.2
 	github.com/pressly/goose/v3 v3.22.1
 	github.com/rs/zerolog v1.35.1
 	github.com/sqlc-dev/pqtype v0.3.0

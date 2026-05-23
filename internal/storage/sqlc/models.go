@@ -23,6 +23,7 @@ type Chunk struct {
 	EndLine       sql.NullInt32
 	Metadata      pqtype.NullRawMessage
 	CreatedAt     time.Time
+	EmbedStatus   string
 }
 
 type Collection struct {
@@ -59,6 +60,7 @@ type Embedding struct {
 	Model         string
 	Embedding     interface{}
 	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 type TelemetryLog struct {

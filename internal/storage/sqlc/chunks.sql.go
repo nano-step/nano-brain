@@ -8,6 +8,7 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -53,15 +54,28 @@ type ListChunksByDocumentIDParams struct {
 	WorkspaceHash string
 }
 
-func (q *Queries) ListChunksByDocumentID(ctx context.Context, arg ListChunksByDocumentIDParams) ([]Chunk, error) {
+type ListChunksByDocumentIDRow struct {
+	ID            uuid.UUID
+	DocumentID    uuid.UUID
+	WorkspaceHash string
+	ContentHash   string
+	Content       string
+	ChunkIndex    int32
+	StartLine     sql.NullInt32
+	EndLine       sql.NullInt32
+	Metadata      pqtype.NullRawMessage
+	CreatedAt     time.Time
+}
+
+func (q *Queries) ListChunksByDocumentID(ctx context.Context, arg ListChunksByDocumentIDParams) ([]ListChunksByDocumentIDRow, error) {
 	rows, err := q.db.QueryContext(ctx, listChunksByDocumentID, arg.DocumentID, arg.WorkspaceHash)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Chunk
+	var items []ListChunksByDocumentIDRow
 	for rows.Next() {
-		var i Chunk
+		var i ListChunksByDocumentIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.DocumentID,
