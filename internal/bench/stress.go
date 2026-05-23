@@ -141,6 +141,6 @@ func RunStress(ctx context.Context, writer StressWriter, cfg StressConfig) (*Str
 		DocumentsVerified: int(actualNew),
 		Violations:        violations,
 		Errors:            errMsgs,
-		DurationMs:        float64(duration.Milliseconds()),
+		DurationMs:        float64(duration) / float64(time.Millisecond),
 	}, nil
 }
