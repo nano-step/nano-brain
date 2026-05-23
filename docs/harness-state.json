@@ -1,10 +1,10 @@
 {
   "updated": "2026-05-23",
   "position": {
-    "epic": 2,
-    "story": "2.8",
+    "epic": 3,
+    "story": "3.1",
     "branch": null,
-    "base_commit": "b1d3653"
+    "base_commit": "d292d6e"
   },
   "debt": [
     {
@@ -24,6 +24,6 @@
     "2.5": { "status": "done", "pr": 51, "issue": 50, "review": "oracle", "pr_comments": "none" },
     "2.6": { "status": "done", "pr": 53, "issue": 52, "review": "oracle", "pr_comments": "1C+2H+3M:all_fixed_or_deferred" },
     "2.7": { "status": "done", "pr": 55, "issue": 54, "review": "oracle", "pr_comments": "1C+3H+1M:all_fixed" },
-    "2.8": { "status": "pending" }
+    "2.8": { "status": "done", "pr": 57, "issue": 56, "review": "oracle", "pr_comments": "4M:2fixed,2deferred" }
   }
 }
