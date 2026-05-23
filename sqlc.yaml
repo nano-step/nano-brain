@@ -7,3 +7,8 @@ sql:
       go:
         package: "sqlc"
         out: "internal/storage/sqlc/"
+        overrides:
+          - db_type: "vector"
+            go_type:
+              import: "github.com/pgvector/pgvector-go"
+              type: "Vector"

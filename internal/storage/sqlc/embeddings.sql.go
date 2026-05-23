@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	pgvector_go "github.com/pgvector/pgvector-go"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -125,20 +126,30 @@ func (q *Queries) InsertEmbedding(ctx context.Context, arg InsertEmbeddingParams
 }
 
 const markChunkEmbedFailed = `-- name: MarkChunkEmbedFailed :exec
-UPDATE chunks SET embed_status = 'embed_failed' WHERE id = $1
+UPDATE chunks SET embed_status = 'embed_failed' WHERE id = $1 AND workspace_hash = $2
 `
 
-func (q *Queries) MarkChunkEmbedFailed(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, markChunkEmbedFailed, id)
+type MarkChunkEmbedFailedParams struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+}
+
+func (q *Queries) MarkChunkEmbedFailed(ctx context.Context, arg MarkChunkEmbedFailedParams) error {
+	_, err := q.db.ExecContext(ctx, markChunkEmbedFailed, arg.ID, arg.WorkspaceHash)
 	return err
 }
 
 const markChunkEmbedded = `-- name: MarkChunkEmbedded :exec
-UPDATE chunks SET embed_status = 'embedded' WHERE id = $1
+UPDATE chunks SET embed_status = 'embedded' WHERE id = $1 AND workspace_hash = $2
 `
 
-func (q *Queries) MarkChunkEmbedded(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, markChunkEmbedded, id)
+type MarkChunkEmbeddedParams struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+}
+
+func (q *Queries) MarkChunkEmbedded(ctx context.Context, arg MarkChunkEmbeddedParams) error {
+	_, err := q.db.ExecContext(ctx, markChunkEmbedded, arg.ID, arg.WorkspaceHash)
 	return err
 }
 
@@ -152,10 +163,10 @@ func (q *Queries) ResetEmbedStatus(ctx context.Context, workspaceHash string) er
 }
 
 const vectorSearch = `-- name: VectorSearch :many
-SELECT e.id, e.chunk_id, e.workspace_hash, e.embedding,
+SELECT e.id, e.chunk_id, e.workspace_hash,
        c.content, c.metadata, c.document_id,
        d.source_path, d.collection, d.tags,
-       1 - (e.embedding <=> $1::vector) AS score
+       CAST(1 - (e.embedding <=> $1::vector) AS double precision) AS score
 FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
@@ -165,27 +176,26 @@ LIMIT $3
 `
 
 type VectorSearchParams struct {
-	Column1       interface{}
-	WorkspaceHash string
-	Limit         int32
+	QueryEmbedding pgvector_go.Vector
+	WorkspaceHash  string
+	MaxResults     int32
 }
 
 type VectorSearchRow struct {
 	ID            uuid.UUID
 	ChunkID       uuid.UUID
 	WorkspaceHash string
-	Embedding     interface{}
 	Content       string
 	Metadata      pqtype.NullRawMessage
 	DocumentID    uuid.UUID
 	SourcePath    string
 	Collection    string
 	Tags          []string
-	Score         int32
+	Score         float64
 }
 
 func (q *Queries) VectorSearch(ctx context.Context, arg VectorSearchParams) ([]VectorSearchRow, error) {
-	rows, err := q.db.QueryContext(ctx, vectorSearch, arg.Column1, arg.WorkspaceHash, arg.Limit)
+	rows, err := q.db.QueryContext(ctx, vectorSearch, arg.QueryEmbedding, arg.WorkspaceHash, arg.MaxResults)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +207,6 @@ func (q *Queries) VectorSearch(ctx context.Context, arg VectorSearchParams) ([]V
 			&i.ID,
 			&i.ChunkID,
 			&i.WorkspaceHash,
-			&i.Embedding,
 			&i.Content,
 			&i.Metadata,
 			&i.DocumentID,
