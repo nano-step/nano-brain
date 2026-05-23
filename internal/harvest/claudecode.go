@@ -269,6 +269,10 @@ func renderClaudeCodeMarkdown(sessionID string, msgs []claudeCodeMessage) string
 				if err := json.Unmarshal(msg.ToolOutput, &outputMap); err == nil {
 					if out, ok := outputMap["output"]; ok {
 						fmt.Fprintf(&b, "%v\n", out)
+					} else {
+						// Fallback: output key missing (e.g. error or other metadata)
+						b.WriteString(string(msg.ToolOutput))
+						b.WriteString("\n")
 					}
 				} else {
 					b.WriteString(string(msg.ToolOutput))
