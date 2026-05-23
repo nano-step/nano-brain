@@ -109,6 +109,30 @@ func TestRecallAtK(t *testing.T) {
 			k:    10,
 			want: 0.0,
 		},
+		{
+			name: "empty relevant excluded from denominator",
+			qrs: []QueryResult{
+				{
+					RelevantDocIDs: []string{"a"},
+					ReturnedDocIDs: []string{"a", "x"},
+				},
+				{
+					RelevantDocIDs: nil,
+					ReturnedDocIDs: []string{"x", "y"},
+				},
+			},
+			k:    10,
+			want: 1.0,
+		},
+		{
+			name: "all queries have empty relevant",
+			qrs: []QueryResult{{
+				RelevantDocIDs: nil,
+				ReturnedDocIDs: []string{"x"},
+			}},
+			k:    10,
+			want: 0.0,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

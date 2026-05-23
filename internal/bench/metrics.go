@@ -39,10 +39,12 @@ func RecallAtK(results []QueryResult, k int) float64 {
 		return 0
 	}
 	var sum float64
+	var counted int
 	for _, r := range results {
 		if len(r.RelevantDocIDs) == 0 {
 			continue
 		}
+		counted++
 		relevant := toSet(r.RelevantDocIDs)
 		top := r.ReturnedDocIDs
 		if len(top) > k {
@@ -56,7 +58,10 @@ func RecallAtK(results []QueryResult, k int) float64 {
 		}
 		sum += float64(hits) / float64(len(r.RelevantDocIDs))
 	}
-	return sum / float64(len(results))
+	if counted == 0 {
+		return 0
+	}
+	return sum / float64(counted)
 }
 
 func MeanReciprocalRank(results []QueryResult) float64 {

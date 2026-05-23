@@ -146,18 +146,11 @@ func runBenchGenerate(args []string) {
 
 func runBenchRun(args []string) {
 	args = splitEqualsArgs(args)
-	var workspace, dataset, save string
+	var dataset, save string
 	var jsonFlag bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--workspace":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "--workspace requires a value")
-				os.Exit(1)
-			}
-			i++
-			workspace = args[i]
 		case "--dataset":
 			if i+1 >= len(args) {
 				fmt.Fprintln(os.Stderr, "--dataset requires a value")
@@ -180,8 +173,8 @@ func runBenchRun(args []string) {
 		}
 	}
 
-	if workspace == "" || dataset == "" {
-		fmt.Fprintln(os.Stderr, "Usage: nano-brain bench run --dataset=FILE --workspace=HASH [--save=FILE] [--json]")
+	if dataset == "" {
+		fmt.Fprintln(os.Stderr, "Usage: nano-brain bench run --dataset=FILE [--save=FILE] [--json]")
 		os.Exit(1)
 	}
 
@@ -233,25 +226,25 @@ func runBenchRun(args []string) {
 		os.Exit(1)
 	}
 
-	if save != "" {
-		data, err := json.MarshalIndent(results, "", "  ")
+	var resultJSON []byte
+	if save != "" || jsonFlag {
+		var err error
+		resultJSON, err = json.MarshalIndent(results, "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to marshal results: %v\n", err)
 			os.Exit(1)
 		}
-		if err := os.WriteFile(save, data, 0644); err != nil {
+	}
+
+	if save != "" {
+		if err := os.WriteFile(save, resultJSON, 0644); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to write results: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
 	if jsonFlag {
-		data, err := json.MarshalIndent(results, "", "  ")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to marshal results: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println(string(data))
+		fmt.Println(string(resultJSON))
 		return
 	}
 
