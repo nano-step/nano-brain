@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nano-brain/nano-brain/internal/chunk"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -392,14 +394,87 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_get",
 			Description: "Get a document by ID or path",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"id":        {"type": "string", "description": "Document path or #docid"},
-				"workspace": {"type": "string", "description": "Workspace hash"},
-			}, []string{"id", "workspace"}),
+				"path":       {"type": "string", "description": "Document source_path or #<uuid> for lookup by ID"},
+				"workspace":  {"type": "string", "description": "Workspace hash"},
+				"start_line": {"type": "number", "description": "Start line (1-indexed, inclusive)"},
+				"end_line":   {"type": "number", "description": "End line (1-indexed, inclusive)"},
+			}, []string{"path", "workspace"}),
 		},
-		func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-			// TODO(story-5.6): When implementing, reject workspace == "all" for write-like behavior
-			// or support cross-workspace get if read-only.
-			return errResult("memory_get not yet implemented (Story 5.6)"), nil
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ws, errRes := requireWorkspace(args)
+			if errRes != nil {
+				return errRes, nil
+			}
+			if ws == "all" {
+				return errResult("workspace 'all' is not valid for memory_get"), nil
+			}
+			path := argString(args, "path")
+			if path == "" {
+				return errResult("path is required"), nil
+			}
+
+			var doc sqlc.Document
+			if strings.HasPrefix(path, "#") {
+				docID, parseErr := uuid.Parse(strings.TrimPrefix(path, "#"))
+				if parseErr != nil {
+					return errResult(fmt.Sprintf("invalid document ID: %v", parseErr)), nil
+				}
+				doc, err = a.queries.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{
+					ID:            docID,
+					WorkspaceHash: ws,
+				})
+			} else {
+				doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+					SourcePath:    path,
+					WorkspaceHash: ws,
+				})
+			}
+			if err != nil {
+				return errResult(fmt.Sprintf("document not found: %v", err)), nil
+			}
+
+			content := doc.Content
+			startLine := argInt(args, "start_line", 0, 1<<30)
+			endLine := argInt(args, "end_line", 0, 1<<30)
+			if startLine > 0 || endLine > 0 {
+				lines := strings.Split(content, "\n")
+				total := len(lines)
+				s := startLine
+				if s < 1 {
+					s = 1
+				}
+				e := endLine
+			if e < 1 || e > total {
+				e = total
+			}
+			if s > total || s > e {
+				content = ""
+			} else {
+				content = strings.Join(lines[s-1:e], "\n")
+			}
+			}
+
+			supersedes := ""
+			if doc.SupersedesID.Valid {
+				supersedes = doc.SupersedesID.UUID.String()
+			}
+
+			return textResult(map[string]any{
+				"id":             doc.ID.String(),
+				"content":        content,
+				"title":          doc.Title,
+				"tags":           doc.Tags,
+				"collection":     doc.Collection,
+				"workspace_hash": doc.WorkspaceHash,
+				"source_path":    doc.SourcePath,
+				"supersedes_id":  supersedes,
+				"created_at":     doc.CreatedAt.Format(time.RFC3339),
+				"updated_at":     doc.UpdatedAt.Format(time.RFC3339),
+			})
 		},
 	)
 }
@@ -417,6 +492,7 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 				"collection":  {"type": "string", "description": "Collection name (default: memory)"},
 				"source_path": {"type": "string", "description": "Source file path"},
 				"metadata":    {"type": "object", "description": "Additional metadata"},
+				"supersedes":  {"type": "string", "description": "Document to supersede (#<uuid> or source_path)"},
 			}, []string{"content", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -459,6 +535,28 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 				}
 			}
 
+			var supersedesID uuid.NullUUID
+			if sup := argString(args, "supersedes"); sup != "" {
+				if strings.HasPrefix(sup, "#") {
+					parsed, parseErr := uuid.Parse(strings.TrimPrefix(sup, "#"))
+					if parseErr == nil {
+						supersedesID = uuid.NullUUID{UUID: parsed, Valid: true}
+					} else {
+						a.logger.Warn().Str("supersedes", sup).Err(parseErr).Msg("invalid supersedes UUID, ignoring")
+					}
+				} else {
+					target, lookupErr := a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+						SourcePath:    sup,
+						WorkspaceHash: ws,
+					})
+					if lookupErr == nil {
+						supersedesID = uuid.NullUUID{UUID: target.ID, Valid: true}
+					} else {
+						a.logger.Warn().Str("supersedes", sup).Err(lookupErr).Msg("supersedes target not found, ignoring")
+					}
+				}
+			}
+
 			sum := sha256.Sum256([]byte(content))
 			contentHash := hex.EncodeToString(sum[:])
 
@@ -471,6 +569,7 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 				Collection:    collection,
 				Tags:          tags,
 				Metadata:      meta,
+				SupersedesID:  supersedesID,
 			}
 
 			chunks := chunk.Split(content, chunk.DefaultConfig())

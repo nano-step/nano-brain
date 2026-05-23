@@ -51,6 +51,7 @@ type Document struct {
 	Metadata      pqtype.NullRawMessage
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	SupersedesID  uuid.NullUUID
 }
 
 type Embedding struct {

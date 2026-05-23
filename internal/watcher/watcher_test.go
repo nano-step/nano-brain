@@ -50,12 +50,12 @@ func (m *mockQuerier) UpsertChunk(_ context.Context, _ sqlc.UpsertChunkParams) (
 	return uuid.New(), nil
 }
 
-func (m *mockQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.GetDocumentBySourcePathRow, error) {
+func (m *mockQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
 	hash, ok := m.sourcePathHash[arg.SourcePath]
 	if !ok {
-		return sqlc.GetDocumentBySourcePathRow{}, sql.ErrNoRows
+		return sqlc.Document{}, sql.ErrNoRows
 	}
-	return sqlc.GetDocumentBySourcePathRow{
+	return sqlc.Document{
 		ID:          uuid.New(),
 		ContentHash: hash,
 	}, nil

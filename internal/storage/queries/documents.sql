@@ -1,6 +1,6 @@
 -- name: UpsertDocument :one
-INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (content_hash, workspace_hash) DO UPDATE SET
     title = EXCLUDED.title,
     content = EXCLUDED.content,
@@ -8,12 +8,13 @@ ON CONFLICT (content_hash, workspace_hash) DO UPDATE SET
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
+    supersedes_id = COALESCE(EXCLUDED.supersedes_id, documents.supersedes_id),
     updated_at = now()
 RETURNING id, content_hash, collection, workspace_hash;
 
 -- name: UpsertDocumentBySourcePath :one
-INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     content_hash = EXCLUDED.content_hash,
     title = EXCLUDED.title,
@@ -21,14 +22,18 @@ ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
+    supersedes_id = COALESCE(EXCLUDED.supersedes_id, documents.supersedes_id),
     updated_at = now()
 RETURNING id, content_hash, collection, workspace_hash;
 
 -- name: GetDocumentByHash :one
 SELECT * FROM documents WHERE content_hash = $1 AND workspace_hash = $2;
 
+-- name: GetDocumentByID :one
+SELECT * FROM documents WHERE id = $1 AND workspace_hash = $2;
+
 -- name: GetDocumentBySourcePath :one
-SELECT id, content_hash FROM documents WHERE source_path = $1 AND workspace_hash = $2;
+SELECT * FROM documents WHERE source_path = $1 AND workspace_hash = $2;
 
 -- name: ListDocumentsByWorkspace :many
 SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, created_at, updated_at

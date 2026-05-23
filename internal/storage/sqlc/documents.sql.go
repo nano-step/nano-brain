@@ -15,7 +15,7 @@ import (
 )
 
 const getDocumentByHash = `-- name: GetDocumentByHash :one
-SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at FROM documents WHERE content_hash = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id FROM documents WHERE content_hash = $1 AND workspace_hash = $2
 `
 
 type GetDocumentByHashParams struct {
@@ -38,12 +38,42 @@ func (q *Queries) GetDocumentByHash(ctx context.Context, arg GetDocumentByHashPa
 		&i.Metadata,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SupersedesID,
+	)
+	return i, err
+}
+
+const getDocumentByID = `-- name: GetDocumentByID :one
+SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id FROM documents WHERE id = $1 AND workspace_hash = $2
+`
+
+type GetDocumentByIDParams struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+}
+
+func (q *Queries) GetDocumentByID(ctx context.Context, arg GetDocumentByIDParams) (Document, error) {
+	row := q.db.QueryRowContext(ctx, getDocumentByID, arg.ID, arg.WorkspaceHash)
+	var i Document
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceHash,
+		&i.ContentHash,
+		&i.Title,
+		&i.Content,
+		&i.SourcePath,
+		&i.Collection,
+		pq.Array(&i.Tags),
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SupersedesID,
 	)
 	return i, err
 }
 
 const getDocumentBySourcePath = `-- name: GetDocumentBySourcePath :one
-SELECT id, content_hash FROM documents WHERE source_path = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id FROM documents WHERE source_path = $1 AND workspace_hash = $2
 `
 
 type GetDocumentBySourcePathParams struct {
@@ -51,15 +81,23 @@ type GetDocumentBySourcePathParams struct {
 	WorkspaceHash string
 }
 
-type GetDocumentBySourcePathRow struct {
-	ID          uuid.UUID
-	ContentHash string
-}
-
-func (q *Queries) GetDocumentBySourcePath(ctx context.Context, arg GetDocumentBySourcePathParams) (GetDocumentBySourcePathRow, error) {
+func (q *Queries) GetDocumentBySourcePath(ctx context.Context, arg GetDocumentBySourcePathParams) (Document, error) {
 	row := q.db.QueryRowContext(ctx, getDocumentBySourcePath, arg.SourcePath, arg.WorkspaceHash)
-	var i GetDocumentBySourcePathRow
-	err := row.Scan(&i.ID, &i.ContentHash)
+	var i Document
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceHash,
+		&i.ContentHash,
+		&i.Title,
+		&i.Content,
+		&i.SourcePath,
+		&i.Collection,
+		pq.Array(&i.Tags),
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SupersedesID,
+	)
 	return i, err
 }
 
@@ -129,8 +167,8 @@ func (q *Queries) UpdateDocumentsCollection(ctx context.Context, arg UpdateDocum
 }
 
 const upsertDocument = `-- name: UpsertDocument :one
-INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (content_hash, workspace_hash) DO UPDATE SET
     title = EXCLUDED.title,
     content = EXCLUDED.content,
@@ -138,6 +176,7 @@ ON CONFLICT (content_hash, workspace_hash) DO UPDATE SET
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
+    supersedes_id = COALESCE(EXCLUDED.supersedes_id, documents.supersedes_id),
     updated_at = now()
 RETURNING id, content_hash, collection, workspace_hash
 `
@@ -151,6 +190,7 @@ type UpsertDocumentParams struct {
 	Collection    string
 	Tags          []string
 	Metadata      pqtype.NullRawMessage
+	SupersedesID  uuid.NullUUID
 }
 
 type UpsertDocumentRow struct {
@@ -170,6 +210,7 @@ func (q *Queries) UpsertDocument(ctx context.Context, arg UpsertDocumentParams) 
 		arg.Collection,
 		pq.Array(arg.Tags),
 		arg.Metadata,
+		arg.SupersedesID,
 	)
 	var i UpsertDocumentRow
 	err := row.Scan(
@@ -182,8 +223,8 @@ func (q *Queries) UpsertDocument(ctx context.Context, arg UpsertDocumentParams) 
 }
 
 const upsertDocumentBySourcePath = `-- name: UpsertDocumentBySourcePath :one
-INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     content_hash = EXCLUDED.content_hash,
     title = EXCLUDED.title,
@@ -191,6 +232,7 @@ ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
+    supersedes_id = COALESCE(EXCLUDED.supersedes_id, documents.supersedes_id),
     updated_at = now()
 RETURNING id, content_hash, collection, workspace_hash
 `
@@ -204,6 +246,7 @@ type UpsertDocumentBySourcePathParams struct {
 	Collection    string
 	Tags          []string
 	Metadata      pqtype.NullRawMessage
+	SupersedesID  uuid.NullUUID
 }
 
 type UpsertDocumentBySourcePathRow struct {
@@ -223,6 +266,7 @@ func (q *Queries) UpsertDocumentBySourcePath(ctx context.Context, arg UpsertDocu
 		arg.Collection,
 		pq.Array(arg.Tags),
 		arg.Metadata,
+		arg.SupersedesID,
 	)
 	var i UpsertDocumentBySourcePathRow
 	err := row.Scan(

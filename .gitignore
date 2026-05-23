@@ -20,3 +20,4 @@ _bmad/config.user.yaml
 *.exe
 *.test
 *.out
+bin/
