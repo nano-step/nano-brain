@@ -20,7 +20,6 @@ type DocumentRow struct {
 }
 
 type DataStore interface {
-	CountDocumentsByWorkspace(ctx context.Context, workspaceHash string) (int64, error)
 	ListDocumentsByWorkspace(ctx context.Context, workspaceHash string) ([]DocumentRow, error)
 }
 
@@ -29,17 +28,12 @@ func Generate(ctx context.Context, store DataStore, workspaceHash string, scale 
 		return nil, fmt.Errorf("scale must be a positive integer, got %d", scale)
 	}
 
-	count, err := store.CountDocumentsByWorkspace(ctx, workspaceHash)
-	if err != nil {
-		return nil, fmt.Errorf("counting documents: %w", err)
-	}
-	if count < int64(scale) {
-		return nil, fmt.Errorf("workspace %q has %d documents, need at least %d", workspaceHash, count, scale)
-	}
-
 	docs, err := store.ListDocumentsByWorkspace(ctx, workspaceHash)
 	if err != nil {
 		return nil, fmt.Errorf("listing documents: %w", err)
+	}
+	if len(docs) < scale {
+		return nil, fmt.Errorf("workspace %q has %d documents, need at least %d", workspaceHash, len(docs), scale)
 	}
 
 	shuffled := make([]DocumentRow, len(docs))
@@ -50,12 +44,8 @@ func Generate(ctx context.Context, store DataStore, workspaceHash string, scale 
 
 	entries := make([]DatasetEntry, 0, scale)
 	for _, doc := range sampled {
-		query := deriveQuery(doc)
-		if query == "" {
-			continue
-		}
 		entries = append(entries, DatasetEntry{
-			Query:          query,
+			Query:          deriveQuery(doc),
 			RelevantDocIDs: []string{doc.ID.String()},
 			SourceDocID:    doc.ID.String(),
 			SourceTitle:    doc.Title,
@@ -77,5 +67,5 @@ func deriveQuery(doc DocumentRow) string {
 	if doc.SourcePath != "" {
 		return strings.TrimSpace(doc.SourcePath)
 	}
-	return ""
+	return doc.ID.String()
 }

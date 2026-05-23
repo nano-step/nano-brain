@@ -10,16 +10,8 @@ import (
 )
 
 type mockStore struct {
-	count int64
-	docs  []DocumentRow
-	err   error
-}
-
-func (m *mockStore) CountDocumentsByWorkspace(_ context.Context, _ string) (int64, error) {
-	if m.err != nil {
-		return 0, m.err
-	}
-	return m.count, nil
+	docs []DocumentRow
+	err  error
 }
 
 func (m *mockStore) ListDocumentsByWorkspace(_ context.Context, _ string) ([]DocumentRow, error) {
@@ -46,7 +38,7 @@ func makeDocs(n int) []DocumentRow {
 
 func TestGenerate_Success(t *testing.T) {
 	docs := makeDocs(10)
-	store := &mockStore{count: 10, docs: docs}
+	store := &mockStore{docs: docs}
 
 	ds, err := Generate(context.Background(), store, "ws-test", 5)
 	if err != nil {
@@ -75,7 +67,7 @@ func TestGenerate_Success(t *testing.T) {
 }
 
 func TestGenerate_InsufficientDocuments(t *testing.T) {
-	store := &mockStore{count: 3, docs: makeDocs(3)}
+	store := &mockStore{docs: makeDocs(3)}
 
 	_, err := Generate(context.Background(), store, "ws-test", 10)
 	if err == nil {
@@ -84,7 +76,7 @@ func TestGenerate_InsufficientDocuments(t *testing.T) {
 }
 
 func TestGenerate_InvalidScale(t *testing.T) {
-	store := &mockStore{count: 10, docs: makeDocs(10)}
+	store := &mockStore{docs: makeDocs(10)}
 
 	_, err := Generate(context.Background(), store, "ws-test", 0)
 	if err == nil {
@@ -105,16 +97,41 @@ func TestGenerate_StoreError(t *testing.T) {
 	}
 }
 
+func TestGenerate_ListError(t *testing.T) {
+	store := &mockStore{err: fmt.Errorf("list query failed")}
+
+	_, err := Generate(context.Background(), store, "ws-test", 1)
+	if err == nil {
+		t.Fatal("expected error from list failure")
+	}
+}
+
+func TestGenerate_EmptyTitleAndPath(t *testing.T) {
+	id := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+	store := &mockStore{docs: []DocumentRow{{ID: id, WorkspaceHash: "ws-test", ContentHash: "h1"}}}
+
+	ds, err := Generate(context.Background(), store, "ws-test", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ds.Entries) != 1 {
+		t.Fatalf("entries count = %d, want 1", len(ds.Entries))
+	}
+	if ds.Entries[0].Query != id.String() {
+		t.Errorf("query = %q, want doc ID %q", ds.Entries[0].Query, id.String())
+	}
+}
+
 func TestGenerate_Deterministic(t *testing.T) {
 	docs := makeDocs(20)
-	store := &mockStore{count: 20, docs: docs}
+	store := &mockStore{docs: docs}
 
 	ds1, err := Generate(context.Background(), store, "ws-test", 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	store2 := &mockStore{count: 20, docs: docs}
+	store2 := &mockStore{docs: docs}
 	ds2, err := Generate(context.Background(), store2, "ws-test", 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -144,9 +161,9 @@ func TestDeriveQuery(t *testing.T) {
 			want: "/path/to/file.md",
 		},
 		{
-			name: "returns empty when both empty",
-			doc:  DocumentRow{Title: "", SourcePath: ""},
-			want: "",
+			name: "falls back to doc ID when both empty",
+			doc:  DocumentRow{ID: uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), Title: "", SourcePath: ""},
+			want: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
 		},
 		{
 			name: "trims whitespace",
