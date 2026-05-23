@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 )
 
@@ -50,15 +51,31 @@ func runCollectionAdd(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--name":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			name = args[i]
 		case "--path":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			path = args[i]
 		case "--workspace":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			workspace = args[i]
 		case "--glob":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			glob = args[i]
 		}
@@ -91,9 +108,17 @@ func runCollectionRemove(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--name":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			name = args[i]
 		case "--workspace":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			workspace = args[i]
 		}
@@ -103,8 +128,8 @@ func runCollectionRemove(args []string) {
 		os.Exit(1)
 	}
 
-	url := fmt.Sprintf("%s/api/v1/collections/%s?workspace=%s", collectionBaseURL(), name, workspace)
-	req, _ := http.NewRequest(http.MethodDelete, url, nil)
+	reqURL := fmt.Sprintf("%s/api/v1/collections/%s?workspace=%s", collectionBaseURL(), url.PathEscape(name), url.QueryEscape(workspace))
+	req, _ := http.NewRequest(http.MethodDelete, reqURL, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -124,6 +149,10 @@ func runCollectionList(args []string) {
 	var workspace string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--workspace" {
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			workspace = args[i]
 		}
@@ -133,8 +162,8 @@ func runCollectionList(args []string) {
 		os.Exit(1)
 	}
 
-	url := fmt.Sprintf("%s/api/v1/collections?workspace=%s", collectionBaseURL(), workspace)
-	resp, err := http.Get(url)
+	reqURL := fmt.Sprintf("%s/api/v1/collections?workspace=%s", collectionBaseURL(), url.QueryEscape(workspace))
+	resp, err := http.Get(reqURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -149,12 +178,24 @@ func runCollectionRename(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--old":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			oldName = args[i]
 		case "--new":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			newName = args[i]
 		case "--workspace":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "%s requires a value\n", args[i])
+				os.Exit(1)
+			}
 			i++
 			workspace = args[i]
 		}
@@ -170,8 +211,8 @@ func runCollectionRename(args []string) {
 	}
 	data, _ := json.Marshal(body)
 
-	url := fmt.Sprintf("%s/api/v1/collections/%s", collectionBaseURL(), oldName)
-	req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	reqURL := fmt.Sprintf("%s/api/v1/collections/%s", collectionBaseURL(), url.PathEscape(oldName))
+	req, _ := http.NewRequest(http.MethodPut, reqURL, bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

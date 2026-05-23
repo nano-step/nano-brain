@@ -18,12 +18,13 @@ import (
 )
 
 type mockCollectionQuerier struct {
-	upsertFn      func(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error)
-	listFn        func(ctx context.Context, ws string) ([]sqlc.Collection, error)
-	getFn         func(ctx context.Context, arg sqlc.GetCollectionByNameParams) (sqlc.Collection, error)
-	renameFn      func(ctx context.Context, arg sqlc.RenameCollectionParams) (sqlc.Collection, error)
-	deleteFn      func(ctx context.Context, arg sqlc.DeleteCollectionParams) error
-	countDocsFn   func(ctx context.Context, arg sqlc.CountDocumentsByCollectionParams) (int64, error)
+	upsertFn            func(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error)
+	listFn              func(ctx context.Context, ws string) ([]sqlc.Collection, error)
+	listWithDocCountFn  func(ctx context.Context, ws string) ([]sqlc.ListCollectionsWithDocCountRow, error)
+	getFn               func(ctx context.Context, arg sqlc.GetCollectionByNameParams) (sqlc.Collection, error)
+	renameFn            func(ctx context.Context, arg sqlc.RenameCollectionParams) (sqlc.Collection, error)
+	deleteFn            func(ctx context.Context, arg sqlc.DeleteCollectionParams) error
+	countDocsFn         func(ctx context.Context, arg sqlc.CountDocumentsByCollectionParams) (int64, error)
 }
 
 func (m *mockCollectionQuerier) UpsertCollection(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error) {
@@ -31,6 +32,9 @@ func (m *mockCollectionQuerier) UpsertCollection(ctx context.Context, arg sqlc.U
 }
 func (m *mockCollectionQuerier) ListCollections(ctx context.Context, ws string) ([]sqlc.Collection, error) {
 	return m.listFn(ctx, ws)
+}
+func (m *mockCollectionQuerier) ListCollectionsWithDocCount(ctx context.Context, ws string) ([]sqlc.ListCollectionsWithDocCountRow, error) {
+	return m.listWithDocCountFn(ctx, ws)
 }
 func (m *mockCollectionQuerier) GetCollectionByName(ctx context.Context, arg sqlc.GetCollectionByNameParams) (sqlc.Collection, error) {
 	return m.getFn(ctx, arg)
@@ -143,12 +147,20 @@ func TestAddCollection_MissingName(t *testing.T) {
 }
 
 func TestListCollections_Success(t *testing.T) {
+	col := fixedCollection("codebase", "/tmp")
 	q := &mockCollectionQuerier{
-		listFn: func(_ context.Context, _ string) ([]sqlc.Collection, error) {
-			return []sqlc.Collection{fixedCollection("codebase", "/tmp")}, nil
-		},
-		countDocsFn: func(_ context.Context, _ sqlc.CountDocumentsByCollectionParams) (int64, error) {
-			return 42, nil
+		listWithDocCountFn: func(_ context.Context, _ string) ([]sqlc.ListCollectionsWithDocCountRow, error) {
+			return []sqlc.ListCollectionsWithDocCountRow{{
+				ID:            col.ID,
+				WorkspaceHash: col.WorkspaceHash,
+				Name:          col.Name,
+				Path:          col.Path,
+				GlobPattern:   col.GlobPattern,
+				UpdateMode:    col.UpdateMode,
+				CreatedAt:     col.CreatedAt,
+				UpdatedAt:     col.UpdatedAt,
+				DocumentCount: 42,
+			}}, nil
 		},
 	}
 
@@ -188,7 +200,7 @@ func TestRenameCollection_Success(t *testing.T) {
 	c.SetParamNames("name")
 	c.SetParamValues("old-name")
 
-	h := handlers.RenameCollectionHandler(q, zerolog.Nop())
+	h := handlers.RenameCollectionHandler(q, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}

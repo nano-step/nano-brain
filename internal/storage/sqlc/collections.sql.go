@@ -7,7 +7,9 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
@@ -90,6 +92,65 @@ func (q *Queries) ListCollections(ctx context.Context, workspaceHash string) ([]
 			pq.Array(&i.ExcludePatterns),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCollectionsWithDocCount = `-- name: ListCollectionsWithDocCount :many
+SELECT c.id, c.workspace_hash, c.name, c.path, c.glob_pattern, c.update_mode, c.exclude_patterns, c.created_at, c.updated_at, COALESCE(d.cnt, 0)::bigint AS document_count
+FROM collections c
+LEFT JOIN (
+    SELECT collection, workspace_hash, count(*) AS cnt
+    FROM documents
+    GROUP BY collection, workspace_hash
+) d ON c.name = d.collection AND c.workspace_hash = d.workspace_hash
+WHERE c.workspace_hash = $1
+ORDER BY c.name
+`
+
+type ListCollectionsWithDocCountRow struct {
+	ID              uuid.UUID
+	WorkspaceHash   string
+	Name            string
+	Path            string
+	GlobPattern     string
+	UpdateMode      string
+	ExcludePatterns []string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DocumentCount   int64
+}
+
+func (q *Queries) ListCollectionsWithDocCount(ctx context.Context, workspaceHash string) ([]ListCollectionsWithDocCountRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCollectionsWithDocCount, workspaceHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCollectionsWithDocCountRow
+	for rows.Next() {
+		var i ListCollectionsWithDocCountRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.Name,
+			&i.Path,
+			&i.GlobPattern,
+			&i.UpdateMode,
+			pq.Array(&i.ExcludePatterns),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DocumentCount,
 		); err != nil {
 			return nil, err
 		}

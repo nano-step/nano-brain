@@ -24,3 +24,14 @@ DELETE FROM collections WHERE name = $1 AND workspace_hash = $2;
 
 -- name: CountDocumentsByCollection :one
 SELECT count(*) FROM documents WHERE collection = $1 AND workspace_hash = $2;
+
+-- name: ListCollectionsWithDocCount :many
+SELECT c.id, c.workspace_hash, c.name, c.path, c.glob_pattern, c.update_mode, c.exclude_patterns, c.created_at, c.updated_at, COALESCE(d.cnt, 0)::bigint AS document_count
+FROM collections c
+LEFT JOIN (
+    SELECT collection, workspace_hash, count(*) AS cnt
+    FROM documents
+    GROUP BY collection, workspace_hash
+) d ON c.name = d.collection AND c.workspace_hash = d.workspace_hash
+WHERE c.workspace_hash = $1
+ORDER BY c.name;
