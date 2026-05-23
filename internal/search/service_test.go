@@ -16,8 +16,16 @@ func (m *mockQuerier) BM25Search(ctx context.Context, arg sqlc.BM25SearchParams)
 	return []sqlc.BM25SearchRow{}, nil
 }
 
+func (m *mockQuerier) BM25SearchAll(ctx context.Context, arg sqlc.BM25SearchAllParams) ([]sqlc.BM25SearchAllRow, error) {
+	return []sqlc.BM25SearchAllRow{}, nil
+}
+
 func (m *mockQuerier) VectorSearch(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error) {
 	return []sqlc.VectorSearchRow{}, nil
+}
+
+func (m *mockQuerier) VectorSearchAll(ctx context.Context, arg sqlc.VectorSearchAllParams) ([]sqlc.VectorSearchAllRow, error) {
+	return []sqlc.VectorSearchAllRow{}, nil
 }
 
 type mockEmbedder struct{}

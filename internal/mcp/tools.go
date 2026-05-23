@@ -212,7 +212,44 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			results := make([]resultRow, 0)
 			limit := int32(maxResults)
 
-			if len(tags) > 0 {
+			if ws == "all" {
+				if len(tags) > 0 {
+					rows, err := a.queries.BM25SearchAllWithTags(ctx, sqlc.BM25SearchAllWithTagsParams{
+						Query:      query,
+						Tags:       tags,
+						MaxResults: limit,
+					})
+					if err != nil {
+						return errResult(fmt.Sprintf("bm25 search failed: %v", err)), nil
+					}
+					for _, r := range rows {
+						results = append(results, resultRow{
+							ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+							WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+							Content: r.Content, SourcePath: r.SourcePath,
+							Collection: r.Collection, Tags: r.Tags,
+							Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+						})
+					}
+				} else {
+					rows, err := a.queries.BM25SearchAll(ctx, sqlc.BM25SearchAllParams{
+						Query:      query,
+						MaxResults: limit,
+					})
+					if err != nil {
+						return errResult(fmt.Sprintf("bm25 search failed: %v", err)), nil
+					}
+					for _, r := range rows {
+						results = append(results, resultRow{
+							ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+							WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+							Content: r.Content, SourcePath: r.SourcePath,
+							Collection: r.Collection, Tags: r.Tags,
+							Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+						})
+					}
+				}
+			} else if len(tags) > 0 {
 				rows, err := a.queries.BM25SearchWithTags(ctx, sqlc.BM25SearchWithTagsParams{
 					Query:         query,
 					WorkspaceHash: ws,
@@ -291,15 +328,6 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				return errResult(fmt.Sprintf("embedding query failed: %v", err)), nil
 			}
 
-			rows, err := a.queries.VectorSearch(ctx, sqlc.VectorSearchParams{
-				QueryEmbedding: pgvector_go.NewVector(vec),
-				WorkspaceHash:  ws,
-				MaxResults:     int32(maxResults),
-			})
-			if err != nil {
-				return errResult(fmt.Sprintf("vector search failed: %v", err)), nil
-			}
-
 			type vsearchRow struct {
 				ID            string    `json:"id"`
 				DocumentID    string    `json:"document_id"`
@@ -313,15 +341,45 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				CreatedAt     time.Time `json:"created_at"`
 				UpdatedAt     time.Time `json:"updated_at"`
 			}
-			results := make([]vsearchRow, 0, len(rows))
-			for _, r := range rows {
-				results = append(results, vsearchRow{
-					ID: r.ChunkID.String(), DocumentID: r.DocumentID.String(),
-					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
-					Content: r.Content, SourcePath: r.SourcePath,
-					Collection: r.Collection, Tags: r.Tags,
-					Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+
+			var results []vsearchRow
+			if ws == "all" {
+				rows, err := a.queries.VectorSearchAll(ctx, sqlc.VectorSearchAllParams{
+					QueryEmbedding: pgvector_go.NewVector(vec),
+					MaxResults:     int32(maxResults),
 				})
+				if err != nil {
+					return errResult(fmt.Sprintf("vector search failed: %v", err)), nil
+				}
+				results = make([]vsearchRow, 0, len(rows))
+				for _, r := range rows {
+					results = append(results, vsearchRow{
+						ID: r.ChunkID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+						Content: r.Content, SourcePath: r.SourcePath,
+						Collection: r.Collection, Tags: r.Tags,
+						Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
+			} else {
+				rows, err := a.queries.VectorSearch(ctx, sqlc.VectorSearchParams{
+					QueryEmbedding: pgvector_go.NewVector(vec),
+					WorkspaceHash:  ws,
+					MaxResults:     int32(maxResults),
+				})
+				if err != nil {
+					return errResult(fmt.Sprintf("vector search failed: %v", err)), nil
+				}
+				results = make([]vsearchRow, 0, len(rows))
+				for _, r := range rows {
+					results = append(results, vsearchRow{
+						ID: r.ChunkID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+						Content: r.Content, SourcePath: r.SourcePath,
+						Collection: r.Collection, Tags: r.Tags,
+						Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
 			}
 			return textResult(results)
 		},
@@ -367,6 +425,9 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 			ws, errRes := requireWorkspace(args)
 			if errRes != nil {
 				return errRes, nil
+			}
+			if ws == "all" {
+				return errResult("workspace 'all' is not valid for write operations"), nil
 			}
 			content := argString(args, "content")
 			if content == "" {
@@ -512,6 +573,9 @@ func registerMemoryTags(server *mcpsdk.Server, a *Adapter) {
 			if errRes != nil {
 				return errRes, nil
 			}
+			if ws == "all" {
+				return errResult("cross-workspace not supported for this tool"), nil
+			}
 
 			rows, err := a.queries.ListCollectionsWithLastUpdated(ctx, ws)
 			if err != nil {
@@ -592,6 +656,9 @@ func registerMemoryUpdate(server *mcpsdk.Server, a *Adapter) {
 			if errRes != nil {
 				return errRes, nil
 			}
+			if ws == "all" {
+				return errResult("workspace 'all' is not valid for write operations"), nil
+			}
 			return textResult(map[string]string{
 				"status":  "accepted",
 				"message": fmt.Sprintf("reindex requested for workspace %s", ws),
@@ -618,6 +685,9 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 			ws, errRes := requireWorkspace(args)
 			if errRes != nil {
 				return errRes, nil
+			}
+			if ws == "all" {
+				return errResult("cross-workspace not supported for this tool"), nil
 			}
 			limit := argInt(args, "limit", 10, 50)
 
