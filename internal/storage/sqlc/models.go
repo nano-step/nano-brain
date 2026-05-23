@@ -24,6 +24,7 @@ type Chunk struct {
 	Metadata      pqtype.NullRawMessage
 	CreatedAt     time.Time
 	EmbedStatus   string
+	SearchVector  interface{}
 }
 
 type Collection struct {
