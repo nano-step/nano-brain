@@ -27,9 +27,27 @@ func main() {
 	flag.StringVar(&configPath, "config", "", "path to config file (default: ~/.nano-brain/config.yml)")
 	flag.Parse()
 
-	if args := flag.Args(); len(args) > 0 && args[0] == "collection" {
-		runCollectionCmd(args[1:])
-		return
+	if args := flag.Args(); len(args) > 0 {
+		switch args[0] {
+		case "collection":
+			runCollectionCmd(args[1:])
+			return
+		case "init":
+			runInitCmd(args[1:])
+			return
+		case "write":
+			runWriteCmd(args[1:])
+			return
+		case "query":
+			runQueryCmd(args[1:])
+			return
+		case "search":
+			runSearchCmd(args[1:])
+			return
+		case "vsearch":
+			runVSearchCmd(args[1:])
+			return
+		}
 	}
 
 	if configPath == "" {

@@ -15,17 +15,7 @@ func collectionUsage() {
 	os.Exit(1)
 }
 
-func collectionBaseURL() string {
-	host := os.Getenv("NANO_BRAIN_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-	port := os.Getenv("NANO_BRAIN_PORT")
-	if port == "" {
-		port = "3100"
-	}
-	return fmt.Sprintf("http://%s:%s", host, port)
-}
+
 
 func runCollectionCmd(args []string) {
 	if len(args) == 0 {
@@ -97,7 +87,7 @@ func runCollectionAdd(args []string) {
 		os.Exit(1)
 	}
 
-	resp, err := http.Post(collectionBaseURL()+"/api/v1/collections", "application/json", bytes.NewReader(data))
+	resp, err := http.Post(getBaseURL()+"/api/v1/collections", "application/json", bytes.NewReader(data))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -132,7 +122,7 @@ func runCollectionRemove(args []string) {
 		os.Exit(1)
 	}
 
-	reqURL := fmt.Sprintf("%s/api/v1/collections/%s?workspace=%s", collectionBaseURL(), url.PathEscape(name), url.QueryEscape(workspace))
+	reqURL := fmt.Sprintf("%s/api/v1/collections/%s?workspace=%s", getBaseURL(), url.PathEscape(name), url.QueryEscape(workspace))
 	req, _ := http.NewRequest(http.MethodDelete, reqURL, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -166,7 +156,7 @@ func runCollectionList(args []string) {
 		os.Exit(1)
 	}
 
-	reqURL := fmt.Sprintf("%s/api/v1/collections?workspace=%s", collectionBaseURL(), url.QueryEscape(workspace))
+	reqURL := fmt.Sprintf("%s/api/v1/collections?workspace=%s", getBaseURL(), url.QueryEscape(workspace))
 	resp, err := http.Get(reqURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -219,7 +209,7 @@ func runCollectionRename(args []string) {
 		os.Exit(1)
 	}
 
-	reqURL := fmt.Sprintf("%s/api/v1/collections/%s", collectionBaseURL(), url.PathEscape(oldName))
+	reqURL := fmt.Sprintf("%s/api/v1/collections/%s", getBaseURL(), url.PathEscape(oldName))
 	req, _ := http.NewRequest(http.MethodPut, reqURL, bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
