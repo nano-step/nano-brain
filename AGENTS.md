@@ -116,8 +116,8 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 
 ### Validation ladder
 
-- `validate:quick` → `npm run build && vitest run`
-- `smoke` → `npx nano-brain status`
+- `validate:quick` → `go build ./... && go test -race -short ./...`
+- `smoke` → `./nano-brain status`
 
 ### Flow
 

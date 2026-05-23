@@ -58,7 +58,7 @@ review gate before any work is archived.
          ▼
 ┌─────────────────────┐
 │  Implement          │  work through tasks list
-│                     │  npm must stay green
+│                     │  build + tests must stay green
 │                     │
 │                     │  → update issue #N: tick off tasks as completed
 └────────┬────────────┘
@@ -205,16 +205,16 @@ running it and seeing exit code 0.
 
 ```text
 validate:quick   (always — every lane)
-  npm run build && vitest run
+  go build ./... && go test -race -short ./...
 
 test:integration   (normal + high-risk)
-  # N/A
+  go test -race -tags=integration ./...
 
 test:e2e   (high-risk or when UI behavior changes)
-  # N/A
+  go test -race -tags=e2e ./...
 
 test:release   (before deploy)
-  npx nano-brain status
+  ./nano-brain status
 ```
 
 **Lane → required layers:**
@@ -266,7 +266,7 @@ that matches the changed surface:
 | Web UI | Playwright / Cypress | `# N/A` |
 | REST API | API integration test | `# N/A` |
 | Backend-only (no user surface) | Existing integration tests | `# N/A` |
-| LLM / external service call | Live smoke script | `npx nano-brain status` |
+| LLM / external service call | Live smoke script | `./nano-brain status` |
 
 **Lane × user-flow requirement:**
 
@@ -365,6 +365,42 @@ After the local Review Gate passes, push branch and open a PR. The PR triggers y
 The PR review loop is not optional. It is the final correctness gate before
 the change becomes part of the trunk.
 
+## Harness Gate Enforcement
+
+All development transitions are governed by the gate specification in
+[`docs/HARNESS_GATES.md`](HARNESS_GATES.md). Six gates form the lifecycle:
+
+```
+① PRE-WORK → ② IN-PROGRESS → ③ PRE-MERGE → ④ POST-MERGE → ⑤ NEXT-READY → ⑥ RETRO-GATE
+```
+
+**Core enforcement rules:**
+
+1. **1 feature = 1 PR = 1 GitHub issue.** No bundling multiple features.
+2. **All gates must PASS** before proceeding to the next phase.
+3. **FAIL = BLOCK.** Agent must fix failures before continuing.
+4. **Agent MUST NOT start the next feature** until ⑤ NEXT-READY passes.
+
+Run gates via: `./scripts/harness-check.sh <phase> [options]`
+
+The `harness-check` skill (`.opencode/skills/harness-check/`) provides
+agent-side enforcement and is invoked automatically at transition points.
+
+### Retro Gate (⑥)
+
+After every epic completes, a mandatory retrospective analyzes failure patterns
+and proposes harness rule improvements:
+
+- **Mandatory trigger:** Last story of epic merges.
+- **Emergency trigger:** 3+ consecutive stories fail review gate mid-epic.
+- **Flag trigger:** Any PR with review cycle count > 2.
+
+Retro output is saved to `docs/evidence/retro-epic-{N}.md`. Any proposed
+harness rule changes **require user approval** before being applied.
+
+See `docs/HARNESS_GATES.md` for the full gate specification, check details,
+and retro output template.
+
 ## Forbidden Practices
 
 1. **Claiming "tests pass" without output.** Paste the command and its exit code.
@@ -390,6 +426,13 @@ the change becomes part of the trunk.
    classification. Working without an issue ID = invisible work.
 10. **Stale issue.** If implementation progresses but the issue isn't updated
     at the milestones in § GitHub Issue Tracking, the change is in violation.
+11. **Starting next feature with gates failing.** All gates (① – ⑤) of the
+    current feature must PASS before starting the next. No exceptions.
+12. **Skipping retro after epic.** The retro gate (⑥) is mandatory after
+    every epic. Skipping it prevents process improvement.
+13. **Modifying harness rules without user approval.** Retro-proposed rule
+    changes must be approved by the user before being applied to HARNESS.md
+    or HARNESS_GATES.md.
 
 ## GitHub Issue Tracking
 

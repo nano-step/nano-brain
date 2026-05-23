@@ -1,0 +1,15 @@
+# Manual BMM (BMad Method) config seed.
+# Created because bmad-bmb-setup installs BMad Builder only; BMM module
+# has no installer in this checkout, but its skills (bmad-product-brief,
+# bmad-prd, bmad-create-architecture, etc.) need this config to resolve
+# placeholders.
+
+name: BMad Method
+description: Product discovery → PRD → architecture → epics → stories
+version: 0.1.0-manual-seed
+
+# Project identity
+project_name: nano-brain-greenfield
+
+# Where BMM artifacts land. Maps to {planning_artifacts} placeholder.
+planning_artifacts: '{project-root}/docs'

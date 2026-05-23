@@ -107,7 +107,7 @@ Low-risk docs, copy, config, or narrow single-file edits.
 
 Steps:
 1. Patch directly.
-2. Run `validate:quick` — `npm run build && vitest run`.
+2. Run `validate:quick` — `go build ./... && go test -race -short ./...`.
 3. Update affected docs if changed.
 4. Log friction to `HARNESS_BACKLOG.md` if found.
 5. Close issue #N with single comment containing the diff + validate output.
@@ -150,7 +150,7 @@ Steps:
    ```
    /opsx-apply
    ```
-   Keep `npm run build && vitest run` green on every commit.
+   Keep `go build ./... && go test -race -short ./...` green on every commit.
       → Issue update: tick off tasks in Progress checklist as completed.
    → For multi-day work, post status comment every ~3 substantive commits.
 

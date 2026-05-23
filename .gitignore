@@ -14,3 +14,9 @@ src/web/node_modules/
 .npmrc2
 _bmad/config.user.yaml
 /skills/
+
+# Go
+/nano-brain
+*.exe
+*.test
+*.out
