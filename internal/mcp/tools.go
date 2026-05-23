@@ -209,7 +209,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				UpdatedAt     time.Time `json:"updated_at"`
 			}
 
-			results := make([]resultRow, 0)
+			var results []resultRow
 			limit := int32(maxResults)
 
 			if ws == "all" {
