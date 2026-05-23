@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -40,6 +41,15 @@ func TestResolveHostPort_InvalidPort(t *testing.T) {
 	_, port := resolveHostPort()
 	if port != 3100 {
 		t.Errorf("port = %d, want default %d for invalid input", port, 3100)
+	}
+}
+
+func TestResolveHostPort_OutOfRangePort(t *testing.T) {
+	t.Setenv("NANO_BRAIN_HOST", "")
+	t.Setenv("NANO_BRAIN_PORT", "99999")
+	_, port := resolveHostPort()
+	if port != 3100 {
+		t.Errorf("port = %d, want default %d for out-of-range port", port, 3100)
 	}
 }
 
@@ -84,6 +94,50 @@ func TestTailLines_FileNotFound(t *testing.T) {
 	_, err := tailLines("/nonexistent/file.log", 10)
 	if err == nil {
 		t.Error("expected error for nonexistent file")
+	}
+}
+
+func TestTailLines_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "empty.log")
+	if err := os.WriteFile(logFile, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lines, err := tailLines(logFile, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 0 {
+		t.Errorf("got %d lines, want 0 for empty file", len(lines))
+	}
+}
+
+func TestTailLines_MultiChunk(t *testing.T) {
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "big.log")
+
+	var b strings.Builder
+	totalLines := 2000
+	for i := 1; i <= totalLines; i++ {
+		fmt.Fprintf(&b, "line-%04d\n", i)
+	}
+	if err := os.WriteFile(logFile, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lines, err := tailLines(logFile, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 5 {
+		t.Fatalf("got %d lines, want 5", len(lines))
+	}
+	if lines[0] != "line-1996" {
+		t.Errorf("lines[0] = %q, want %q", lines[0], "line-1996")
+	}
+	if lines[4] != "line-2000" {
+		t.Errorf("lines[4] = %q, want %q", lines[4], "line-2000")
 	}
 }
 

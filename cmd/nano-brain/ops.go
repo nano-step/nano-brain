@@ -20,22 +20,6 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-// resolveHostPort returns the host and port for connecting to the nano-brain server,
-// honoring NANO_BRAIN_HOST and NANO_BRAIN_PORT env vars.
-func resolveHostPort() (string, int) {
-	host := os.Getenv("NANO_BRAIN_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-	port := 3100
-	if p := os.Getenv("NANO_BRAIN_PORT"); p != "" {
-		if v, err := strconv.Atoi(p); err == nil && v > 0 {
-			port = v
-		}
-	}
-	return host, port
-}
-
 // defaultLogPath returns the default log file path.
 func defaultLogPath() string {
 	home, err := os.UserHomeDir()
@@ -121,7 +105,10 @@ func resolveLogPath() string {
 	return defaultLogPath()
 }
 
-// tailLines reads the last n lines from a file.
+const tailChunkSize = 64 * 1024
+
+// tailLines reads the last n lines from a file by reading backward from EOF
+// in fixed-size chunks. Memory usage is capped regardless of file size.
 func tailLines(path string, n int) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -129,20 +116,59 @@ func tailLines(path string, n int) ([]string, error) {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-	var lines []string
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("cannot stat log file: %w", err)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading log file: %w", err)
+	fileSize := stat.Size()
+	if fileSize == 0 {
+		return nil, nil
 	}
 
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
+	var collected []string
+	remaining := fileSize
+	var leftover []byte
+
+	for remaining > 0 && len(collected) < n {
+		chunkSize := int64(tailChunkSize)
+		if chunkSize > remaining {
+			chunkSize = remaining
+		}
+		offset := remaining - chunkSize
+		remaining = offset
+
+		buf := make([]byte, chunkSize)
+		if _, err := f.ReadAt(buf, offset); err != nil && err != io.EOF {
+			return nil, fmt.Errorf("error reading log file: %w", err)
+		}
+
+		if len(leftover) > 0 {
+			buf = append(buf, leftover...)
+			leftover = nil
+		}
+
+		lines := strings.Split(string(buf), "\n")
+
+		if offset > 0 {
+			leftover = []byte(lines[0])
+			lines = lines[1:]
+		}
+
+		if len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+
+		collected = append(lines, collected...)
 	}
-	return lines, nil
+
+	if len(leftover) > 0 && string(leftover) != "" {
+		collected = append([]string{string(leftover)}, collected...)
+	}
+
+	if len(collected) > n {
+		collected = collected[len(collected)-n:]
+	}
+	return collected, nil
 }
 
 // tailFollow implements simple tail -f behavior.
