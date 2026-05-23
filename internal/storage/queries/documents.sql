@@ -14,6 +14,9 @@ RETURNING id, content_hash, collection, workspace_hash;
 -- name: GetDocumentByHash :one
 SELECT * FROM documents WHERE content_hash = $1 AND workspace_hash = $2;
 
+-- name: GetDocumentBySourcePath :one
+SELECT id, content_hash FROM documents WHERE source_path = $1 AND workspace_hash = $2;
+
 -- name: ListDocumentsByWorkspace :many
 SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, created_at, updated_at
 FROM documents WHERE workspace_hash = $1 ORDER BY updated_at DESC;

@@ -16,6 +16,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/server"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/jackc/pgx/v5/stdlib"
 	"golang.org/x/sync/errgroup"
 )
@@ -63,6 +64,22 @@ func main() {
 
 	srv := server.New(cfg.Server, pool, db, queries, logger, Version)
 
+	fw := watcher.New(db, queries, logger, *cfg)
+	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
+		for _, ws := range workspaces {
+			collections, err := queries.ListCollections(ctx, ws.Hash)
+			if err != nil {
+				logger.Warn().Err(err).Str("workspace", ws.Hash).Msg("failed to list collections for watcher")
+				continue
+			}
+			for _, col := range collections {
+				if watchErr := fw.Watch(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern); watchErr != nil {
+					logger.Warn().Err(watchErr).Str("collection", col.Name).Msg("failed to watch collection")
+				}
+			}
+		}
+	}
+
 	g, gctx := errgroup.WithContext(context.Background())
 
 	g.Go(func() error {
@@ -70,6 +87,10 @@ func main() {
 			return err
 		}
 		return nil
+	})
+
+	g.Go(func() error {
+		return fw.Run(gctx)
 	})
 
 	g.Go(func() error {

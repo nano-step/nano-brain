@@ -42,6 +42,27 @@ func (q *Queries) GetDocumentByHash(ctx context.Context, arg GetDocumentByHashPa
 	return i, err
 }
 
+const getDocumentBySourcePath = `-- name: GetDocumentBySourcePath :one
+SELECT id, content_hash FROM documents WHERE source_path = $1 AND workspace_hash = $2
+`
+
+type GetDocumentBySourcePathParams struct {
+	SourcePath    string
+	WorkspaceHash string
+}
+
+type GetDocumentBySourcePathRow struct {
+	ID          uuid.UUID
+	ContentHash string
+}
+
+func (q *Queries) GetDocumentBySourcePath(ctx context.Context, arg GetDocumentBySourcePathParams) (GetDocumentBySourcePathRow, error) {
+	row := q.db.QueryRowContext(ctx, getDocumentBySourcePath, arg.SourcePath, arg.WorkspaceHash)
+	var i GetDocumentBySourcePathRow
+	err := row.Scan(&i.ID, &i.ContentHash)
+	return i, err
+}
+
 const listDocumentsByWorkspace = `-- name: ListDocumentsByWorkspace :many
 SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, created_at, updated_at
 FROM documents WHERE workspace_hash = $1 ORDER BY updated_at DESC
