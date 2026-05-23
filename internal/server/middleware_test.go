@@ -183,3 +183,29 @@ func TestContentType_POST_NoBody(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 }
+
+func TestVersionHeaderMiddleware(t *testing.T) {
+	mw := versionHeaderMiddleware("1.2.3")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := applyMiddleware(mw, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	got := rec.Header().Get("X-Nano-Brain-Version")
+	if got != "1.2.3" {
+		t.Errorf("expected X-Nano-Brain-Version=1.2.3, got %q", got)
+	}
+}
+
+func TestVersionHeaderMiddleware_EmptyVersion(t *testing.T) {
+	mw := versionHeaderMiddleware("")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := applyMiddleware(mw, req)
+
+	got := rec.Header().Get("X-Nano-Brain-Version")
+	if got != "" {
+		t.Errorf("expected empty version header, got %q", got)
+	}
+}

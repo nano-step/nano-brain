@@ -18,10 +18,9 @@ import (
 )
 
 type mockQuerier struct {
-	upsertWorkspaceFn           func(ctx context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error)
-	upsertCollectionFn          func(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error)
-	listWorkspacesFn            func(ctx context.Context) ([]sqlc.Workspace, error)
-	countDocumentsByWorkspaceFn func(ctx context.Context, workspaceHash string) (int64, error)
+	upsertWorkspaceFn          func(ctx context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error)
+	upsertCollectionFn         func(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error)
+	listWorkspacesWithStatsFn  func(ctx context.Context) ([]sqlc.ListWorkspacesWithStatsRow, error)
 }
 
 func (m *mockQuerier) UpsertWorkspace(ctx context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error) {
@@ -32,12 +31,8 @@ func (m *mockQuerier) UpsertCollection(ctx context.Context, arg sqlc.UpsertColle
 	return m.upsertCollectionFn(ctx, arg)
 }
 
-func (m *mockQuerier) ListWorkspaces(ctx context.Context) ([]sqlc.Workspace, error) {
-	return m.listWorkspacesFn(ctx)
-}
-
-func (m *mockQuerier) CountDocumentsByWorkspace(ctx context.Context, workspaceHash string) (int64, error) {
-	return m.countDocumentsByWorkspaceFn(ctx, workspaceHash)
+func (m *mockQuerier) ListWorkspacesWithStats(ctx context.Context) ([]sqlc.ListWorkspacesWithStatsRow, error) {
+	return m.listWorkspacesWithStatsFn(ctx)
 }
 
 func TestWorkspaceHashDeterministic(t *testing.T) {
@@ -156,13 +151,10 @@ func TestInitWorkspaceHandlerMissingRootPath(t *testing.T) {
 func TestListWorkspacesHandler(t *testing.T) {
 	now := time.Now()
 	q := &mockQuerier{
-		listWorkspacesFn: func(_ context.Context) ([]sqlc.Workspace, error) {
-			return []sqlc.Workspace{
-				{ID: uuid.New(), Hash: "abc123", Name: "myproject", Path: "/home/user/myproject", CreatedAt: now, UpdatedAt: now},
+		listWorkspacesWithStatsFn: func(_ context.Context) ([]sqlc.ListWorkspacesWithStatsRow, error) {
+			return []sqlc.ListWorkspacesWithStatsRow{
+				{ID: uuid.New(), Hash: "abc123", Name: "myproject", Path: "/home/user/myproject", CreatedAt: now, UpdatedAt: now, DocumentCount: 5, LastDocumentUpdated: now},
 			}, nil
-		},
-		countDocumentsByWorkspaceFn: func(_ context.Context, _ string) (int64, error) {
-			return 5, nil
 		},
 	}
 
@@ -190,7 +182,7 @@ func TestListWorkspacesHandler(t *testing.T) {
 	}
 
 	item := items[0]
-	for _, field := range []string{"workspace_hash", "root_path", "name", "document_count", "created_at", "updated_at"} {
+	for _, field := range []string{"workspace_hash", "root_path", "name", "document_count", "last_document_updated", "created_at", "updated_at"} {
 		if _, ok := item[field]; !ok {
 			t.Errorf("missing field %q in response item", field)
 		}
@@ -206,11 +198,8 @@ func TestListWorkspacesHandler(t *testing.T) {
 
 func TestListWorkspacesHandlerEmpty(t *testing.T) {
 	q := &mockQuerier{
-		listWorkspacesFn: func(_ context.Context) ([]sqlc.Workspace, error) {
-			return []sqlc.Workspace{}, nil
-		},
-		countDocumentsByWorkspaceFn: func(_ context.Context, _ string) (int64, error) {
-			return 0, nil
+		listWorkspacesWithStatsFn: func(_ context.Context) ([]sqlc.ListWorkspacesWithStatsRow, error) {
+			return []sqlc.ListWorkspacesWithStatsRow{}, nil
 		},
 	}
 
