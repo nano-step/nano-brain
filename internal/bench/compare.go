@@ -110,13 +110,21 @@ func Compare(newResults, baseline *BenchmarkResults) *ComparisonResult {
 	}
 	if newResults.QueryP95ms > p95Ratio*baseline.QueryP95ms+epsilon {
 		result.Passed = false
+		ratio := 0.0
+		if baseline.QueryP95ms > 0 {
+			ratio = newResults.QueryP95ms / baseline.QueryP95ms
+		}
+		message := fmt.Sprintf("Query P95 increased by %.2fx (threshold: 2.00x)", ratio)
+		if baseline.QueryP95ms == 0 {
+			message = "Query P95 regression: baseline was 0ms"
+		}
 		result.Regressions = append(result.Regressions, Regression{
 			Metric:    "Query P95",
 			Baseline:  baseline.QueryP95ms,
 			New:       newResults.QueryP95ms,
-			Drop:      newResults.QueryP95ms / baseline.QueryP95ms,
+			Drop:      ratio,
 			Threshold: p95Ratio,
-			Message:   fmt.Sprintf("Query P95 increased by %.2fx (threshold: 2.00x)", newResults.QueryP95ms/baseline.QueryP95ms),
+			Message:   message,
 		})
 	}
 

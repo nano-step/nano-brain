@@ -1,6 +1,7 @@
 package bench
 
 import (
+	"encoding/json"
 	"math"
 	"testing"
 )
@@ -303,5 +304,64 @@ func TestCompareDeltasComputed(t *testing.T) {
 	p95Delta := result.Deltas["Query P95"]
 	if !almostEqualDelta(p95Delta.Change, -20.0, 0.001) {
 		t.Errorf("expected Query P95 change -20.0 (positive improvement), got %f", p95Delta.Change)
+	}
+}
+
+func TestCompareZeroBaselineP95(t *testing.T) {
+	baseline := &BenchmarkResults{
+		PrecisionAt5: 0.80,
+		RecallAt10:   0.75,
+		MRR:          0.9,
+		QueryP50ms:   50.0,
+		QueryP95ms:   0.0,
+	}
+	newResults := &BenchmarkResults{
+		PrecisionAt5: 0.80,
+		RecallAt10:   0.75,
+		MRR:          0.9,
+		QueryP50ms:   50.0,
+		QueryP95ms:   5.0,
+	}
+	result := Compare(newResults, baseline)
+	if result.Passed {
+		t.Errorf("expected Passed=false for P95 regression (zero baseline), got %v", result.Passed)
+	}
+	if len(result.Regressions) != 1 {
+		t.Errorf("expected 1 regression, got %d", len(result.Regressions))
+	}
+	if result.Regressions[0].Metric != "Query P95" {
+		t.Errorf("expected Query P95 regression, got %s", result.Regressions[0].Metric)
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Errorf("expected ComparisonResult to be JSON-marshable, got error: %v", err)
+	}
+	if data == nil {
+		t.Errorf("expected non-nil JSON data")
+	}
+}
+
+func TestCompareRecallAt10Exactly10DropBoundary(t *testing.T) {
+	baseline := &BenchmarkResults{
+		PrecisionAt5: 0.80,
+		RecallAt10:   0.80,
+		MRR:          0.9,
+		QueryP50ms:   50.0,
+		QueryP95ms:   100.0,
+	}
+	newResults := &BenchmarkResults{
+		PrecisionAt5: 0.80,
+		RecallAt10:   0.70,
+		MRR:          0.9,
+		QueryP50ms:   50.0,
+		QueryP95ms:   100.0,
+	}
+	result := Compare(newResults, baseline)
+	if !result.Passed {
+		t.Errorf("expected Passed=true at exactly 0.10 drop, got %v", result.Passed)
+	}
+	if len(result.Regressions) != 0 {
+		t.Errorf("expected 0 regressions at boundary, got %d", len(result.Regressions))
 	}
 }
