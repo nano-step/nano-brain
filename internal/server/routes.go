@@ -11,7 +11,7 @@ func registerRoutes(s *Server) {
 	if s.embedQueue != nil {
 		queueInfo = s.embedQueue
 	}
-	h := handlers.NewHealth(s.pool, s.logger, s.version, s.startTime, queueInfo)
+	h := handlers.NewHealth(s.pool, s.logger, s.version, s.startTime, queueInfo, s.harvesterCfg, s.intervalsCfg)
 
 	s.echo.GET("/health", h.Health)
 	s.echo.GET("/api/status", h.Status)
