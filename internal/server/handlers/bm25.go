@@ -59,7 +59,7 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			Tags          []string
 			CreatedAt     time.Time
 			UpdatedAt     time.Time
-			Score         float32
+			Score         float64
 		}
 
 		var matched []bm25Row
@@ -112,7 +112,7 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger) echo.HandlerFunc {
 				ID:            r.ID,
 				Title:         r.Title,
 				Snippet:       truncateSnippet(r.Content, maxSnippetLen),
-				Score:         float64(r.Score),
+				Score:         r.Score,
 				Tags:          r.Tags,
 				Collection:    r.Collection,
 				WorkspaceHash: r.WorkspaceHash,

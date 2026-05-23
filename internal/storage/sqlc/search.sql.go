@@ -18,7 +18,7 @@ const bM25Search = `-- name: BM25Search :many
 SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
        d.source_path, d.title, d.collection, d.tags,
        d.created_at, d.updated_at,
-       ts_rank_cd(c.search_vector, websearch_to_tsquery('english', $1::text)) AS score
+       CAST(ts_rank_cd(c.search_vector, websearch_to_tsquery('english', $1::text)) AS double precision) AS score
 FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = $2
@@ -46,7 +46,7 @@ type BM25SearchRow struct {
 	Tags          []string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
-	Score         float32
+	Score         float64
 }
 
 func (q *Queries) BM25Search(ctx context.Context, arg BM25SearchParams) ([]BM25SearchRow, error) {
@@ -90,7 +90,7 @@ const bM25SearchWithTags = `-- name: BM25SearchWithTags :many
 SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
        d.source_path, d.title, d.collection, d.tags,
        d.created_at, d.updated_at,
-       ts_rank_cd(c.search_vector, websearch_to_tsquery('english', $1::text)) AS score
+       CAST(ts_rank_cd(c.search_vector, websearch_to_tsquery('english', $1::text)) AS double precision) AS score
 FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = $2
@@ -120,7 +120,7 @@ type BM25SearchWithTagsRow struct {
 	Tags          []string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
-	Score         float32
+	Score         float64
 }
 
 func (q *Queries) BM25SearchWithTags(ctx context.Context, arg BM25SearchWithTagsParams) ([]BM25SearchWithTagsRow, error) {
