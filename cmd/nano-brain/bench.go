@@ -22,7 +22,7 @@ import (
 
 func runBenchCmd(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nano-brain bench <generate|run> [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: nano-brain bench <generate|run|compare> [flags]")
 		os.Exit(1)
 	}
 	switch args[0] {
@@ -30,6 +30,8 @@ func runBenchCmd(args []string) {
 		runBenchGenerate(args[1:])
 	case "run":
 		runBenchRun(args[1:])
+	case "compare":
+		runBenchCompare(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown bench subcommand: %s\n", args[0])
 		os.Exit(1)
@@ -254,6 +256,94 @@ func runBenchRun(args []string) {
 	fmt.Fprintf(os.Stderr, "  MRR:      %.3f\n", results.MRR)
 	fmt.Fprintf(os.Stderr, "  P50(ms):  %.1f\n", results.QueryP50ms)
 	fmt.Fprintf(os.Stderr, "  P95(ms):  %.1f\n", results.QueryP95ms)
+}
+
+func runBenchCompare(args []string) {
+	var jsonFlag bool
+	var positionalArgs []string
+
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonFlag = true
+		} else {
+			positionalArgs = append(positionalArgs, arg)
+		}
+	}
+
+	if len(positionalArgs) != 2 {
+		fmt.Fprintln(os.Stderr, "Usage: nano-brain bench compare <new.json> <baseline.json> [--json]")
+		os.Exit(1)
+	}
+
+	newFile := positionalArgs[0]
+	baselineFile := positionalArgs[1]
+
+	newBytes, err := os.ReadFile(newFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to read new results: %v\n", err)
+		os.Exit(1)
+	}
+	var newResults bench.BenchmarkResults
+	if err := json.Unmarshal(newBytes, &newResults); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to parse new results: %v\n", err)
+		os.Exit(1)
+	}
+
+	baselineBytes, err := os.ReadFile(baselineFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to read baseline results: %v\n", err)
+		os.Exit(1)
+	}
+	var baselineResults bench.BenchmarkResults
+	if err := json.Unmarshal(baselineBytes, &baselineResults); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to parse baseline results: %v\n", err)
+		os.Exit(1)
+	}
+
+	result := bench.Compare(&newResults, &baselineResults)
+
+	if jsonFlag {
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to marshal result: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(string(data))
+	} else {
+		fmt.Fprintln(os.Stderr, "Benchmark Comparison")
+		fmt.Fprintln(os.Stderr, "====================")
+		fmt.Fprintf(os.Stderr, "Status: ")
+		if result.Passed {
+			fmt.Fprintln(os.Stderr, "PASS")
+		} else {
+			fmt.Fprintln(os.Stderr, "FAIL")
+		}
+
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Deltas:")
+		fmt.Fprintf(os.Stderr, "  %-15s %12s %12s %12s\n", "Metric", "Baseline", "New", "Change")
+		for _, metric := range []string{"P@5", "R@10", "MRR", "Query P50", "Query P95"} {
+			if delta, ok := result.Deltas[metric]; ok {
+				sign := ""
+				if delta.Change >= 0 {
+					sign = "+"
+				}
+				fmt.Fprintf(os.Stderr, "  %-15s %12.4f %12.4f %12s%.4f\n", metric, delta.Baseline, delta.New, sign, delta.Change)
+			}
+		}
+
+		if len(result.Regressions) > 0 {
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Regressions:")
+			for _, reg := range result.Regressions {
+				fmt.Fprintf(os.Stderr, "  %s\n", reg.Message)
+			}
+		}
+	}
+
+	if !result.Passed {
+		os.Exit(1)
+	}
 }
 
 type sqlcAdapter struct {
