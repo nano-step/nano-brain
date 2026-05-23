@@ -2,9 +2,9 @@
   "updated": "2026-05-23",
   "position": {
     "epic": 7,
-    "story": "7.4",
+    "story": "7.5",
     "branch": null,
-    "base_commit": "5143918"
+    "base_commit": "38352c8"
   },
   "debt": [
     {
@@ -51,6 +51,7 @@
     "6.5": { "status": "done", "pr": 105, "issue": 104, "review": "oracle:0C+1M+4m:M_fixed", "pr_comments": "1H+2M:1H_fixed+1M_already_fixed+1M_deferred" },
     "7.1": { "status": "done", "pr": 107, "issue": 106, "review": "oracle:0C+2M+4m:all_fixed", "pr_comments": "1C(stale)+2H+3M:2H_fixed+1M_fixed+1C_already_fixed+1M_deferred" },
     "7.2": { "status": "done", "pr": 109, "issue": 108, "review": "oracle:0C+1M+2m:all_fixed", "pr_comments": "1H(stale)+2M:1H_already_fixed+1M_already_fixed+1M_deferred" },
-    "7.3": { "status": "done", "pr": 111, "issue": 110, "review": "oracle:0C+1M+2m:all_fixed", "pr_comments": "1H(stale)+1M:1H_already_fixed+1M_deferred" }
+    "7.3": { "status": "done", "pr": 111, "issue": 110, "review": "oracle:0C+1M+2m:all_fixed", "pr_comments": "1H(stale)+1M:1H_already_fixed+1M_deferred" },
+    "7.4": { "status": "done", "pr": 113, "issue": 112, "review": "oracle:0C+1M+3m:M_fixed", "pr_comments": "3M:1already_fixed+1fixed+1deferred" }
   }
 }
