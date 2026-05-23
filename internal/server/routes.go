@@ -38,6 +38,10 @@ func registerRoutes(s *Server) {
 	if s.searchService != nil {
 		data.POST("/query", handlers.Query(s.searchService, s.searchCfg.Limit, s.logger))
 	}
+
+	wakeUp := handlers.WakeUpHandler(s.queries, s.logger)
+	api.GET("/wake-up", wakeUp)
+	data.POST("/wake-up", wakeUp)
 }
 
 const defaultMaxFileSize int64 = 307200
