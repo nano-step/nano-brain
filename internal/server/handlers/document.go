@@ -163,7 +163,9 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger
 
 		if enqueuer != nil {
 			for _, id := range chunkIDs {
-				enqueuer.Enqueue(id)
+				if !enqueuer.Enqueue(id) {
+					logger.Warn().Str("chunk_id", id.String()).Msg("embedding queue full, chunk will be picked up on next scan")
+				}
 			}
 		}
 

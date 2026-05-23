@@ -2,6 +2,7 @@ package embed
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -75,13 +76,17 @@ func (q *Queue) Run(ctx context.Context) error {
 	q.scanPending(ctx)
 
 	sem := make(chan struct{}, q.concurrency)
+	var wg sync.WaitGroup
 	for {
 		select {
 		case <-ctx.Done():
+			wg.Wait()
 			return nil
 		case chunkID := <-q.ch:
 			sem <- struct{}{}
+			wg.Add(1)
 			go func(id uuid.UUID) {
+				defer wg.Done()
 				defer func() { <-sem }()
 				q.processChunk(ctx, id)
 			}(chunkID)
@@ -114,6 +119,8 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 	q.mu.Unlock()
 
 	if delay > 0 {
+		jitter := time.Duration(rand.Int63n(int64(delay / 4)))
+		delay += jitter
 		select {
 		case <-ctx.Done():
 			return
