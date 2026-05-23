@@ -21,6 +21,15 @@ func getBaseURL() string {
 }
 
 func doRequest(method, url string, body io.Reader) ([]byte, error) {
+	host := os.Getenv("NANO_BRAIN_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+	port := os.Getenv("NANO_BRAIN_PORT")
+	if port == "" {
+		port = "3100"
+	}
+
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -33,14 +42,6 @@ func doRequest(method, url string, body io.Reader) ([]byte, error) {
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") ||
 			strings.Contains(err.Error(), "dial tcp") {
-			host := os.Getenv("NANO_BRAIN_HOST")
-			if host == "" {
-				host = "localhost"
-			}
-			port := os.Getenv("NANO_BRAIN_PORT")
-			if port == "" {
-				port = "3100"
-			}
 			return nil, fmt.Errorf("cannot connect to nano-brain server at %s:%s", host, port)
 		}
 		return nil, fmt.Errorf("request failed: %w", err)

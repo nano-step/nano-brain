@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
@@ -133,13 +133,88 @@ func TestDoRequest_NoContentTypeWithoutBody(t *testing.T) {
 }
 
 func TestGetBaseURL_EnvVarsFromOS(t *testing.T) {
-	os.Setenv("NANO_BRAIN_HOST", "check")
-	defer os.Unsetenv("NANO_BRAIN_HOST")
-	os.Setenv("NANO_BRAIN_PORT", "4444")
-	defer os.Unsetenv("NANO_BRAIN_PORT")
+	t.Setenv("NANO_BRAIN_HOST", "check")
+	t.Setenv("NANO_BRAIN_PORT", "4444")
 
 	got := getBaseURL()
 	if got != "http://check:4444" {
 		t.Errorf("getBaseURL() = %q, want %q", got, "http://check:4444")
+	}
+}
+
+func TestInitCmdBuildsCorrectBody(t *testing.T) {
+	var capturedBody map[string]interface{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedBody)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{
+			"workspace_hash": "hash123",
+			"root_path":      "/test/path",
+			"agents_snippet": "",
+		})
+	}))
+	defer ts.Close()
+
+	t.Setenv("NANO_BRAIN_HOST", strings.TrimPrefix(strings.TrimPrefix(ts.URL, "http://"), ":"))
+	parts := strings.Split(strings.TrimPrefix(ts.URL, "http://"), ":")
+	if len(parts) > 1 {
+		t.Setenv("NANO_BRAIN_PORT", parts[1])
+	}
+
+	resp, err := doRequest("POST", ts.URL+"/api/v1/init",
+		bytes.NewReader([]byte(`{"root_path":"/test/path","workspace":"myhash"}`)))
+	if err != nil {
+		t.Fatalf("doRequest failed: %v", err)
+	}
+
+	var result map[string]string
+	json.Unmarshal(resp, &result)
+	if result["workspace_hash"] != "hash123" {
+		t.Errorf("response workspace_hash = %s, want hash123", result["workspace_hash"])
+	}
+}
+
+func TestWriteCmdWithTagsBuildsCorrectBody(t *testing.T) {
+	var capturedBody map[string]interface{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedBody)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"id": "doc123"})
+	}))
+	defer ts.Close()
+
+	writeBody := map[string]interface{}{
+		"content":   "test content",
+		"workspace": "ws123",
+		"tags":      []string{"tag1", "tag2"},
+	}
+	data, _ := json.Marshal(writeBody)
+
+	resp, err := doRequest("POST", ts.URL+"/api/v1/write", bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("doRequest failed: %v", err)
+	}
+
+	if !strings.Contains(string(resp), "doc123") {
+		t.Errorf("response = %s, want to contain doc123", string(resp))
+	}
+}
+
+func TestStubCmdHandles404(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"not_found"}`))
+	}))
+	defer ts.Close()
+
+	_, err := doRequest("POST", ts.URL+"/api/v1/query",
+		bytes.NewReader([]byte(`{"query":"test","workspace":"ws123"}`)))
+	if err == nil {
+		t.Fatal("expected error for 404")
+	}
+	if !strings.Contains(err.Error(), "server returned 404") {
+		t.Errorf("error = %s, want to contain 'server returned 404'", err.Error())
 	}
 }

@@ -205,7 +205,7 @@ func runStubCmd(endpoint string, args []string) {
 		if strings.Contains(reqErr.Error(), "server returned 404") {
 			name := strings.ToUpper(endpoint[:1]) + endpoint[1:]
 			fmt.Fprintf(os.Stderr, "%s endpoint not yet implemented\n", name)
-			return
+			os.Exit(2)
 		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", reqErr)
 		os.Exit(1)
