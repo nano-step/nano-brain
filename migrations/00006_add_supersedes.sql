@@ -1,5 +1,5 @@
 -- +goose Up
-ALTER TABLE documents ADD COLUMN supersedes_id UUID REFERENCES documents(id);
+ALTER TABLE documents ADD COLUMN supersedes_id UUID REFERENCES documents(id) ON DELETE SET NULL;
 CREATE INDEX idx_documents_supersedes_id ON documents(supersedes_id);
 
 -- +goose Down
