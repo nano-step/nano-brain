@@ -6,7 +6,6 @@ import (
 	"flag"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/server"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/jackc/pgx/v5/stdlib"
 	"golang.org/x/sync/errgroup"
 )
@@ -46,7 +46,8 @@ func main() {
 		Int("port", cfg.Server.Port).
 		Msg("nano-brain starting")
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	pool, err := storage.NewPool(ctx, cfg.Database, logger)
 	if err != nil {
@@ -63,7 +64,23 @@ func main() {
 
 	srv := server.New(cfg.Server, pool, db, queries, logger, Version)
 
-	g, gctx := errgroup.WithContext(context.Background())
+	fw := watcher.New(db, queries, logger, *cfg)
+	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
+		for _, ws := range workspaces {
+			collections, err := queries.ListCollections(ctx, ws.Hash)
+			if err != nil {
+				logger.Warn().Err(err).Str("workspace", ws.Hash).Msg("failed to list collections for watcher")
+				continue
+			}
+			for _, col := range collections {
+				if watchErr := fw.Watch(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern); watchErr != nil {
+					logger.Warn().Err(watchErr).Str("collection", col.Name).Msg("failed to watch collection")
+				}
+			}
+		}
+	}
+
+	g, gctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -73,13 +90,12 @@ func main() {
 	})
 
 	g.Go(func() error {
-		quit := make(chan os.Signal, 1)
-		signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
-		select {
-		case sig := <-quit:
-			logger.Info().Str("signal", sig.String()).Msg("shutdown signal received")
-		case <-gctx.Done():
-		}
+		return fw.Run(gctx)
+	})
+
+	g.Go(func() error {
+		<-gctx.Done()
+		logger.Info().Msg("shutdown signal received")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
