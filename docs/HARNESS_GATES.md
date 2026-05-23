@@ -10,6 +10,8 @@ Gate specification for the nano-brain v2 Go project. Each gate defines the check
 - PASS = all checks in current phase ✅ → proceed
 - FAIL = any check ❌ → BLOCK, must fix before continuing
 - SKIP = check not applicable (e.g., first feature → skip 1.1, 1.2)
+- **State file:** `docs/harness-state.json` — read BEFORE every story/epic transition. If any debt item has `"status":"open"`, resolve before proceeding.
+- **Delegation rule:** Orchestrator (Sisyphus) does NOT write code or tests directly. ALL code/test work MUST be delegated to subagents. Orchestrator only: plans, delegates, verifies results, manages git/PR workflow.
 
 ---
 
@@ -54,16 +56,33 @@ Run continuously during development. Check after each story completes.
 | 2.1 | On feature branch, not `b-main` | `git branch --show-current` ≠ `b-main` |
 | 2.2 | OpenSpec change exists & active | `openspec list` has current change |
 | 2.3 | Validation ladder pass after each story | `go build ./... && go test -race -short ./...` |
-| 2.4 | Self-review before push — Oracle or review-work on local diff, all critical/major findings fixed | Evidence file `docs/evidence/self-review-{story}.md` exists and no unresolved critical/major findings |
+| 2.4 | Self-review after PR creation — Oracle on PR diff, all critical/major findings fixed, evidence saved | Evidence file `docs/evidence/self-review-{story}.md` exists and no unresolved critical/major findings |
 
-### Self-review process (check 2.4)
+### Review process (gates 2.4 + 3.6)
 
-Before pushing code to remote, the agent MUST:
+The review flow is designed for parallelism: create the PR first so Gemini bot starts reviewing, then run Oracle self-review concurrently.
 
-1. Run Oracle code review or `review-work` skill on the local diff (`git diff b-main..HEAD` or staged changes)
-2. Fix ALL critical and major findings
-3. Save the review output + fix summary to `docs/evidence/self-review-{story-id}.md`
-4. Only after evidence file exists and all critical/major findings are resolved → push is allowed
+**Step-by-step flow:**
+
+1. **Commit and push** code to feature branch
+2. **Create PR** targeting `b-main` — this triggers Gemini bot review automatically
+3. **Run Oracle self-review** on the diff (`git diff b-main..HEAD` or PR diff) while Gemini is reviewing
+4. **Fix ALL critical and major Oracle findings** — push fixes to the same PR branch
+5. **Save Oracle review** to `docs/evidence/self-review-{story-id}.md`
+6. **Check Gemini PR comments** — read all comments from `gh pr view <N> --comments`
+7. **Fix ALL critical and high severity Gemini comments** — push fixes to the same PR branch
+8. **Only after both reviews are clean** → merge is allowed
+
+**Parallelism rules:**
+
+- **Review ∥ Next-story prep**: While Oracle + Gemini review story N, orchestrator MAY start story N+1 **prep only** (create issue, create branch, read spec). NO code/test work until story N merges. If story N review fails critically → cancel N+1 prep, fix N first.
+- **POST-MERGE gates run in parallel**: After confirming 4.1 (merged), gates 4.2–4.4 run simultaneously. Gate 4.5 (validation) runs last since it depends on merged code.
+
+**PR comment review rules:**
+- Critical/High severity Gemini comments → MUST fix before merge (BLOCKING)
+- Medium severity Gemini comments → FIX if effort < 15 min, otherwise note in PR and defer
+- Low/Informational comments → ACKNOWLEDGE in PR, fix is optional
+- If Gemini finds nothing → proceed (no evidence needed beyond PR review thread)
 
 **Self-review evidence file format:**
 
@@ -98,10 +117,11 @@ Run before creating or merging a PR. All checks must be green.
 | 3.3 | `go test -race -tags=integration ./...` pass | exit code 0 |
 | 3.4 | `golangci-lint run` clean (if available) | exit code 0 |
 | 3.5 | Review Gate pass (Oracle or review-work) | evidence in PR/issue |
-| 3.6 | Gemini PR review — no unresolved substantive comments | `gh pr reviews` |
+| 3.6 | PR review comments addressed — all critical/high Gemini comments fixed, medium acknowledged | `gh pr view --comments` — no unresolved critical/high comments |
 | 3.7 | CI workflow pass | `gh pr checks` all green |
 | 3.8 | PR linked to GitHub issue | PR body contains `Closes #N` |
 | 3.9 | PR targets `b-main` (NOT master) | `gh pr view --json baseRefName` = `b-main` |
+| 3.10 | Self-review evidence exists for this story | `ls docs/evidence/self-review-*.md` for current story |
 
 ---
 

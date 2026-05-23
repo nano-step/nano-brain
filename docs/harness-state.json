@@ -1,0 +1,29 @@
+{
+  "updated": "2026-05-23",
+  "position": {
+    "epic": 2,
+    "story": "2.5",
+    "branch": "story/2.5-chunker-integration",
+    "base_commit": "c7a31d3"
+  },
+  "debt": [
+    {
+      "id": "D1",
+      "type": "missing-evidence",
+      "description": "Story 2.2 merged without self-review evidence",
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "stories": {
+    "1.1-1.6": { "status": "done", "pr": 45, "review": "oracle", "pr_comments": "n/a" },
+    "2.1": { "status": "done", "pr": 45, "review": "oracle", "pr_comments": "n/a" },
+    "2.2": { "status": "done", "pr": 47, "issue": 46, "review": "missing", "pr_comments": "not_checked" },
+    "2.3": { "status": "done", "pr": 49, "issue": 48, "review": "oracle", "pr_comments": "6M:3fixed,3deferred" },
+    "2.4": { "status": "done", "pr": 45, "review": "oracle", "pr_comments": "n/a" },
+    "2.5": { "status": "in_progress", "issue": 50, "review": null, "pr_comments": null },
+    "2.6": { "status": "pending" },
+    "2.7": { "status": "pending" },
+    "2.8": { "status": "pending" }
+  }
+}
