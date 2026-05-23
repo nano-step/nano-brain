@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
@@ -194,5 +195,11 @@ func TestMemoryGet_StillWorksAsStub(t *testing.T) {
 	text := result.Content[0].(*mcpsdk.TextContent).Text
 	if !strings.Contains(text, "not yet implemented") {
 		t.Errorf("unexpected message: %s", text)
+	}
+}
+
+func TestKeepAliveInterval_Is30Seconds(t *testing.T) {
+	if internalmcp.KeepAliveInterval != 30*time.Second {
+		t.Errorf("KeepAliveInterval = %v, want 30s", internalmcp.KeepAliveInterval)
 	}
 }

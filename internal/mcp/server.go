@@ -2,17 +2,21 @@
 package mcp
 
 import (
+	"time"
+
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// NewMCPServer creates the core MCP server instance.
-// Tools are NOT registered here — that's Story 5.2.
+const KeepAliveInterval = 30 * time.Second
+
 func NewMCPServer(version string) *mcpsdk.Server {
 	return mcpsdk.NewServer(
 		&mcpsdk.Implementation{
 			Name:    "nano-brain",
 			Version: version,
 		},
-		nil,
+		&mcpsdk.ServerOptions{
+			KeepAlive: KeepAliveInterval,
+		},
 	)
 }
