@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/telemetry"
 	"github.com/rs/zerolog"
 )
 
@@ -21,7 +22,7 @@ type BM25SearchRequest struct {
 	Tags       []string `json:"tags,omitempty"`
 }
 
-func BM25Search(q BM25SearchQuerier, logger zerolog.Logger) echo.HandlerFunc {
+func BM25Search(q BM25SearchQuerier, logger zerolog.Logger, rec ...*telemetry.Recorder) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req BM25SearchRequest
 		if err := c.Bind(&req); err != nil {
@@ -123,10 +124,16 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			})
 		}
 
+		elapsed := time.Since(start).Milliseconds()
+
+		if len(rec) > 0 && rec[0] != nil {
+			rec[0].Record(c.Request().Context(), req.Query, len(results), elapsed, "", workspace)
+		}
+
 		return c.JSON(http.StatusOK, SearchResponse{
 			Results: results,
 			Total:   len(results),
-			QueryMs: time.Since(start).Milliseconds(),
+			QueryMs: elapsed,
 		})
 	}
 }

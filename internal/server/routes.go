@@ -38,11 +38,11 @@ func registerRoutes(s *Server) {
 	data.POST("/reindex", handlers.TriggerReindex(s.logger))
 	data.POST("/update", handlers.TriggerUpdate(s.logger))
 
-	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger))
-	data.POST("/search", handlers.BM25Search(s.queries, s.logger))
+	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger, s.recorder))
+	data.POST("/search", handlers.BM25Search(s.queries, s.logger, s.recorder))
 
 	if s.searchService != nil {
-		data.POST("/query", handlers.Query(s.searchService, s.logger))
+		data.POST("/query", handlers.Query(s.searchService, s.logger, s.recorder))
 	}
 
 	wakeUp := handlers.WakeUpHandler(s.queries, s.logger)

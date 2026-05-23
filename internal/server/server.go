@@ -17,6 +17,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/search"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/telemetry"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
 )
@@ -36,6 +37,8 @@ type Server struct {
 	embedder       embed.Embedder
 	searchService  *search.SearchService
 	mcpServer      *mcpsdk.Server
+	recorder       *telemetry.Recorder
+	cleanupCancel  context.CancelFunc
 	harvestMu      sync.RWMutex
 	harvestRunner  handlers.HarvestRunner
 	configMu       sync.RWMutex
@@ -46,6 +49,7 @@ type Server struct {
 	embedCfg       config.EmbeddingConfig
 	searchCfg      config.SearchConfig
 	harvesterCfg   config.HarvesterConfig
+	telemetryCfg   config.TelemetryConfig
 	intervalsCfg   config.IntervalsConfig
 	version        string
 	startTime      time.Time
@@ -70,6 +74,11 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 	mcpAdapter := internalmcp.NewAdapter(queries, db, embedder, ss, eqInfo, fullCfg.Embedding, fullCfg.Search, pool, logger)
 	internalmcp.RegisterTools(mcpServer, mcpAdapter)
 
+	var rec *telemetry.Recorder
+	if queries != nil {
+		rec = telemetry.NewRecorder(queries, logger)
+	}
+
 	s := &Server{
 		echo:           e,
 		pool:           pool,
@@ -80,6 +89,7 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		embedder:       embedder,
 		searchService:  ss,
 		mcpServer:      mcpServer,
+		recorder:       rec,
 		fullCfg:        fullCfg,
 		configPath:     configPath,
 		logger:         logger,
@@ -87,6 +97,7 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		embedCfg:       fullCfg.Embedding,
 		searchCfg:      fullCfg.Search,
 		harvesterCfg:   fullCfg.Harvester,
+		telemetryCfg:   fullCfg.Telemetry,
 		intervalsCfg:   fullCfg.Intervals,
 		version:        version,
 		startTime:      time.Now(),
@@ -94,6 +105,12 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 
 	registerMiddleware(s)
 	registerRoutes(s)
+
+	if queries != nil {
+		cleanupCtx, cancel := context.WithCancel(context.Background())
+		s.cleanupCancel = cancel
+		go s.runTelemetryCleanup(cleanupCtx)
+	}
 
 	return s
 }
@@ -107,6 +124,9 @@ func (s *Server) Start() error {
 
 // Shutdown gracefully shuts down the HTTP server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.cleanupCancel != nil {
+		s.cleanupCancel()
+	}
 	return s.echo.Shutdown(ctx)
 }
 
@@ -143,6 +163,31 @@ func (s *Server) currentConfig() *config.Config {
 	defer s.configMu.RUnlock()
 	cp := *s.fullCfg
 	return &cp
+}
+
+func (s *Server) runTelemetryCleanup(ctx context.Context) {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.configMu.RLock()
+			days := s.telemetryCfg.RetentionDays
+			s.configMu.RUnlock()
+
+			result, err := s.queries.CleanupTelemetryLogs(ctx, int32(days))
+			if err != nil {
+				s.logger.Warn().Err(err).Msg("telemetry cleanup failed")
+				continue
+			}
+			if n, _ := result.RowsAffected(); n > 0 {
+				s.logger.Info().Int64("deleted", n).Int("retention_days", days).Msg("telemetry logs cleaned up")
+			}
+		}
+	}
 }
 
 func (s *Server) applyReloadedConfig(newCfg *config.Config, _ *config.ReloadResult) {
