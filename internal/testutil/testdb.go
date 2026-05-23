@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/nano-brain/nano-brain/migrations"
@@ -31,14 +32,18 @@ func SetupTestDB(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("SetupTestDB: parse config: %v", err)
 	}
 
+	schema := testSchema(t.Name())
+	poolCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, fmt.Sprintf("SET search_path TO %s, public", schema))
+		return err
+	}
+
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		t.Fatalf("SetupTestDB: connect: %v", err)
 	}
 
-	schema := testSchema(t.Name())
 	mustExec(t, ctx, pool, "CREATE SCHEMA IF NOT EXISTS "+schema)
-	mustExec(t, ctx, pool, "SET search_path TO "+schema+", public")
 
 	if err := runTestMigrations(ctx, pool); err != nil {
 		pool.Close()

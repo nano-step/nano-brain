@@ -96,7 +96,8 @@ The orchestrator (Sisyphus) MUST invoke this skill at these points:
 | Trigger | Gate |
 |---------|------|
 | `git checkout -b <feature-branch>` | ① PRE-WORK |
-| Story marked complete in todo | ② IN-PROGRESS |
+| Story marked complete in todo | ② IN-PROGRESS (includes 2.4 self-review) |
+| `git push` (code ready for PR) | ② IN-PROGRESS (2.4 prerequisite) |
 | `gh pr create` or before merge | ③ PRE-MERGE |
 | PR merge confirmed | ④ POST-MERGE |
 | Agent about to start next feature | ⑤ NEXT-READY |

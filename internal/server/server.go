@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"time"
@@ -22,6 +23,7 @@ type PoolChecker interface {
 type Server struct {
 	echo      *echo.Echo
 	pool      PoolChecker
+	db        *sql.DB
 	queries   *sqlc.Queries
 	logger    zerolog.Logger
 	cfg       config.ServerConfig
@@ -30,7 +32,7 @@ type Server struct {
 }
 
 // New creates a new Server with all routes and middleware registered.
-func New(cfg config.ServerConfig, pool PoolChecker, queries *sqlc.Queries, logger zerolog.Logger, version string) *Server {
+func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, logger zerolog.Logger, version string) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -38,6 +40,7 @@ func New(cfg config.ServerConfig, pool PoolChecker, queries *sqlc.Queries, logge
 	s := &Server{
 		echo:      e,
 		pool:      pool,
+		db:        db,
 		queries:   queries,
 		logger:    logger,
 		cfg:       cfg,

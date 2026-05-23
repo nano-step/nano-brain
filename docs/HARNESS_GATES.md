@@ -51,6 +51,36 @@ Run continuously during development. Check after each story completes.
 | 2.1 | On feature branch, not `b-main` | `git branch --show-current` ≠ `b-main` |
 | 2.2 | OpenSpec change exists & active | `openspec list` has current change |
 | 2.3 | Validation ladder pass after each story | `go build ./... && go test -race -short ./...` |
+| 2.4 | Self-review before push — Oracle or review-work on local diff, all critical/major findings fixed | Evidence file `docs/evidence/self-review-{story}.md` exists and no unresolved critical/major findings |
+
+### Self-review process (check 2.4)
+
+Before pushing code to remote, the agent MUST:
+
+1. Run Oracle code review or `review-work` skill on the local diff (`git diff b-main..HEAD` or staged changes)
+2. Fix ALL critical and major findings
+3. Save the review output + fix summary to `docs/evidence/self-review-{story-id}.md`
+4. Only after evidence file exists and all critical/major findings are resolved → push is allowed
+
+**Self-review evidence file format:**
+
+```markdown
+## Self-Review: {story-id}
+Date: {date}
+Reviewer: Oracle / review-work
+
+## Findings
+| # | Severity | File | Description | Status |
+|---|----------|------|-------------|--------|
+| 1 | critical | src/foo.go | Missing error handling | FIXED |
+| 2 | major | src/bar.go | Potential nil pointer | FIXED |
+| 3 | minor | src/baz.go | Inconsistent naming | DEFERRED |
+
+## Summary
+- Critical: 1 found, 1 fixed
+- Major: 1 found, 1 fixed  
+- Minor: 1 found, 0 fixed (deferred to next sprint)
+```
 
 ---
 

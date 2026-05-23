@@ -49,7 +49,7 @@ CREATE TABLE embeddings (
     workspace_hash TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'ollama',
     model TEXT NOT NULL DEFAULT '',
-    embedding vector(1536),
+    embedding vector(768),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_embeddings_chunk_id ON embeddings(chunk_id);

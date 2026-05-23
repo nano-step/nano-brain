@@ -41,23 +41,38 @@ func (m *mockQuerier) CountDocumentsByWorkspace(ctx context.Context, workspaceHa
 }
 
 func TestWorkspaceHashDeterministic(t *testing.T) {
-	h1 := storage.WorkspaceHash("/home/user/project")
-	h2 := storage.WorkspaceHash("/home/user/project")
+	h1, err := storage.WorkspaceHash("/home/user/project")
+	if err != nil {
+		t.Fatalf("WorkspaceHash: %v", err)
+	}
+	h2, err := storage.WorkspaceHash("/home/user/project")
+	if err != nil {
+		t.Fatalf("WorkspaceHash: %v", err)
+	}
 	if h1 != h2 {
 		t.Errorf("expected same hash, got %q and %q", h1, h2)
 	}
 }
 
 func TestWorkspaceHashDifferentPaths(t *testing.T) {
-	h1 := storage.WorkspaceHash("/home/user/project-a")
-	h2 := storage.WorkspaceHash("/home/user/project-b")
+	h1, err := storage.WorkspaceHash("/home/user/project-a")
+	if err != nil {
+		t.Fatalf("WorkspaceHash: %v", err)
+	}
+	h2, err := storage.WorkspaceHash("/home/user/project-b")
+	if err != nil {
+		t.Fatalf("WorkspaceHash: %v", err)
+	}
 	if h1 == h2 {
 		t.Errorf("expected different hashes for different paths, got %q", h1)
 	}
 }
 
 func TestInitWorkspaceHandler(t *testing.T) {
-	fixedHash := storage.WorkspaceHash("/tmp/test-project")
+	fixedHash, err := storage.WorkspaceHash("/tmp/test-project")
+	if err != nil {
+		t.Fatalf("WorkspaceHash: %v", err)
+	}
 	q := &mockQuerier{
 		upsertWorkspaceFn: func(_ context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error) {
 			return sqlc.Workspace{
@@ -90,7 +105,7 @@ func TestInitWorkspaceHandler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.InitWorkspace(q, zerolog.Nop())
+	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -123,7 +138,7 @@ func TestInitWorkspaceHandlerMissingRootPath(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.InitWorkspace(q, zerolog.Nop())
+	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for missing root_path")

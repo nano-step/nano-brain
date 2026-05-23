@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -38,7 +39,46 @@ type workspaceItem struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-func InitWorkspace(q WorkspaceQuerier, logger zerolog.Logger) echo.HandlerFunc {
+func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath string) (sqlc.Workspace, error) {
+	ws, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: hash,
+		Name: name,
+		Path: absPath,
+	})
+	if err != nil {
+		return sqlc.Workspace{}, err
+	}
+
+	memoryPath := "~/.nano-brain/memory/"
+	sessionsPath := "~/.nano-brain/sessions/"
+
+	if _, err := q.UpsertCollection(ctx, sqlc.UpsertCollectionParams{
+		WorkspaceHash: ws.Hash,
+		Name:          "memory",
+		Path:          memoryPath,
+		GlobPattern:   "**/*",
+		UpdateMode:    "auto",
+	}); err != nil {
+		return sqlc.Workspace{}, err
+	}
+
+	if _, err := q.UpsertCollection(ctx, sqlc.UpsertCollectionParams{
+		WorkspaceHash: ws.Hash,
+		Name:          "sessions",
+		Path:          sessionsPath,
+		GlobPattern:   "**/*",
+		UpdateMode:    "auto",
+	}); err != nil {
+		return sqlc.Workspace{}, err
+	}
+
+	return ws, nil
+}
+
+// InitWorkspace handles POST /api/v1/init. When db is non-nil, all three DB
+// operations are wrapped in a single transaction. Pass nil db in tests that
+// use a mock querier.
+func InitWorkspace(q WorkspaceQuerier, db *sql.DB, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req initRequest
 		if err := c.Bind(&req); err != nil {
@@ -53,42 +93,35 @@ func InitWorkspace(q WorkspaceQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid root_path")
 		}
 
-		hash := storage.WorkspaceHash(absPath)
+		hash, err := storage.WorkspaceHash(absPath)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid root_path")
+		}
 		name := filepath.Base(absPath)
 
-		ws, err := q.UpsertWorkspace(c.Request().Context(), sqlc.UpsertWorkspaceParams{
-			Hash: hash,
-			Name: name,
-			Path: absPath,
-		})
-		if err != nil {
-			logger.Error().Err(err).Str("hash", hash).Msg("upsert workspace failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to register workspace")
-		}
-
-		memoryPath := "~/.nano-brain/memory/"
-		sessionsPath := "~/.nano-brain/sessions/"
-
-		if _, err := q.UpsertCollection(c.Request().Context(), sqlc.UpsertCollectionParams{
-			WorkspaceHash: ws.Hash,
-			Name:          "memory",
-			Path:          memoryPath,
-			GlobPattern:   "**/*",
-			UpdateMode:    "auto",
-		}); err != nil {
-			logger.Error().Err(err).Str("hash", hash).Msg("upsert memory collection failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to create default collections")
-		}
-
-		if _, err := q.UpsertCollection(c.Request().Context(), sqlc.UpsertCollectionParams{
-			WorkspaceHash: ws.Hash,
-			Name:          "sessions",
-			Path:          sessionsPath,
-			GlobPattern:   "**/*",
-			UpdateMode:    "auto",
-		}); err != nil {
-			logger.Error().Err(err).Str("hash", hash).Msg("upsert sessions collection failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to create default collections")
+		var ws sqlc.Workspace
+		if db != nil {
+			tx, err := db.BeginTx(c.Request().Context(), nil)
+			if err != nil {
+				logger.Error().Err(err).Msg("begin transaction failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to register workspace")
+			}
+			ws, err = initWorkspace(c.Request().Context(), sqlc.New(tx), hash, name, absPath)
+			if err != nil {
+				_ = tx.Rollback()
+				logger.Error().Err(err).Str("hash", hash).Msg("init workspace failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to register workspace")
+			}
+			if err := tx.Commit(); err != nil {
+				logger.Error().Err(err).Msg("commit transaction failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to register workspace")
+			}
+		} else {
+			ws, err = initWorkspace(c.Request().Context(), q, hash, name, absPath)
+			if err != nil {
+				logger.Error().Err(err).Str("hash", hash).Msg("init workspace failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to register workspace")
+			}
 		}
 
 		snippet := "## nano-brain Access\n\nnano-brain workspace: " + ws.Hash + "\n" +

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -347,5 +348,5 @@ func TestGenerateDefaultCreatesDirectories(t *testing.T) {
 }
 
 func contains(haystack, needle string) bool {
-	return len(haystack) > 0 && len(needle) > 0 && (haystack == needle || len(haystack) > 0)
+	return strings.Contains(haystack, needle)
 }

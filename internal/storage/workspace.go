@@ -6,8 +6,11 @@ import (
 	"path/filepath"
 )
 
-func WorkspaceHash(rootPath string) string {
-	absPath, _ := filepath.Abs(rootPath)
+func WorkspaceHash(rootPath string) (string, error) {
+	absPath, err := filepath.Abs(rootPath)
+	if err != nil {
+		return "", err
+	}
 	h := sha256.Sum256([]byte(absPath))
-	return hex.EncodeToString(h[:])
+	return hex.EncodeToString(h[:]), nil
 }

@@ -218,6 +218,25 @@ phase_in_progress() {
     else
         add_check "SKIP" "2.3 Go not installed"
     fi
+    
+    # 2.4 Self-review evidence
+    review_files=$(find docs/evidence -name "self-review-*.md" -type f 2>/dev/null | sort -r | head -1)
+    if [[ -n "$review_files" ]]; then
+        # Check the file has content (not just template)
+        if grep -q "## Findings" "$review_files" 2>/dev/null; then
+            # Check no unresolved critical/major
+            unresolved=$(grep -cE "critical.*OPEN|critical.*UNRESOLVED|major.*OPEN|major.*UNRESOLVED" "$review_files" 2>/dev/null || true)
+            if [[ "$unresolved" -eq 0 ]]; then
+                add_check "PASS" "2.4 Self-review evidence found, no unresolved critical/major"
+            else
+                add_check "FAIL" "2.4 Self-review has $unresolved unresolved critical/major findings"
+            fi
+        else
+            add_check "FAIL" "2.4 Self-review file exists but missing findings section"
+        fi
+    else
+        add_check "SKIP" "2.4 No self-review evidence file found in docs/evidence/"
+    fi
 }
 
 phase_pre_merge() {

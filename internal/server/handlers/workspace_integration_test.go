@@ -36,7 +36,7 @@ func doInit(t *testing.T, q *sqlc.Queries, rootPath string) map[string]interface
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.InitWorkspace(q, zerolog.Nop())
+	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("InitWorkspace handler error: %v", err)
 	}
@@ -60,7 +60,10 @@ func TestInitWorkspaceE2E(t *testing.T) {
 		t.Fatalf("expected non-empty workspace_hash, got %v", resp["workspace_hash"])
 	}
 
-	expectedHash := storage.WorkspaceHash("/tmp/e2e-test-project")
+	expectedHash, err := storage.WorkspaceHash("/tmp/e2e-test-project")
+	if err != nil {
+		t.Fatalf("WorkspaceHash: %v", err)
+	}
 	if hash != expectedHash {
 		t.Errorf("expected hash %q, got %q", expectedHash, hash)
 	}
@@ -127,7 +130,10 @@ func TestListWorkspacesE2E(t *testing.T) {
 		t.Error("expected at least one workspace in list")
 	}
 
-	expectedHash := storage.WorkspaceHash("/tmp/list-test-project")
+	expectedHash, err := storage.WorkspaceHash("/tmp/list-test-project")
+	if err != nil {
+		t.Fatalf("WorkspaceHash: %v", err)
+	}
 	found := false
 	for _, item := range items {
 		if item["workspace_hash"] == expectedHash {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -59,12 +61,15 @@ func main() {
 	db := stdlib.OpenDBFromPool(pool)
 	queries := sqlc.New(db)
 
-	srv := server.New(cfg.Server, pool, queries, logger, Version)
+	srv := server.New(cfg.Server, pool, db, queries, logger, Version)
 
 	g, gctx := errgroup.WithContext(context.Background())
 
 	g.Go(func() error {
-		return srv.Start()
+		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
 	})
 
 	g.Go(func() error {

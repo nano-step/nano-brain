@@ -149,6 +149,10 @@ func Load(configPath string) (*Config, error) {
 		if idx := strings.Index(key, "_"); idx != -1 {
 			key = key[:idx] + "." + key[idx+1:]
 		}
+		// NOTE: Env var parsing replaces only the FIRST underscore after the prefix
+		// with a dot separator. This means deeply nested keys like
+		// harvester.opencode.session_dir cannot be set via NANO_BRAIN_HARVESTER_OPENCODE_SESSION_DIR.
+		// Use the special env var mappings (e.g., OPENCODE_STORAGE_DIR) for these cases.
 
 		_ = k.Set(key, value)
 	}
