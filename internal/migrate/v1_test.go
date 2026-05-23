@@ -166,8 +166,11 @@ func TestMigrate_WriterErrorContinues(t *testing.T) {
 	if res.Migrated != 1 {
 		t.Fatalf("migrated: got %d, want 1", res.Migrated)
 	}
-	if res.Skipped != 1 {
-		t.Fatalf("skipped: got %d, want 1", res.Skipped)
+	if res.Failed != 1 {
+		t.Fatalf("failed: got %d, want 1", res.Failed)
+	}
+	if res.Skipped != 0 {
+		t.Fatalf("skipped: got %d, want 0", res.Skipped)
 	}
 	if len(res.Errors) != 1 {
 		t.Fatalf("errors: got %d, want 1", len(res.Errors))
@@ -197,6 +200,7 @@ func TestParseTags(t *testing.T) {
 	}{
 		{"", nil},
 		{"  ", nil},
+		{"[]", nil},
 		{`["a","b"]`, []string{"a", "b"}},
 		{"foo,bar,baz", []string{"foo", "bar", "baz"}},
 		{" foo , bar ", []string{"foo", "bar"}},
@@ -239,5 +243,30 @@ func TestMigrate_ProgressCallback(t *testing.T) {
 	}
 	if len(calls) != 3 || calls[0] != 1 || calls[1] != 2 || calls[2] != 3 {
 		t.Fatalf("progress calls: got %v, want [1 2 3]", calls)
+	}
+}
+
+func TestMigrate_CancelledContext(t *testing.T) {
+	db := createV1DB(t)
+	defer db.Close()
+
+	insertDoc(t, db, "a.md", "A", "aaa", "", "")
+	insertDoc(t, db, "b.md", "B", "bbb", "", "")
+
+	w := &mockWriter{}
+	m := migratorFromDB(t, db, w)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	res, err := m.Migrate(ctx, "ws", nil)
+	if err == nil {
+		t.Fatal("expected error from cancelled context")
+	}
+	if res != nil && res.Migrated != 0 {
+		t.Fatalf("migrated: got %d, want 0", res.Migrated)
+	}
+	if len(w.docs) != 0 {
+		t.Fatalf("writer should have 0 docs, got %d", len(w.docs))
 	}
 }

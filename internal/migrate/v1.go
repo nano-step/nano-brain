@@ -35,6 +35,7 @@ type MigrateResult struct {
 	Total    int
 	Migrated int
 	Skipped  int
+	Failed   int
 	Errors   []string
 }
 
@@ -68,7 +69,7 @@ func (m *V1Migrator) Close() error {
 // Migrate reads all documents from the v1 SQLite database and upserts them
 // into the v2 store via the Writer interface.
 func (m *V1Migrator) Migrate(ctx context.Context, workspaceHash string, progress ProgressFunc) (*MigrateResult, error) {
-	if !m.hasTable("documents") {
+	if !m.hasTable(ctx, "documents") {
 		return nil, fmt.Errorf("v1 database has no 'documents' table")
 	}
 
@@ -130,7 +131,7 @@ func (m *V1Migrator) Migrate(ctx context.Context, workspaceHash string, progress
 			Tags:          tags,
 		})
 		if err != nil {
-			res.Skipped++
+			res.Failed++
 			res.Errors = append(res.Errors, fmt.Sprintf("source_path=%s: %v", doc.sourcePath, err))
 		} else {
 			res.Migrated++
@@ -144,9 +145,9 @@ func (m *V1Migrator) Migrate(ctx context.Context, workspaceHash string, progress
 	return res, nil
 }
 
-func (m *V1Migrator) hasTable(name string) bool {
+func (m *V1Migrator) hasTable(ctx context.Context, name string) bool {
 	var n int
-	err := m.srcDB.QueryRow(
+	err := m.srcDB.QueryRowContext(ctx,
 		`SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?`, name,
 	).Scan(&n)
 	return err == nil && n > 0
@@ -164,7 +165,10 @@ func parseTags(raw string) []string {
 	}
 
 	var arr []string
-	if err := json.Unmarshal([]byte(raw), &arr); err == nil && len(arr) > 0 {
+	if err := json.Unmarshal([]byte(raw), &arr); err == nil {
+		if len(arr) == 0 {
+			return nil
+		}
 		return arr
 	}
 

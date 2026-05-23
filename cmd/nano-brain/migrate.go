@@ -70,6 +70,7 @@ func runDBMigrateCmd(args []string) {
 	defer pool.Close()
 
 	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
 	queries := sqlc.New(db)
 
 	writer := &sqlcWriter{q: queries}
@@ -92,7 +93,7 @@ func runDBMigrateCmd(args []string) {
 	}
 
 	fmt.Println()
-	fmt.Printf("Migration complete: %d migrated, %d skipped, %d total\n", res.Migrated, res.Skipped, res.Total)
+	fmt.Printf("Migration complete: %d migrated, %d skipped, %d failed, %d total\n", res.Migrated, res.Skipped, res.Failed, res.Total)
 	if len(res.Errors) > 0 {
 		fmt.Printf("Errors (%d):\n", len(res.Errors))
 		for _, e := range res.Errors {
