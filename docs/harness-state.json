@@ -1,10 +1,10 @@
 {
   "updated": "2026-05-23",
   "position": {
-    "epic": 7,
-    "story": "8.1",
-    "branch": null,
-    "base_commit": "40a8f32"
+    "epic": 8,
+    "story": "COMPLETE",
+    "branch": "b-main",
+    "base_commit": "ad815a4"
   },
   "debt": [
     {
@@ -53,6 +53,12 @@
     "7.2": { "status": "done", "pr": 109, "issue": 108, "review": "oracle:0C+1M+2m:all_fixed", "pr_comments": "1H(stale)+2M:1H_already_fixed+1M_already_fixed+1M_deferred" },
     "7.3": { "status": "done", "pr": 111, "issue": 110, "review": "oracle:0C+1M+2m:all_fixed", "pr_comments": "1H(stale)+1M:1H_already_fixed+1M_deferred" },
     "7.4": { "status": "done", "pr": 113, "issue": 112, "review": "oracle:0C+1M+3m:M_fixed", "pr_comments": "3M:1already_fixed+1fixed+1deferred" },
-    "7.5": { "status": "done", "pr": 115, "issue": 114, "review": "skipped:S_plumbing", "pr_comments": "none" }
+    "7.5": { "status": "done", "pr": 115, "issue": 114, "review": "skipped:S_plumbing", "pr_comments": "none" },
+    "8.1": { "status": "done", "pr": 117, "issue": 116, "review": "oracle:0C+1M+3m:all_fixed", "pr_comments": "gemini_quota_exceeded" },
+    "8.2": { "status": "done", "pr": 119, "issue": 118, "review": "skipped:S_test_only", "pr_comments": "gemini_quota_exceeded" },
+    "8.3": { "status": "done", "pr": 121, "issue": 120, "review": "oracle:0C+2M+2m:all_fixed", "pr_comments": "gemini_quota_exceeded" },
+    "8.4": { "status": "done", "pr": 123, "issue": 122, "review": "oracle:0C+1M+4m:M_fixed", "pr_comments": "gemini_quota_exceeded" },
+    "8.5": { "status": "done", "pr": 125, "issue": 124, "review": "manual:no_issues", "pr_comments": "gemini_quota_exceeded" },
+    "8.6": { "status": "done", "pr": 127, "issue": 126, "review": "skipped:S_complexity", "pr_comments": "gemini_quota_exceeded" }
   }
 }
