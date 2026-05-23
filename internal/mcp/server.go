@@ -7,6 +7,8 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// KeepAliveInterval is the period between MCP-level JSON-RPC pings sent to
+// connected clients. Prevents proxy/load-balancer idle-connection timeouts.
 const KeepAliveInterval = 30 * time.Second
 
 func NewMCPServer(version string) *mcpsdk.Server {
