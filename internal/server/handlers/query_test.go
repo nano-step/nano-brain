@@ -88,22 +88,23 @@ func TestQuery_MissingWorkspace(t *testing.T) {
 }
 
 func TestQuery_DefaultMaxResults(t *testing.T) {
-	var capturedMax int
-	ms := &mockSearcher{}
-	original := handlers.Query(ms, 20, zerolog.Nop())
-
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/query",
-		strings.NewReader(`{"query":"test"}`))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set("workspace", "ws1")
-
-	_ = original(c)
-
-	_ = capturedMax
+	h := handlers.Query(&mockSearcher{}, 20, zerolog.Nop())
+	rec, c := queryRequest(`{"query":"test"}`, "ws1")
+	if err := h(c); err != nil {
+		t.Fatal(err)
+	}
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestQuery_MaxResultsCapping(t *testing.T) {
+	h := handlers.Query(&mockSearcher{}, 20, zerolog.Nop())
+	rec, c := queryRequest(`{"query":"test","max_results":500}`, "ws1")
+	if err := h(c); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 even with oversized max_results, got %d", rec.Code)
 	}
 }

@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -41,6 +42,8 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 	var (
 		bm25Results   []Result
 		vectorResults []Result
+		bm25Err       error
+		vectorErr     error
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -52,7 +55,8 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 			MaxResults:    fetchLimit,
 		})
 		if err != nil {
-			s.logger.Warn().Err(err).Msg("bm25 leg failed, continuing with vector only")
+			bm25Err = err
+			s.logger.Warn().Err(err).Msg("bm25 leg failed, degrading")
 			return nil
 		}
 		bm25Results = make([]Result, 0, len(rows))
@@ -76,12 +80,12 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 
 	g.Go(func() error {
 		if s.embedder == nil {
-			s.logger.Warn().Msg("no embedder configured, skipping vector leg")
 			return nil
 		}
 		vec, err := s.embedder.Embed(gctx, query)
 		if err != nil {
-			s.logger.Warn().Err(err).Msg("embed failed, continuing with bm25 only")
+			vectorErr = err
+			s.logger.Warn().Err(err).Msg("embed failed, degrading")
 			return nil
 		}
 		rows, err := s.queries.VectorSearch(gctx, sqlc.VectorSearchParams{
@@ -90,7 +94,8 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 			MaxResults:     fetchLimit,
 		})
 		if err != nil {
-			s.logger.Warn().Err(err).Msg("vector search leg failed, continuing with bm25 only")
+			vectorErr = err
+			s.logger.Warn().Err(err).Msg("vector search leg failed, degrading")
 			return nil
 		}
 		vectorResults = make([]Result, 0, len(rows))
@@ -113,6 +118,10 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 	})
 
 	_ = g.Wait()
+
+	if bm25Err != nil && vectorErr != nil {
+		return nil, fmt.Errorf("all search legs failed: bm25: %v, vector: %v", bm25Err, vectorErr)
+	}
 
 	merged := RRFMerge(bm25Results, vectorResults, s.config.RrfK)
 

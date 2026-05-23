@@ -48,6 +48,31 @@ func TestRecencyBoost_TodayDoc(t *testing.T) {
 	}
 }
 
+func TestRecencyBoost_Normalization(t *testing.T) {
+	now := time.Now()
+	results := []Result{
+		{ID: "high", Score: 0.03, UpdatedAt: now.Add(-200 * 24 * time.Hour)},
+		{ID: "low", Score: 0.01, UpdatedAt: now.Add(-1 * 24 * time.Hour)},
+	}
+
+	boosted := ApplyRecencyBoost(results, 0.3, 180, now)
+	if boosted[0].ID != "high" {
+		t.Errorf("higher-scoring doc should still rank first after normalization, got %s first", boosted[0].ID)
+	}
+	if boosted[0].Score <= 0 || boosted[0].Score > 1.0 {
+		t.Errorf("boosted score should be in (0,1], got %f", boosted[0].Score)
+	}
+}
+
+func TestRecencyBoost_ZeroHalfLife(t *testing.T) {
+	now := time.Now()
+	results := []Result{{ID: "1", Score: 0.5, UpdatedAt: now}}
+	boosted := ApplyRecencyBoost(results, 0.3, 0, now)
+	if !approxEqual(boosted[0].Score, 0.5, 1e-9) {
+		t.Errorf("halfLifeDays=0 should return unchanged, got %f", boosted[0].Score)
+	}
+}
+
 func TestRecencyBoost_VeryOldDoc(t *testing.T) {
 	now := time.Now()
 	results := []Result{

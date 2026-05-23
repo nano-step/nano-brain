@@ -4,6 +4,8 @@ import "sort"
 
 // RRFMerge merges two ranked result lists using Reciprocal Rank Fusion.
 // score = Σ 1/(k + rank + 1) for each list the result appears in.
+// When a chunk appears in both lists, metadata is kept from the first occurrence (BM25).
+// Both queries return identical metadata for the same chunk ID so the choice is safe.
 func RRFMerge(bm25Results, vectorResults []Result, k float64) []Result {
 	type entry struct {
 		result Result
