@@ -81,25 +81,28 @@ func TestOllamaEmbedder_Embed(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/api/embeddings" {
-			t.Errorf("path = %s, want /api/embeddings", r.URL.Path)
+		if r.URL.Path != "/api/embed" {
+			t.Errorf("path = %s, want /api/embed", r.URL.Path)
 		}
-		var req map[string]string
+		var req struct {
+			Model string   `json:"model"`
+			Input []string `json:"input"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if req["model"] != "test-model" {
-			t.Errorf("model = %q, want %q", req["model"], "test-model")
+		if req.Model != "test-model" {
+			t.Errorf("model = %q, want %q", req.Model, "test-model")
 		}
-		if req["prompt"] != "hello world" {
-			t.Errorf("prompt = %q, want %q", req["prompt"], "hello world")
+		if len(req.Input) != 1 || req.Input[0] != "hello world" {
+			t.Errorf("input = %v, want [hello world]", req.Input)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string][]float32{"embedding": want})
+		json.NewEncoder(w).Encode(map[string][][]float32{"embeddings": {want}})
 	}))
 	defer srv.Close()
 
-	e := NewOllamaEmbedder(srv.URL, "test-model")
+	e := NewOllamaEmbedder(srv.URL, "test-model", 0)
 	got, err := e.Embed(context.Background(), "hello world")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -115,9 +118,16 @@ func TestOllamaEmbedder_Embed(t *testing.T) {
 }
 
 func TestOllamaEmbedder_Dimension(t *testing.T) {
-	e := NewOllamaEmbedder("http://localhost:11434", "test")
+	e := NewOllamaEmbedder("http://localhost:11434", "test", 0)
 	if d := e.Dimension(); d != 768 {
 		t.Errorf("Dimension() = %d, want 768", d)
+	}
+}
+
+func TestOllamaEmbedder_CustomDimension(t *testing.T) {
+	e := NewOllamaEmbedder("http://localhost:11434", "test", 384)
+	if d := e.Dimension(); d != 384 {
+		t.Errorf("Dimension() = %d, want 384", d)
 	}
 }
 
@@ -128,7 +138,7 @@ func TestOllamaEmbedder_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := NewOllamaEmbedder(srv.URL, "test-model")
+	e := NewOllamaEmbedder(srv.URL, "test-model", 0)
 	_, err := e.Embed(context.Background(), "hello")
 	if err == nil {
 		t.Fatal("expected error for 500 response")
@@ -168,17 +178,10 @@ func TestVoyageAIEmbedder_Embed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ve := &VoyageAIEmbedder{
-		apiKey:     "test-key",
-		model:      "voyage-3",
-		httpClient: srv.Client(),
+	ve, err := NewVoyageAIEmbedder("test-key", "voyage-3", srv.URL, 0)
+	if err != nil {
+		t.Fatalf("unexpected error creating embedder: %v", err)
 	}
-	ve.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		r.URL.Scheme = "http"
-		r.URL.Host = srv.Listener.Addr().String()
-		return http.DefaultTransport.RoundTrip(r)
-	})
-
 	got, err := ve.Embed(context.Background(), "hello world")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -193,21 +196,29 @@ func TestVoyageAIEmbedder_Embed(t *testing.T) {
 	}
 }
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
-	return f(r)
-}
-
 func TestVoyageAIEmbedder_Dimension(t *testing.T) {
-	e, _ := NewVoyageAIEmbedder("key", "model")
+	e, _ := NewVoyageAIEmbedder("key", "model", "", 0)
 	if d := e.Dimension(); d != 1024 {
 		t.Errorf("Dimension() = %d, want 1024", d)
 	}
 }
 
+func TestVoyageAIEmbedder_CustomDimension(t *testing.T) {
+	e, _ := NewVoyageAIEmbedder("key", "model", "", 512)
+	if d := e.Dimension(); d != 512 {
+		t.Errorf("Dimension() = %d, want 512", d)
+	}
+}
+
+func TestVoyageAIEmbedder_DefaultURL(t *testing.T) {
+	e, _ := NewVoyageAIEmbedder("key", "model", "", 0)
+	if e.url != defaultVoyageAIURL {
+		t.Errorf("url = %q, want %q", e.url, defaultVoyageAIURL)
+	}
+}
+
 func TestVoyageAIEmbedder_MissingKey(t *testing.T) {
-	_, err := NewVoyageAIEmbedder("", "voyage-3")
+	_, err := NewVoyageAIEmbedder("", "voyage-3", "", 0)
 	if err == nil {
 		t.Fatal("expected error for empty API key")
 	}
@@ -220,18 +231,11 @@ func TestVoyageAIEmbedder_Unauthorized(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ve := &VoyageAIEmbedder{
-		apiKey:     "bad-key",
-		model:      "voyage-3",
-		httpClient: srv.Client(),
+	ve, err := NewVoyageAIEmbedder("bad-key", "voyage-3", srv.URL, 0)
+	if err != nil {
+		t.Fatalf("unexpected error creating embedder: %v", err)
 	}
-	ve.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		r.URL.Scheme = "http"
-		r.URL.Host = srv.Listener.Addr().String()
-		return http.DefaultTransport.RoundTrip(r)
-	})
-
-	_, err := ve.Embed(context.Background(), "hello")
+	_, err = ve.Embed(context.Background(), "hello")
 	if err == nil {
 		t.Fatal("expected error for 401 response")
 	}

@@ -18,7 +18,7 @@ func NewFromConfig(cfg config.EmbeddingConfig) (Embedder, error) {
 		if model == "" {
 			model = "nomic-embed-text"
 		}
-		return NewOllamaEmbedder(url, model), nil
+		return NewOllamaEmbedder(url, model, cfg.Dimension), nil
 
 	case "voyageai":
 		apiKey := cfg.VoyageAPIKey
@@ -29,7 +29,7 @@ func NewFromConfig(cfg config.EmbeddingConfig) (Embedder, error) {
 		if model == "" {
 			model = "voyage-3"
 		}
-		return NewVoyageAIEmbedder(apiKey, model)
+		return NewVoyageAIEmbedder(apiKey, model, cfg.URL, cfg.Dimension)
 
 	default:
 		return nil, fmt.Errorf("unknown embedding provider: %q (supported: ollama, voyageai)", cfg.Provider)

@@ -43,6 +43,7 @@ type EmbeddingConfig struct {
 	Provider     string `koanf:"provider"`
 	URL          string `koanf:"url"`
 	Model        string `koanf:"model"`
+	Dimension    int    `koanf:"dimension"`
 	Concurrency  int    `koanf:"concurrency"`
 	VoyageAPIKey string `koanf:"voyage_api_key"`
 }

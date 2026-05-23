@@ -11,23 +11,33 @@ import (
 )
 
 const (
-	voyageAPIDimension = 1024
-	voyageAPIURL       = "https://api.voyageai.com/v1/embeddings"
+	defaultVoyageAIDimension = 1024
+	defaultVoyageAIURL       = "https://api.voyageai.com/v1/embeddings"
 )
 
 type VoyageAIEmbedder struct {
+	url        string
 	apiKey     string
 	model      string
+	dimension  int
 	httpClient *http.Client
 }
 
-func NewVoyageAIEmbedder(apiKey, model string) (*VoyageAIEmbedder, error) {
+func NewVoyageAIEmbedder(apiKey, model, url string, dimension int) (*VoyageAIEmbedder, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("voyageai: api key is required")
 	}
+	if url == "" {
+		url = defaultVoyageAIURL
+	}
+	if dimension <= 0 {
+		dimension = defaultVoyageAIDimension
+	}
 	return &VoyageAIEmbedder{
-		apiKey: apiKey,
-		model:  model,
+		url:       url,
+		apiKey:    apiKey,
+		model:     model,
+		dimension: dimension,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -48,7 +58,7 @@ func (v *VoyageAIEmbedder) Embed(ctx context.Context, text string) ([]float32, e
 		return nil, fmt.Errorf("voyageai: marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, voyageAPIURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, v.url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("voyageai: create request: %w", err)
 	}
@@ -62,7 +72,7 @@ func (v *VoyageAIEmbedder) Embed(ctx context.Context, text string) ([]float32, e
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("voyageai: unexpected status %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -83,5 +93,5 @@ func (v *VoyageAIEmbedder) Embed(ctx context.Context, text string) ([]float32, e
 }
 
 func (v *VoyageAIEmbedder) Dimension() int {
-	return voyageAPIDimension
+	return v.dimension
 }

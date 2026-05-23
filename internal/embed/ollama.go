@@ -10,18 +10,23 @@ import (
 	"time"
 )
 
-const ollamaDimension = 768
+const defaultOllamaDimension = 768
 
 type OllamaEmbedder struct {
 	url        string
 	model      string
+	dimension  int
 	httpClient *http.Client
 }
 
-func NewOllamaEmbedder(url, model string) *OllamaEmbedder {
+func NewOllamaEmbedder(url, model string, dimension int) *OllamaEmbedder {
+	if dimension <= 0 {
+		dimension = defaultOllamaDimension
+	}
 	return &OllamaEmbedder{
-		url:   url,
-		model: model,
+		url:       url,
+		model:     model,
+		dimension: dimension,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -29,15 +34,20 @@ func NewOllamaEmbedder(url, model string) *OllamaEmbedder {
 }
 
 func (o *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
-	body, err := json.Marshal(map[string]string{
-		"model":  o.model,
-		"prompt": text,
-	})
+	reqBody := struct {
+		Model string   `json:"model"`
+		Input []string `json:"input"`
+	}{
+		Model: o.model,
+		Input: []string{text},
+	}
+
+	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("ollama: marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.url+"/api/embeddings", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.url+"/api/embed", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("ollama: create request: %w", err)
 	}
@@ -50,24 +60,24 @@ func (o *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("ollama: unexpected status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var result struct {
-		Embedding []float32 `json:"embedding"`
+		Embeddings [][]float32 `json:"embeddings"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("ollama: decode response: %w", err)
 	}
 
-	if len(result.Embedding) == 0 {
+	if len(result.Embeddings) == 0 || len(result.Embeddings[0]) == 0 {
 		return nil, fmt.Errorf("ollama: empty embedding returned")
 	}
 
-	return result.Embedding, nil
+	return result.Embeddings[0], nil
 }
 
 func (o *OllamaEmbedder) Dimension() int {
-	return ollamaDimension
+	return o.dimension
 }
