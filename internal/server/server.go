@@ -52,6 +52,15 @@ func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg con
 		ss = search.NewSearchService(queries, embedder, searchCfg, logger)
 	}
 
+	mcpServer := internalmcp.NewMCPServer(version)
+
+	var eqInfo internalmcp.EmbedQueueInfo
+	if eq != nil {
+		eqInfo = eq
+	}
+	mcpAdapter := internalmcp.NewAdapter(queries, db, embedder, ss, eqInfo, embedCfg, searchCfg, pool, logger)
+	internalmcp.RegisterTools(mcpServer, mcpAdapter)
+
 	s := &Server{
 		echo:          e,
 		pool:          pool,
@@ -61,7 +70,7 @@ func New(cfg config.ServerConfig, embedCfg config.EmbeddingConfig, searchCfg con
 		embedQueue:    eq,
 		embedder:      embedder,
 		searchService: ss,
-		mcpServer:     internalmcp.NewMCPServer(version),
+		mcpServer:     mcpServer,
 		logger:        logger,
 		cfg:           cfg,
 		embedCfg:      embedCfg,
