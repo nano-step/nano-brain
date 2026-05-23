@@ -163,21 +163,19 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger
 			}
 		}
 
+		warning := ""
 		if enqueuer != nil {
 			if enqueuer.IsPressured() {
-				c.Response().Header().Set("Retry-After", "30")
-				return c.JSON(http.StatusServiceUnavailable, WriteResponse{
-					ID:            row.ID.String(),
-					Hash:          row.ContentHash,
-					Collection:    row.Collection,
-					WorkspaceHash: row.WorkspaceHash,
-					ChunkCount:    len(chunks),
-					Warning:       "embedding queue backpressure active, document saved but embedding delayed",
-				})
-			}
-			for _, id := range chunkIDs {
-				if !enqueuer.Enqueue(id) {
-					logger.Warn().Str("chunk_id", id.String()).Msg("embedding queue full, chunk will be picked up on next scan")
+				warning = "embedding queue backpressure active, document saved but embedding delayed"
+				logger.Warn().Int("chunk_count", len(chunkIDs)).Msg("skipping enqueue due to backpressure")
+			} else {
+				for _, id := range chunkIDs {
+					if !enqueuer.Enqueue(id) {
+						logger.Warn().Str("chunk_id", id.String()).Msg("embedding queue full, chunk will be picked up on next scan")
+						if warning == "" {
+							warning = "some chunks could not be enqueued for embedding, will be picked up on next scan"
+						}
+					}
 				}
 			}
 		}
@@ -188,6 +186,7 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger
 			Collection:    row.Collection,
 			WorkspaceHash: row.WorkspaceHash,
 			ChunkCount:    len(chunks),
+			Warning:       warning,
 		})
 	}
 }

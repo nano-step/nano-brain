@@ -346,7 +346,7 @@ func TestWriteDocument_EnqueuesChunks(t *testing.T) {
 	}
 }
 
-func TestWriteDocument_Backpressure503(t *testing.T) {
+func TestWriteDocument_BackpressureWarning(t *testing.T) {
 	q := &mockDocumentQuerier{
 		upsertDocumentFn: func(_ context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error) {
 			return sqlc.UpsertDocumentRow{
@@ -369,13 +369,8 @@ func TestWriteDocument_Backpressure503(t *testing.T) {
 		t.Fatalf("handler returned error: %v", err)
 	}
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d body=%s", rec.Code, rec.Body.String())
-	}
-
-	retryAfter := rec.Header().Get("Retry-After")
-	if retryAfter != "30" {
-		t.Errorf("expected Retry-After=30, got %q", retryAfter)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	var resp handlers.WriteResponse
