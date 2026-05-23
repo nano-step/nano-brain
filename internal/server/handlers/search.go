@@ -47,11 +47,14 @@ func truncateSnippet(content string, maxLen int) string {
 	if len(content) <= maxLen {
 		return content
 	}
-	runes := []rune(content)
-	if len(runes) <= maxLen {
-		return content
+	var count int
+	for i := range content {
+		if count == maxLen {
+			return content[:i]
+		}
+		count++
 	}
-	return string(runes[:maxLen])
+	return content
 }
 
 type SearchResponse struct {
