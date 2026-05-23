@@ -33,3 +33,6 @@ SELECT id, content_hash FROM documents WHERE source_path = $1 AND workspace_hash
 -- name: ListDocumentsByWorkspace :many
 SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, created_at, updated_at
 FROM documents WHERE workspace_hash = $1 ORDER BY updated_at DESC;
+
+-- name: UpdateDocumentsCollection :exec
+UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = $3;

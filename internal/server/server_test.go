@@ -25,7 +25,7 @@ func (m *mockPool) Ping(_ context.Context) error {
 func newTestServer(pool *mockPool) *server.Server {
 	cfg := config.ServerConfig{Host: "127.0.0.1", Port: 3100}
 	logger := zerolog.Nop()
-	return server.New(cfg, pool, nil, nil, logger, "test-v1")
+	return server.New(cfg, pool, nil, nil, nil, logger, "test-v1")
 }
 
 func TestHealthEndpointHealthyDB(t *testing.T) {
@@ -155,7 +155,7 @@ func TestRouteRegistration(t *testing.T) {
 		paths[r.Path] = true
 	}
 
-	for _, path := range []string{"/health", "/api/status", "/api/v1/init", "/api/v1/workspaces"} {
+	for _, path := range []string{"/health", "/api/status", "/api/v1/init", "/api/v1/workspaces", "/api/v1/collections", "/api/v1/collections/:name"} {
 		if !paths[path] {
 			t.Errorf("route %s not registered", path)
 		}

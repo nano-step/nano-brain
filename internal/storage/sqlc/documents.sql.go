@@ -113,6 +113,21 @@ func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash st
 	return items, nil
 }
 
+const updateDocumentsCollection = `-- name: UpdateDocumentsCollection :exec
+UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = $3
+`
+
+type UpdateDocumentsCollectionParams struct {
+	Collection    string
+	Collection_2  string
+	WorkspaceHash string
+}
+
+func (q *Queries) UpdateDocumentsCollection(ctx context.Context, arg UpdateDocumentsCollectionParams) error {
+	_, err := q.db.ExecContext(ctx, updateDocumentsCollection, arg.Collection, arg.Collection_2, arg.WorkspaceHash)
+	return err
+}
+
 const upsertDocument = `-- name: UpsertDocument :one
 INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

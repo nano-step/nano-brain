@@ -16,6 +16,11 @@ func registerRoutes(s *Server) {
 
 	data := api.Group("", workspaceMiddleware())
 	data.POST("/write", handlers.WriteDocument(s.queries, s.db, s.logger, defaultMaxFileSize))
+
+	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.logger))
+	data.GET("/collections", handlers.ListCollectionsHandler(s.queries, s.logger))
+	data.PUT("/collections/:name", handlers.RenameCollectionHandler(s.queries, s.watcher, s.logger))
+	data.DELETE("/collections/:name", handlers.RemoveCollection(s.queries, s.watcher, s.logger))
 }
 
 const defaultMaxFileSize int64 = 307200

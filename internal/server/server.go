@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
 )
 
@@ -25,6 +26,7 @@ type Server struct {
 	pool      PoolChecker
 	db        *sql.DB
 	queries   *sqlc.Queries
+	watcher   *watcher.Watcher
 	logger    zerolog.Logger
 	cfg       config.ServerConfig
 	version   string
@@ -32,7 +34,7 @@ type Server struct {
 }
 
 // New creates a new Server with all routes and middleware registered.
-func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, logger zerolog.Logger, version string) *Server {
+func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, logger zerolog.Logger, version string) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -42,6 +44,7 @@ func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Qu
 		pool:      pool,
 		db:        db,
 		queries:   queries,
+		watcher:   fw,
 		logger:    logger,
 		cfg:       cfg,
 		version:   version,

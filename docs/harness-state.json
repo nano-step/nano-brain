@@ -2,9 +2,9 @@
   "updated": "2026-05-23",
   "position": {
     "epic": 2,
-    "story": "2.5",
-    "branch": "story/2.5-chunker-integration",
-    "base_commit": "c7a31d3"
+    "story": "2.7",
+    "branch": null,
+    "base_commit": "8188c50"
   },
   "debt": [
     {
@@ -21,8 +21,8 @@
     "2.2": { "status": "done", "pr": 47, "issue": 46, "review": "missing", "pr_comments": "not_checked" },
     "2.3": { "status": "done", "pr": 49, "issue": 48, "review": "oracle", "pr_comments": "6M:3fixed,3deferred" },
     "2.4": { "status": "done", "pr": 45, "review": "oracle", "pr_comments": "n/a" },
-    "2.5": { "status": "in_progress", "issue": 50, "review": null, "pr_comments": null },
-    "2.6": { "status": "pending" },
+    "2.5": { "status": "done", "pr": 51, "issue": 50, "review": "oracle", "pr_comments": "none" },
+    "2.6": { "status": "done", "pr": 53, "issue": 52, "review": "oracle", "pr_comments": "1C+2H+3M:all_fixed_or_deferred" },
     "2.7": { "status": "pending" },
     "2.8": { "status": "pending" }
   }
