@@ -121,7 +121,7 @@ func WakeUpHandler(q WakeUpQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			memories = append(memories, RecentMemory{
 				ID:      d.ID.String(),
 				Title:   d.Title,
-				Snippet: truncateSnippet(d.Snippet, 200),
+				Snippet: d.Snippet,
 				Tags:    tags,
 				Date:    d.UpdatedAt.Format(time.RFC3339),
 			})
