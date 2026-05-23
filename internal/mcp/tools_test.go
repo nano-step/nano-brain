@@ -176,25 +176,187 @@ func TestMemoryWakeUp_RejectsWorkspaceAll(t *testing.T) {
 	}
 }
 
-func TestMemoryGet_StillWorksAsStub(t *testing.T) {
+func TestMemoryGet_RejectsWorkspaceAll(t *testing.T) {
 	session, ctx := setupTestClient(t)
 
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_get",
 		Arguments: map[string]any{
-			"workspace": "test-ws",
-			"id":        "some-id",
+			"workspace": "all",
+			"path":      "some-path",
 		},
 	})
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)
 	}
 	if !result.IsError {
-		t.Fatal("expected error result from stub")
+		t.Fatal("expected error result for workspace 'all'")
 	}
 	text := result.Content[0].(*mcpsdk.TextContent).Text
-	if !strings.Contains(text, "not yet implemented") {
-		t.Errorf("unexpected message: %s", text)
+	if !strings.Contains(text, "not valid for memory_get") {
+		t.Errorf("unexpected error message: %s", text)
+	}
+}
+
+func TestMemoryGet_RequiresPath(t *testing.T) {
+	session, ctx := setupTestClient(t)
+
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name: "memory_get",
+		Arguments: map[string]any{
+			"workspace": "test-ws",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for missing path")
+	}
+	text := result.Content[0].(*mcpsdk.TextContent).Text
+	if !strings.Contains(text, "path is required") {
+		t.Errorf("unexpected error message: %s", text)
+	}
+}
+
+func TestMemoryGet_InvalidUUID(t *testing.T) {
+	session, ctx := setupTestClient(t)
+
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name: "memory_get",
+		Arguments: map[string]any{
+			"workspace": "test-ws",
+			"path":      "#not-a-uuid",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for invalid UUID")
+	}
+	text := result.Content[0].(*mcpsdk.TextContent).Text
+	if !strings.Contains(text, "invalid document ID") {
+		t.Errorf("unexpected error message: %s", text)
+	}
+}
+
+func TestMemoryGet_NotFound_ByUUID(t *testing.T) {
+	session, ctx := setupMockedTestClient(t)
+
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name: "memory_get",
+		Arguments: map[string]any{
+			"workspace": "test-ws",
+			"path":      "#00000000-0000-0000-0000-000000000001",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for not-found document")
+	}
+	text := result.Content[0].(*mcpsdk.TextContent).Text
+	if !strings.Contains(text, "document not found") {
+		t.Errorf("unexpected error message: %s", text)
+	}
+}
+
+func TestMemoryGet_NotFound_BySourcePath(t *testing.T) {
+	session, ctx := setupMockedTestClient(t)
+
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name: "memory_get",
+		Arguments: map[string]any{
+			"workspace": "test-ws",
+			"path":      "/nonexistent/path.md",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for not-found document")
+	}
+	text := result.Content[0].(*mcpsdk.TextContent).Text
+	if !strings.Contains(text, "document not found") {
+		t.Errorf("unexpected error message: %s", text)
+	}
+}
+
+func TestMemoryGet_WithLineRange_StillReportsNotFound(t *testing.T) {
+	session, ctx := setupMockedTestClient(t)
+
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name: "memory_get",
+		Arguments: map[string]any{
+			"workspace":  "test-ws",
+			"path":       "/nonexistent/path.md",
+			"start_line": float64(5),
+			"end_line":   float64(10),
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for not-found document with line range")
+	}
+	text := result.Content[0].(*mcpsdk.TextContent).Text
+	if !strings.Contains(text, "document not found") {
+		t.Errorf("unexpected error message: %s", text)
+	}
+}
+
+func TestMemoryWrite_WithSupersedes_AcceptsField(t *testing.T) {
+	session, ctx := setupMockedTestClient(t)
+
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name: "memory_write",
+		Arguments: map[string]any{
+			"workspace":  "test-ws",
+			"content":    "new content that supersedes old",
+			"supersedes": "#00000000-0000-0000-0000-000000000099",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	// The write will fail at the DB layer (fakedb), but the supersedes
+	// UUID resolution should succeed (it's a direct parse, not a DB lookup).
+	// The error should be about the DB operation, not about supersedes.
+	if !result.IsError {
+		t.Fatal("expected DB-level error from fakedb")
+	}
+	text := result.Content[0].(*mcpsdk.TextContent).Text
+	if strings.Contains(text, "supersedes") {
+		t.Errorf("supersedes should not cause an error, got: %s", text)
+	}
+}
+
+func TestMemoryWrite_WithSupersedes_BySourcePath(t *testing.T) {
+	session, ctx := setupMockedTestClient(t)
+
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name: "memory_write",
+		Arguments: map[string]any{
+			"workspace":  "test-ws",
+			"content":    "new content",
+			"supersedes": "/some/old/path.md",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	// Supersedes by source_path lookup will fail (fakedb) but should be
+	// silently ignored. The error should be about the upsert, not supersedes.
+	if !result.IsError {
+		t.Fatal("expected DB-level error from fakedb")
+	}
+	text := result.Content[0].(*mcpsdk.TextContent).Text
+	if strings.Contains(text, "supersedes") {
+		t.Errorf("supersedes lookup failure should be silently ignored, got: %s", text)
 	}
 }
 
