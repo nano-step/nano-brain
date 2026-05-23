@@ -397,6 +397,8 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 			}, []string{"id", "workspace"}),
 		},
 		func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			// TODO(story-5.6): When implementing, reject workspace == "all" for write-like behavior
+			// or support cross-workspace get if read-only.
 			return errResult("memory_get not yet implemented (Story 5.6)"), nil
 		},
 	)
