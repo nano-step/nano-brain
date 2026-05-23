@@ -23,11 +23,18 @@ func (m *mockPool) Ping(_ context.Context) error {
 }
 
 func newTestServer(pool *mockPool) *server.Server {
-	cfg := config.ServerConfig{Host: "127.0.0.1", Port: 3100}
-	harvesterCfg := config.HarvesterConfig{}
-	intervalsCfg := config.IntervalsConfig{SessionPoll: 120}
+	fullCfg := &config.Config{
+		Server:    config.ServerConfig{Host: "127.0.0.1", Port: 3100},
+		Embedding: config.EmbeddingConfig{Concurrency: 3},
+		Search:    config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20},
+		Harvester: config.HarvesterConfig{},
+		Intervals: config.IntervalsConfig{SessionPoll: 120},
+		Watcher:   config.WatcherConfig{DebounceMs: 2000, ReindexInterval: 300},
+		Storage:   config.StorageConfig{MaxFileSize: 314572800, MaxSize: 10737418240},
+		Logging:   config.LoggingConfig{Level: "info"},
+	}
 	logger := zerolog.Nop()
-	return server.New(cfg, config.EmbeddingConfig{}, config.SearchConfig{RrfK: 60, Limit: 20}, harvesterCfg, intervalsCfg, pool, nil, nil, nil, nil, nil, logger, "test-v1")
+	return server.New(fullCfg, "", pool, nil, nil, nil, nil, nil, logger, "test-v1")
 }
 
 func TestHealthEndpointHealthyDB(t *testing.T) {

@@ -15,12 +15,20 @@ import (
 )
 
 type mockSearcher struct {
-	results []search.Result
-	err     error
+	results      []search.Result
+	err          error
+	defaultLimit int
 }
 
 func (m *mockSearcher) HybridSearch(_ context.Context, _ string, _ string, _ int) ([]search.Result, error) {
 	return m.results, m.err
+}
+
+func (m *mockSearcher) DefaultLimit() int {
+	if m.defaultLimit > 0 {
+		return m.defaultLimit
+	}
+	return 20
 }
 
 func queryRequest(body string, workspace string) (*httptest.ResponseRecorder, echo.Context) {
@@ -39,7 +47,7 @@ func TestQuery_Success(t *testing.T) {
 	ms := &mockSearcher{results: []search.Result{
 		{ID: "r1", Title: "Result One", Content: "snippet", Score: 0.9},
 	}}
-	h := handlers.Query(ms, 20, zerolog.Nop())
+	h := handlers.Query(ms, zerolog.Nop())
 
 	rec, c := queryRequest(`{"query":"test"}`, "ws1")
 	if err := h(c); err != nil {
@@ -62,7 +70,7 @@ func TestQuery_Success(t *testing.T) {
 }
 
 func TestQuery_EmptyQuery(t *testing.T) {
-	h := handlers.Query(&mockSearcher{}, 20, zerolog.Nop())
+	h := handlers.Query(&mockSearcher{}, zerolog.Nop())
 	_, c := queryRequest(`{"query":""}`, "ws1")
 	err := h(c)
 	if err == nil {
@@ -75,7 +83,7 @@ func TestQuery_EmptyQuery(t *testing.T) {
 }
 
 func TestQuery_MissingWorkspace(t *testing.T) {
-	h := handlers.Query(&mockSearcher{}, 20, zerolog.Nop())
+	h := handlers.Query(&mockSearcher{}, zerolog.Nop())
 	_, c := queryRequest(`{"query":"test"}`, "")
 	err := h(c)
 	if err == nil {
@@ -88,7 +96,7 @@ func TestQuery_MissingWorkspace(t *testing.T) {
 }
 
 func TestQuery_DefaultMaxResults(t *testing.T) {
-	h := handlers.Query(&mockSearcher{}, 20, zerolog.Nop())
+	h := handlers.Query(&mockSearcher{}, zerolog.Nop())
 	rec, c := queryRequest(`{"query":"test"}`, "ws1")
 	if err := h(c); err != nil {
 		t.Fatal(err)
@@ -99,7 +107,7 @@ func TestQuery_DefaultMaxResults(t *testing.T) {
 }
 
 func TestQuery_MaxResultsCapping(t *testing.T) {
-	h := handlers.Query(&mockSearcher{}, 20, zerolog.Nop())
+	h := handlers.Query(&mockSearcher{}, zerolog.Nop())
 	rec, c := queryRequest(`{"query":"test","max_results":500}`, "ws1")
 	if err := h(c); err != nil {
 		t.Fatal(err)

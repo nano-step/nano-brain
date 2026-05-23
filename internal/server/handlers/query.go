@@ -12,6 +12,7 @@ import (
 
 type HybridSearcher interface {
 	HybridSearch(ctx context.Context, query string, workspace string, maxResults int) ([]search.Result, error)
+	DefaultLimit() int
 }
 
 type QueryRequest struct {
@@ -19,7 +20,7 @@ type QueryRequest struct {
 	MaxResults int    `json:"max_results,omitempty"`
 }
 
-func Query(searcher HybridSearcher, defaultLimit int, logger zerolog.Logger) echo.HandlerFunc {
+func Query(searcher HybridSearcher, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req QueryRequest
 		if err := c.Bind(&req); err != nil {
@@ -31,7 +32,7 @@ func Query(searcher HybridSearcher, defaultLimit int, logger zerolog.Logger) ech
 
 		maxResults := req.MaxResults
 		if maxResults <= 0 {
-			maxResults = defaultLimit
+			maxResults = searcher.DefaultLimit()
 		}
 		if maxResults > 100 {
 			maxResults = 100

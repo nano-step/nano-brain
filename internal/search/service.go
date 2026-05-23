@@ -46,6 +46,12 @@ func (s *SearchService) UpdateConfig(cfg config.SearchConfig) {
 	s.config = cfg
 }
 
+func (s *SearchService) DefaultLimit() int {
+	s.configMutex.RLock()
+	defer s.configMutex.RUnlock()
+	return s.config.Limit
+}
+
 func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int) ([]Result, error) {
 	// Read config under lock at the start, then release before I/O
 	s.configMutex.RLock()

@@ -11,7 +11,7 @@ func registerRoutes(s *Server) {
 	if s.embedQueue != nil {
 		queueInfo = s.embedQueue
 	}
-	h := handlers.NewHealth(s.pool, s.logger, s.version, s.startTime, queueInfo, s.harvesterCfg, s.intervalsCfg)
+	h := handlers.NewHealth(s.pool, s.logger, s.version, s.startTime, queueInfo, s.getHealthCfg)
 
 	s.echo.GET("/health", h.Health)
 	s.echo.GET("/api/status", h.Status)
@@ -38,7 +38,7 @@ func registerRoutes(s *Server) {
 	data.POST("/search", handlers.BM25Search(s.queries, s.logger))
 
 	if s.searchService != nil {
-		data.POST("/query", handlers.Query(s.searchService, s.searchCfg.Limit, s.logger))
+		data.POST("/query", handlers.Query(s.searchService, s.logger))
 	}
 
 	wakeUp := handlers.WakeUpHandler(s.queries, s.logger)
@@ -46,6 +46,7 @@ func registerRoutes(s *Server) {
 	data.POST("/wake-up", wakeUp)
 
 	s.echo.POST("/api/harvest", handlers.TriggerHarvest(s.getHarvestRunner))
+	s.echo.POST("/api/reload-config", handlers.ReloadConfig(s.configPath, s.currentConfig, s.applyReloadedConfig, s.logger))
 
 	sseHandler := mcp.NewSSEHandler(s.mcpServer)
 	streamableHandler := mcp.NewStreamableHTTPHandler(s.mcpServer)
