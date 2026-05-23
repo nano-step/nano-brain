@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -51,6 +52,7 @@ func testVector() []float32 { return []float32{0.1, 0.2, 0.3} }
 func TestVSearch_Success(t *testing.T) {
 	docID := uuid.New()
 	embID := uuid.New()
+	now := time.Now().Truncate(time.Second)
 
 	emb := &mockEmbedder{
 		embedFn:   func(_ context.Context, _ string) ([]float32, error) { return testVector(), nil },
@@ -72,8 +74,11 @@ func TestVSearch_Success(t *testing.T) {
 					Content:       "test content",
 					DocumentID:    docID,
 					SourcePath:    "/test.md",
+					Title:         "Test Doc",
 					Collection:    "memory",
 					Tags:          []string{"tag1", "tag2"},
+					CreatedAt:     now,
+					UpdatedAt:     now,
 					Score:         0.95,
 				},
 			}, nil
@@ -99,17 +104,24 @@ func TestVSearch_Success(t *testing.T) {
 	if resp.Total != 1 {
 		t.Errorf("expected total=1, got %d", resp.Total)
 	}
-	if resp.Results[0].ID != embID.String() {
-		t.Errorf("expected id=%s, got %s", embID, resp.Results[0].ID)
+	r := resp.Results[0]
+	if r.ID != embID.String() {
+		t.Errorf("expected id=%s, got %s", embID, r.ID)
 	}
-	if resp.Results[0].Score != 0.95 {
-		t.Errorf("expected score=0.95, got %f", resp.Results[0].Score)
+	if r.Title != "Test Doc" {
+		t.Errorf("expected title=Test Doc, got %q", r.Title)
 	}
-	if resp.Results[0].Tags != "tag1,tag2" {
-		t.Errorf("expected tags=tag1,tag2, got %q", resp.Results[0].Tags)
+	if r.Snippet != "test content" {
+		t.Errorf("expected snippet=test content, got %q", r.Snippet)
 	}
-	if resp.Results[0].DocumentID != docID.String() {
-		t.Errorf("expected document_id=%s, got %s", docID, resp.Results[0].DocumentID)
+	if r.Score != 0.95 {
+		t.Errorf("expected score=0.95, got %f", r.Score)
+	}
+	if len(r.Tags) != 2 || r.Tags[0] != "tag1" || r.Tags[1] != "tag2" {
+		t.Errorf("expected tags=[tag1,tag2], got %v", r.Tags)
+	}
+	if r.DocumentID != docID.String() {
+		t.Errorf("expected document_id=%s, got %s", docID, r.DocumentID)
 	}
 	if resp.QueryMs < 0 {
 		t.Error("expected non-negative query_ms")

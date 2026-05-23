@@ -3,13 +3,12 @@ package handlers
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
-	"github.com/rs/zerolog"
 	pgvector_go "github.com/pgvector/pgvector-go"
+	"github.com/rs/zerolog"
 )
 
 // Embedder generates vector embeddings from text.
@@ -28,15 +27,31 @@ type VSearchRequest struct {
 	MaxResults int    `json:"max_results,omitempty"`
 }
 
+const maxSnippetLen = 700
+
 type SearchResult struct {
-	ID            string  `json:"id"`
-	Content       string  `json:"content"`
-	Score         float64 `json:"score"`
-	SourcePath    string  `json:"source_path"`
-	Collection    string  `json:"collection"`
-	Tags          string  `json:"tags,omitempty"`
-	WorkspaceHash string  `json:"workspace_hash"`
-	DocumentID    string  `json:"document_id"`
+	ID            string    `json:"id"`
+	Title         string    `json:"title"`
+	Snippet       string    `json:"snippet"`
+	Score         float64   `json:"score"`
+	Tags          []string  `json:"tags,omitempty"`
+	Collection    string    `json:"collection"`
+	WorkspaceHash string    `json:"workspace_hash"`
+	SourcePath    string    `json:"source_path"`
+	DocumentID    string    `json:"document_id"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+func truncateSnippet(content string, maxLen int) string {
+	if len(content) <= maxLen {
+		return content
+	}
+	runes := []rune(content)
+	if len(runes) <= maxLen {
+		return content
+	}
+	return string(runes[:maxLen])
 }
 
 type SearchResponse struct {
@@ -97,13 +112,16 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger) ec
 		for _, r := range rows {
 			results = append(results, SearchResult{
 				ID:            r.ID.String(),
-				Content:       r.Content,
+				Title:         r.Title,
+				Snippet:       truncateSnippet(r.Content, maxSnippetLen),
 				Score:         r.Score,
-				SourcePath:    r.SourcePath,
+				Tags:          r.Tags,
 				Collection:    r.Collection,
-				Tags:          strings.Join(r.Tags, ","),
 				WorkspaceHash: r.WorkspaceHash,
+				SourcePath:    r.SourcePath,
 				DocumentID:    r.DocumentID.String(),
+				CreatedAt:     r.CreatedAt,
+				UpdatedAt:     r.UpdatedAt,
 			})
 		}
 
