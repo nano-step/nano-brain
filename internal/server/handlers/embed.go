@@ -39,7 +39,9 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, queue *embed.Queue, p
 		}
 
 		var req embedRequest
-		_ = c.Bind(&req)
+		if err := c.Bind(&req); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		}
 
 		workspace, _ := c.Get("workspace").(string)
 		if workspace == "" {
@@ -68,9 +70,12 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, queue *embed.Queue, p
 			chunks = chunks[:embedBatchLimit]
 		}
 
+		loopCtx, loopCancel := context.WithTimeout(ctx, 3*time.Minute)
+		defer loopCancel()
+
 		embedded := 0
 		for _, chunk := range chunks {
-			embedCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			embedCtx, cancel := context.WithTimeout(loopCtx, 30*time.Second)
 			vec, embedErr := embedder.Embed(embedCtx, chunk.Content)
 			cancel()
 			if embedErr != nil {
@@ -78,7 +83,7 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, queue *embed.Queue, p
 				break
 			}
 
-			if _, insertErr := q.InsertEmbedding(ctx, sqlc.InsertEmbeddingParams{
+			if _, insertErr := q.InsertEmbedding(loopCtx, sqlc.InsertEmbeddingParams{
 				ChunkID:       chunk.ID,
 				WorkspaceHash: chunk.WorkspaceHash,
 				Provider:      provider,
@@ -89,7 +94,7 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, queue *embed.Queue, p
 				break
 			}
 
-			if markErr := q.MarkChunkEmbedded(ctx, sqlc.MarkChunkEmbeddedParams{
+			if markErr := q.MarkChunkEmbedded(loopCtx, sqlc.MarkChunkEmbeddedParams{
 				ID:            chunk.ID,
 				WorkspaceHash: chunk.WorkspaceHash,
 			}); markErr != nil {
@@ -102,7 +107,11 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, queue *embed.Queue, p
 
 		var remaining int64
 		if hasMore {
-			remaining, _ = q.CountPendingChunks(ctx, workspace)
+			var countErr error
+			remaining, countErr = q.CountPendingChunks(ctx, workspace)
+			if countErr != nil {
+				logger.Error().Err(countErr).Msg("failed to count remaining pending chunks")
+			}
 		} else {
 			remaining = int64(len(chunks) - embedded)
 			if remaining < 0 {

@@ -96,7 +96,7 @@ func (q *Queue) Depth() int { return len(q.ch) }
 // Capacity returns the channel capacity.
 func (q *Queue) Capacity() int { return channelCapacity }
 
-// Status returns a human-readable queue status string.
+// Status is advisory; reads are not atomic across fields.
 func (q *Queue) Status() string {
 	if q.pending.Load() >= rejectionThreshold {
 		return "rejecting"

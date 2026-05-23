@@ -199,3 +199,83 @@ func TestTriggerEmbed_Force(t *testing.T) {
 		t.Errorf("embedded = %d, want 2", resp.Embedded)
 	}
 }
+
+func TestTriggerEmbed_PartialFailure(t *testing.T) {
+	chunks := makeChunks(3, "ws1")
+	callCount := 0
+	q := &mockEmbedQuerier{
+		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+			return chunks, nil
+		},
+	}
+	emb := &mockEmbedder{
+		embedFn: func(_ context.Context, _ string) ([]float32, error) {
+			callCount++
+			if callCount == 2 {
+				return nil, fmt.Errorf("provider error")
+			}
+			return testVector(), nil
+		},
+		dimension: 3,
+	}
+
+	e := echo.New()
+	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
+
+	h := handlers.TriggerEmbed(q, emb, nil, "p", "m", zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp handlers.EmbedResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Embedded != 1 {
+		t.Errorf("embedded = %d, want 1", resp.Embedded)
+	}
+	if resp.Remaining != 2 {
+		t.Errorf("remaining = %d, want 2", resp.Remaining)
+	}
+}
+
+func TestTriggerEmbed_HasMore(t *testing.T) {
+	chunks := makeChunks(51, "ws1")
+	q := &mockEmbedQuerier{
+		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+			return chunks, nil
+		},
+		countPendingFn: func(_ context.Context, _ string) (int64, error) {
+			return 120, nil
+		},
+	}
+	emb := &mockEmbedder{
+		embedFn:   func(_ context.Context, _ string) ([]float32, error) { return testVector(), nil },
+		dimension: 3,
+	}
+
+	e := echo.New()
+	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
+
+	h := handlers.TriggerEmbed(q, emb, nil, "p", "m", zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp handlers.EmbedResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Embedded != 50 {
+		t.Errorf("embedded = %d, want 50", resp.Embedded)
+	}
+	if resp.Remaining != 120 {
+		t.Errorf("remaining = %d, want 120", resp.Remaining)
+	}
+}
