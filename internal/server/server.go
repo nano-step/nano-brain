@@ -29,6 +29,7 @@ type Server struct {
 	queries    *sqlc.Queries
 	watcher    *watcher.Watcher
 	embedQueue *embed.Queue
+	embedder   embed.Embedder
 	logger     zerolog.Logger
 	cfg        config.ServerConfig
 	version    string
@@ -36,7 +37,7 @@ type Server struct {
 }
 
 // New creates a new Server with all routes and middleware registered.
-func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, logger zerolog.Logger, version string) *Server {
+func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -48,6 +49,7 @@ func New(cfg config.ServerConfig, pool PoolChecker, db *sql.DB, queries *sqlc.Qu
 		queries:    queries,
 		watcher:    fw,
 		embedQueue: eq,
+		embedder:   embedder,
 		logger:     logger,
 		cfg:        cfg,
 		version:    version,

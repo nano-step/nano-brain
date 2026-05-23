@@ -89,16 +89,18 @@ func main() {
 	fw := watcher.New(db, queries, logger, *cfg)
 
 	var eq *embed.Queue
+	var embedder embed.Embedder
 	if cfg.Embedding.Provider != "" {
-		embedder, embedErr := embed.NewFromConfig(cfg.Embedding)
+		e, embedErr := embed.NewFromConfig(cfg.Embedding)
 		if embedErr != nil {
 			logger.Warn().Err(embedErr).Msg("embedding disabled — provider not configured")
 		} else {
+			embedder = e
 			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency)
 		}
 	}
 
-	srv := server.New(cfg.Server, pool, db, queries, fw, eq, logger, Version)
+	srv := server.New(cfg.Server, pool, db, queries, fw, eq, embedder, logger, Version)
 
 	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
 		for _, ws := range workspaces {
