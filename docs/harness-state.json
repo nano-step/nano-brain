@@ -2,9 +2,9 @@
   "updated": "2026-05-23",
   "position": {
     "epic": 5,
-    "story": "5.3",
+    "story": "5.4",
     "branch": null,
-    "base_commit": "29cf787"
+    "base_commit": "8ef823d"
   },
   "debt": [
     {
@@ -39,6 +39,7 @@
     "4.5": { "status": "done", "pr": 80, "issue": 77, "review": "oracle:2M+2m", "pr_comments": "3M:all_addressed_by_oracle_fixes" },
     "4.6": { "status": "done", "pr": 83, "issue": 78, "review": "oracle:1M+3m", "pr_comments": "1H(fp)+4M:2already_fixed+2deferred" },
     "5.1": { "status": "done", "pr": 85, "issue": 84, "review": "oracle:0C+0M+3m", "pr_comments": "1H(fp)+1M(fp):both_inapplicable_v0.8.0" },
-    "5.2": { "status": "done", "pr": 87, "issue": 86, "review": "oracle:0C+1M+3m", "pr_comments": "3M:all_deferred" }
+    "5.2": { "status": "done", "pr": 87, "issue": 86, "review": "oracle:0C+1M+3m", "pr_comments": "3M:all_deferred" },
+    "5.3": { "status": "done", "pr": 89, "issue": 88, "review": "oracle:0C+0M+2m", "pr_comments": "2M:1fixed+1deferred" }
   }
 }
