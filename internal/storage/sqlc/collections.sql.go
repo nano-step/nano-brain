@@ -11,6 +11,62 @@ import (
 	"github.com/lib/pq"
 )
 
+const countDocumentsByCollection = `-- name: CountDocumentsByCollection :one
+SELECT count(*) FROM documents WHERE collection = $1 AND workspace_hash = $2
+`
+
+type CountDocumentsByCollectionParams struct {
+	Collection    string
+	WorkspaceHash string
+}
+
+func (q *Queries) CountDocumentsByCollection(ctx context.Context, arg CountDocumentsByCollectionParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDocumentsByCollection, arg.Collection, arg.WorkspaceHash)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deleteCollection = `-- name: DeleteCollection :exec
+DELETE FROM collections WHERE name = $1 AND workspace_hash = $2
+`
+
+type DeleteCollectionParams struct {
+	Name          string
+	WorkspaceHash string
+}
+
+func (q *Queries) DeleteCollection(ctx context.Context, arg DeleteCollectionParams) error {
+	_, err := q.db.ExecContext(ctx, deleteCollection, arg.Name, arg.WorkspaceHash)
+	return err
+}
+
+const getCollectionByName = `-- name: GetCollectionByName :one
+SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at FROM collections WHERE name = $1 AND workspace_hash = $2
+`
+
+type GetCollectionByNameParams struct {
+	Name          string
+	WorkspaceHash string
+}
+
+func (q *Queries) GetCollectionByName(ctx context.Context, arg GetCollectionByNameParams) (Collection, error) {
+	row := q.db.QueryRowContext(ctx, getCollectionByName, arg.Name, arg.WorkspaceHash)
+	var i Collection
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceHash,
+		&i.Name,
+		&i.Path,
+		&i.GlobPattern,
+		&i.UpdateMode,
+		pq.Array(&i.ExcludePatterns),
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listCollections = `-- name: ListCollections :many
 SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at FROM collections WHERE workspace_hash = $1 ORDER BY name
 `
@@ -46,6 +102,35 @@ func (q *Queries) ListCollections(ctx context.Context, workspaceHash string) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const renameCollection = `-- name: RenameCollection :one
+UPDATE collections SET name = $2, updated_at = now()
+WHERE name = $1 AND workspace_hash = $3
+RETURNING id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at
+`
+
+type RenameCollectionParams struct {
+	Name          string
+	Name_2        string
+	WorkspaceHash string
+}
+
+func (q *Queries) RenameCollection(ctx context.Context, arg RenameCollectionParams) (Collection, error) {
+	row := q.db.QueryRowContext(ctx, renameCollection, arg.Name, arg.Name_2, arg.WorkspaceHash)
+	var i Collection
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceHash,
+		&i.Name,
+		&i.Path,
+		&i.GlobPattern,
+		&i.UpdateMode,
+		pq.Array(&i.ExcludePatterns),
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertCollection = `-- name: UpsertCollection :one

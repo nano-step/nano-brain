@@ -27,6 +27,11 @@ func main() {
 	flag.StringVar(&configPath, "config", "", "path to config file (default: ~/.nano-brain/config.yml)")
 	flag.Parse()
 
+	if args := flag.Args(); len(args) > 0 && args[0] == "collection" {
+		runCollectionCmd(args[1:])
+		return
+	}
+
 	if configPath == "" {
 		configPath = config.DefaultConfigPath()
 	}
@@ -62,9 +67,10 @@ func main() {
 	db := stdlib.OpenDBFromPool(pool)
 	queries := sqlc.New(db)
 
-	srv := server.New(cfg.Server, pool, db, queries, logger, Version)
-
 	fw := watcher.New(db, queries, logger, *cfg)
+
+	srv := server.New(cfg.Server, pool, db, queries, fw, logger, Version)
+
 	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
 		for _, ws := range workspaces {
 			collections, err := queries.ListCollections(ctx, ws.Hash)

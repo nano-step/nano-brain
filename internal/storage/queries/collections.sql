@@ -10,3 +10,17 @@ RETURNING *;
 
 -- name: ListCollections :many
 SELECT * FROM collections WHERE workspace_hash = $1 ORDER BY name;
+
+-- name: GetCollectionByName :one
+SELECT * FROM collections WHERE name = $1 AND workspace_hash = $2;
+
+-- name: RenameCollection :one
+UPDATE collections SET name = $2, updated_at = now()
+WHERE name = $1 AND workspace_hash = $3
+RETURNING *;
+
+-- name: DeleteCollection :exec
+DELETE FROM collections WHERE name = $1 AND workspace_hash = $2;
+
+-- name: CountDocumentsByCollection :one
+SELECT count(*) FROM documents WHERE collection = $1 AND workspace_hash = $2;
