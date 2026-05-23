@@ -1,10 +1,10 @@
 {
   "updated": "2026-05-23",
   "position": {
-    "epic": 6,
-    "story": "6.1",
+    "epic": 7,
+    "story": "7.1",
     "branch": null,
-    "base_commit": "62e1632"
+    "base_commit": "72e6034"
   },
   "debt": [
     {
@@ -43,6 +43,11 @@
     "5.3": { "status": "done", "pr": 89, "issue": 88, "review": "oracle:0C+0M+2m", "pr_comments": "2M:1fixed+1deferred" },
     "5.4": { "status": "done", "pr": 91, "issue": 90, "review": "oracle:0C+3M+2m:all_fixed", "pr_comments": "1H(fp)+4M:1fixed+3read_safe+1fp" },
     "5.5": { "status": "done", "pr": 93, "issue": 92, "review": "oracle:0C+0M+1m", "pr_comments": "3M:1fixed+2deferred" },
-    "5.6": { "status": "done", "pr": 95, "issue": 94, "review": "oracle:0C+1M+1m:M_fixed", "pr_comments": "2H+1M:2H_fixed+1M_deferred" }
+    "5.6": { "status": "done", "pr": 95, "issue": 94, "review": "oracle:0C+1M+1m:M_fixed", "pr_comments": "2H+1M:2H_fixed+1M_deferred" },
+    "6.1": { "status": "done", "pr": 97, "issue": 96, "review": "oracle:0C+1M+3m:all_fixed", "pr_comments": "2H+2M:2H_fixed+2M_addressed_by_oracle" },
+    "6.2": { "status": "done", "pr": 99, "issue": 98, "review": "oracle:0C+1M+2m:all_fixed", "pr_comments": "3M:2already_fixed+1fixed" },
+    "6.3": { "status": "done", "pr": 101, "issue": 100, "review": "skipped:test_only", "pr_comments": "none" },
+    "6.4": { "status": "done", "pr": 103, "issue": 102, "review": "oracle:0C+0M+3m", "pr_comments": "2M:both_deferred" },
+    "6.5": { "status": "done", "pr": 105, "issue": 104, "review": "oracle:0C+1M+4m:M_fixed", "pr_comments": "1H+2M:1H_fixed+1M_already_fixed+1M_deferred" }
   }
 }
