@@ -14,6 +14,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/embed"
 	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/search"
+	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
@@ -34,6 +35,7 @@ type Server struct {
 	embedder       embed.Embedder
 	searchService  *search.SearchService
 	mcpServer      *mcpsdk.Server
+	harvestRunner  handlers.HarvestRunner
 	logger         zerolog.Logger
 	cfg            config.ServerConfig
 	embedCfg       config.EmbeddingConfig
@@ -109,4 +111,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Echo returns the underlying Echo instance (for test route injection).
 func (s *Server) Echo() *echo.Echo {
 	return s.echo
+}
+
+func (s *Server) SetHarvestRunner(r handlers.HarvestRunner) {
+	s.harvestRunner = r
 }

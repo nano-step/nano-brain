@@ -45,6 +45,8 @@ func registerRoutes(s *Server) {
 	api.GET("/wake-up", wakeUp)
 	data.POST("/wake-up", wakeUp)
 
+	s.echo.POST("/api/harvest", handlers.TriggerHarvest(&s.harvestRunner, s.logger))
+
 	sseHandler := mcp.NewSSEHandler(s.mcpServer)
 	streamableHandler := mcp.NewStreamableHTTPHandler(s.mcpServer)
 

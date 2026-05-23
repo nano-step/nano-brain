@@ -54,17 +54,25 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 }
 
-func (r *Runner) tick(ctx context.Context) {
-	var totalHarvested, totalSkipped, totalErrors int
+// RunOnce executes a single harvest cycle synchronously and returns aggregate counts.
+func (r *Runner) RunOnce(ctx context.Context) (harvested, skipped, errCount int) {
 	for _, h := range r.harvesters {
-		harvested, skipped, errCount := h.HarvestAll(ctx, r.enqueuer)
-		totalHarvested += harvested
-		totalSkipped += skipped
-		totalErrors += errCount
+		h, s, e := h.HarvestAll(ctx, r.enqueuer)
+		harvested += h
+		skipped += s
+		errCount += e
 	}
 	r.logger.Info().
-		Int("harvested", totalHarvested).
-		Int("skipped", totalSkipped).
-		Int("errors", totalErrors).
-		Msg("harvest cycle complete")
+		Int("harvested", harvested).
+		Int("skipped", skipped).
+		Int("errors", errCount).
+		Msg("harvest cycle complete (on-demand)")
+	return
+}
+
+func (r *Runner) tick(ctx context.Context) {
+	harvested, skipped, errCount := r.RunOnce(ctx)
+	_ = harvested
+	_ = skipped
+	_ = errCount
 }

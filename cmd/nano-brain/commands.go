@@ -218,6 +218,41 @@ func runStubCmd(endpoint string, args []string) {
 	fmt.Println(string(resp))
 }
 
+func runHarvestCmd(args []string) {
+	var jsonFlag bool
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			jsonFlag = true
+		default:
+			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
+			os.Exit(1)
+		}
+	}
+
+	resp, _, err := doRequest("POST", getBaseURL()+"/api/harvest", nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if jsonFlag {
+		fmt.Println(string(resp))
+		return
+	}
+
+	var result struct {
+		Harvested int `json:"harvested"`
+		Skipped   int `json:"skipped"`
+		Errors    int `json:"errors"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		fmt.Println(string(resp))
+		return
+	}
+	fmt.Printf("Harvest complete: %d harvested, %d skipped, %d errors\n", result.Harvested, result.Skipped, result.Errors)
+}
+
 func runQueryCmd(args []string) {
 	runStubCmd("query", args)
 }
