@@ -56,6 +56,9 @@ func main() {
 		case "bench":
 			runBenchCmd(args[1:])
 			return
+		case "db:migrate":
+			runDBMigrateCmd(args[1:])
+			return
 		}
 	}
 
