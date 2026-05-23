@@ -2,14 +2,125 @@ package mcp_test
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"sync"
 	"testing"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/search"
+	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
+
+// --- Fake database/sql driver (stdlib only) ---
+// Returns errors on all operations so sqlc-generated code fails gracefully
+// instead of panicking on nil pointers.
+
+var errFakeDB = errors.New("fakedb: not a real database")
+
+func init() {
+	sql.Register("fakedb", &fakeDriver{})
+}
+
+type fakeDriver struct{}
+
+func (d *fakeDriver) Open(_ string) (driver.Conn, error) { return &fakeConn{}, nil }
+
+type fakeConn struct{}
+
+func (c *fakeConn) Prepare(_ string) (driver.Stmt, error) { return nil, errFakeDB }
+func (c *fakeConn) Close() error                          { return nil }
+func (c *fakeConn) Begin() (driver.Tx, error)             { return nil, errFakeDB }
+
+// --- Mock search.Querier (returns empty results, no DB needed) ---
+
+type mockSearchQuerier struct{}
+
+func (m *mockSearchQuerier) BM25Search(_ context.Context, _ sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error) {
+	return nil, nil
+}
+func (m *mockSearchQuerier) BM25SearchAll(_ context.Context, _ sqlc.BM25SearchAllParams) ([]sqlc.BM25SearchAllRow, error) {
+	return nil, nil
+}
+func (m *mockSearchQuerier) VectorSearch(_ context.Context, _ sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error) {
+	return nil, nil
+}
+func (m *mockSearchQuerier) VectorSearchAll(_ context.Context, _ sqlc.VectorSearchAllParams) ([]sqlc.VectorSearchAllRow, error) {
+	return nil, nil
+}
+
+// --- Mock embed.Embedder (returns zero vector) ---
+
+type mockEmbedder struct{}
+
+func (m *mockEmbedder) Embed(_ context.Context, _ string) ([]float32, error) {
+	return make([]float32, 384), nil
+}
+func (m *mockEmbedder) Dimension() int { return 384 }
+
+// --- Mock mcp.PoolChecker ---
+
+type mockPoolChecker struct{}
+
+func (m *mockPoolChecker) Ping(_ context.Context) error { return nil }
+
+// --- Mock mcp.EmbedQueueInfo ---
+
+type mockEmbedQueueInfo struct{}
+
+func (m *mockEmbedQueueInfo) Depth() int        { return 0 }
+func (m *mockEmbedQueueInfo) Capacity() int     { return 100 }
+func (m *mockEmbedQueueInfo) Status() string     { return "idle" }
+func (m *mockEmbedQueueInfo) PendingCount() int64 { return 0 }
+
+// setupMockedTestClient creates an MCP client+server with real mocked
+// services so tool handlers reach their actual logic paths instead of
+// bailing at nil checks.
+func setupMockedTestClient(t *testing.T) (*mcpsdk.ClientSession, context.Context) {
+	t.Helper()
+
+	db, err := sql.Open("fakedb", "")
+	if err != nil {
+		t.Fatalf("open fakedb: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	queries := sqlc.New(db)
+	embedder := &mockEmbedder{}
+	searchSvc := search.NewSearchService(&mockSearchQuerier{}, embedder, config.SearchConfig{
+		RrfK:                60,
+		RecencyWeight:       0.1,
+		RecencyHalfLifeDays: 7,
+		Limit:               10,
+	}, zerolog.Nop())
+
+	server := internalmcp.NewMCPServer("test")
+	adapter := internalmcp.NewAdapter(
+		queries, db, embedder, searchSvc, &mockEmbedQueueInfo{},
+		config.EmbeddingConfig{Provider: "mock"},
+		config.SearchConfig{},
+		&mockPoolChecker{},
+		zerolog.Nop(),
+	)
+	internalmcp.RegisterTools(server, adapter)
+
+	ctx := context.Background()
+	ct, st := mcpsdk.NewInMemoryTransports()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	session, err := client.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+	return session, ctx
+}
 
 // TestConcurrentToolRegistration_RaceFree verifies that registering all 9
 // tools and listing them is race-free under the race detector.
@@ -40,34 +151,29 @@ func TestConcurrentToolRegistration_RaceFree(t *testing.T) {
 }
 
 // TestConcurrentToolCalls_NoRace fires 20 goroutines that each invoke
-// different tool handlers concurrently through the MCP SDK's in-memory
-// transport. The handlers return errors (nil service deps), but the point
-// is proving no data race exists under `go test -race`.
+// different tool handlers concurrently via mocked services. Handlers
+// reach their actual logic paths (search, embed, DB) — proving no
+// data race under `go test -race`.
 func TestConcurrentToolCalls_NoRace(t *testing.T) {
-	session, ctx := setupTestClient(t)
+	session, ctx := setupMockedTestClient(t)
 
-	// Tool calls that exercise different handlers. Each returns an error
-	// result because service deps are nil, but that is expected — we only
-	// care that no race is detected.
-	// Only calls that return error results without panicking on nil deps.
-	// Handlers that dereference nil queries/db are excluded.
+	// All 9 handlers exercised with valid workspaces.
+	// memory_query → full HybridSearch (BM25 + vector in parallel via errgroup)
+	// memory_search → BM25Search via fakedb (returns SQL error gracefully)
+	// memory_vsearch → Embed then VectorSearch via fakedb
+	// memory_write → chunk.Split + BeginTx via fakedb (fails at tx, not nil)
+	// memory_tags, memory_wake_up → query via fakedb
+	// memory_status → reads pool/queue/config fields
 	calls := []mcpsdk.CallToolParams{
-		// memory_status — reads adapter fields, nil pool → "not configured"
 		{Name: "memory_status", Arguments: map[string]any{}},
-		// memory_update — validates workspace, returns "accepted"
 		{Name: "memory_update", Arguments: map[string]any{"workspace": "ws-1"}},
-		// memory_get — stub, returns "not yet implemented"
 		{Name: "memory_get", Arguments: map[string]any{"workspace": "ws-1", "id": "doc-1"}},
-		// memory_write — rejected before DB: workspace="all"
-		{Name: "memory_write", Arguments: map[string]any{"workspace": "all", "content": "test"}},
-		// memory_query — nil searchService → error before DB
-		{Name: "memory_query", Arguments: map[string]any{"workspace": "ws-1", "query": "test"}},
-		// memory_vsearch — nil embedder → error before DB
-		{Name: "memory_vsearch", Arguments: map[string]any{"workspace": "ws-1", "query": "test"}},
-		// memory_tags — rejected before DB: workspace="all"
-		{Name: "memory_tags", Arguments: map[string]any{"workspace": "all"}},
-		// memory_wake_up — rejected before DB: workspace="all"
-		{Name: "memory_wake_up", Arguments: map[string]any{"workspace": "all"}},
+		{Name: "memory_write", Arguments: map[string]any{"workspace": "ws-1", "content": "concurrent write test"}},
+		{Name: "memory_query", Arguments: map[string]any{"workspace": "ws-1", "query": "concurrent search"}},
+		{Name: "memory_search", Arguments: map[string]any{"workspace": "ws-1", "query": "bm25 test"}},
+		{Name: "memory_vsearch", Arguments: map[string]any{"workspace": "ws-1", "query": "vector test"}},
+		{Name: "memory_tags", Arguments: map[string]any{"workspace": "ws-1"}},
+		{Name: "memory_wake_up", Arguments: map[string]any{"workspace": "ws-1"}},
 	}
 
 	const goroutines = 20
@@ -83,37 +189,38 @@ func TestConcurrentToolCalls_NoRace(t *testing.T) {
 				t.Errorf("goroutine %d: CallTool(%s) transport error: %v", idx, call.Name, err)
 				return
 			}
-			// We don't check result correctness — just that it returned
-			// without a data race. Log for debugging if needed.
 			_ = result
 		}(i)
 	}
 	wg.Wait()
 }
 
-// TestConcurrentMixedToolCalls_NoRace is a heavier variant that mixes
-// read-like and write-like tool calls across 50 goroutines to stress-test
-// the adapter's shared-nothing architecture under the race detector.
+// TestConcurrentMixedToolCalls_NoRace mixes read-like and write-like tool
+// calls across 50 goroutines with multiple workspace hashes, stress-testing
+// concurrent handler execution under the race detector.
 func TestConcurrentMixedToolCalls_NoRace(t *testing.T) {
-	session, ctx := setupTestClient(t)
+	session, ctx := setupMockedTestClient(t)
 
 	type toolCall struct {
 		name string
 		args map[string]any
 	}
 
-	// Only calls safe with nil service deps (no nil-pointer panics).
 	palette := []toolCall{
 		{"memory_status", map[string]any{}},
 		{"memory_update", map[string]any{"workspace": "ws-a"}},
 		{"memory_update", map[string]any{"workspace": "ws-b"}},
 		{"memory_get", map[string]any{"workspace": "ws-a", "id": "id-1"}},
 		{"memory_get", map[string]any{"workspace": "ws-b", "id": "id-2"}},
-		{"memory_write", map[string]any{"workspace": "all", "content": "rejected"}},
-		{"memory_query", map[string]any{"workspace": "ws-a", "query": "search term"}},
-		{"memory_vsearch", map[string]any{"workspace": "ws-a", "query": "vector search"}},
-		{"memory_tags", map[string]any{"workspace": "all"}},
-		{"memory_wake_up", map[string]any{"workspace": "all"}},
+		{"memory_write", map[string]any{"workspace": "ws-a", "content": "doc alpha"}},
+		{"memory_write", map[string]any{"workspace": "ws-b", "content": "doc beta"}},
+		{"memory_query", map[string]any{"workspace": "ws-a", "query": "search alpha"}},
+		{"memory_query", map[string]any{"workspace": "all", "query": "cross-workspace"}},
+		{"memory_search", map[string]any{"workspace": "ws-a", "query": "bm25 alpha"}},
+		{"memory_search", map[string]any{"workspace": "all", "query": "bm25 all"}},
+		{"memory_vsearch", map[string]any{"workspace": "ws-b", "query": "vector beta"}},
+		{"memory_tags", map[string]any{"workspace": "ws-a"}},
+		{"memory_wake_up", map[string]any{"workspace": "ws-b", "limit": float64(5)}},
 	}
 
 	const goroutines = 50
