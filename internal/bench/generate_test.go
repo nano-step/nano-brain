@@ -219,3 +219,68 @@ func TestBenchmarkDataset_JSONRoundtrip(t *testing.T) {
 		t.Errorf("entry query = %q, want %q", decoded.Entries[0].Query, "test query")
 	}
 }
+
+func TestBenchmarkResults_JSONRoundtrip(t *testing.T) {
+	results := BenchmarkResults{
+		Scale:        42,
+		WorkspaceHash: "ws-prod-hash",
+		Timestamp:    "2025-01-15T12:34:56Z",
+		Version:      "v1.2.3",
+
+		// Quality metrics
+		PrecisionAt5: 0.8523,
+		RecallAt10:   0.7142,
+		MRR:          0.6789,
+
+		// Latency percentiles (milliseconds)
+		QueryP50ms: 45.67,
+		QueryP95ms: 234.56,
+
+		// Per-query detail
+		QueryCount: 100,
+	}
+
+	// Marshal to JSON
+	data, err := json.Marshal(results)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	// Unmarshal back
+	var decoded BenchmarkResults
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	// Verify all fields match
+	if decoded.Scale != results.Scale {
+		t.Errorf("scale = %d, want %d", decoded.Scale, results.Scale)
+	}
+	if decoded.WorkspaceHash != results.WorkspaceHash {
+		t.Errorf("workspace_hash = %q, want %q", decoded.WorkspaceHash, results.WorkspaceHash)
+	}
+	if decoded.Timestamp != results.Timestamp {
+		t.Errorf("timestamp = %q, want %q", decoded.Timestamp, results.Timestamp)
+	}
+	if decoded.Version != results.Version {
+		t.Errorf("version = %q, want %q", decoded.Version, results.Version)
+	}
+	if decoded.PrecisionAt5 != results.PrecisionAt5 {
+		t.Errorf("precision_at_5 = %.4f, want %.4f", decoded.PrecisionAt5, results.PrecisionAt5)
+	}
+	if decoded.RecallAt10 != results.RecallAt10 {
+		t.Errorf("recall_at_10 = %.4f, want %.4f", decoded.RecallAt10, results.RecallAt10)
+	}
+	if decoded.MRR != results.MRR {
+		t.Errorf("mrr = %.4f, want %.4f", decoded.MRR, results.MRR)
+	}
+	if decoded.QueryP50ms != results.QueryP50ms {
+		t.Errorf("query_p50_ms = %.2f, want %.2f", decoded.QueryP50ms, results.QueryP50ms)
+	}
+	if decoded.QueryP95ms != results.QueryP95ms {
+		t.Errorf("query_p95_ms = %.2f, want %.2f", decoded.QueryP95ms, results.QueryP95ms)
+	}
+	if decoded.QueryCount != results.QueryCount {
+		t.Errorf("query_count = %d, want %d", decoded.QueryCount, results.QueryCount)
+	}
+}

@@ -20,9 +20,38 @@ import (
 	"github.com/rs/zerolog"
 )
 
+func printBenchHelp() {
+	help := `Usage: nano-brain bench <command> [flags]
+
+Commands:
+  generate   Generate benchmark dataset from workspace documents
+             --scale=N         Number of query-answer pairs to generate (required)
+             --workspace=HASH  Workspace hash to sample from (required)
+             --output=FILE     Output file path (default: stdout)
+             --json            Machine-readable JSON output
+
+  run        Execute search benchmark and measure quality/latency metrics
+             --dataset=FILE    Path to generated dataset JSON (required)
+             --save=FILE       Save results to JSON file
+             --json            Machine-readable JSON output
+
+  compare    Compare two benchmark result files for regression detection
+             <new.json>        Path to new results file
+             <baseline.json>   Path to baseline results file
+             --json            Machine-readable JSON output
+
+  stress     Concurrent write stress test
+             --concurrency=N      Number of concurrent writers (required)
+             --docs-per-writer=M  Documents per writer (default: 10)
+             --workspace=HASH     Workspace hash (required)
+             --json               Machine-readable JSON output
+`
+	fmt.Fprint(os.Stderr, help)
+}
+
 func runBenchCmd(args []string) {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nano-brain bench <generate|run|compare|stress> [flags]")
+	if len(args) == 0 || (len(args) > 0 && (args[0] == "--help" || args[0] == "-h")) {
+		printBenchHelp()
 		os.Exit(1)
 	}
 	switch args[0] {
@@ -35,7 +64,8 @@ func runBenchCmd(args []string) {
 	case "stress":
 		runBenchStress(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "unknown bench subcommand: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "unknown bench subcommand: %s\n\n", args[0])
+		printBenchHelp()
 		os.Exit(1)
 	}
 }
