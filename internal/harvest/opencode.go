@@ -23,7 +23,6 @@ import (
 // ChunkEnqueuer enqueues chunk IDs for embedding.
 type ChunkEnqueuer interface {
 	Enqueue(chunkID uuid.UUID) bool
-	IsPressured() bool
 }
 
 // OpenCodeHarvester ingests OpenCode session files into the document store.
@@ -131,7 +130,7 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 	meta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
 	tags := []string{"opencode", "session"}
 
-	docRow, err := tq.UpsertDocument(ctx, sqlc.UpsertDocumentParams{
+	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: h.workspace,
 		ContentHash:   contentHash,
 		Title:         sess.Title,
@@ -177,7 +176,7 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 		return false, fmt.Errorf("commit tx: %w", err)
 	}
 
-	if enqueuer != nil && !enqueuer.IsPressured() {
+	if enqueuer != nil {
 		for _, id := range chunkIDs {
 			enqueuer.Enqueue(id)
 		}
