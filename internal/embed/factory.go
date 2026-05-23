@@ -2,7 +2,6 @@ package embed
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/nano-brain/nano-brain/internal/config"
 )
@@ -22,9 +21,6 @@ func NewFromConfig(cfg config.EmbeddingConfig) (Embedder, error) {
 
 	case "voyageai":
 		apiKey := cfg.VoyageAPIKey
-		if apiKey == "" {
-			apiKey = os.Getenv("VOYAGE_API_KEY")
-		}
 		model := cfg.Model
 		if model == "" {
 			model = "voyage-3"

@@ -59,7 +59,6 @@ func TestNewFromConfig_VoyageAI(t *testing.T) {
 }
 
 func TestNewFromConfig_VoyageAI_MissingKey(t *testing.T) {
-	t.Setenv("VOYAGE_API_KEY", "")
 	cfg := config.EmbeddingConfig{Provider: "voyageai"}
 	_, err := NewFromConfig(cfg)
 	if err == nil {
