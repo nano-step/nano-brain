@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
@@ -247,12 +247,17 @@ func renderClaudeCodeMarkdown(sessionID string, msgs []claudeCodeMessage) string
 			fmt.Fprintf(&b, "\n## assistant (%s)\n\n", ts)
 			fmt.Fprintf(&b, "Tool: %s\n", msg.ToolName)
 			if len(msg.ToolInput) > 0 && string(msg.ToolInput) != "null" {
-				var inputMap map[string]interface{}
-				if err := json.Unmarshal(msg.ToolInput, &inputMap); err == nil {
-					for k, v := range inputMap {
-						fmt.Fprintf(&b, "%s: %v\n", k, v)
-					}
+			var inputMap map[string]interface{}
+			if err := json.Unmarshal(msg.ToolInput, &inputMap); err == nil {
+				keys := make([]string, 0, len(inputMap))
+				for k := range inputMap {
+					keys = append(keys, k)
 				}
+				sort.Strings(keys)
+				for _, k := range keys {
+					fmt.Fprintf(&b, "%s: %v\n", k, inputMap[k])
+				}
+			}
 			}
 			b.WriteString("\n")
 
@@ -276,7 +281,3 @@ func renderClaudeCodeMarkdown(sessionID string, msgs []claudeCodeMessage) string
 	return b.String()
 }
 
-// parseTimestamp parses a Claude Code timestamp string into a time.Time.
-func parseTimestamp(ts string) (time.Time, error) {
-	return time.Parse(time.RFC3339Nano, ts)
-}

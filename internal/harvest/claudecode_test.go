@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -238,20 +239,20 @@ func TestClaudeCodeHarvestAllSkipsNonJSONL(t *testing.T) {
 	}
 }
 
-func TestParseTimestamp(t *testing.T) {
-	ts, err := parseTimestamp("2026-01-01T10:00:00Z")
-	if err != nil {
-		t.Fatal(err)
+func TestRenderClaudeCodeMarkdownToolUseHashStability(t *testing.T) {
+	msgs := []claudeCodeMessage{
+		{
+			Type:      "tool_use",
+			Timestamp: "2026-01-01T10:00:00Z",
+			ToolName:  "bash",
+			ToolInput: json.RawMessage(`{"command":"ls -la","timeout":30,"cwd":"/tmp"}`),
+		},
 	}
-	if ts.Year() != 2026 || ts.Month() != 1 || ts.Day() != 1 {
-		t.Errorf("unexpected parsed time: %v", ts)
-	}
-
-	ts2, err := parseTimestamp("2026-01-01T10:00:00.123Z")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ts2.Nanosecond() != 123000000 {
-		t.Errorf("expected nanoseconds 123000000, got %d", ts2.Nanosecond())
+	first := renderClaudeCodeMarkdown("test-session", msgs)
+	for i := 0; i < 50; i++ {
+		got := renderClaudeCodeMarkdown("test-session", msgs)
+		if got != first {
+			t.Fatalf("iteration %d: non-deterministic output.\nfirst:\n%s\ngot:\n%s", i, first, got)
+		}
 	}
 }
