@@ -15,5 +15,7 @@ func registerRoutes(s *Server) {
 	api.GET("/workspaces", handlers.ListWorkspaces(s.queries, s.logger))
 
 	data := api.Group("", workspaceMiddleware())
-	_ = data
+	data.POST("/write", handlers.WriteDocument(s.queries, s.db, s.logger, defaultMaxFileSize))
 }
+
+const defaultMaxFileSize int64 = 307200
