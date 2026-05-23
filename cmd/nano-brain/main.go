@@ -6,6 +6,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -137,17 +138,16 @@ func main() {
 		})
 	}
 
+	var hr *harvest.Runner
+	interval := time.Duration(cfg.Intervals.SessionPoll) * time.Second
+
 	if cfg.Harvester.OpenCode.SessionDir != "" {
 		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
 		if err != nil {
 			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode harvester")
 		} else {
 			oh := harvest.NewOpenCodeHarvester(db, logger, cfg.Harvester.OpenCode.SessionDir, wsHash)
-			interval := time.Duration(cfg.Intervals.SessionPoll) * time.Second
-			hr := harvest.NewRunner(oh, eq, interval, logger)
-			g.Go(func() error {
-				return hr.Run(gctx)
-			})
+			hr = harvest.NewRunner(oh, eq, interval, logger)
 			logger.Info().
 				Str("session_dir", cfg.Harvester.OpenCode.SessionDir).
 				Dur("interval", interval).
@@ -155,6 +155,36 @@ func main() {
 		}
 	} else {
 		logger.Info().Msg("opencode session harvester disabled (no session_dir configured)")
+	}
+
+	if cfg.Harvester.ClaudeCode.Enabled {
+		if _, err := os.Stat(cfg.Harvester.ClaudeCode.SessionDir); os.IsNotExist(err) {
+			logger.Warn().
+				Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+				Msg("claude code harvester enabled but session_dir does not exist, skipping")
+		} else {
+			wsHash, err := storage.WorkspaceHash(cfg.Harvester.ClaudeCode.SessionDir)
+			if err != nil {
+				logger.Warn().Err(err).Msg("failed to compute workspace hash for claude code harvester")
+			} else {
+				ch := harvest.NewClaudeCodeHarvester(db, logger, cfg.Harvester.ClaudeCode.SessionDir, wsHash)
+				if hr == nil {
+					hr = harvest.NewRunner(ch, eq, interval, logger)
+				} else {
+					hr.AddHarvester(ch)
+				}
+				logger.Info().
+					Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+					Dur("interval", interval).
+					Msg("claude code session harvester started")
+			}
+		}
+	}
+
+	if hr != nil {
+		g.Go(func() error {
+			return hr.Run(gctx)
+		})
 	}
 
 	g.Go(func() error {
