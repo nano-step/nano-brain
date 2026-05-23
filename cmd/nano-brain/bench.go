@@ -22,7 +22,7 @@ import (
 
 func runBenchCmd(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nano-brain bench <generate|run|compare> [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: nano-brain bench <generate|run|compare|stress> [flags]")
 		os.Exit(1)
 	}
 	switch args[0] {
@@ -32,6 +32,8 @@ func runBenchCmd(args []string) {
 		runBenchRun(args[1:])
 	case "compare":
 		runBenchCompare(args[1:])
+	case "stress":
+		runBenchStress(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown bench subcommand: %s\n", args[0])
 		os.Exit(1)
@@ -344,6 +346,154 @@ func runBenchCompare(args []string) {
 	if !result.Passed {
 		os.Exit(1)
 	}
+}
+
+func runBenchStress(args []string) {
+	args = splitEqualsArgs(args)
+	var workspace string
+	var concurrency, docsPerWriter int
+	var jsonFlag bool
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--concurrency":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "--concurrency requires a value")
+				os.Exit(1)
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 1 {
+				fmt.Fprintln(os.Stderr, "--concurrency must be a positive integer")
+				os.Exit(1)
+			}
+			concurrency = n
+		case "--docs-per-writer":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "--docs-per-writer requires a value")
+				os.Exit(1)
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 1 {
+				fmt.Fprintln(os.Stderr, "--docs-per-writer must be a positive integer")
+				os.Exit(1)
+			}
+			docsPerWriter = n
+		case "--workspace":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "--workspace requires a value")
+				os.Exit(1)
+			}
+			i++
+			workspace = args[i]
+		case "--json":
+			jsonFlag = true
+		default:
+			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
+			os.Exit(1)
+		}
+	}
+
+	if workspace == "" || concurrency == 0 {
+		fmt.Fprintln(os.Stderr, "Usage: nano-brain bench stress --concurrency=N --workspace=HASH [--docs-per-writer=M] [--json]")
+		os.Exit(1)
+	}
+	if docsPerWriter == 0 {
+		docsPerWriter = 10
+	}
+
+	cfg, err := config.Load(config.DefaultConfigPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	db, err := sql.Open("pgx", cfg.Database.URL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	if err := db.PingContext(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to connect to database: %v\n", err)
+		os.Exit(1)
+	}
+
+	queries := sqlc.New(db)
+	adapter := &stressAdapter{q: queries}
+
+	result, err := bench.RunStress(ctx, adapter, bench.StressConfig{
+		Concurrency:   concurrency,
+		DocsPerWriter: docsPerWriter,
+		WorkspaceHash: workspace,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "stress test failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	if jsonFlag {
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to marshal result: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(string(data))
+	} else {
+		fmt.Fprintf(os.Stderr, "Stress Test Results\n")
+		fmt.Fprintf(os.Stderr, "  Concurrency:        %d\n", result.Concurrency)
+		fmt.Fprintf(os.Stderr, "  Docs per writer:    %d\n", result.DocsPerWriter)
+		fmt.Fprintf(os.Stderr, "  Documents written:  %d\n", result.DocumentsWritten)
+		fmt.Fprintf(os.Stderr, "  Documents verified: %d\n", result.DocumentsVerified)
+		fmt.Fprintf(os.Stderr, "  Violations:         %d\n", result.Violations)
+		fmt.Fprintf(os.Stderr, "  Duration:           %.1f ms\n", result.DurationMs)
+		if len(result.Errors) > 0 {
+			fmt.Fprintf(os.Stderr, "  Errors (%d):\n", len(result.Errors))
+			for _, e := range result.Errors {
+				fmt.Fprintf(os.Stderr, "    - %s\n", e)
+			}
+		}
+	}
+
+	if result.Violations > 0 {
+		os.Exit(1)
+	}
+}
+
+type stressAdapter struct {
+	q *sqlc.Queries
+}
+
+func (a *stressAdapter) UpsertDocument(ctx context.Context, arg bench.StressUpsertParams) (bench.StressUpsertRow, error) {
+	row, err := a.q.UpsertDocument(ctx, sqlc.UpsertDocumentParams{
+		WorkspaceHash: arg.WorkspaceHash,
+		ContentHash:   arg.ContentHash,
+		Title:         arg.Title,
+		Content:       arg.Content,
+		SourcePath:    arg.SourcePath,
+		Collection:    arg.Collection,
+		Tags:          arg.Tags,
+		Metadata:      arg.Metadata,
+		SupersedesID:  arg.SupersedesID,
+	})
+	if err != nil {
+		return bench.StressUpsertRow{}, err
+	}
+	return bench.StressUpsertRow{
+		ID:            row.ID,
+		ContentHash:   row.ContentHash,
+		Collection:    row.Collection,
+		WorkspaceHash: row.WorkspaceHash,
+	}, nil
+}
+
+func (a *stressAdapter) CountDocumentsByWorkspace(ctx context.Context, workspaceHash string) (int64, error) {
+	return a.q.CountDocumentsByWorkspace(ctx, workspaceHash)
 }
 
 type sqlcAdapter struct {
