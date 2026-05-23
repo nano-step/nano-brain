@@ -36,6 +36,8 @@ func NewSearchService(queries Querier, embedder Embedder, cfg config.SearchConfi
 }
 
 // UpdateConfig updates the search configuration with thread-safe locking.
+// TODO(story-8.2): validate cfg before accepting — callers must ensure
+// RrfK >= 1, RecencyWeight in [0,1], RecencyHalfLifeDays >= 1, Limit >= 1.
 func (s *SearchService) UpdateConfig(cfg config.SearchConfig) {
 	s.configMutex.Lock()
 	defer s.configMutex.Unlock()

@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -70,7 +71,7 @@ func TestUpdateConfig_ChangesAppliedToSubsequentSearches(t *testing.T) {
 	service.configMutex.RUnlock()
 }
 
-func TestUpdateConfig_ThreadSafe(t *testing.T) {
+func TestUpdateConfig_ConcurrentReadersAndWriters(t *testing.T) {
 	logger := zerolog.Nop()
 	initialCfg := config.SearchConfig{
 		RrfK:                60,
@@ -80,20 +81,40 @@ func TestUpdateConfig_ThreadSafe(t *testing.T) {
 	}
 
 	service := NewSearchService(&mockQuerier{}, &mockEmbedder{}, initialCfg, logger)
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	errors := make(chan error, 20)
 
 	for i := 0; i < 10; i++ {
-		newCfg := config.SearchConfig{
-			RrfK:                float64(50 + i),
-			RecencyWeight:       0.3,
-			RecencyHalfLifeDays: 180,
-			Limit:               20,
-		}
-		service.UpdateConfig(newCfg)
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			newCfg := config.SearchConfig{
+				RrfK:                float64(50 + idx),
+				RecencyWeight:       0.3,
+				RecencyHalfLifeDays: 180,
+				Limit:               20,
+			}
+			service.UpdateConfig(newCfg)
+		}(i)
 	}
 
-	service.configMutex.RLock()
-	defer service.configMutex.RUnlock()
-	if service.config.RrfK != 59 {
-		t.Errorf("final RrfK should be 59, got %v", service.config.RrfK)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := service.HybridSearch(ctx, "test", "workspace", 10)
+			if err != nil {
+				errors <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		t.Errorf("concurrent operation failed: %v", err)
 	}
 }
