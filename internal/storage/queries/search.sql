@@ -7,7 +7,7 @@ FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = sqlc.arg(workspace_hash)
   AND c.search_vector @@ websearch_to_tsquery('english', sqlc.arg(query)::text)
-ORDER BY score DESC
+ORDER BY score DESC, c.id ASC
 LIMIT sqlc.arg(max_results);
 
 -- name: BM25SearchWithTags :many
@@ -20,5 +20,5 @@ JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = sqlc.arg(workspace_hash)
   AND c.search_vector @@ websearch_to_tsquery('english', sqlc.arg(query)::text)
   AND d.tags && sqlc.arg(tags)::text[]
-ORDER BY score DESC
+ORDER BY score DESC, c.id ASC
 LIMIT sqlc.arg(max_results);

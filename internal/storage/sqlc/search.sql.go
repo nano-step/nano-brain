@@ -23,7 +23,7 @@ FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = $2
   AND c.search_vector @@ websearch_to_tsquery('english', $1::text)
-ORDER BY score DESC
+ORDER BY score DESC, c.id ASC
 LIMIT $3
 `
 
@@ -96,7 +96,7 @@ JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = $2
   AND c.search_vector @@ websearch_to_tsquery('english', $1::text)
   AND d.tags && $3::text[]
-ORDER BY score DESC
+ORDER BY score DESC, c.id ASC
 LIMIT $4
 `
 
