@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: nanobrain-pg
+    environment:
+      POSTGRES_USER: nanobrain
+      POSTGRES_PASSWORD: nanobrain
+      POSTGRES_DB: nanobrain_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - nanobrain-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nanobrain -d nanobrain_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nanobrain-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - nanobrain-ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  nano-brain:
+    build: .
+    container_name: nanobrain
+    ports:
+      - "3100:3100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      NANO_BRAIN_SERVER_HOST: "0.0.0.0"
+      NANO_BRAIN_DATABASE_URL: "postgres://nanobrain:nanobrain@postgres:5432/nanobrain_dev"
+      NANO_BRAIN_EMBEDDING_URL: "http://ollama:11434"
+      NANO_BRAIN_EMBEDDING_PROVIDER: ollama
+      NANO_BRAIN_EMBEDDING_MODEL: nomic-embed-text
+    restart: unless-stopped
+
+volumes:
+  nanobrain-pgdata:
+  nanobrain-ollama:
