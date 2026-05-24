@@ -1,15 +1,1 @@
-name: Publish Stable
-
-on:
-  push:
-    branches: [master]
-
-jobs:
-  publish:
-    uses: kokorolx/shared-workflows/.github/workflows/publish-stable.yml@v1
-    with:
-      package-name: "nano-brain"
-      build-command: "npm run build:web"
-      changelog-insert-marker: "---"
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+# Removed: v1 npm workflow. See ci.yml for v2 Go CI.
