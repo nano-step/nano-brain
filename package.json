@@ -1,6 +1,6 @@
 {
   "name": "nano-brain",
-  "version": "2.0.0-beta.4",
+  "version": "2.0.0-beta.5",
   "description": "Persistent memory and code intelligence for AI coding agents",
   "bin": {
     "nano-brain": "npm/run.js"
