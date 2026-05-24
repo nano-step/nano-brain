@@ -62,7 +62,7 @@ async function main() {
 
   if (fs.existsSync(binPath)) {
     try {
-      const output = execSync(`"${binPath}" status --json`, { timeout: 5000 }).toString();
+      const output = execSync(`"${binPath}" version --json`, { timeout: 5000 }).toString();
       if (output.includes(VERSION)) {
         console.log(`nano-brain v${VERSION} already installed.`);
         return;
