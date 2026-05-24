@@ -21,3 +21,5 @@ _bmad/config.user.yaml
 *.test
 *.out
 bin/
+npm/nano-brain
+npm/nano-brain.exe

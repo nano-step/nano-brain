@@ -1,0 +1,19 @@
+{
+  "name": "nano-brain",
+  "version": "2.0.0",
+  "description": "Persistent memory and code intelligence for AI coding agents",
+  "bin": {
+    "nano-brain": "npm/run.js"
+  },
+  "scripts": {
+    "postinstall": "node npm/postinstall.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nano-step/nano-brain.git"
+  },
+  "keywords": ["ai", "memory", "mcp", "coding-agent", "search", "pgvector"],
+  "author": "nano-step",
+  "license": "MIT",
+  "files": ["npm/", "README.md", "LICENSE"]
+}
