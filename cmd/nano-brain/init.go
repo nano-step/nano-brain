@@ -1,0 +1,131 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/nano-brain/nano-brain/internal/config"
+)
+
+func runInteractiveInit(configPath string) {
+	if configPath == "" {
+		configPath = config.DefaultConfigPath()
+	}
+
+	dbURL := "postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev"
+	provider := "ollama"
+	embURL := "http://localhost:11434"
+	model := "nomic-embed-text"
+	port := 3100
+
+	if cfg, err := config.Load(configPath); err == nil {
+		if cfg.Database.URL != "" {
+			dbURL = cfg.Database.URL
+		}
+		if cfg.Embedding.Provider != "" {
+			provider = cfg.Embedding.Provider
+		}
+		if cfg.Embedding.URL != "" {
+			embURL = cfg.Embedding.URL
+		}
+		if cfg.Embedding.Model != "" {
+			model = cfg.Embedding.Model
+		}
+		if cfg.Server.Port > 0 {
+			port = cfg.Server.Port
+		}
+	}
+
+	fmt.Print("\nnano-brain setup\n────────────────\n\n")
+
+	scanner := bufio.NewScanner(os.Stdin)
+
+	dbURL = promptWithDefault(scanner, "PostgreSQL URL", dbURL)
+	provider = promptWithDefault(scanner, "Embedding provider (ollama/voyage)", provider)
+
+	voyageKey := ""
+	if provider == "voyage" {
+		model = promptWithDefault(scanner, "Embedding model", "voyage-3")
+		envKey := os.Getenv("VOYAGE_API_KEY")
+		def := ""
+		if envKey != "" {
+			def = "(from env)"
+		}
+		voyageKey = promptWithDefault(scanner, "Voyage API key", def)
+		if voyageKey == def {
+			voyageKey = ""
+		}
+	} else {
+		embURL = promptWithDefault(scanner, "Ollama URL", embURL)
+		model = promptWithDefault(scanner, "Embedding model", model)
+	}
+
+	portStr := promptWithDefault(scanner, "Server port", strconv.Itoa(port))
+	p, err := strconv.Atoi(portStr)
+	if err != nil || p < 1 || p > 65535 {
+		fmt.Fprintf(os.Stderr, "Invalid port: %s\n", portStr)
+		os.Exit(1)
+	}
+	port = p
+
+	var embBlock string
+	if provider == "voyage" {
+		embBlock = fmt.Sprintf("embedding:\n  provider: voyage\n  model: %s\n  concurrency: 3\n", model)
+	} else {
+		embBlock = fmt.Sprintf("embedding:\n  provider: %s\n  url: %s\n  model: %s\n  concurrency: 3\n", provider, embURL, model)
+	}
+
+	yaml := fmt.Sprintf(`server:
+  host: localhost
+  port: %d
+
+database:
+  url: %s
+
+%s
+search:
+  rrf_k: 60
+  recency_weight: 0.3
+  recency_half_life_days: 180
+  limit: 20
+
+watcher:
+  debounce_ms: 2000
+  reindex_interval: 300
+
+logging:
+  level: info
+`, port, dbURL, embBlock)
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create config directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.WriteFile(configPath, []byte(yaml), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to write config: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\nConfig written to %s\n\n", configPath)
+
+	runDoctorCmd([]string{}, configPath)
+}
+
+func promptWithDefault(scanner *bufio.Scanner, prompt, defaultVal string) string {
+	if defaultVal != "" {
+		fmt.Printf("  %s [%s]: ", prompt, defaultVal)
+	} else {
+		fmt.Printf("  %s: ", prompt)
+	}
+	scanner.Scan()
+	input := strings.TrimSpace(scanner.Text())
+	if input == "" {
+		return defaultVal
+	}
+	return input
+}

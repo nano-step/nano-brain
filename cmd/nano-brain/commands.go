@@ -8,7 +8,19 @@ import (
 	"strings"
 )
 
-func runInitCmd(args []string) {
+func runInitCmd(args []string, configPath string) {
+	hasRoot := false
+	for _, a := range args {
+		if a == "--root" {
+			hasRoot = true
+			break
+		}
+	}
+	if !hasRoot {
+		runInteractiveInit(configPath)
+		return
+	}
+
 	var root, workspace string
 	var jsonFlag bool
 	for i := 0; i < len(args); i++ {
@@ -33,10 +45,6 @@ func runInitCmd(args []string) {
 			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
 			os.Exit(1)
 		}
-	}
-	if root == "" {
-		fmt.Fprintln(os.Stderr, "Usage: nano-brain init --root <path> [--workspace <hash>] [--json]")
-		os.Exit(1)
 	}
 
 	body := map[string]string{"root_path": root}

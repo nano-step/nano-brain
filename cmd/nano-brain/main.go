@@ -36,7 +36,7 @@ func main() {
 			runCollectionCmd(args[1:])
 			return
 		case "init":
-			runInitCmd(args[1:])
+			runInitCmd(args[1:], configPath)
 			return
 		case "write":
 			runWriteCmd(args[1:])
