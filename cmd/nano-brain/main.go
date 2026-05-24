@@ -28,11 +28,29 @@ var Version = "dev"
 
 func main() {
 	var configPath string
+	var daemonChild bool
 	flag.StringVar(&configPath, "config", "", "path to config file (default: ~/.nano-brain/config.yml)")
+	flag.BoolVar(&daemonChild, "daemon-child", false, "")
 	flag.Parse()
+
+	// Hidden --daemon-child flag: run server directly (called by serve -d)
+	if daemonChild {
+		defer os.Remove(pidFilePath())
+		startServer(configPath)
+		return
+	}
 
 	if args := flag.Args(); len(args) > 0 {
 		switch args[0] {
+		case "serve":
+			runServeCmd(args[1:], configPath)
+			return
+		case "stop":
+			runStopCmd()
+			return
+		case "restart":
+			runRestartCmd(args[1:], configPath)
+			return
 		case "collection":
 			runCollectionCmd(args[1:])
 			return
@@ -88,6 +106,12 @@ func main() {
 		}
 	}
 
+	// No args: start server foreground (backward compat)
+	startServer(configPath)
+}
+
+// startServer runs the nano-brain HTTP server (blocking).
+func startServer(configPath string) {
 	if configPath == "" {
 		configPath = config.DefaultConfigPath()
 	}

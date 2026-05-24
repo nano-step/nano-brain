@@ -534,7 +534,11 @@ func printUsage() {
 Usage: nano-brain [command] [flags]
 
 Commands:
-  (no command)       Start the server
+  (no command)       Start the server (foreground)
+  serve              Start the server (foreground)
+  serve -d           Start the server (background/daemon)
+  stop               Stop background server
+  restart            Restart background server
   init               Interactive setup wizard (or --root <path> to register workspace)
   doctor             Check prerequisites (PostgreSQL, pgvector, embedding provider)
   status             Show server status
