@@ -528,6 +528,37 @@ func runGooseMigrateCmd(jsonFlag bool) {
 	}
 }
 
+func printUsage() {
+	fmt.Printf(`nano-brain %s — persistent memory for AI coding agents
+
+Usage: nano-brain [command] [flags]
+
+Commands:
+  (no command)       Start the server
+  init               Interactive setup wizard (or --root <path> to register workspace)
+  doctor             Check prerequisites (PostgreSQL, pgvector, embedding provider)
+  status             Show server status
+  version            Show version
+  config show        Show current configuration
+  config check       Validate configuration
+  query              Hybrid search (BM25 + vector)
+  search             BM25 keyword search
+  vsearch            Vector similarity search
+  write              Write a document
+  collection         Manage collections (add/remove/list)
+  harvest            Trigger session harvesting
+  logs               View log file (-f to follow, -n <count>)
+  docker             Manage Docker Compose (start/stop/status)
+  db:migrate         Run database migrations
+  bench              Benchmarking suite (generate/run/compare/stress)
+  help               Show this help
+
+Global flags:
+  --config <path>    Config file path (default: ~/.nano-brain/config.yml)
+
+`, Version)
+}
+
 func runVersionCmd(args []string) {
 	jsonFlag := false
 	for _, a := range args {

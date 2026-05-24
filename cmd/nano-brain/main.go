@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -74,6 +75,13 @@ func main() {
 		case "version":
 			runVersionCmd(args[1:])
 			return
+		case "help":
+			printUsage()
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", args[0])
+			printUsage()
+			os.Exit(1)
 		}
 	}
 
