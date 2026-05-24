@@ -3,13 +3,25 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
 )
+
+func detectOllama(url string) bool {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == 200
+}
 
 func runInteractiveInit(configPath string) {
 	if configPath == "" {
@@ -44,6 +56,16 @@ func runInteractiveInit(configPath string) {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
+	if _, err := os.Stat(configPath); err == nil {
+		fmt.Printf("  Config exists at %s\n", configPath)
+		answer := promptWithDefault(scanner, "Overwrite?", "Y")
+		if answer == "n" || answer == "N" {
+			fmt.Println("Aborted.")
+			return
+		}
+		fmt.Println()
+	}
+
 	dbURL = promptWithDefault(scanner, "PostgreSQL URL", dbURL)
 	provider = promptWithDefault(scanner, "Embedding provider (ollama/voyage)", provider)
 
@@ -60,7 +82,11 @@ func runInteractiveInit(configPath string) {
 			voyageKey = ""
 		}
 	} else {
-		embURL = promptWithDefault(scanner, "Ollama URL", embURL)
+		if detectOllama(embURL) {
+			fmt.Printf("  Ollama detected at %s\n", embURL)
+		} else {
+			embURL = promptWithDefault(scanner, "Ollama URL", embURL)
+		}
 		model = promptWithDefault(scanner, "Embedding model", model)
 	}
 
@@ -101,6 +127,16 @@ logging:
   level: info
 `, port, dbURL, embBlock)
 
+	fmt.Println("\n── Config preview ──────────────")
+	fmt.Print(yaml)
+	fmt.Println("────────────────────────────────")
+
+	answer := promptWithDefault(scanner, "Save this config?", "Y")
+	if answer == "n" || answer == "N" {
+		fmt.Println("Aborted.")
+		return
+	}
+
 	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create config directory: %v\n", err)
 		os.Exit(1)
@@ -114,6 +150,13 @@ logging:
 	fmt.Printf("\nConfig written to %s\n\n", configPath)
 
 	runDoctorCmd([]string{}, configPath)
+
+	cwd, _ := os.Getwd()
+	wsDir := promptWithDefault(scanner, "Register workspace directory?", cwd)
+	if wsDir != "" {
+		fmt.Printf("\nTo register this workspace, start the server and run:\n")
+		fmt.Printf("  nano-brain init --root %s\n\n", wsDir)
+	}
 }
 
 func promptWithDefault(scanner *bufio.Scanner, prompt, defaultVal string) string {
