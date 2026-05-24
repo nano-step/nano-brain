@@ -71,6 +71,9 @@ func main() {
 		case "doctor":
 			runDoctorCmd(args[1:], configPath)
 			return
+		case "version":
+			runVersionCmd(args[1:])
+			return
 		}
 	}
 

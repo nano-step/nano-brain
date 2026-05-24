@@ -527,3 +527,18 @@ func runGooseMigrateCmd(jsonFlag bool) {
 		}
 	}
 }
+
+func runVersionCmd(args []string) {
+	jsonFlag := false
+	for _, a := range args {
+		if a == "--json" {
+			jsonFlag = true
+		}
+	}
+	if jsonFlag {
+		j, _ := json.Marshal(map[string]string{"version": Version})
+		fmt.Println(string(j))
+		return
+	}
+	fmt.Printf("nano-brain %s\n", Version)
+}
