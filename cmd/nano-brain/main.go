@@ -69,6 +69,9 @@ func main() {
 		case "status":
 			runStatusCmd(args[1:])
 			return
+		case "config":
+			runConfigCmd(args[1:], configPath)
+			return
 		case "doctor":
 			runDoctorCmd(args[1:], configPath)
 			return
