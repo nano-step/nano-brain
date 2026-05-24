@@ -144,6 +144,10 @@ func main() {
 				continue
 			}
 			for _, col := range collections {
+				if _, statErr := os.Stat(col.Path); os.IsNotExist(statErr) {
+					logger.Debug().Str("collection", col.Name).Str("path", col.Path).Msg("skipping watch — path does not exist")
+					continue
+				}
 				if watchErr := fw.Watch(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern); watchErr != nil {
 					logger.Warn().Err(watchErr).Str("collection", col.Name).Msg("failed to watch collection")
 				}
