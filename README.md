@@ -32,6 +32,28 @@ nano-brain is a persistent memory server for AI coding agents that solves sessio
 
 ## Quick Start
 
+### Option A: Via npx (no Go required)
+
+```bash
+# Start PostgreSQL + pgvector
+docker run -d --name nanobrain-pg -p 5432:5432 \
+  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
+  pgvector/pgvector:pg17
+
+# Start Ollama + pull embedding model
+ollama pull nomic-embed-text
+
+# Check prerequisites
+npx nano-brain@beta doctor
+
+# Start server
+npx nano-brain@beta
+```
+
+> **Note:** Do NOT run `npx nano-brain` from the nano-brain source directory — npm will resolve the local package instead of the registry. Run from any other directory.
+
+### Option B: Build from source
+
 ```bash
 # Build
 CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain
@@ -176,6 +198,7 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | `nano-brain logs [-n 50] [-f]` | Tail log file |
 | `nano-brain docker start\|stop\|status` | Docker compose management |
 | `nano-brain status [--json]` | Server status |
+| `nano-brain doctor [--json]` | Check prerequisites (config, PostgreSQL, pgvector, Ollama, model) |
 
 ## MCP Tools
 

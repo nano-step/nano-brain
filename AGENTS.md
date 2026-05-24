@@ -54,6 +54,13 @@ curl -s localhost:3100/api/write -d '{"content":"## Summary\n- Decision: ...\n- 
 - Inside containers: use HTTP API (`curl localhost:3100/api/*`) for memory operations
 - MCP tools access the server via remote proxy at `http://host.docker.internal:3100/mcp`
 
+## ⚠️ npx nano-brain — Known Caveats
+
+- **NEVER run `npx nano-brain` from the nano-brain source directory.** npm resolves the local `package.json` (name: `nano-brain`) instead of the registry package, causing binary-not-found errors or running stale source code.
+- Always run `npx nano-brain` from a **different directory** (e.g., your project root, `/tmp`, home dir).
+- The npm package downloads a pre-built Go binary from GitHub Releases — no Go toolchain required on the host.
+- Supported platforms: `darwin-arm64`, `darwin-amd64`, `linux-arm64`, `linux-amd64`.
+
 
 
 
