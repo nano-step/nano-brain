@@ -58,6 +58,11 @@ func runServeCmd(args []string, configPath string) {
 }
 
 func runServeDaemon(configPath string) {
+	if err := guardBeforeStart(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
+
 	if pid, err := readPID(); err == nil && isRunning(pid) {
 		fmt.Fprintf(os.Stderr, "nano-brain is already running (PID: %d)\n", pid)
 		os.Exit(1)
