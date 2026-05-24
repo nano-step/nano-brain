@@ -112,6 +112,11 @@ func main() {
 
 // startServer runs the nano-brain HTTP server (blocking).
 func startServer(configPath string) {
+	if err := guardBeforeStart(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
+
 	if configPath == "" {
 		configPath = config.DefaultConfigPath()
 	}
