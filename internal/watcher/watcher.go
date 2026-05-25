@@ -278,6 +278,10 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		return
 	}
 
+	if info.IsDir() {
+		return
+	}
+
 	if info.Size() > w.maxFileSize {
 		w.logger.Warn().
 			Str("file", filePath).
