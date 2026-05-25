@@ -100,8 +100,12 @@ func triggerInitBackground(workspaceHash, root string) {
 		cliLog.Warn().Err(err).Str("workspace", workspaceHash).Msg("auto reindex trigger failed")
 	}
 
-	if _, _, err := doRequest("POST", getBaseURL()+"/api/harvest", nil); err != nil {
-		cliLog.Warn().Err(err).Msg("auto harvest trigger failed")
+	if _, status, err := doRequest("POST", getBaseURL()+"/api/harvest", nil); err != nil {
+		if status == 503 {
+			cliLog.Info().Msg("harvest skipped: no session harvester configured")
+		} else {
+			cliLog.Warn().Err(err).Msg("auto harvest trigger failed")
+		}
 	}
 
 	fmt.Println()
