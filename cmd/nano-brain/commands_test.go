@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -426,5 +428,207 @@ func TestWaitForServerHealthy_UnreachableHost(t *testing.T) {
 	}
 	if time.Since(start) < 400*time.Millisecond {
 		t.Errorf("returned too early")
+	}
+}
+
+func TestPromptStartServer(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"empty input (Enter)", "\n", true},
+		{"capital Y", "Y\n", true},
+		{"lowercase y", "y\n", true},
+		{"yes-with-trailing-text", "yes\n", true},
+		{"capital N", "N\n", false},
+		{"lowercase n", "n\n", false},
+		{"no", "no\n", false},
+		{"garbage", "abort\n", false},
+		{"whitespace only", "   \n", true},
+		{"eof", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := bytes.NewBufferString(tc.input)
+			writer := &bytes.Buffer{}
+			got := promptStartServer(reader, writer)
+			if got != tc.want {
+				t.Errorf("promptStartServer(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+			if !strings.Contains(writer.String(), "Start server now? [Y/n]:") {
+				t.Errorf("expected prompt text in output, got %q", writer.String())
+			}
+		})
+	}
+}
+
+func withRecoveryHooks(t *testing.T, isTTYReturn bool, accept bool, daemon func()) {
+	t.Helper()
+	origIsTTY := isTTYFn
+	origReader := promptReader
+	origWriter := promptWriter
+	origDaemon := runServeDaemonFn
+
+	isTTYFn = func() bool { return isTTYReturn }
+	if accept {
+		promptReader = bytes.NewBufferString("Y\n")
+	} else {
+		promptReader = bytes.NewBufferString("n\n")
+	}
+	promptWriter = &bytes.Buffer{}
+	if daemon == nil {
+		daemon = func() {}
+	}
+	runServeDaemonFn = func(string) { daemon() }
+
+	t.Cleanup(func() {
+		isTTYFn = origIsTTY
+		promptReader = origReader
+		promptWriter = origWriter
+		runServeDaemonFn = origDaemon
+	})
+}
+
+func TestDoRequest_ConnectionRefused_NoTTY_NoPrompt(t *testing.T) {
+	t.Setenv("NANO_BRAIN_HOST", "127.0.0.1")
+	t.Setenv("NANO_BRAIN_PORT", "19997")
+	t.Setenv("NANO_BRAIN_NO_AUTO_START", "")
+
+	daemonCalled := false
+	withRecoveryHooks(t, false, true, func() { daemonCalled = true })
+
+	_, _, err := doRequest("GET", "http://127.0.0.1:19997/test", nil)
+	if err == nil {
+		t.Fatal("expected connection refused error")
+	}
+	if daemonCalled {
+		t.Error("daemon should NOT be called when TTY is false")
+	}
+}
+
+func TestDoRequest_ConnectionRefused_NoAutoStartEnv(t *testing.T) {
+	t.Setenv("NANO_BRAIN_HOST", "127.0.0.1")
+	t.Setenv("NANO_BRAIN_PORT", "19996")
+	t.Setenv("NANO_BRAIN_NO_AUTO_START", "1")
+
+	daemonCalled := false
+	withRecoveryHooks(t, true, true, func() { daemonCalled = true })
+
+	_, _, err := doRequest("GET", "http://127.0.0.1:19996/test", nil)
+	if err == nil {
+		t.Fatal("expected connection refused error")
+	}
+	if daemonCalled {
+		t.Error("daemon should NOT be called when NANO_BRAIN_NO_AUTO_START=1")
+	}
+}
+
+func TestDoRequest_ConnectionRefused_UserDeclines(t *testing.T) {
+	t.Setenv("NANO_BRAIN_HOST", "127.0.0.1")
+	t.Setenv("NANO_BRAIN_PORT", "19995")
+	t.Setenv("NANO_BRAIN_NO_AUTO_START", "")
+
+	daemonCalled := false
+	withRecoveryHooks(t, true, false, func() { daemonCalled = true })
+
+	_, _, err := doRequest("GET", "http://127.0.0.1:19995/test", nil)
+	if err == nil {
+		t.Fatal("expected connection refused error")
+	}
+	if daemonCalled {
+		t.Error("daemon should NOT be called when user declines")
+	}
+}
+
+func TestDoRequest_ConnectionRefused_UserAcceptsTriggersRecovery(t *testing.T) {
+	t.Setenv("NANO_BRAIN_NO_AUTO_START", "")
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/status" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+	pointHTTPClientAt(t, ts)
+
+	bad := "http://127.0.0.1:19994/test"
+
+	daemonCalled := false
+	withRecoveryHooks(t, true, true, func() {
+		daemonCalled = true
+	})
+
+	_, _, err := doRequest("GET", bad, nil)
+	if err == nil {
+		t.Fatal("expected retry to fail since original URL is still unreachable")
+	}
+	if !daemonCalled {
+		t.Error("daemon should have been called after user accepted")
+	}
+	if !strings.Contains(err.Error(), "after auto-start") && !strings.Contains(err.Error(), "request failed") {
+		t.Errorf("expected retry-stage error, got %q", err.Error())
+	}
+}
+
+func TestDoRequest_RetrySucceeds_HappyPath(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/status" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"retried":true}`))
+	}))
+	defer ts.Close()
+	pointHTTPClientAt(t, ts)
+
+	target := ts.URL + "/api/v1/echo"
+
+	daemonCalled := false
+	withRecoveryHooks(t, true, true, func() { daemonCalled = true })
+
+	t.Setenv("NANO_BRAIN_NO_AUTO_START", "")
+	data, status, err := doRequest("GET", target, nil)
+	if err != nil {
+		t.Fatalf("happy path doRequest error = %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("status = %d", status)
+	}
+	if !strings.Contains(string(data), "retried") {
+		t.Errorf("body = %q", data)
+	}
+	if daemonCalled {
+		t.Error("daemon should NOT be called when server is reachable")
+	}
+}
+
+func TestDoRequest_BodyBufferedForReplay(t *testing.T) {
+	var bodies []string
+	var mu sync.Mutex
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, string(b))
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{}`))
+	}))
+	defer ts.Close()
+	pointHTTPClientAt(t, ts)
+
+	body := bytes.NewReader([]byte(`{"hello":"world"}`))
+	_, _, err := doRequest("POST", ts.URL+"/test", body)
+	if err != nil {
+		t.Fatalf("happy path failed: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(bodies) != 1 || bodies[0] != `{"hello":"world"}` {
+		t.Errorf("expected body forwarded once intact, got %v", bodies)
 	}
 }

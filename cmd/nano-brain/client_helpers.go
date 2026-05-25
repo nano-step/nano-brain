@@ -1,13 +1,36 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
 const healthPollInterval = 200 * time.Millisecond
+
+// promptStartServer writes the Y/n prompt to writer, reads a single line
+// from reader, and returns true on "Y", "y", or empty input (whitespace
+// trimmed). Any other response, or a read error, returns false.
+func promptStartServer(reader io.Reader, writer io.Writer) bool {
+	fmt.Fprint(writer, "Start server now? [Y/n]: ")
+	scanner := bufio.NewScanner(reader)
+	if !scanner.Scan() {
+		return false
+	}
+	answer := strings.TrimSpace(scanner.Text())
+	if answer == "" {
+		return true
+	}
+	switch answer[0] {
+	case 'Y', 'y':
+		return true
+	}
+	return false
+}
 
 // isTTY reports whether BOTH os.Stdin and os.Stderr are connected to a
 // character device (terminal). Stdlib-only: uses os.ModeCharDevice from
