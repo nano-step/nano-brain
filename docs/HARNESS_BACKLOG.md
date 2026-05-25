@@ -77,7 +77,7 @@ Tiny
 
 ### Status
 
-proposed
+implemented — added `self-review:response-shape` and `self-review:staged-files` to validation ladder in HARNESS.md.
 
 ---
 
@@ -113,7 +113,7 @@ Tiny
 
 ### Status
 
-proposed
+implemented — added `self-review:staged-files` gate to validation ladder in HARNESS.md. `.gitignore` already updated in commit `afb0d2f`.
 
 ---
 
@@ -152,4 +152,4 @@ Tiny
 
 ### Status
 
-proposed
+implemented — added Forbidden Practice #14 to HARNESS.md. Constructor error logging already applied in `main.go` commit `afb0d2f`.
