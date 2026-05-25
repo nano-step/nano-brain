@@ -930,16 +930,26 @@ func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 
 			type symbolResult struct {
 				Name       string `json:"name"`
+				Kind       string `json:"kind,omitempty"`
+				Language   string `json:"language,omitempty"`
+				Signature  string `json:"signature,omitempty"`
 				SourcePath string `json:"source_path"`
-				Metadata   any    `json:"metadata,omitempty"`
 			}
 			results := make([]symbolResult, 0, len(rows))
 			for _, r := range rows {
-				results = append(results, symbolResult{
+				item := symbolResult{
 					Name:       r.Title,
 					SourcePath: r.SourcePath,
-					Metadata:   r.Metadata,
-				})
+				}
+				if r.Metadata.Valid {
+					var meta map[string]string
+					if err := json.Unmarshal(r.Metadata.RawMessage, &meta); err == nil {
+						item.Kind = meta["kind"]
+						item.Language = meta["language"]
+						item.Signature = meta["signature"]
+					}
+				}
+				results = append(results, item)
 			}
 			return textResult(map[string]any{
 				"symbols": results,
