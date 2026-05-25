@@ -2,7 +2,7 @@
 
 ## Phase 1 — detectOpenCodeStorageDir function
 
-- [ ] **1.1** Create `cmd/nano-brain/detect.go` with `detectOpenCodeStorageDir() string`:
+- [x] **1.1** Create `cmd/nano-brain/detect.go` with `detectOpenCodeStorageDir() string`:
   ```go
   func detectOpenCodeStorageDir() string {
       // 1. OPENCODE_STORAGE_DIR env var
@@ -27,7 +27,7 @@
   ```
   Use only stdlib: `os`, `path/filepath`, `runtime`.
 
-- [ ] **1.2** Create `cmd/nano-brain/detect_test.go` with 7 table-driven tests:
+- [x] **1.2** Create `cmd/nano-brain/detect_test.go` with 7 table-driven tests:
   - `TestDetectOpenCodeStorageDir_EnvVar` — `t.Setenv("OPENCODE_STORAGE_DIR", tmpDir)` → returns tmpDir
   - `TestDetectOpenCodeStorageDir_EnvVarMissing` — env set but path absent → skips, tries platform
   - `TestDetectOpenCodeStorageDir_XDGDataHome` — `t.Setenv("XDG_DATA_HOME", tmpDir)` + create `opencode/storage` inside → returns path (test platform-path logic directly, not just on Linux GOOS)
@@ -40,7 +40,7 @@
 
 ## Phase 2 — Server startup auto-detect
 
-- [ ] **2.1** In `cmd/nano-brain/main.go`, find the harvester `if` block (around line 212). Add before it:
+- [x] **2.1** In `cmd/nano-brain/main.go`, find the harvester `if` block (around line 212). Add before it:
   ```go
   if cfg.Harvester.OpenCode.SessionDir == "" {
       if detected := detectOpenCodeStorageDir(); detected != "" {
@@ -53,7 +53,7 @@
 
 ## Phase 3 — Init wizard harvester prompt
 
-- [ ] **3.1** In `cmd/nano-brain/init.go`, after the workspace-registration prompt block (after line 159), add:
+- [x] **3.1** In `cmd/nano-brain/init.go`, after the workspace-registration prompt block (after line 159), add:
   ```go
   var sessionDir string
   if detected := detectOpenCodeStorageDir(); detected != "" {
@@ -64,7 +64,7 @@
       }
   }
   ```
-- [ ] **3.2** In the same file, update the YAML template string to conditionally include `harvester:` block:
+- [x] **3.2** In the same file, update the YAML template string to conditionally include `harvester:` block:
   ```go
   var harvesterBlock string
   if sessionDir != "" {
@@ -77,15 +77,15 @@
 
 ## Phase 4 — Validation ladder
 
-- [ ] **4.1** `CGO_ENABLED=0 go build ./...` → success
-- [ ] **4.2** `go vet ./cmd/nano-brain/...` → clean
-- [ ] **4.3** `go test -race -short ./cmd/nano-brain/...` → all pass (including 7 new detect tests)
-- [ ] **4.4** `go test -race -short ./...` → all packages pass
+- [x] **4.1** `CGO_ENABLED=0 go build ./...` → success
+- [x] **4.2** `go vet ./cmd/nano-brain/...` → clean
+- [x] **4.3** `go test -race -short ./cmd/nano-brain/...` → all pass (including 7 new detect tests)
+- [x] **4.4** `go test -race -short ./...` → all packages pass
 
 ## Phase 5 — Evidence + tasks complete
 
-- [ ] **5.1** Write `docs/evidence/harvester-autodetect.md` with smoke transcript or note.
-- [ ] **5.2** Mark all `[ ]` → `[x]` in this file.
+- [x] **5.1** Write `docs/evidence/harvester-autodetect.md` with smoke transcript or note.
+- [x] **5.2** Mark all `[ ]` → `[x]` in this file.
 
 ## Phase 6 — PR (orchestrator)
 
