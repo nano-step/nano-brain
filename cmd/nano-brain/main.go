@@ -19,6 +19,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/server"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog"
@@ -204,7 +205,13 @@ func startServer(configPath string) {
 	db := stdlib.OpenDBFromPool(pool)
 	queries := sqlc.New(db)
 
-	fw := watcher.New(db, queries, logger, *cfg)
+	goE, _ := symbol.NewGoExtractor()
+	tsE, _ := symbol.NewTypeScriptExtractor()
+	pyE, _ := symbol.NewPythonExtractor()
+	jsE, _ := symbol.NewJavaScriptExtractor()
+	symRegistry := symbol.NewRegistry(goE, tsE, pyE, jsE)
+
+	fw := watcher.New(db, queries, logger, *cfg).WithSymbolRegistry(symRegistry)
 
 	var eq *embed.Queue
 	var embedder embed.Embedder

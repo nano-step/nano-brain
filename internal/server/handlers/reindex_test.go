@@ -37,6 +37,10 @@ func (m *mockReindexQuerier) ListCollections(_ context.Context, _ string) ([]sql
 	return []sqlc.Collection{{Name: "code", Path: "/tmp/code"}}, nil
 }
 
+func (m *mockReindexQuerier) DeleteSymbolDocumentsByCollection(_ context.Context, _ sqlc.DeleteSymbolDocumentsByCollectionParams) error {
+	return nil
+}
+
 func newTestWatcherForHandler() *watcher.Watcher {
 	cfg := config.Config{
 		Watcher: config.WatcherConfig{DebounceMs: 2000, ReindexInterval: 300},

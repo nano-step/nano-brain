@@ -42,6 +42,22 @@ FROM documents WHERE workspace_hash = $1 ORDER BY updated_at DESC;
 -- name: UpdateDocumentsCollection :exec
 UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = $3;
 
+-- name: ListSymbolsByWorkspace :many
+SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, metadata, created_at, updated_at
+FROM documents
+WHERE workspace_hash = $1
+  AND metadata->>'source_type' = 'symbol'
+  AND ($2::text = '' OR title ILIKE '%' || $2::text || '%')
+  AND ($3::text = '' OR metadata->>'kind' = $3::text)
+ORDER BY title
+LIMIT $4;
+
+-- name: DeleteSymbolDocumentsByCollection :exec
+DELETE FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND metadata->>'source_type' = 'symbol';
+
 -- name: ListTagsByWorkspace :many
 SELECT unnest(tags) AS tag, COUNT(*) AS count
 FROM documents

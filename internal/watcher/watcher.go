@@ -11,11 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"encoding/json"
+
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
 )
@@ -35,12 +38,13 @@ type watchedCollection struct {
 }
 
 type Watcher struct {
-	db           *sql.DB
-	queries      WatcherQuerier
-	logger       zerolog.Logger
-	debounceMs   int
-	pollInterval int
-	maxFileSize  int64
+	db             *sql.DB
+	queries        WatcherQuerier
+	logger         zerolog.Logger
+	debounceMs     int
+	pollInterval   int
+	maxFileSize    int64
+	symbolRegistry *symbol.Registry
 
 	fsw         *fsnotify.Watcher
 	mu          sync.Mutex
@@ -59,6 +63,11 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 		collections:  make(map[string]watchedCollection),
 		dirty:        make(map[string]bool),
 	}
+}
+
+func (w *Watcher) WithSymbolRegistry(r *symbol.Registry) *Watcher {
+	w.symbolRegistry = r
+	return w
 }
 
 func (w *Watcher) Watch(collectionName, dirPath, workspaceHash, globPattern string) error {
@@ -340,6 +349,50 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		Str("collection", col.name).
 		Int("chunks", len(chunks)).
 		Msg("indexed file")
+
+	if w.symbolRegistry != nil {
+		w.extractAndUpsertSymbols(ctx, col, filePath, content)
+	}
+}
+
+func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollection, filePath string, content []byte) {
+	syms, err := w.symbolRegistry.Extract(filePath, content)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("symbol extraction failed")
+		return
+	}
+	if len(syms) == 0 {
+		return
+	}
+
+	for _, s := range syms {
+		metaBytes, _ := json.Marshal(map[string]string{
+			"source_type": "symbol",
+			"kind":        string(s.Kind),
+			"language":    s.Language,
+			"signature":   s.Signature,
+		})
+		sourcePath := filePath + "?symbol=" + s.Name + "&kind=" + string(s.Kind)
+		sum := sha256.Sum256([]byte(sourcePath + s.Signature))
+		params := sqlc.UpsertDocumentBySourcePathParams{
+			WorkspaceHash: col.workspaceHash,
+			ContentHash:   hex.EncodeToString(sum[:]),
+			Title:         s.Name,
+			Content:       s.Signature,
+			SourcePath:    sourcePath,
+			Collection:    col.name,
+			Tags:          []string{"symbol", s.Language, string(s.Kind)},
+			Metadata:      pqtype.NullRawMessage{RawMessage: metaBytes, Valid: true},
+		}
+		if _, err := w.queries.UpsertDocumentBySourcePath(ctx, params); err != nil {
+			w.logger.Warn().Err(err).Str("symbol", s.Name).Msg("symbol upsert failed")
+		}
+	}
+
+	w.logger.Info().
+		Str("file", filePath).
+		Int("symbols", len(syms)).
+		Msg("symbols extracted")
 }
 
 func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {

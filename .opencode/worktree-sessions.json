@@ -1,0 +1,11 @@
+{
+  "sessions": {
+    "ses_1a1a41e09ffeNkpzm14I2G2wd4": {
+      "sessionId": "ses_1a1a41e09ffeNkpzm14I2G2wd4",
+      "createdAt": 1779724126407,
+      "branch": "feat/symbol-extraction",
+      "name": "Symbol extraction (Pillar 1)",
+      "worktreePath": "/Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/symbol-extraction-pillar-1/symbol-extraction-pillar-1"
+    }
+  }
+}

@@ -15,6 +15,7 @@ import (
 type ReindexQuerier interface {
 	ResetEmbedStatusByCollection(ctx context.Context, arg sqlc.ResetEmbedStatusByCollectionParams) (int64, error)
 	ListCollections(ctx context.Context, workspaceHash string) ([]sqlc.Collection, error)
+	DeleteSymbolDocumentsByCollection(ctx context.Context, arg sqlc.DeleteSymbolDocumentsByCollectionParams) error
 }
 
 type reindexRequest struct {
@@ -65,6 +66,10 @@ func TriggerReindex(queries ReindexQuerier, w *watcher.Watcher, logger zerolog.L
 				return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("reset embed status: %v", err))
 			}
 			totalChunks += n
+			_ = queries.DeleteSymbolDocumentsByCollection(c.Request().Context(), sqlc.DeleteSymbolDocumentsByCollectionParams{
+				WorkspaceHash: workspace,
+				Collection:    col.Name,
+			})
 			if w.TriggerRescanByName(col.Name, workspace) {
 				watcherTriggered = true
 			}

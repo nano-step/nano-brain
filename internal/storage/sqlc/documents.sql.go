@@ -14,6 +14,23 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+const deleteSymbolDocumentsByCollection = `-- name: DeleteSymbolDocumentsByCollection :exec
+DELETE FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND metadata->>'source_type' = 'symbol'
+`
+
+type DeleteSymbolDocumentsByCollectionParams struct {
+	WorkspaceHash string
+	Collection    string
+}
+
+func (q *Queries) DeleteSymbolDocumentsByCollection(ctx context.Context, arg DeleteSymbolDocumentsByCollectionParams) error {
+	_, err := q.db.ExecContext(ctx, deleteSymbolDocumentsByCollection, arg.WorkspaceHash, arg.Collection)
+	return err
+}
+
 const getDocumentByHash = `-- name: GetDocumentByHash :one
 SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id FROM documents WHERE content_hash = $1 AND workspace_hash = $2
 `
@@ -135,6 +152,76 @@ func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash st
 			&i.SourcePath,
 			&i.Collection,
 			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSymbolsByWorkspace = `-- name: ListSymbolsByWorkspace :many
+SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, metadata, created_at, updated_at
+FROM documents
+WHERE workspace_hash = $1
+  AND metadata->>'source_type' = 'symbol'
+  AND ($2::text = '' OR title ILIKE '%' || $2::text || '%')
+  AND ($3::text = '' OR metadata->>'kind' = $3::text)
+ORDER BY title
+LIMIT $4
+`
+
+type ListSymbolsByWorkspaceParams struct {
+	WorkspaceHash string
+	Column2       string
+	Column3       string
+	Limit         int32
+}
+
+type ListSymbolsByWorkspaceRow struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+	ContentHash   string
+	Title         string
+	SourcePath    string
+	Collection    string
+	Tags          []string
+	Metadata      pqtype.NullRawMessage
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func (q *Queries) ListSymbolsByWorkspace(ctx context.Context, arg ListSymbolsByWorkspaceParams) ([]ListSymbolsByWorkspaceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSymbolsByWorkspace,
+		arg.WorkspaceHash,
+		arg.Column2,
+		arg.Column3,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSymbolsByWorkspaceRow
+	for rows.Next() {
+		var i ListSymbolsByWorkspaceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.ContentHash,
+			&i.Title,
+			&i.SourcePath,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.Metadata,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

@@ -18,7 +18,6 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
-// RegisterTools adds all 9 MCP tools to the server.
 func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryQuery(server, a)
 	registerMemorySearch(server, a)
@@ -29,6 +28,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryStatus(server, a)
 	registerMemoryUpdate(server, a)
 	registerMemoryWakeUp(server, a)
+	registerMemorySymbols(server, a)
 }
 
 func toolSchema(props map[string]map[string]any, required []string) json.RawMessage {
@@ -888,6 +888,62 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 					"total_chunks":    chunkCount,
 					"last_activity":   lastActivity,
 				},
+			})
+		},
+	)
+}
+
+func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_symbols",
+			Description: "Search code symbols (functions, types, methods, interfaces) extracted from indexed source files",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"workspace": {"type": "string", "description": "Workspace hash"},
+				"query":     {"type": "string", "description": "Symbol name filter (partial match)"},
+				"kind":      {"type": "string", "description": "Symbol kind: function, method, type, interface, struct, const, var"},
+				"limit":     {"type": "number", "description": "Max results (default 50)"},
+			}, []string{"workspace"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ws, errRes := requireWorkspace(args)
+			if errRes != nil {
+				return errRes, nil
+			}
+			query := argString(args, "query")
+			kind := argString(args, "kind")
+			limit := int32(argInt(args, "limit", 50, 200))
+
+			rows, err := a.queries.ListSymbolsByWorkspace(ctx, sqlc.ListSymbolsByWorkspaceParams{
+				WorkspaceHash: ws,
+				Column2:       query,
+				Column3:       kind,
+				Limit:         limit,
+			})
+			if err != nil {
+				return errResult(fmt.Sprintf("list symbols failed: %v", err)), nil
+			}
+
+			type symbolResult struct {
+				Name       string `json:"name"`
+				SourcePath string `json:"source_path"`
+				Metadata   any    `json:"metadata,omitempty"`
+			}
+			results := make([]symbolResult, 0, len(rows))
+			for _, r := range rows {
+				results = append(results, symbolResult{
+					Name:       r.Title,
+					SourcePath: r.SourcePath,
+					Metadata:   r.Metadata,
+				})
+			}
+			return textResult(map[string]any{
+				"symbols": results,
+				"count":   len(results),
 			})
 		},
 	)
