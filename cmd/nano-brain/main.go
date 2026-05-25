@@ -212,6 +212,13 @@ func startServer(configPath string) {
 	var hr *harvest.Runner
 	interval := time.Duration(cfg.Intervals.SessionPoll) * time.Second
 
+	if cfg.Harvester.OpenCode.SessionDir == "" {
+		if detected := detectOpenCodeStorageDir(); detected != "" {
+			cfg.Harvester.OpenCode.SessionDir = detected
+			logger.Info().Str("path", detected).Msg("auto-detected opencode storage dir")
+		}
+	}
+
 	if cfg.Harvester.OpenCode.SessionDir != "" {
 		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
 		if err != nil {

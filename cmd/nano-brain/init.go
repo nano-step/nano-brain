@@ -101,6 +101,20 @@ func runInteractiveInit(configPath string) {
 		embBlock = fmt.Sprintf("embedding:\n  provider: %s\n  url: %s\n  model: %s\n  concurrency: 3\n", provider, embURL, model)
 	}
 
+	var harvesterSessionDir string
+	if detected := detectOpenCodeStorageDir(); detected != "" {
+		fmt.Printf("  OpenCode detected at %s\n", detected)
+		answer := promptWithDefault(scanner, "Enable session harvesting?", "Y")
+		if answer != "n" && answer != "N" {
+			harvesterSessionDir = detected
+		}
+	}
+
+	var harvesterBlock string
+	if harvesterSessionDir != "" {
+		harvesterBlock = fmt.Sprintf("\nharvester:\n  opencode:\n    session_dir: %s\n  claudecode:\n    enabled: false\n    session_dir: \"\"\n", harvesterSessionDir)
+	}
+
 	yaml := fmt.Sprintf(`server:
   host: localhost
   port: %d
@@ -121,7 +135,7 @@ watcher:
 
 logging:
   level: info
-`, port, dbURL, embBlock)
+%s`, port, dbURL, embBlock, harvesterBlock)
 
 	fmt.Println("\n── Config preview ──────────────")
 	fmt.Print(yaml)
