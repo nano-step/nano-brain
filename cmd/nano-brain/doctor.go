@@ -73,7 +73,7 @@ func runDoctorCmd(args []string, configPath string) {
 		}{results, allPassed}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		enc.Encode(out)
+		_ = enc.Encode(out)
 	} else {
 		fmt.Print("\nnano-brain doctor\n\n")
 		for _, r := range results {

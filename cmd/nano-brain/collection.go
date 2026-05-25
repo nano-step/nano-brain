@@ -93,7 +93,7 @@ func runCollectionAdd(args []string) {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
-	io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
 }
 
@@ -135,7 +135,7 @@ func runCollectionRemove(args []string) {
 		fmt.Println("collection removed")
 		return
 	}
-	io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
 }
 
@@ -163,7 +163,7 @@ func runCollectionList(args []string) {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
-	io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
 }
 
@@ -218,6 +218,6 @@ func runCollectionRename(args []string) {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
-	io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
 }
