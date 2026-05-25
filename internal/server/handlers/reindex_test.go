@@ -17,16 +17,24 @@ import (
 )
 
 type mockReindexQuerier struct {
-	called     bool
-	returnN    int64
-	returnErr  error
-	lastParams sqlc.ResetEmbedStatusByCollectionParams
+	called      bool
+	returnN     int64
+	returnErr   error
+	lastParams  sqlc.ResetEmbedStatusByCollectionParams
+	collections []sqlc.Collection
 }
 
 func (m *mockReindexQuerier) ResetEmbedStatusByCollection(_ context.Context, arg sqlc.ResetEmbedStatusByCollectionParams) (int64, error) {
 	m.called = true
 	m.lastParams = arg
 	return m.returnN, m.returnErr
+}
+
+func (m *mockReindexQuerier) ListCollections(_ context.Context, _ string) ([]sqlc.Collection, error) {
+	if m.collections != nil {
+		return m.collections, nil
+	}
+	return []sqlc.Collection{{Name: "code", Path: "/tmp/code"}}, nil
 }
 
 func newTestWatcherForHandler() *watcher.Watcher {
@@ -46,7 +54,10 @@ func TestTriggerReindex(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.Set("workspace", "ws123")
 
-	mq := &mockReindexQuerier{returnN: 5}
+	mq := &mockReindexQuerier{
+		returnN:     5,
+		collections: []sqlc.Collection{{Name: "code", Path: "/tmp/code"}},
+	}
 	w := newTestWatcherForHandler()
 
 	h := handlers.TriggerReindex(mq, w, zerolog.Nop())
@@ -57,7 +68,6 @@ func TestTriggerReindex(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d body=%s", rec.Code, rec.Body.String())
 	}
-
 	if !mq.called {
 		t.Fatal("expected ResetEmbedStatusByCollection to be called")
 	}
@@ -76,12 +86,42 @@ func TestTriggerReindex(t *testing.T) {
 		t.Errorf("expected chunks_enqueued=5, got %v", resp["chunks_enqueued"])
 	}
 	msg, _ := resp["message"].(string)
-	if !strings.Contains(msg, "code") || !strings.Contains(msg, "ws123") {
+	if !strings.Contains(msg, "ws123") {
 		t.Errorf("unexpected message: %s", msg)
 	}
 }
 
-func TestTriggerReindexMissingRoot(t *testing.T) {
+func TestTriggerReindexByPath(t *testing.T) {
+	e := echo.New()
+	body := `{"workspace":"ws123","root":"/my/project"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/reindex", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("workspace", "ws123")
+
+	mq := &mockReindexQuerier{
+		returnN:     3,
+		collections: []sqlc.Collection{{Name: "code", Path: "/my/project"}},
+	}
+	w := newTestWatcherForHandler()
+
+	h := handlers.TriggerReindex(mq, w, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rec.Code)
+	}
+	if !mq.called {
+		t.Fatal("expected ResetEmbedStatusByCollection to be called for path-matched collection")
+	}
+	if mq.lastParams.Collection != "code" {
+		t.Errorf("expected collection name 'code', got %q", mq.lastParams.Collection)
+	}
+}
+
+func TestTriggerReindexNoRoot(t *testing.T) {
 	e := echo.New()
 	body := `{"workspace":"ws123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/reindex", strings.NewReader(body))
@@ -90,23 +130,21 @@ func TestTriggerReindexMissingRoot(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.Set("workspace", "ws123")
 
-	mq := &mockReindexQuerier{}
+	mq := &mockReindexQuerier{
+		returnN:     2,
+		collections: []sqlc.Collection{{Name: "code", Path: "/tmp/code"}, {Name: "memory", Path: "/tmp/mem"}},
+	}
 	w := newTestWatcherForHandler()
 
 	h := handlers.TriggerReindex(mq, w, zerolog.Nop())
-	err := h(c)
-	if err == nil {
-		t.Fatal("expected error for missing root")
+	if err := h(c); err != nil {
+		t.Fatalf("handler returned error: %v", err)
 	}
-	he, ok := err.(*echo.HTTPError)
-	if !ok {
-		t.Fatalf("expected echo.HTTPError, got %T", err)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rec.Code)
 	}
-	if he.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", he.Code)
-	}
-	if mq.called {
-		t.Error("expected ResetEmbedStatusByCollection not to be called on missing root")
+	if !mq.called {
+		t.Fatal("expected ResetEmbedStatusByCollection to be called for all collections")
 	}
 }
 
