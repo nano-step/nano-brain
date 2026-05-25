@@ -88,6 +88,9 @@ func main() {
 		case "harvest":
 			runHarvestCmd(args[1:])
 			return
+		case "reindex":
+			runReindexCmd(args[1:])
+			return
 		case "bench":
 			runBenchCmd(args[1:])
 			return

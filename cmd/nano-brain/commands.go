@@ -287,6 +287,70 @@ func runHarvestCmd(args []string) {
 		Msg("cli command completed")
 }
 
+func runReindexCmd(args []string) {
+	cliLog.Info().Str("cmd", "reindex").Msg("cli command started")
+	var root, workspace string
+	var jsonFlag bool
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--root":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "--root requires a value\n")
+				os.Exit(1)
+			}
+			i++
+			root = args[i]
+		case "--workspace":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "--workspace requires a value\n")
+				os.Exit(1)
+			}
+			i++
+			workspace = args[i]
+		case "--json":
+			jsonFlag = true
+		default:
+			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
+			os.Exit(1)
+		}
+	}
+
+	if root == "" {
+		fmt.Fprintf(os.Stderr, "--root is required\n")
+		os.Exit(1)
+	}
+
+	// Build request body
+	reqBody := map[string]string{"root": root}
+	if workspace != "" {
+		reqBody["workspace"] = workspace
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to marshal request: %v\n", err)
+		cliLog.Error().Err(err).Str("cmd", "reindex").Msg("failed to marshal request")
+		os.Exit(1)
+	}
+
+	resp, _, err := doRequest("POST", getBaseURL()+"/api/v1/reindex", bytes.NewReader(bodyBytes))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		cliLog.Error().Err(err).Str("cmd", "reindex").Msg("reindex request failed")
+		os.Exit(1)
+	}
+
+	if jsonFlag {
+		fmt.Println(string(resp))
+		cliLog.Info().Str("cmd", "reindex").Msg("cli command completed")
+		return
+	}
+
+	fmt.Printf("Reindex queued for collection '%s'\n", root)
+	cliLog.Info().Str("cmd", "reindex").Str("root", root).Msg("cli command completed")
+}
+
 func runQueryCmd(args []string) {
 	runStubCmd("query", args)
 }
