@@ -15,6 +15,14 @@ src/web/node_modules/
 _bmad/config.user.yaml
 /skills/
 
+# OpenCode internal metadata
+.opencode/worktrees/
+.opencode/worktree-sessions.json
+.opencode/.repo-id
+
+# Node (no npm deps in this project)
+package-lock.json
+
 # Go
 /nano-brain
 *.exe

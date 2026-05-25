@@ -205,11 +205,28 @@ func startServer(configPath string) {
 	db := stdlib.OpenDBFromPool(pool)
 	queries := sqlc.New(db)
 
-	goE, _ := symbol.NewGoExtractor()
-	tsE, _ := symbol.NewTypeScriptExtractor()
-	pyE, _ := symbol.NewPythonExtractor()
-	jsE, _ := symbol.NewJavaScriptExtractor()
-	symRegistry := symbol.NewRegistry(goE, tsE, pyE, jsE)
+	var extractors []symbol.Extractor
+	if goE, err := symbol.NewGoExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("go symbol extractor init failed, skipping")
+	} else {
+		extractors = append(extractors, goE)
+	}
+	if tsE, err := symbol.NewTypeScriptExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("typescript symbol extractor init failed, skipping")
+	} else {
+		extractors = append(extractors, tsE)
+	}
+	if pyE, err := symbol.NewPythonExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("python symbol extractor init failed, skipping")
+	} else {
+		extractors = append(extractors, pyE)
+	}
+	if jsE, err := symbol.NewJavaScriptExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("javascript symbol extractor init failed, skipping")
+	} else {
+		extractors = append(extractors, jsE)
+	}
+	symRegistry := symbol.NewRegistry(extractors...)
 
 	fw := watcher.New(db, queries, logger, *cfg).WithSymbolRegistry(symRegistry)
 

@@ -2,13 +2,13 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
-	"github.com/sqlc-dev/pqtype"
 )
 
 type SymbolQuerier interface {
@@ -16,13 +16,11 @@ type SymbolQuerier interface {
 }
 
 type symbolItem struct {
-	Name       string                  `json:"name"`
-	Kind       string                  `json:"kind"`
-	Language   string                  `json:"language"`
-	Signature  string                  `json:"signature"`
-	File       string                  `json:"file"`
-	SourcePath string                  `json:"source_path"`
-	Metadata   pqtype.NullRawMessage   `json:"metadata,omitempty"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Language   string `json:"language"`
+	Signature  string `json:"signature"`
+	SourcePath string `json:"source_path"`
 }
 
 func ListSymbols(q SymbolQuerier, logger zerolog.Logger) echo.HandlerFunc {
@@ -51,11 +49,19 @@ func ListSymbols(q SymbolQuerier, logger zerolog.Logger) echo.HandlerFunc {
 
 		items := make([]symbolItem, 0, len(rows))
 		for _, r := range rows {
-			items = append(items, symbolItem{
+			item := symbolItem{
 				Name:       r.Title,
 				SourcePath: r.SourcePath,
-				Metadata:   r.Metadata,
-			})
+			}
+			if r.Metadata.Valid {
+				var meta map[string]string
+				if err := json.Unmarshal(r.Metadata.RawMessage, &meta); err == nil {
+					item.Kind = meta["kind"]
+					item.Language = meta["language"]
+					item.Signature = meta["signature"]
+				}
+			}
+			items = append(items, item)
 		}
 		return c.JSON(http.StatusOK, map[string]any{
 			"symbols": items,
