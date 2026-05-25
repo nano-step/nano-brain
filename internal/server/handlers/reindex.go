@@ -31,7 +31,8 @@ func TriggerReindex(logger zerolog.Logger) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusBadRequest, "root (collection name) is required")
 		}
 
-		logger.Info().
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
 			Str("workspace", workspace).
 			Str("root", req.Root).
 			Msg("reindex queued")
@@ -51,7 +52,8 @@ func TriggerUpdate(logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)
 
-		logger.Info().
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
 			Str("workspace", workspace).
 			Msg("update queued for all collections")
 

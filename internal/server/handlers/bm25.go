@@ -130,6 +130,13 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger, rec ...*telemetry.Re
 			rec[0].Record(c.Request().Context(), req.Query, len(results), elapsed, "", workspace)
 		}
 
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
+			Str("workspace", workspace).
+			Int("results", len(results)).
+			Int64("latency_ms", elapsed).
+			Msg("bm25 search complete")
+
 		return c.JSON(http.StatusOK, SearchResponse{
 			Results: results,
 			Total:   len(results),

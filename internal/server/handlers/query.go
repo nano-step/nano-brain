@@ -75,6 +75,13 @@ func Query(searcher HybridSearcher, logger zerolog.Logger, rec ...*telemetry.Rec
 			rec[0].Record(c.Request().Context(), req.Query, len(out), elapsed, "", workspace)
 		}
 
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
+			Str("workspace", workspace).
+			Int("results", len(out)).
+			Int64("latency_ms", elapsed).
+			Msg("hybrid search complete")
+
 		return c.JSON(http.StatusOK, SearchResponse{
 			Results: out,
 			Total:   len(out),
