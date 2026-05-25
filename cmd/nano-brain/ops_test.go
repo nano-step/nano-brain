@@ -153,7 +153,7 @@ func TestRunStatusCmd_JSON(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(statusResp)
+		_ = json.NewEncoder(w).Encode(statusResp)
 	}))
 	defer ts.Close()
 

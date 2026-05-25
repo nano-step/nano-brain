@@ -97,7 +97,7 @@ func TestOllamaEmbedder_Embed(t *testing.T) {
 			t.Errorf("input = %v, want [hello world]", req.Input)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string][][]float32{"embeddings": {want}})
+		_ = json.NewEncoder(w).Encode(map[string][][]float32{"embeddings": {want}})
 	}))
 	defer srv.Close()
 
@@ -133,7 +133,7 @@ func TestOllamaEmbedder_CustomDimension(t *testing.T) {
 func TestOllamaEmbedder_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal error"))
+		_, _ = w.Write([]byte("internal error"))
 	}))
 	defer srv.Close()
 
@@ -173,7 +173,7 @@ func TestVoyageAIEmbedder_Embed(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -226,7 +226,7 @@ func TestVoyageAIEmbedder_MissingKey(t *testing.T) {
 func TestVoyageAIEmbedder_Unauthorized(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":"invalid api key"}`))
+		_, _ = w.Write([]byte(`{"error":"invalid api key"}`))
 	}))
 	defer srv.Close()
 
