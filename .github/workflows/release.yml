@@ -57,3 +57,39 @@ jobs:
         with:
           generate_release_notes: true
           files: artifacts/*
+
+  npm-publish:
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Determine npm tag
+        id: npm-tag
+        run: |
+          if [[ "${{ github.ref_name }}" == *"-beta"* || "${{ github.ref_name }}" == *"-alpha"* || "${{ github.ref_name }}" == *"-rc"* ]]; then
+            echo "tag=beta" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set version from git tag
+        run: npm version --no-git-tag-version "${GITHUB_REF_NAME#v}"
+
+      - name: Publish @nano-step/nano-brain
+        run: npm publish --tag ${{ steps.npm-tag.outputs.tag }} --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish nano-brain (unscoped alias)
+        run: |
+          node -e "const p=require('./package.json'); p.name='nano-brain'; delete p.publishConfig; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+          npm publish --tag ${{ steps.npm-tag.outputs.tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
