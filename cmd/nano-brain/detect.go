@@ -23,6 +23,46 @@ func detectOpenCodeStorageDir() string {
 	return ""
 }
 
+func detectClaudeCodeStorageDir() string {
+	if v := os.Getenv("CLAUDECODE_STORAGE_DIR"); v != "" {
+		if _, err := os.Stat(v); err == nil {
+			return v
+		}
+	}
+	for _, p := range platformClaudeCodePaths() {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func platformClaudeCodePaths() []string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		return nil
+	}
+	candidates := []string{
+		filepath.Join(home, ".claude", "projects"),
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		candidates = append(candidates,
+			filepath.Join(home, "Library", "Application Support", "Claude", "projects"),
+		)
+	case "linux":
+		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+			candidates = append(candidates, filepath.Join(xdg, "claude", "projects"))
+		}
+		candidates = append(candidates, filepath.Join(home, ".local", "share", "claude", "projects"))
+	case "windows":
+		if appdata := os.Getenv("APPDATA"); appdata != "" {
+			candidates = append(candidates, filepath.Join(appdata, "Claude", "projects"))
+		}
+	}
+	return candidates
+}
+
 func platformOpenCodePaths() []string {
 	switch runtime.GOOS {
 	case "linux":

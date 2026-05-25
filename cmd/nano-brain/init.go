@@ -101,19 +101,32 @@ func runInteractiveInit(configPath string) {
 		embBlock = fmt.Sprintf("embedding:\n  provider: %s\n  url: %s\n  model: %s\n  concurrency: 3\n", provider, embURL, model)
 	}
 
-	var harvesterSessionDir string
-	if detected := detectOpenCodeStorageDir(); detected != "" {
-		fmt.Printf("  OpenCode detected at %s\n", detected)
-		answer := promptWithDefault(scanner, "Enable session harvesting?", "Y")
-		if answer != "n" && answer != "N" {
-			harvesterSessionDir = detected
-		}
+	fmt.Print("\n── Harvester (session indexing) ──\n")
+	detectedOC := detectOpenCodeStorageDir()
+	if detectedOC != "" {
+		fmt.Printf("  OpenCode storage auto-detected: %s\n", detectedOC)
+	} else {
+		fmt.Println("  OpenCode storage not found automatically.")
 	}
+	ocSessionDir := promptWithDefault(scanner, "OpenCode session_dir (leave blank to skip)", detectedOC)
+
+	detectedCC := detectClaudeCodeStorageDir()
+	if detectedCC != "" {
+		fmt.Printf("  Claude Code storage auto-detected: %s\n", detectedCC)
+	}
+	ccSessionDir := promptWithDefault(scanner, "Claude Code session_dir (leave blank to skip)", detectedCC)
 
 	var harvesterBlock string
-	if harvesterSessionDir != "" {
-		harvesterBlock = fmt.Sprintf("\nharvester:\n  opencode:\n    session_dir: %s\n  claudecode:\n    enabled: false\n    session_dir: \"\"\n", harvesterSessionDir)
+	ocLine := "\"\""
+	if ocSessionDir != "" {
+		ocLine = ocSessionDir
 	}
+	ccEnabled := ccSessionDir != ""
+	ccLine := "\"\""
+	if ccSessionDir != "" {
+		ccLine = ccSessionDir
+	}
+	harvesterBlock = fmt.Sprintf("\nharvester:\n  opencode:\n    session_dir: %s\n  claudecode:\n    enabled: %v\n    session_dir: %s\n", ocLine, ccEnabled, ccLine)
 
 	yaml := fmt.Sprintf(`server:
   host: localhost
