@@ -563,9 +563,10 @@ Commands:
   vsearch            Vector similarity search
   workspaces         List registered workspaces (alias: ls)
   write              Write a document
-  collection         Manage collections (add/remove/list)
-  harvest            Trigger session harvesting
-  logs               View log file (-f to follow, -n <count>)
+   collection         Manage collections (add/remove/list)
+   harvest            Trigger session harvesting
+   reindex            Queue collection reindex
+   logs               View log file (-f to follow, -n <count>)
   docker             Manage Docker Compose (start/stop/status)
   db:migrate         Run database migrations
   bench              Benchmarking suite (generate/run/compare/stress)
