@@ -1,0 +1,11 @@
+.git
+.github
+.opencode
+.openspec
+.sisyphus
+.agents
+.claude
+docs
+*.md
+!go.mod
+!go.sum

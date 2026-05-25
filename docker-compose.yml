@@ -1,61 +1,52 @@
-# IMPORTANT: Ollama must be running natively on the host machine for GPU acceleration.
-# On macOS (Apple Silicon), native Ollama uses Metal GPU → ~50-200ms per embed vs ~15s in Docker.
-#
-# Setup:
-#   brew install ollama
-#   OLLAMA_KEEP_ALIVE=30m OLLAMA_NUM_PARALLEL=4 ollama serve
-#   ollama pull nomic-embed-text
-#
-# Then start this stack: docker compose up -d
-
 services:
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: nano-brain-qdrant
-    restart: unless-stopped
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - nano-brain-qdrant-data:/qdrant/storage
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: nanobrain-pg
     environment:
-      - QDRANT__SERVICE__GRPC_PORT=6334
-
-  nano-brain:
-    image: node:22
-    container_name: nano-brain-server
-    restart: unless-stopped
-    stop_grace_period: 30s
-    working_dir: /app
+      POSTGRES_USER: nanobrain
+      POSTGRES_PASSWORD: nanobrain
+      POSTGRES_DB: nanobrain_dev
     ports:
-      - "3100:3100"
+      - "5432:5432"
     volumes:
-      - ${NANO_BRAIN_APP:-.}:/app
-      - nano-brain-node-modules:/app/node_modules
-      - ${NANO_BRAIN_HOME:-~/.nano-brain}:/root/.nano-brain
-      - ${NANO_BRAIN_WORKSPACE:-/Users/tamlh/workspaces/NUSTechnology/Projects/zengamingx}:${NANO_BRAIN_WORKSPACE:-/Users/tamlh/workspaces/NUSTechnology/Projects/zengamingx}:ro
-      - ${OPENCODE_DATA_DIR:-~/.local/share/opencode}:/root/.local/share/opencode:ro
-    environment:
-      - NODE_ENV=production
-      - OLLAMA_HOST=http://host.docker.internal:11434
-      - NODE_OPTIONS=--max-old-space-size=1536
-      - NANO_BRAIN_EMBEDDING_CONCURRENCY=3
-    command: sh -c "npm install --omit=dev --prefer-offline --legacy-peer-deps --no-audit --no-fund && npm rebuild tree-sitter tree-sitter-python tree-sitter-typescript tree-sitter-javascript && ./node_modules/.bin/tsx src/index.ts mcp --http --port=3100 --host=0.0.0.0 --root=${NANO_BRAIN_WORKSPACE:-/Users/tamlh/workspaces/NUSTechnology/Projects/zengamingx}"
-    depends_on:
-      - qdrant
+      - nanobrain-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
-      interval: 30s
+      test: ["CMD-SHELL", "pg_isready -U nanobrain -d nanobrain_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nanobrain-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - nanobrain-ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider http://localhost:11434/api/tags"]
+      interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          memory: 2G
+
+  nano-brain:
+    build: .
+    container_name: nanobrain
+    ports:
+      - "3100:3100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      NANO_BRAIN_SERVER_HOST: "0.0.0.0"
+      NANO_BRAIN_DATABASE_URL: "postgres://nanobrain:nanobrain@postgres:5432/nanobrain_dev"
+      NANO_BRAIN_EMBEDDING_URL: "http://ollama:11434"
+      NANO_BRAIN_EMBEDDING_PROVIDER: ollama
+      NANO_BRAIN_EMBEDDING_MODEL: nomic-embed-text
+    restart: unless-stopped
 
 volumes:
-  nano-brain-qdrant-data:
-    driver: local
-  nano-brain-node-modules:
-    driver: local
+  nanobrain-pgdata:
+  nanobrain-ollama:

@@ -1,0 +1,336 @@
+# Harness
+
+<!-- generated-by: harness-init v0.1.0 -->
+<!-- project: ${PROJECT_NAME} -->
+
+The app is what users touch. The harness is what agents touch.
+
+This harness classifies every change by risk lane, requires a proposal-and-review
+cycle for non-trivial changes, and enforces a validation + user-flow test +
+review gate before any work is archived.
+
+## Mental Model
+
+```text
+┌─────────────────────┐
+│   Human intent      │
+└────────┬────────────┘
+         │
+         ▼
+${ISSUE_NODE}
+         │
+         ▼
+┌─────────────────────┐
+│  Feature Intake     │  classify risk → choose lane
+│                     │${ISSUE_INTAKE_UPDATE}
+└────────┬────────────┘
+         │
+         ├── tiny ──► patch + validate${ISSUE_TINY_CLOSE}
+         │
+         ▼  normal / high-risk
+┌─────────────────────┐
+│  Propose            │${PROPOSE_TOOL_LINE}${ISSUE_PROPOSE_UPDATE}
+└────────┬────────────┘
+         │
+         ▼
+${DEEP_DESIGN_BLOCK}
+┌─────────────────────┐
+│  Specs + Story      │  acceptance criteria per behavior slice
+│                     │  story in docs/stories/ (link proposal + issue)
+│                     │  update docs/TEST_MATRIX.md with expected proof${ISSUE_SPECS_UPDATE}
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  Implement          │  work through tasks list
+│                     │  ${VALIDATE_QUICK_HINT} must stay green
+│                     │${ISSUE_IMPL_UPDATE}
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  Validate           │  run validation ladder appropriate to lane
+└────────┬────────────┘
+         │
+         ├── fail ────► fix → re-validate (max 2 attempts before consulting Oracle)
+         │
+         ▼  pass
+┌─────────────────────┐
+│  User-Flow Test     │  run test through user's entry point matching changed surface
+│                     │  Exempt if change type = infra/refactor/docs (see § Change Types)
+└────────┬────────────┘
+         │
+         ├── fail ────► fix → re-test (max 2 attempts)
+         │
+         ▼  pass
+┌─────────────────────┐
+│  Review Gate        │  fresh review agent verifies each acceptance criterion
+│                     │  Reviewer ≠ implementer. Cite evidence per criterion.${ISSUE_REVIEW_UPDATE}
+└────────┬────────────┘
+         │
+         ├── FAIL ────► fix → re-review (max 1 re-review before consulting human)
+         │
+         ▼  PASS
+┌─────────────────────┐
+│  PR + Bot Review    │  push branch → open PR${PR_LINK_ISSUE}
+│  Loop               │  ${PR_BOT_DESC}
+│                     │  agent reads PR comments → fix → re-validate → re-test
+└────────┬────────────┘
+         │
+         ├── bot comments ──► triage → fix or justify → push again
+         │
+         ▼  approved
+┌─────────────────────┐
+│  Harness Delta      │  merge PR → ${ARCHIVE_CMD}
+│                     │  update docs/stories/, docs/decisions/, docs/TEST_MATRIX.md
+│                     │  capture friction → HARNESS_BACKLOG.md if needed${ISSUE_CLOSE_UPDATE}
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│   Next intent       │
+└─────────────────────┘
+```
+
+Every task has two possible outputs:
+
+1. **Product delta**: app code, tests, API shape, data model, or product docs.
+2. **Harness delta**: docs, templates, validation expectations, backlog items, or
+   decision records that make the next task easier.
+
+## Source Hierarchy
+
+```text
+Human intent / prompt
+  └── ${ISSUE_TRACKER_LABEL} tracker (${ISSUE_TRACKER_REF})
+  └── Feature Intake (docs/FEATURE_INTAKE.md)
+${SOURCE_HIERARCHY_SPEC_LAYER}
+        └── Story packet (docs/stories/<name>.md)
+              └── links to ${SPEC_REF}, lists acceptance criteria
+        └── docs/TEST_MATRIX.md
+              └── maps each story to unit / integration / E2E proof
+        └── docs/decisions/
+              └── records why contracts or architecture changed
+```
+
+Before implementation, product docs and proposal artifacts describe intent.
+After implementation, those artifacts plus passing tests are the living contract.
+
+${OPENSPEC_INTEGRATION_SECTION}
+
+${DEEP_DESIGN_SECTION}
+
+## Spec Lifecycle
+
+Ongoing work enters the harness as one of these input types:
+
+| Type | What to do |
+|---|---|
+| New spec | Populate `docs/product/`, create candidate story list, run deep-design on scope |
+| Spec slice | Propose → deep-design → specs/ → story → implement |
+| Change request | Propose → deep-design (if normal+) → story → implement |
+| New initiative | Initiative notes in `docs/stories/` + multiple proposals |
+| Maintenance | Story packet only (no proposal required for tiny) |
+| Harness improvement | Direct docs update or `HARNESS_BACKLOG.md` |
+
+Do not extend a monolithic spec. Use change proposals + story packets as the
+living surface.
+
+## Growth Rule
+
+The harness grows from friction.
+
+When an agent is confused, repeats manual reasoning, needs a new validation
+command, discovers a missing rule, or sees a recurring failure pattern, it must
+either improve the harness directly or add a proposal to `HARNESS_BACKLOG.md`.
+
+## Validation Ladder
+
+Run the layers appropriate to the lane. Never claim a layer passes without
+running it and seeing exit code 0.
+
+```text
+validate:quick   (always — every lane)
+  ${VALIDATE_QUICK_CMD}
+
+test:integration   (normal + high-risk)
+  ${VALIDATE_INTEGRATION_CMD}
+
+test:e2e   (high-risk or when UI behavior changes)
+  ${VALIDATE_E2E_CMD}
+
+test:release   (before deploy)
+  ${VALIDATE_SMOKE_CMD}
+```
+
+**Lane → required layers:**
+
+| Lane | validate:quick | test:integration | test:e2e |
+|------|:-:|:-:|:-:|
+| tiny | ✓ | — | — |
+| normal | ✓ | ✓ | — |
+| high-risk | ✓ | ✓ | ✓ |
+
+Agents must not claim a layer passes until it has been run and output verified.
+
+## Change Types
+
+The validation ladder is necessary but not sufficient. The **change type**
+determines whether user-flow testing and review gate apply.
+
+| Change type | E2E required? | Review gate? | Example |
+|-------------|:-:|:-:|---|
+| **user-feature** (new behavior, new surface) | ✅ | ✅ | new endpoint, new UI page |
+| **bug-fix** (user-visible defect) | ✅ | ✅ | "OTP not arriving", broken response |
+| **infrastructure** (migrations, config, deploy) | ❌ smoke test sufficient | ⚠️ self-verify | DB migration, env var change |
+| **refactor** (same I/O) | ❌ existing tests pass | ⚠️ self-verify | extract helper, rename internal symbol |
+| **docs** (markdown / comments only) | ❌ | ❌ | README, ADR write-up |
+| **dependency-bump** | ❌ smoke test | ⚠️ self-verify | upgrade library version |
+
+**Combined gate:** Lane × Change Type. Both must pass to proceed.
+
+For change types marked **❌ smoke test** instead of E2E:
+- Run a deterministic check that exercises the changed surface (e.g.
+  `alembic upgrade head` for migrations, `import <app>` for refactors).
+- Paste the output in story Evidence section.
+- No user-flow test required — there is no user surface to test.
+
+For change types marked **⚠️ self-verify**:
+- Implementing agent runs the validation ladder and pastes output.
+- No independent review agent required.
+- Still subject to PR bot review (see below).
+
+## User-Flow Testing
+
+After validation ladder passes, run at least one test that exercises the
+changed behavior through the **user's actual entry point**. Choose the tool
+that matches the changed surface:
+
+| Changed surface | Tool | Command |
+|---|---|---|
+| Bot / chat handler | Command simulator | `${USER_FLOW_BOT_CMD}` |
+| Web UI | Playwright / Cypress | `${USER_FLOW_WEB_CMD}` |
+| REST API | API integration test | `${USER_FLOW_API_CMD}` |
+| Backend-only (no user surface) | Existing integration tests | `${VALIDATE_INTEGRATION_CMD}` |
+| LLM / external service call | Live smoke script | `${VALIDATE_SMOKE_CMD}` |
+
+**Lane × user-flow requirement:**
+
+| Lane | User-flow test required? |
+|------|:-:|
+| tiny | No (escalate to normal if user-visible behavior changes) |
+| normal | Yes — at least 1 test covering the primary changed behavior |
+| high-risk | Yes — cover primary + at least 1 error/edge path |
+
+**E2E not applicable**: If change type is infra/refactor/docs/deps, write
+"E2E: not applicable — [reason]" in the story Evidence section. The review
+gate validates this justification.
+
+**Happy-path-only is insufficient for high-risk**: at minimum cover one
+error/edge path (auth fail, rate limit, malformed input, etc.).
+
+## Review Gate
+
+After user-flow tests pass, a **fresh review agent** verifies the implementation.
+The reviewer **must not be** the implementing agent.
+
+**What the reviewer checks:**
+1. Read `git diff <default-branch>` + the proposal, design, and spec.
+2. For each acceptance criterion, find evidence (test output, screenshot,
+   command result) that it is satisfied.
+3. Produce a verdict: **PASS** (all criteria met with evidence) or **FAIL**
+   (list unmet criteria + missing evidence).
+
+**Lane × Change Type → review requirement:**
+
+| Lane | user-feature / bug-fix | infra / refactor / deps | docs |
+|------|---|---|---|
+| tiny | n/a (escalate if user-visible) | self-verify | none |
+| normal | Single Oracle review | self-verify | none |
+| high-risk | Full review-work skill (5 parallel sub-agents) | single Oracle | n/a |
+
+**Review output format:**
+
+```text
+## Review Verdict: PASS | FAIL
+
+Reviewer: <agent name>
+Date: YYYY-MM-DD
+Commit: <sha>
+
+| Acceptance Criterion | Evidence | Status |
+|---|---|---|
+| "Users can upload receipt photo" | test_receipt_upload.py passes (output below) | ✓ |
+| "Items appear in inventory" | simulator output shows items listed | ✓ |
+
+Unmet criteria (if FAIL):
+- [criterion] — missing [evidence type]
+```
+
+**Rule:** `${ARCHIVE_CMD}` is forbidden until Review Verdict = PASS.
+
+## PR + Bot Review Loop
+
+After the local Review Gate passes, push branch and open a PR. ${PR_BOT_LOOP_DESC}
+
+```text
+1. Push branch + open PR
+        │
+        ▼
+2. ${PR_BOT_NAME} posts review comments
+        │
+        ├── comments substantive ──► agent reads → fix → push
+        │                            │
+        │                            ▼
+        │                   re-run validate + user-flow test
+        │                            │
+        │                            ▼
+        │                   if substantive impl change → re-run Review Gate
+        │                            │
+        │                            ▼
+        │                   wait for bot re-review
+        │
+        ├── comments stylistic only ─► address inline or reply with reason
+        │
+        ▼
+3. Bot approves → merge → ${ARCHIVE_CMD}
+```
+
+**Rules for handling PR comments:**
+
+- **Read every comment.** Do not collapse / dismiss without action or reasoned reply.
+- **Substantive comment** (correctness, security, missing case): MUST fix.
+  After fix, re-run validate + user-flow + Review Gate before pushing.
+- **Stylistic comment** (naming, ordering, preference): fix if cheap, or reply
+  with reasoning and tag for human review.
+- **Disagreement**: do NOT silently dismiss. Reply with rationale; tag human.
+- **Loop limit**: max 3 push cycles per PR. After 3, escalate to human review.
+- **Never**: force-push to bypass bot, dismiss without reading, or merge
+  without bot approval (unless human override documented in PR).
+
+The PR review loop is not optional. It is the final correctness gate before
+the change becomes part of the trunk.
+
+## Forbidden Practices
+
+1. **Claiming "tests pass" without output.** Paste the command and its exit code.
+   A claim without evidence is not a claim.
+2. **Self-review.** The implementing agent must not perform its own Review Gate.
+   Use review-work skill or spawn a fresh review agent.
+3. **Skipping user-flow tests for "refactors."** If the refactor changes
+   observable behavior (response shape, timing, error messages, side effects),
+   it needs a user-flow test. Only pure internal refactors (identical I/O)
+   qualify as "E2E not applicable."
+4. **Happy-path-only E2E for high-risk changes.** High-risk must cover at least
+   one error or edge path.
+5. **Archiving without review verdict.** ${ARCHIVE_CMD} is blocked until
+   the story shows Review Verdict = PASS with per-criterion evidence.
+6. **Backdating evidence.** Evidence must reference the current implementation
+   commit, not a previous passing run.
+7. **Force-pushing to bypass PR bot review.** PR bot must approve or be
+   overridden by documented human decision.
+8. **Dismissing PR comments without action or reasoned reply.** Every
+   substantive comment requires a fix or a documented disagreement.
+${ISSUE_FORBIDDEN_LINES}
+
+${ISSUE_TRACKING_SECTION}

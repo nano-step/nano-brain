@@ -1,0 +1,42 @@
+services:
+  nano-brain:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: nanobrain-app
+    ports:
+      - "3100:3100"
+    environment:
+      DATABASE_URL: "postgres://nanobrain:nanobrain@postgres:5432/nanobrain_dev?sslmode=disable"
+      NANO_BRAIN_SERVER_HOST: "0.0.0.0"
+      NANO_BRAIN_SERVER_PORT: "3100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/nano-brain", "--help"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg17
+    container_name: nanobrain-pg
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: nanobrain
+      POSTGRES_PASSWORD: nanobrain
+      POSTGRES_DB: nanobrain_dev
+    volumes:
+      - nanobrain_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nanobrain -d nanobrain_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  nanobrain_pgdata:
