@@ -39,7 +39,7 @@ func registerRoutes(s *Server) {
 	data.DELETE("/collections/:name", handlers.RemoveCollection(s.queries, s.watcher, s.logger))
 
 	data.GET("/tags", handlers.ListTags(s.queries, s.logger))
-	data.POST("/reindex", handlers.TriggerReindex(s.logger))
+	data.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.logger))
 	data.POST("/update", handlers.TriggerUpdate(s.logger))
 
 	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger, s.recorder))

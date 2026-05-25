@@ -49,6 +49,14 @@ WHERE e.workspace_hash = sqlc.arg(workspace_hash)
 ORDER BY e.embedding <=> sqlc.arg(query_embedding)::vector
 LIMIT sqlc.arg(max_results);
 
+-- name: ResetEmbedStatusByCollection :execrows
+UPDATE chunks
+SET embed_status = 'pending'
+FROM documents
+WHERE chunks.document_id = documents.id
+  AND chunks.workspace_hash = @workspace_hash
+  AND documents.collection = @collection;
+
 -- name: VectorSearchAll :many
 SELECT e.id, e.chunk_id, e.workspace_hash,
        c.content, c.metadata, c.document_id,

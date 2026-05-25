@@ -194,6 +194,28 @@ func (q *Queries) ResetEmbedStatus(ctx context.Context, workspaceHash string) er
 	return err
 }
 
+const resetEmbedStatusByCollection = `-- name: ResetEmbedStatusByCollection :execrows
+UPDATE chunks
+SET embed_status = 'pending'
+FROM documents
+WHERE chunks.document_id = documents.id
+  AND chunks.workspace_hash = $1
+  AND documents.collection = $2
+`
+
+type ResetEmbedStatusByCollectionParams struct {
+	WorkspaceHash string
+	Collection    string
+}
+
+func (q *Queries) ResetEmbedStatusByCollection(ctx context.Context, arg ResetEmbedStatusByCollectionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, resetEmbedStatusByCollection, arg.WorkspaceHash, arg.Collection)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const vectorSearch = `-- name: VectorSearch :many
 SELECT e.id, e.chunk_id, e.workspace_hash,
        c.content, c.metadata, c.document_id,
