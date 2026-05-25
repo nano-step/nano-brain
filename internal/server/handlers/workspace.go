@@ -72,6 +72,16 @@ func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath 
 		return sqlc.Workspace{}, err
 	}
 
+	if _, err := q.UpsertCollection(ctx, sqlc.UpsertCollectionParams{
+		WorkspaceHash: ws.Hash,
+		Name:          "code",
+		Path:          absPath,
+		GlobPattern:   "**/*",
+		UpdateMode:    "auto",
+	}); err != nil {
+		return sqlc.Workspace{}, err
+	}
+
 	return ws, nil
 }
 

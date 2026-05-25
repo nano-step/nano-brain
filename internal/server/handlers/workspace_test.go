@@ -3,9 +3,11 @@ package handlers_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -193,6 +195,135 @@ func TestListWorkspacesHandler(t *testing.T) {
 	}
 	if item["document_count"] != float64(5) {
 		t.Errorf("expected document_count=5, got %v", item["document_count"])
+	}
+}
+
+func TestInitWorkspaceCreatesCodeCollection(t *testing.T) {
+	var collectionNames []string
+	q := &mockQuerier{
+		upsertWorkspaceFn: func(_ context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error) {
+			return sqlc.Workspace{
+				ID: uuid.New(), Hash: arg.Hash, Name: arg.Name, Path: arg.Path,
+				CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+		upsertCollectionFn: func(_ context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error) {
+			collectionNames = append(collectionNames, arg.Name)
+			return sqlc.Collection{
+				ID: uuid.New(), WorkspaceHash: arg.WorkspaceHash,
+				Name: arg.Name, Path: arg.Path, GlobPattern: arg.GlobPattern,
+				UpdateMode: arg.UpdateMode, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/init", strings.NewReader(`{"root_path":"/tmp/test-project"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	// Expect exactly three collections: memory, sessions, code.
+	if len(collectionNames) != 3 {
+		t.Fatalf("expected 3 UpsertCollection calls, got %d: %v", len(collectionNames), collectionNames)
+	}
+	found := false
+	for _, n := range collectionNames {
+		if n == "code" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'code' collection to be created, got: %v", collectionNames)
+	}
+}
+
+func TestInitWorkspaceCodeCollectionIdempotent(t *testing.T) {
+	var callCount atomic.Int32
+	q := &mockQuerier{
+		upsertWorkspaceFn: func(_ context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error) {
+			return sqlc.Workspace{
+				ID: uuid.New(), Hash: arg.Hash, Name: arg.Name, Path: arg.Path,
+				CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+		upsertCollectionFn: func(_ context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error) {
+			callCount.Add(1)
+			return sqlc.Collection{
+				ID: uuid.New(), WorkspaceHash: arg.WorkspaceHash,
+				Name: arg.Name, Path: arg.Path, GlobPattern: arg.GlobPattern,
+				UpdateMode: arg.UpdateMode, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+	}
+
+	e := echo.New()
+	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/init", strings.NewReader(`{"root_path":"/tmp/test-project"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		if err := h(c); err != nil {
+			t.Fatalf("handler error on call %d: %v", i+1, err)
+		}
+	}
+
+	// Two calls × 3 collections each = 6 total UpsertCollection invocations.
+	// UpsertCollection uses ON CONFLICT DO UPDATE, so duplicate rows are not a concern at the DB level.
+	if callCount.Load() != 6 {
+		t.Errorf("expected 6 UpsertCollection calls (2 inits × 3 collections), got %d", callCount.Load())
+	}
+}
+
+func TestInitWorkspaceCodeCollectionErrorRollback(t *testing.T) {
+	var collectionCallCount int
+	q := &mockQuerier{
+		upsertWorkspaceFn: func(_ context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error) {
+			return sqlc.Workspace{
+				ID: uuid.New(), Hash: arg.Hash, Name: arg.Name, Path: arg.Path,
+				CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+		upsertCollectionFn: func(_ context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error) {
+			collectionCallCount++
+			if arg.Name == "code" {
+				return sqlc.Collection{}, errors.New("db error")
+			}
+			return sqlc.Collection{
+				ID: uuid.New(), WorkspaceHash: arg.WorkspaceHash,
+				Name: arg.Name, Path: arg.Path, GlobPattern: arg.GlobPattern,
+				UpdateMode: arg.UpdateMode, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/init", strings.NewReader(`{"root_path":"/tmp/test-project"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
+	err := h(c)
+	if err == nil {
+		t.Fatal("expected error when code collection upsert fails")
+	}
+	he, ok := err.(*echo.HTTPError)
+	if !ok {
+		t.Fatalf("expected echo.HTTPError, got %T", err)
+	}
+	if he.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", he.Code)
 	}
 }
 
