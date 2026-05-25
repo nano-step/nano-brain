@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/lib/pq"
 )
 
 const deleteGraphEdgesByFile = `-- name: DeleteGraphEdgesByFile :exec
@@ -22,6 +24,91 @@ type DeleteGraphEdgesByFileParams struct {
 func (q *Queries) DeleteGraphEdgesByFile(ctx context.Context, arg DeleteGraphEdgesByFileParams) error {
 	_, err := q.db.ExecContext(ctx, deleteGraphEdgesByFile, arg.WorkspaceHash, arg.SourceFile)
 	return err
+}
+
+const getImpactors = `-- name: GetImpactors :many
+SELECT DISTINCT source_node, edge_type
+FROM graph_edges
+WHERE workspace_hash = $1 AND target_node = $2
+  AND ($3::text = '' OR edge_type = $3)
+ORDER BY edge_type, source_node
+`
+
+type GetImpactorsParams struct {
+	WorkspaceHash string
+	TargetNode    string
+	Column3       string
+}
+
+type GetImpactorsRow struct {
+	SourceNode string
+	EdgeType   string
+}
+
+func (q *Queries) GetImpactors(ctx context.Context, arg GetImpactorsParams) ([]GetImpactorsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getImpactors, arg.WorkspaceHash, arg.TargetNode, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetImpactorsRow
+	for rows.Next() {
+		var i GetImpactorsRow
+		if err := rows.Scan(&i.SourceNode, &i.EdgeType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getImpactorsByTargets = `-- name: GetImpactorsByTargets :many
+SELECT DISTINCT source_node, target_node, edge_type
+FROM graph_edges
+WHERE workspace_hash = $1 AND target_node = ANY($2::text[])
+  AND ($3::text = '' OR edge_type = $3)
+ORDER BY edge_type, source_node
+`
+
+type GetImpactorsByTargetsParams struct {
+	WorkspaceHash string
+	Column2       []string
+	Column3       string
+}
+
+type GetImpactorsByTargetsRow struct {
+	SourceNode string
+	TargetNode string
+	EdgeType   string
+}
+
+func (q *Queries) GetImpactorsByTargets(ctx context.Context, arg GetImpactorsByTargetsParams) ([]GetImpactorsByTargetsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getImpactorsByTargets, arg.WorkspaceHash, pq.Array(arg.Column2), arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetImpactorsByTargetsRow
+	for rows.Next() {
+		var i GetImpactorsByTargetsRow
+		if err := rows.Scan(&i.SourceNode, &i.TargetNode, &i.EdgeType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getIncomingEdges = `-- name: GetIncomingEdges :many

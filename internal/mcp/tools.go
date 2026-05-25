@@ -30,6 +30,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryWakeUp(server, a)
 	registerMemorySymbols(server, a)
 	registerMemoryGraph(server, a)
+	registerMemoryImpact(server, a)
 }
 
 func toolSchema(props map[string]map[string]any, required []string) json.RawMessage {
@@ -982,6 +983,78 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 				"direction": direction,
 				"edges":     results,
 				"count":     len(results),
+			})
+		},
+	)
+}
+
+func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_impact",
+			Description: "Find what would be affected if a node (file or symbol) changes — reverse import/call lookup with optional depth traversal",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"workspace": {"type": "string", "description": "Workspace hash"},
+				"node":      {"type": "string", "description": "The node to analyze (file path or file::symbol)"},
+				"edge_type": {"type": "string", "description": "Filter by edge type: imports, calls (empty = all)"},
+				"max_depth": {"type": "number", "description": "Traversal depth 1-3 (default 1)"},
+			}, []string{"workspace", "node"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ws, errRes := requireWorkspace(args)
+			if errRes != nil {
+				return errRes, nil
+			}
+			node := argString(args, "node")
+			if node == "" {
+				return errResult("node is required"), nil
+			}
+			edgeType := argString(args, "edge_type")
+			maxDepth := argInt(args, "max_depth", 1, 3)
+
+			frontier := []string{node}
+			seen := map[string]bool{node: true}
+
+			type impactItem struct {
+				Node     string `json:"node"`
+				Depth    int    `json:"depth"`
+				EdgeType string `json:"edge_type"`
+			}
+			var impacted []impactItem
+
+			for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
+				rows, err := a.queries.GetImpactorsByTargets(ctx, sqlc.GetImpactorsByTargetsParams{
+					WorkspaceHash: ws,
+					Column2:       frontier,
+					Column3:       edgeType,
+				})
+				if err != nil {
+					return errResult(fmt.Sprintf("impact query failed: %v", err)), nil
+				}
+				var next []string
+				for _, r := range rows {
+					if seen[r.SourceNode] {
+						continue
+					}
+					seen[r.SourceNode] = true
+					impacted = append(impacted, impactItem{
+						Node:     r.SourceNode,
+						Depth:    depth,
+						EdgeType: r.EdgeType,
+					})
+					next = append(next, r.SourceNode)
+				}
+				frontier = next
+			}
+
+			return textResult(map[string]any{
+				"node":     node,
+				"impacted": impacted,
+				"count":    len(impacted),
 			})
 		},
 	)

@@ -27,3 +27,17 @@ SELECT
     COUNT(*) FILTER (WHERE edge_type = 'imports')  AS imports_count,
     COUNT(*) FILTER (WHERE edge_type = 'calls')    AS calls_count
 FROM graph_edges WHERE workspace_hash = $1;
+
+-- name: GetImpactors :many
+SELECT DISTINCT source_node, edge_type
+FROM graph_edges
+WHERE workspace_hash = $1 AND target_node = $2
+  AND ($3::text = '' OR edge_type = $3)
+ORDER BY edge_type, source_node;
+
+-- name: GetImpactorsByTargets :many
+SELECT DISTINCT source_node, target_node, edge_type
+FROM graph_edges
+WHERE workspace_hash = $1 AND target_node = ANY($2::text[])
+  AND ($3::text = '' OR edge_type = $3)
+ORDER BY edge_type, source_node;
