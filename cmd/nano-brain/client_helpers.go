@@ -2,8 +2,12 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 )
+
+const healthPollInterval = 200 * time.Millisecond
 
 // isTTY reports whether BOTH os.Stdin and os.Stderr are connected to a
 // character device (terminal). Stdlib-only: uses os.ModeCharDevice from
@@ -53,4 +57,39 @@ func formatConnectError(host string, port int) string {
 			"Run this to start it: %s",
 		host, port, suggestStartCommand(),
 	)
+}
+
+// waitForServerHealthy polls GET <baseURL>/api/status every healthPollInterval
+// and returns nil on the first HTTP 200 response. If timeout elapses before
+// success, it returns an error describing the deadline.
+func waitForServerHealthy(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	url := getBaseURL() + "/api/status"
+
+	for {
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err == nil {
+			resp, doErr := httpClient.Do(req)
+			if doErr == nil {
+				status := resp.StatusCode
+				_ = resp.Body.Close()
+				if status == http.StatusOK {
+					return nil
+				}
+			}
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("server did not become healthy within %s", timeout)
+		}
+
+		remaining := time.Until(deadline)
+		sleep := healthPollInterval
+		if remaining < sleep {
+			sleep = remaining
+		}
+		if sleep > 0 {
+			time.Sleep(sleep)
+		}
+	}
 }

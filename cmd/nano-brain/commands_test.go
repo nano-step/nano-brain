@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestGetBaseURL_Defaults(t *testing.T) {
@@ -354,5 +356,75 @@ func TestIsCharDevice_RegularFile(t *testing.T) {
 
 	if isCharDevice(tmp) {
 		t.Error("isCharDevice(regular file) = true, want false")
+	}
+}
+
+func pointHTTPClientAt(t *testing.T, ts *httptest.Server) {
+	t.Helper()
+	u := strings.TrimPrefix(ts.URL, "http://")
+	parts := strings.Split(u, ":")
+	t.Setenv("NANO_BRAIN_HOST", parts[0])
+	if len(parts) > 1 {
+		t.Setenv("NANO_BRAIN_PORT", parts[1])
+	}
+}
+
+func TestWaitForServerHealthy_BecomesHealthy(t *testing.T) {
+	start := time.Now()
+	var hits int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		if time.Since(start) < 400*time.Millisecond {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+	pointHTTPClientAt(t, ts)
+
+	if err := waitForServerHealthy(3 * time.Second); err != nil {
+		t.Fatalf("waitForServerHealthy() error = %v, want nil", err)
+	}
+	if atomic.LoadInt32(&hits) < 2 {
+		t.Errorf("expected at least 2 polls, got %d", hits)
+	}
+}
+
+func TestWaitForServerHealthy_Timeout(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer ts.Close()
+	pointHTTPClientAt(t, ts)
+
+	start := time.Now()
+	err := waitForServerHealthy(500 * time.Millisecond)
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if !strings.Contains(err.Error(), "did not become healthy") {
+		t.Errorf("error = %q, expected 'did not become healthy'", err.Error())
+	}
+	if elapsed < 500*time.Millisecond {
+		t.Errorf("returned too early: %s", elapsed)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("returned too late: %s", elapsed)
+	}
+}
+
+func TestWaitForServerHealthy_UnreachableHost(t *testing.T) {
+	t.Setenv("NANO_BRAIN_HOST", "127.0.0.1")
+	t.Setenv("NANO_BRAIN_PORT", "19998")
+
+	start := time.Now()
+	err := waitForServerHealthy(400 * time.Millisecond)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if time.Since(start) < 400*time.Millisecond {
+		t.Errorf("returned too early")
 	}
 }
