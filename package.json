@@ -1,12 +1,15 @@
 {
-  "name": "nano-brain",
-  "version": "2.0.0-beta.5",
+  "name": "@nano-step/nano-brain",
+  "version": "0.0.0-dev",
   "description": "Persistent memory and code intelligence for AI coding agents",
   "bin": {
     "nano-brain": "npm/run.js"
   },
   "scripts": {
     "postinstall": "node npm/postinstall.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "repository": {
     "type": "git",

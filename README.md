@@ -44,12 +44,14 @@ docker run -d --name nanobrain-pg -p 5432:5432 \
 ollama pull nomic-embed-text
 
 # Check prerequisites
-npx nano-brain@beta doctor
+npx @nano-step/nano-brain@beta doctor
 
 # Start server
-npx nano-brain@beta
+npx @nano-step/nano-brain@beta
 ```
 
+> **Also available as:** `npx nano-brain@beta` (unscoped alias)
+>
 > **Note:** Do NOT run `npx nano-brain` from the nano-brain source directory — npm will resolve the local package instead of the registry. Run from any other directory.
 
 ### Option B: Build from source
