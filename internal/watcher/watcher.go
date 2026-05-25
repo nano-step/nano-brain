@@ -17,11 +17,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
 )
+
+type GraphQuerier interface {
+	UpsertGraphEdge(ctx context.Context, arg sqlc.UpsertGraphEdgeParams) error
+	DeleteGraphEdgesByFile(ctx context.Context, arg sqlc.DeleteGraphEdgesByFileParams) error
+}
 
 type WatcherQuerier interface {
 	UpsertDocumentBySourcePath(ctx context.Context, arg sqlc.UpsertDocumentBySourcePathParams) (sqlc.UpsertDocumentBySourcePathRow, error)
@@ -40,11 +46,13 @@ type watchedCollection struct {
 type Watcher struct {
 	db             *sql.DB
 	queries        WatcherQuerier
+	graphQuerier   GraphQuerier
 	logger         zerolog.Logger
 	debounceMs     int
 	pollInterval   int
 	maxFileSize    int64
 	symbolRegistry *symbol.Registry
+	graphRegistry  *graph.Registry
 
 	fsw         *fsnotify.Watcher
 	mu          sync.Mutex
@@ -67,6 +75,12 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 
 func (w *Watcher) WithSymbolRegistry(r *symbol.Registry) *Watcher {
 	w.symbolRegistry = r
+	return w
+}
+
+func (w *Watcher) WithGraphRegistry(r *graph.Registry, gq GraphQuerier) *Watcher {
+	w.graphRegistry = r
+	w.graphQuerier = gq
 	return w
 }
 
@@ -353,6 +367,9 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	if w.symbolRegistry != nil {
 		w.extractAndUpsertSymbols(ctx, col, filePath, content)
 	}
+	if w.graphRegistry != nil {
+		w.extractAndUpsertEdges(ctx, col, filePath, content)
+	}
 }
 
 func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollection, filePath string, content []byte) {
@@ -393,6 +410,54 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 		Str("file", filePath).
 		Int("symbols", len(syms)).
 		Msg("symbols extracted")
+}
+
+func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollection, filePath string, content []byte) {
+	edges, err := w.graphRegistry.ExtractEdges(filePath, content)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph edge extraction failed")
+		return
+	}
+
+	tx, err := w.db.BeginTx(ctx, nil)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph tx begin failed")
+		return
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	tq := sqlc.New(tx)
+	if err := tq.DeleteGraphEdgesByFile(ctx, sqlc.DeleteGraphEdgesByFileParams{
+		WorkspaceHash: col.workspaceHash,
+		SourceFile:    filePath,
+	}); err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph edge delete failed")
+		return
+	}
+
+	for _, e := range edges {
+		meta, _ := json.Marshal(map[string]any{"line": e.Line, "language": e.Language})
+		if err := tq.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+			WorkspaceHash: col.workspaceHash,
+			SourceNode:    e.SourceNode,
+			TargetNode:    e.TargetNode,
+			EdgeType:      string(e.Kind),
+			SourceFile:    e.SourceFile,
+			Metadata:      meta,
+		}); err != nil {
+			w.logger.Warn().Err(err).Str("edge", e.SourceNode+"->"+e.TargetNode).Msg("graph edge upsert failed")
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph tx commit failed")
+		return
+	}
+
+	w.logger.Info().
+		Str("file", filePath).
+		Int("edges", len(edges)).
+		Msg("graph edges extracted")
 }
 
 func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {

@@ -6,6 +6,7 @@ package sqlc
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,6 +64,17 @@ type Embedding struct {
 	Embedding     interface{}
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+type GraphEdge struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+	SourceNode    string
+	TargetNode    string
+	EdgeType      string
+	SourceFile    string
+	Metadata      json.RawMessage
+	CreatedAt     time.Time
 }
 
 type TelemetryLog struct {

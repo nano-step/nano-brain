@@ -29,6 +29,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryUpdate(server, a)
 	registerMemoryWakeUp(server, a)
 	registerMemorySymbols(server, a)
+	registerMemoryGraph(server, a)
 }
 
 func toolSchema(props map[string]map[string]any, required []string) json.RawMessage {
@@ -888,6 +889,99 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 					"total_chunks":    chunkCount,
 					"last_activity":   lastActivity,
 				},
+			})
+		},
+	)
+}
+
+func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_graph",
+			Description: "Query the knowledge graph: find imports, calls, and symbol containment relationships for a node",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"workspace": {"type": "string", "description": "Workspace hash"},
+				"node":      {"type": "string", "description": "Source node (file path or file::symbol)"},
+				"direction": {"type": "string", "description": "Edge direction: out (default), in, both"},
+				"edge_type": {"type": "string", "description": "Filter by edge type: contains, imports, calls (empty = all)"},
+			}, []string{"workspace", "node"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ws, errRes := requireWorkspace(args)
+			if errRes != nil {
+				return errRes, nil
+			}
+			node := argString(args, "node")
+			if node == "" {
+				return errResult("node is required"), nil
+			}
+			direction := argString(args, "direction")
+			if direction == "" {
+				direction = "out"
+			}
+			edgeType := argString(args, "edge_type")
+
+			type edgeResult struct {
+				Source   string `json:"source"`
+				Target   string `json:"target"`
+				EdgeType string `json:"edge_type"`
+			}
+
+			var rows []sqlc.GraphEdge
+			switch direction {
+			case "in":
+				rows, err = a.queries.GetIncomingEdges(ctx, sqlc.GetIncomingEdgesParams{
+					WorkspaceHash: ws,
+					TargetNode:    node,
+					Column3:       edgeType,
+				})
+			case "both":
+				out, errOut := a.queries.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
+					WorkspaceHash: ws,
+					SourceNode:    node,
+					Column3:       edgeType,
+				})
+				in, errIn := a.queries.GetIncomingEdges(ctx, sqlc.GetIncomingEdgesParams{
+					WorkspaceHash: ws,
+					TargetNode:    node,
+					Column3:       edgeType,
+				})
+				if errOut != nil {
+					err = errOut
+				} else if errIn != nil {
+					err = errIn
+				} else {
+					rows = append(out, in...)
+				}
+			default:
+				rows, err = a.queries.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
+					WorkspaceHash: ws,
+					SourceNode:    node,
+					Column3:       edgeType,
+				})
+			}
+
+			if err != nil {
+				return errResult(fmt.Sprintf("graph query failed: %v", err)), nil
+			}
+
+			results := make([]edgeResult, 0, len(rows))
+			for _, r := range rows {
+				results = append(results, edgeResult{
+					Source:   r.SourceNode,
+					Target:   r.TargetNode,
+					EdgeType: r.EdgeType,
+				})
+			}
+			return textResult(map[string]any{
+				"node":      node,
+				"direction": direction,
+				"edges":     results,
+				"count":     len(results),
 			})
 		},
 	)

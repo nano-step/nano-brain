@@ -14,6 +14,7 @@ import (
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/harvest"
 	"github.com/nano-brain/nano-brain/internal/health"
 	"github.com/nano-brain/nano-brain/internal/server"
@@ -228,7 +229,17 @@ func startServer(configPath string) {
 	}
 	symRegistry := symbol.NewRegistry(extractors...)
 
-	fw := watcher.New(db, queries, logger, *cfg).WithSymbolRegistry(symRegistry)
+	var graphExtractors []graph.Extractor
+	if goGE, err := graph.NewGoGraphExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("go graph extractor init failed, skipping")
+	} else {
+		graphExtractors = append(graphExtractors, goGE)
+	}
+	graphRegistry := graph.NewRegistry(graphExtractors...)
+
+	fw := watcher.New(db, queries, logger, *cfg).
+		WithSymbolRegistry(symRegistry).
+		WithGraphRegistry(graphRegistry, queries)
 
 	var eq *embed.Queue
 	var embedder embed.Embedder
