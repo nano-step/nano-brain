@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/nano-brain/nano-brain/internal/storage"
 )
 
 func runInitCmd(args []string, configPath string) {
@@ -321,11 +323,17 @@ func runReindexCmd(args []string) {
 		os.Exit(1)
 	}
 
-	// Build request body
-	reqBody := map[string]string{"root": root}
-	if workspace != "" {
-		reqBody["workspace"] = workspace
+	if workspace == "" {
+		h, err := storage.WorkspaceHash(root)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: could not resolve workspace for path %q: %v\n", root, err)
+			cliLog.Error().Err(err).Str("cmd", "reindex").Str("root", root).Msg("failed to derive workspace hash")
+			os.Exit(1)
+		}
+		workspace = h
 	}
+
+	reqBody := map[string]string{"root": root, "workspace": workspace}
 
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
