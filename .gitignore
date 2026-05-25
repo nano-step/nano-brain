@@ -12,22 +12,3 @@ src/web/node_modules/
 .npmrc.npmrc2
 .npmrc
 .npmrc2
-_bmad/config.user.yaml
-/skills/
-
-# OpenCode internal metadata
-.opencode/worktrees/
-.opencode/worktree-sessions.json
-.opencode/.repo-id
-
-# Node (no npm deps in this project)
-package-lock.json
-
-# Go
-/nano-brain
-*.exe
-*.test
-*.out
-bin/
-npm/nano-brain
-npm/nano-brain.exe

@@ -1,5 +1,0 @@
----
-description: Master Test Architect and Quality Advisor. Use when the user asks to talk to Murat or requests the Test Architect.
----
-
-@skills/bmad-tea

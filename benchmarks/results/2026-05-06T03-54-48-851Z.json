@@ -1,0 +1,868 @@
+{
+  "schema_version": 1,
+  "nano_brain_version": "2026.8.1-beta.11",
+  "timestamp": "2026-05-06T03:54:48.851Z",
+  "environment": {
+    "ollama_model": "nomic-embed-text:latest",
+    "ollama_model_digest": "unknown",
+    "platform": "linux-arm64",
+    "node_version": "v22.22.2"
+  },
+  "corpus_hash": "1b96105a3886bde796d83ef07ccdd84e0764f2f9c28449d66a689d1639a239c9",
+  "scales": {
+    "100": {
+      "quality": {
+        "fts": {
+          "mean_p5": 0.975,
+          "mean_r10": 0.9850000000000001,
+          "mean_mrr": 1,
+          "per_query": [
+            {
+              "query": "JWT authentication middleware token validation",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "OAuth session credentials bearer token",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Redis cache TTL eviction strategy",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "cache invalidation LRU Memcached",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Stripe payment webhook idempotency",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "billing subscription invoice refund",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Kubernetes rolling update Helm chart",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Docker CI/CD canary blue-green deployment",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "production debugging stack trace profiler",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "distributed tracing memory leak flamegraph",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "REST API versioning rate limiting",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "GraphQL schema OpenAPI pagination",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "PostgreSQL index query plan optimization",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "N+1 problem connection pool deadlock",
+              "p5": 0.8,
+              "r10": 0.8,
+              "mrr": 1
+            },
+            {
+              "query": "unit test mock integration fixture",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "test coverage snapshot property-based testing",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Prometheus metrics alerting histogram",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Grafana SLO error rate latency p99",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "SQL injection XSS CSRF OWASP",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "TLS secret rotation vulnerability penetration test",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "React memo useCallback performance",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "code splitting lazy loading bundle hydration",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "React Native push notification offline",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Expo deep link AsyncStorage Hermes",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "ETL Airflow Kafka pipeline batch job",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "data lake schema registry partitioning backfill",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "model serving inference feature store",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "ONNX model drift training embedding GPU",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "message queue dead letter consumer group",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "event sourcing CQRS outbox saga pattern",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Elasticsearch BM25 index analyzer tokenizer",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "fuzzy match aggregation relevance scoring",
+              "p5": 0.6,
+              "r10": 0.6,
+              "mrr": 1
+            },
+            {
+              "query": "S3 presigned URL CDN multipart upload",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "bucket policy CORS object versioning lifecycle",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "push notification FCM APNs email delivery",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "SMTP bounce unsubscribe webhook retry",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "event tracking funnel cohort A/B experiment",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "session replay heatmap retention DAU",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "feature flag LaunchDarkly rollout percentage",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "secrets manager config reload kill switch",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            }
+          ]
+        },
+        "vector": {
+          "mean_p5": 0,
+          "mean_r10": 0,
+          "mean_mrr": 0,
+          "per_query": [
+            {
+              "query": "JWT authentication middleware token validation",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "OAuth session credentials bearer token",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "Redis cache TTL eviction strategy",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "cache invalidation LRU Memcached",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "Stripe payment webhook idempotency",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "billing subscription invoice refund",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "Kubernetes rolling update Helm chart",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "Docker CI/CD canary blue-green deployment",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "production debugging stack trace profiler",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "distributed tracing memory leak flamegraph",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "REST API versioning rate limiting",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "GraphQL schema OpenAPI pagination",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "PostgreSQL index query plan optimization",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "N+1 problem connection pool deadlock",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "unit test mock integration fixture",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "test coverage snapshot property-based testing",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "Prometheus metrics alerting histogram",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "Grafana SLO error rate latency p99",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "SQL injection XSS CSRF OWASP",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "TLS secret rotation vulnerability penetration test",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "React memo useCallback performance",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "code splitting lazy loading bundle hydration",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "React Native push notification offline",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "Expo deep link AsyncStorage Hermes",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "ETL Airflow Kafka pipeline batch job",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "data lake schema registry partitioning backfill",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "model serving inference feature store",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "ONNX model drift training embedding GPU",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "message queue dead letter consumer group",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "event sourcing CQRS outbox saga pattern",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "Elasticsearch BM25 index analyzer tokenizer",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "fuzzy match aggregation relevance scoring",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "S3 presigned URL CDN multipart upload",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "bucket policy CORS object versioning lifecycle",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "push notification FCM APNs email delivery",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "SMTP bounce unsubscribe webhook retry",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "event tracking funnel cohort A/B experiment",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "session replay heatmap retention DAU",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "feature flag LaunchDarkly rollout percentage",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            },
+            {
+              "query": "secrets manager config reload kill switch",
+              "p5": 0,
+              "r10": 0,
+              "mrr": 0
+            }
+          ]
+        },
+        "hybrid": {
+          "mean_p5": 0.8450000000000003,
+          "mean_r10": 0.9600000000000002,
+          "mean_mrr": 1,
+          "per_query": [
+            {
+              "query": "JWT authentication middleware token validation",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "OAuth session credentials bearer token",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Redis cache TTL eviction strategy",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "cache invalidation LRU Memcached",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Stripe payment webhook idempotency",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "billing subscription invoice refund",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Kubernetes rolling update Helm chart",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Docker CI/CD canary blue-green deployment",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "production debugging stack trace profiler",
+              "p5": 0.6,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "distributed tracing memory leak flamegraph",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "REST API versioning rate limiting",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "GraphQL schema OpenAPI pagination",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "PostgreSQL index query plan optimization",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "N+1 problem connection pool deadlock",
+              "p5": 0.8,
+              "r10": 0.8,
+              "mrr": 1
+            },
+            {
+              "query": "unit test mock integration fixture",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "test coverage snapshot property-based testing",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Prometheus metrics alerting histogram",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Grafana SLO error rate latency p99",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "SQL injection XSS CSRF OWASP",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "TLS secret rotation vulnerability penetration test",
+              "p5": 0.8,
+              "r10": 0.8,
+              "mrr": 1
+            },
+            {
+              "query": "React memo useCallback performance",
+              "p5": 0.6,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "code splitting lazy loading bundle hydration",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "React Native push notification offline",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Expo deep link AsyncStorage Hermes",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "ETL Airflow Kafka pipeline batch job",
+              "p5": 0.6,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "data lake schema registry partitioning backfill",
+              "p5": 0.6,
+              "r10": 0.6,
+              "mrr": 1
+            },
+            {
+              "query": "model serving inference feature store",
+              "p5": 0.6,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "ONNX model drift training embedding GPU",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "message queue dead letter consumer group",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "event sourcing CQRS outbox saga pattern",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "Elasticsearch BM25 index analyzer tokenizer",
+              "p5": 0.6,
+              "r10": 0.8,
+              "mrr": 1
+            },
+            {
+              "query": "fuzzy match aggregation relevance scoring",
+              "p5": 0.6,
+              "r10": 0.6,
+              "mrr": 1
+            },
+            {
+              "query": "S3 presigned URL CDN multipart upload",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "bucket policy CORS object versioning lifecycle",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "push notification FCM APNs email delivery",
+              "p5": 0.6,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "SMTP bounce unsubscribe webhook retry",
+              "p5": 0.6,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "event tracking funnel cohort A/B experiment",
+              "p5": 1,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "session replay heatmap retention DAU",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "feature flag LaunchDarkly rollout percentage",
+              "p5": 0.8,
+              "r10": 1,
+              "mrr": 1
+            },
+            {
+              "query": "secrets manager config reload kill switch",
+              "p5": 0.8,
+              "r10": 0.8,
+              "mrr": 1
+            }
+          ]
+        },
+        "hybrid_beats_fts": true
+      },
+      "latency": {
+        "insert": {
+          "p50_ms": 1,
+          "p95_ms": 2
+        },
+        "query_fts": {
+          "p50_ms": 1,
+          "p95_ms": 3
+        },
+        "query_vector": {
+          "p50_ms": 25,
+          "p95_ms": 40
+        },
+        "query_hybrid": {
+          "p50_ms": 29,
+          "p95_ms": 56
+        }
+      },
+      "commands": [
+        {
+          "cmd": "search",
+          "args": [
+            "JWT authentication middleware token validation"
+          ],
+          "status": "pass",
+          "exit_code": 0,
+          "stdout": "[2026-05-06T03:53:52.324Z] [info] [cli] command=search\n[2026-05-06T03:53:52.326Z] [info] [cli] search mode=fts query=JWT authentication middleware token validation\n[2026-05-06T03:53:52.356Z] [info] [store] createStore dbPath=/tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:53:52.357Z] [info] [corruption-recovery] Checking database integrity at /tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:53:52.367Z] [info] [corruption-recovery] Quick check PASSED - database is valid\n[2026-05-06T03:53:52.377Z] [debug] [store] searchFTS query=JWT authentication middleware token validation results=10\n[cf4daa] bench//Users/tamlh/workspaces/self/AI/Tools/nano-brain/benchmarks/fixtures/scale-100/docs/auth-0003.md\n  Score: 18.0528 | JWT authentication middleware: JWT (3)\n  # <mark>JWT</mark> <mark>authentication</mark> <mark>middleware</mark>: <mark>JWT</mark> (3)\n\nAdditionally, note that CSV export may require separate consideration depending on your deployment context (doc-2). When implementing credentials, consider how <mark>token</mark> interacts with your system. Engineers often configure bearer to improve OAuth reliability. A common pattern for <mark>JWT</mark> <mark>authentication</mark> <mark>middleware</mark> involves using refresh <mark>token</mark> alongside auth <mark>middleware</mark>. This document covers <mark>JWT</mark> <mark>authentication</mark> <mark>middleware</mark> including login and credentials.\n\n\n[121075] bench//Users/tamlh/workspaces/self/AI/Tools/nano-brain/benchmarks/fixtures/scale-100/docs/auth-0005.md\n  Score: 17.4390 | JWT authentication middleware: login (5)\n  # <mark>JWT</mark> <mark>authentication</mark> <mark>middleware</mark>: login (5)\n\nBest practices for <mark>JWT</mark> <mark>authentication</mark> <mark>middleware</mark> recommend <mark>token</mark> as a foundational component. Engineers often configure password hash to improve OAuth reliability. A common pattern for <mark>JWT</mark> <mark>authentication</ma",
+          "stderr": "",
+          "duration_ms": 3299
+        },
+        {
+          "cmd": "query",
+          "args": [
+            "JWT authentication middleware token validation"
+          ],
+          "status": "pass",
+          "exit_code": 0,
+          "stdout": "[2026-05-06T03:53:55.065Z] [info] [cli] command=query\n[2026-05-06T03:53:55.067Z] [info] [cli] search mode=hybrid query=JWT authentication middleware token validation\n[2026-05-06T03:53:55.087Z] [info] [store] createStore dbPath=/tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:53:55.087Z] [info] [corruption-recovery] Checking database integrity at /tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:53:55.096Z] [info] [corruption-recovery] Quick check PASSED - database is valid\n[2026-05-06T03:53:55.099Z] [info] [collections] loading config from /home/agent/.nano-brain/config.yml\n[2026-05-06T03:53:55.144Z] [info] [embed] Detected nomic-embed-text context: 2048 tokens → 3840 max chars\n[2026-05-06T03:53:55.506Z] [info] [embed] 🦙 Ollama connected: nomic-embed-text at http://host.docker.internal:11434\n[2026-05-06T03:53:55.507Z] [info] [reranker] No API key configured — reranking disabled\n[2026-05-06T03:53:55.508Z] [info] [search] hybridSearch START query=JWT authentication middleware token validation limit=10 expansion=false reranking=true hasEmbedder=true hasExpander=false\n[2026-05-06T03:53:55.508Z] [info] [search] hybridSearch expansion done queries=1\n[2026-05-06T03:53:55.516Z] [debug] [store] searchFTS query=JWT authentication middleware token validation results=15\n[2026-05-06T03:53:55.521Z] [info] [search] hybridSearch awaiting searchPromises...\n[2026-05-06T03:53:55.619Z] [info] [store] searchVecAsync qdrant failed, falling back to SQLite: fetch failed\n[2026-05-06T03:53:55.620Z] [warn] [store] Vector search failed: no such table: vectors_vec\n[2026-05-06T03:53:55.620Z] [info] [search] hybridSearch searchPromises resolved\n[2026-05-06T03:53:55.620Z] [info] [search] hybridSearch fts=15 vec=0\n[2026-05-06T03:53:55.620Z] [info] [search] hybridSearch fusing results...\n[2026-05-06T03:53:55.621Z] [info] [search] hybridSearch fused=15\n[2026-05-06T03:53:55.621Z] [info] [search] hybridSearch final=10\n[cf4daa] bench//Users/tamlh/workspaces/self/A",
+          "stderr": "",
+          "duration_ms": 6182
+        },
+        {
+          "cmd": "vsearch",
+          "args": [
+            "JWT authentication middleware token validation"
+          ],
+          "status": "pass",
+          "exit_code": 0,
+          "stdout": "[2026-05-06T03:54:01.215Z] [info] [cli] command=vsearch\n[2026-05-06T03:54:01.217Z] [info] [cli] search mode=vec query=JWT authentication middleware token validation\n[2026-05-06T03:54:01.244Z] [info] [store] createStore dbPath=/tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:01.245Z] [info] [corruption-recovery] Checking database integrity at /tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:01.255Z] [info] [corruption-recovery] Quick check PASSED - database is valid\n[2026-05-06T03:54:01.260Z] [info] [collections] loading config from /home/agent/.nano-brain/config.yml\n[2026-05-06T03:54:01.304Z] [info] [embed] Detected nomic-embed-text context: 2048 tokens → 3840 max chars\n[2026-05-06T03:54:01.395Z] [info] [embed] 🦙 Ollama connected: nomic-embed-text at http://host.docker.internal:11434\n[2026-05-06T03:54:01.429Z] [info] [store] searchVecAsync qdrant failed, falling back to SQLite: fetch failed\n[2026-05-06T03:54:01.430Z] [warn] [store] Vector search failed: no such table: vectors_vec\n\n",
+          "stderr": "",
+          "duration_ms": 2694
+        },
+        {
+          "cmd": "write",
+          "args": [
+            "benchmark test document content"
+          ],
+          "status": "pass",
+          "exit_code": 0,
+          "stdout": "[2026-05-06T03:54:03.919Z] [info] [cli] command=write\n[2026-05-06T03:54:03.921Z] [info] [cli] write command contentLength=31\n[2026-05-06T03:54:03.922Z] [info] [store] createStore dbPath=/tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:03.922Z] [info] [corruption-recovery] Checking database integrity at /tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:03.936Z] [info] [corruption-recovery] Quick check PASSED - database is valid\n✅ Written to /home/agent/.nano-brain/memory/2026-05-06.md [nano-brain]\n",
+          "stderr": "",
+          "duration_ms": 728
+        },
+        {
+          "cmd": "reindex",
+          "args": [],
+          "status": "pass",
+          "exit_code": 0,
+          "stdout": "[2026-05-06T03:54:04.599Z] [info] [cli] command=reindex\n[2026-05-06T03:54:04.601Z] [info] [cli] reindex root=/Users/tamlh/workspaces/self/AI/Tools/nano-brain\n[2026-05-06T03:54:04.601Z] [info] [store] createStore dbPath=/tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:04.601Z] [info] [corruption-recovery] Checking database integrity at /tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:04.610Z] [info] [corruption-recovery] Quick check PASSED - database is valid\n[2026-05-06T03:54:04.614Z] [info] [collections] loading config from /home/agent/.nano-brain/config.yml\n[2026-05-06T03:54:04.618Z] [info] [collections] workspace config source=default\nReindexing codebase: /Users/tamlh/workspaces/self/AI/Tools/nano-brain\n[2026-05-06T03:54:04.619Z] [info] [codebase] Starting codebase scan: /Users/tamlh/workspaces/self/AI/Tools/nano-brain\n[2026-05-06T03:54:04.621Z] [info] [codebase] Scanning with extensions: .ts, .tsx, .js, .jsx, .mjs, .cjs, .json, .vue, .md\n[2026-05-06T03:54:04.781Z] [info] [codebase] Found 742 files matching patterns\n[2026-05-06T03:54:04.849Z] [info] [store] insertDocument collection=codebase path=/Users/tamlh/workspaces/self/AI/Tools/nano-brain/AGENTS.md\n[2026-05-06T03:54:04.850Z] [info] [store] insertDocument collection=codebase path=/Users/tamlh/workspaces/self/AI/Tools/nano-brain/AGENTS_SNIPPET.md\n[2026-05-06T03:54:04.867Z] [info] [store] insertDocument collection=codebase path=/Users/tamlh/workspaces/self/AI/Tools/nano-brain/CHANGELOG.md\n[2026-05-06T03:54:04.875Z] [info] [store] insertDocument collection=codebase path=/Users/tamlh/workspaces/self/AI/Tools/nano-brain/README.md\n[2026-05-06T03:54:04.878Z] [info] [store] insertDocument collection=codebase path=/Users/tamlh/workspaces/self/AI/Tools/nano-brain/SKILL.md\n[2026-05-06T03:54:04.879Z] [info] [store] insertDocument collection=codebase path=/Users/tamlh/workspaces/self/AI/Tools/nano-brain/analysis-2026-03-08-token-bloat-harvester.md\n[2026-05-06T03:54:04.894Z] [",
+          "stderr": "",
+          "duration_ms": 19484
+        },
+        {
+          "cmd": "status",
+          "args": [],
+          "status": "pass",
+          "exit_code": 0,
+          "stdout": "[2026-05-06T03:54:24.697Z] [info] [cli] command=status\n[2026-05-06T03:54:24.703Z] [info] [cli] status command invoked\n[2026-05-06T03:54:24.737Z] [info] [collections] loading config from /home/agent/.nano-brain/config.yml\n[2026-05-06T03:54:24.746Z] [info] [store] createStore dbPath=/tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:24.747Z] [info] [corruption-recovery] Checking database integrity at /tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:24.841Z] [info] [corruption-recovery] Quick check PASSED - database is valid\nnano-brain Status — bench-test\n═══════════════════════════════════════════════════\n\nDatabase:\n  Path:     /tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n  Size:     11.8 MB (on disk)\n\nIndex:\n  Documents:          742\n  Embedded:           0\n  Pending embeddings: 742\n\nCollections:\n  bench      100 documents\n  codebase   642 documents\n\n[2026-05-06T03:54:24.871Z] [info] [collections] workspace config source=default\nCodebase:\n  Enabled:    true\n  Storage:    3.7 MB / 2048.0 MB\n  Extensions: .ts, .tsx, .js, .jsx, .mjs, .cjs, .json, .vue, .md\n  Excludes:   102 patterns\n\nCode Intelligence:\n  Symbols:    1,303\n  Edges:      1,779\n  Flows:      49\n\nEmbedding Server:\n  Provider:  ollama\n  URL:       http://host.docker.internal:11434\n  Model:     nomic-embed-text\n  Status:    ✅ connected\n\nVector Store:\n  Provider:   qdrant\n  Status:     ❌ unreachable (fetch failed)\n\nModels:\n  Embedding: nomic-embed-text (ollama)\n  Reranker:  rerank-2.5-lite (no endpoint — set reranker.apiKey)\n  Expander:  disabled\n",
+          "stderr": "",
+          "duration_ms": 6661
+        },
+        {
+          "cmd": "tags",
+          "args": [],
+          "status": "pass",
+          "exit_code": 0,
+          "stdout": "[2026-05-06T03:54:31.008Z] [info] [cli] command=tags\n[2026-05-06T03:54:31.012Z] [info] [store] createStore dbPath=/tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:31.012Z] [info] [corruption-recovery] Checking database integrity at /tmp/nano-brain-bench-1778039627935/bench-test.sqlite\n[2026-05-06T03:54:31.091Z] [info] [corruption-recovery] Quick check PASSED - database is valid\nNo tags found.\n",
+          "stderr": "",
+          "duration_ms": 1021
+        }
+      ],
+      "combination_tests": [
+        {
+          "name": "write→reindex→query",
+          "status": "pass",
+          "detail": "Token found in results"
+        },
+        {
+          "name": "supersede→query",
+          "status": "fail",
+          "detail": "Old doc still present. write_exit=0"
+        },
+        {
+          "name": "harvest→reindex→search",
+          "status": "pass",
+          "detail": "Session content found in search"
+        }
+      ]
+    }
+  }
+}

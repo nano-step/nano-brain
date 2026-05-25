@@ -1,5 +1,0 @@
----
-description: "Craft compelling narratives using story frameworks. Use when the user says \"help me with storytelling\" or \"I want to create a narrative through storytelling\""
----
-
-@skills/bmad-cis-storytelling

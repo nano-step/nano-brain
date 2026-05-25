@@ -1,323 +1,852 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>nano-brain — Persistent memory for AI coding agents</title>
-  <meta name="description" content="Hybrid search, MCP tools, session harvesting — all in a single Go binary. Your AI never forgets again.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            primary: '#1E293B',
-            secondary: '#334155',
-            cta: '#22C55E',
-            surface: '#0F172A',
-            text: '#F8FAFC',
-            muted: '#94A3B8',
-            border: '#1E293B',
-          },
-          fontFamily: {
-            mono: ['"JetBrains Mono"', 'monospace'],
-            sans: ['"IBM Plex Sans"', 'sans-serif'],
-          },
-        },
-      },
-    }
-  </script>
+  <title>nano-brain — Persistent Memory & Code Intelligence for AI Agents</title>
+  <meta name="description" content="A persistent memory MCP server for AI coding agents. Hybrid search (BM25 + vector + RRF), code intelligence, 30 MCP tools, TypeScript/JavaScript/Python/Ruby/Vue.">
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/nano-step-logo.png">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
-    body { background: #0F172A; color: #F8FAFC; }
-    ::selection { background: #22C55E; color: #0F172A; }
-    .terminal { background: #0c0f17; border: 1px solid #1E293B; }
-    .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
-    .pill { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; border: 1px solid #334155; color: #94A3B8; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #1E293B; font-size: 0.875rem; }
-    th { color: #94A3B8; font-weight: 500; }
+    /* ── HERO ─────────────────────────────────────── */
+    .hero {
+      padding: 96px 0 80px;
+      position: relative;
+      overflow: visible;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -200px; left: 50%;
+      transform: translateX(-50%);
+      width: 800px; height: 600px;
+      background: radial-gradient(ellipse at center, rgba(56,189,248,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    /* ── THREE.JS CANVAS (full viewport background) ── */
+    #brain-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.32;
+    }
+    /* Ensure all main content sits above the canvas */
+    .nav, .hero, .stats-bar, .section, .footer {
+      position: relative;
+      z-index: 1;
+    }
+    /* Hero glow stays subtle since canvas is the main visual */
+    .hero::before { display: none; }
+    .hero-inner { position: relative; z-index: 1; }
+    /* .hero-inner { position: relative; } */
+    .hero-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 28px;
+    }
+    .hero-title {
+      margin-bottom: 20px;
+    }
+    .hero-title em {
+      font-style: normal;
+      color: var(--accent);
+    }
+    .hero-desc {
+      margin-bottom: 36px;
+    }
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 56px;
+    }
+    .install-cmd {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-family: var(--mono);
+      font-size: 14px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .install-cmd:hover { border-color: var(--border-hover); }
+    .install-cmd .cmd { color: var(--text); }
+    .install-cmd .copy-icon { opacity: 0.4; font-size: 12px; }
+    .hero-terminal {
+      background: #0c0c14;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      max-width: 680px;
+    }
+    .hero-terminal-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero-terminal-header span { width: 10px; height: 10px; border-radius: 50%; }
+    .hero-terminal-header .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: 8px;
+    }
+    .hero-terminal pre {
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      padding: 20px 24px;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .c-prompt { color: var(--accent); }
+    .c-cmd { color: var(--text); }
+    .c-comment { color: #475569; }
+    .c-green { color: #34d399; }
+    .c-muted { color: #64748b; }
+    .c-orange { color: #fb923c; }
+
+    /* ── STATS BAR ─────────────────────────────────── */
+    .stats-bar {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 0;
+    }
+    .stats-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      gap: 48px;
+      flex-wrap: wrap;
+    }
+    .stat { display: flex; flex-direction: column; gap: 2px; }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+    .stat-value span { color: var(--accent); }
+    .stat-label { font-size: 13px; color: var(--text-muted); }
+
+    /* ── FEATURES ─────────────────────────────────── */
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .feature-card:hover {
+      border-color: var(--border-hover);
+      background: var(--surface-2);
+    }
+    .feature-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(56,189,248,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 14px;
+      color: var(--accent);
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+    .feature-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .feature-desc { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+    .feature-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+
+    /* ── PIPELINE ─────────────────────────────────── */
+    .pipeline {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+    }
+    .pipeline-steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+    .pipeline-step {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .pipeline-node {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-family: var(--mono);
+      white-space: nowrap;
+    }
+    .pipeline-node.accent {
+      border-color: rgba(56,189,248,0.3);
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .pipeline-arrow {
+      color: var(--text-subtle);
+      padding: 0 8px;
+      font-size: 14px;
+    }
+
+    /* ── TOOLS GRID ────────────────────────────────── */
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 8px;
+      margin-top: 24px;
+    }
+    .tool-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .tool-item:hover { border-color: var(--border-hover); color: var(--text); }
+    .tool-item-cat {
+      font-size: 10px;
+      color: var(--text-subtle);
+      margin-top: 2px;
+      font-family: var(--font);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── QUICK START ───────────────────────────────── */
+    .tab-bar {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: -1px;
+    }
+    .tab {
+      padding: 10px 18px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s;
+    }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── TOOLTIPS ────────────────────────────────── */
+    .tool-item { position: relative; cursor: default; }
+    .tool-tip {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e1e2a;
+      border: 1px solid var(--border-hover);
+      border-radius: 8px;
+      padding: 10px 13px;
+      font-size: 12px;
+      font-family: var(--font);
+      color: var(--text-muted);
+      line-height: 1.5;
+      white-space: normal;
+      width: 220px;
+      text-align: left;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s, visibility 0.15s;
+      z-index: 200;
+    }
+    .tool-tip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--border-hover);
+    }
+    .tool-tip::before {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: #1e1e2a;
+      z-index: 1;
+      margin-top: -1px;
+    }
+    .tool-item:hover .tool-tip {
+      opacity: 1;
+      visibility: visible;
+    }
   </style>
 </head>
-<body class="font-sans antialiased">
+<body>
 
-  <!-- Hero -->
-  <section class="min-h-screen flex items-center justify-center px-6 py-24">
-    <div class="max-w-5xl mx-auto text-center">
-      <p class="font-mono text-cta text-sm tracking-widest uppercase mb-4">v2.0</p>
-      <h1 class="font-mono text-5xl md:text-7xl font-bold tracking-tight mb-4">nano-brain</h1>
-      <p class="text-xl md:text-2xl text-muted font-light mb-6">Persistent memory for AI coding agents</p>
-      <p class="text-muted max-w-2xl mx-auto mb-10 leading-relaxed">Your AI forgets everything between sessions. nano-brain fixes that. Hybrid search, MCP tools, session harvesting — all in a single Go binary.</p>
-      <div class="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-        <a href="#quickstart" class="inline-flex items-center justify-center px-6 py-3 bg-cta text-surface font-semibold rounded-lg hover:bg-green-400 transition-colors duration-200 cursor-pointer">Get Started</a>
-        <a href="https://github.com/nano-step/nano-brain" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 px-6 py-3 border border-secondary text-text rounded-lg hover:border-muted transition-colors duration-200 cursor-pointer">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-          View on GitHub
-        </a>
-      </div>
-      <div class="terminal rounded-xl p-1 max-w-lg mx-auto text-left">
-        <div class="flex gap-1.5 px-4 pt-3 pb-2">
-          <span class="terminal-dot bg-red-500/70"></span>
-          <span class="terminal-dot bg-yellow-500/70"></span>
-          <span class="terminal-dot bg-green-500/70"></span>
-        </div>
-        <pre class="font-mono text-sm px-4 pb-4 text-muted leading-relaxed"><span class="text-cta">$</span> nano-brain serve
-<span class="text-text">nano-brain starting (v2.0.0, port 3100)</span>
-<span class="text-muted">database pool connected</span>
-<span class="text-muted">HTTP server listening on localhost:3100</span></pre>
+<canvas id="brain-canvas"></canvas>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="index.html">
+      <img src="assets/nano-step-logo.png" alt="nano-step">
+      <span class="nav-brand-name">nano-brain</span>
+      <span class="nav-brand-version">v2026.8.19</span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html" class="active">Home</a>
+      <a href="features.html">Features</a>
+      <a href="docs.html">Docs</a>
+      <a href="setup.html">Setup</a>
+      <a href="changelog.html">Changelog</a>
+    </div>
+    <div class="nav-actions">
+      <a class="nav-badge" href="https://www.npmjs.com/package/nano-brain" target="_blank">
+        <span class="nav-badge-dot"></span>
+        npm v2026.8.19
+      </a>
+      <a class="nav-badge" href="https://github.com/nano-step/nano-brain" target="_blank">
+        GitHub ↗
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="container hero-inner">
+    <div class="hero-pills">
+      <span class="badge badge-accent">MCP Server</span>
+      <span class="badge badge-green">v2026.8.19 stable</span>
+      <span class="badge">30 MCP Tools</span>
+      <span class="badge">SQLite + Qdrant</span>
+    </div>
+
+    <h1 class="hero-title">
+      Persistent memory<br>for <em>AI coding agents</em>
+    </h1>
+
+    <p class="lead hero-desc">
+      nano-brain automatically ingests your AI sessions, notes, and codebase into a searchable index using hybrid search — BM25 + vector embeddings + knowledge graph. Serves everything back via 22+ MCP tools. Learns what matters over time.
+    </p>
+
+    <div class="hero-actions">
+      <a href="docs.html" class="btn btn-primary">Get Started →</a>
+      <div class="install-cmd" onclick="copyInstall()">
+        <span>$</span>
+        <span class="cmd">npx nano-brain init</span>
+        <span class="copy-icon">⎘</span>
       </div>
     </div>
-  </section>
 
-  <!-- Features -->
-  <section class="px-6 py-24">
-    <div class="max-w-6xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">Features</h2>
-      <p class="text-muted text-center mb-16 max-w-xl mx-auto">Everything an AI agent needs to remember across sessions.</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Hybrid Search</h3>
-          <p class="text-muted text-sm leading-relaxed">BM25 + pgvector + RRF fusion + recency decay. Find anything by keyword or meaning.</p>
-        </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-          <h3 class="font-mono font-semibold mb-2">9 MCP Tools</h3>
-          <p class="text-muted text-sm leading-relaxed">query, search, vsearch, get, write, tags, status, update, wake_up. Works with any MCP client.</p>
-        </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Session Harvesting</h3>
-          <p class="text-muted text-sm leading-relaxed">Auto-ingest OpenCode and Claude Code sessions. Never lose context.</p>
-        </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">File Watcher</h3>
-          <p class="text-muted text-sm leading-relaxed">fsnotify directory monitoring with debounce. Documents stay in sync.</p>
-        </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Content Addressing</h3>
-          <p class="text-muted text-sm leading-relaxed">SHA-256 deduplication. Write the same thing twice, stored once.</p>
-        </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Config Hot-Reload</h3>
-          <p class="text-muted text-sm leading-relaxed">POST /api/reload-config. Change search params without restart.</p>
-        </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Single Binary</h3>
-          <p class="text-muted text-sm leading-relaxed">CGO_ENABLED=0 Go binary. No runtime dependencies.</p>
-        </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-          <h3 class="font-mono font-semibold mb-2">V1 Migration</h3>
-          <p class="text-muted text-sm leading-relaxed">Import from SQLite with pure Go reader. Idempotent, safe to re-run.</p>
-        </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Benchmarking</h3>
-          <p class="text-muted text-sm leading-relaxed">Generate, run, compare, stress. Measure search quality and latency.</p>
-        </div>
-
+    <div class="hero-terminal">
+      <div class="hero-terminal-header">
+        <span style="background:#ff5f57"></span>
+        <span style="background:#febc2e"></span>
+        <span style="background:#28c840"></span>
+        <span class="label">~ nano-brain session</span>
       </div>
+      <pre><span class="c-comment"># Initialize workspace</span>
+<span class="c-prompt">$</span> <span class="c-cmd">npx nano-brain init</span>
+<span class="c-green">✔</span> Config created at ~/.nano-brain/config.yml
+<span class="c-green">✔</span> Codebase indexed — 1,247 symbols extracted
+<span class="c-green">✔</span> Embeddings generated (768-dim nomic-embed-text)
+<span class="c-green">✔</span> MCP server ready on stdio
+
+<span class="c-comment"># Check index health</span>
+<span class="c-prompt">$</span> <span class="c-cmd">npx nano-brain status</span>
+<span class="c-muted">  documents   </span><span class="c-green">4,821</span>  <span class="c-muted">chunks     </span><span class="c-orange">12,440</span>
+<span class="c-muted">  symbols     </span><span class="c-green">1,247</span>  <span class="c-muted">entities   </span><span class="c-green">892</span>
+<span class="c-muted">  collections </span><span class="c-green">4</span>      <span class="c-muted">embed      </span><span class="c-green">nomic-embed-text</span></pre>
     </div>
-  </section>
+  </div>
+</div>
 
-  <!-- Architecture -->
-  <section class="px-6 py-24">
-    <div class="max-w-4xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">How It Works</h2>
-      <p class="text-muted text-center mb-12 max-w-xl mx-auto">Two search paths, fused into one ranked result set.</p>
-      <div class="terminal rounded-xl p-6 md:p-8 mb-10">
-        <pre class="font-mono text-sm md:text-base text-muted leading-loose overflow-x-auto"><span class="text-text">Query</span> ──&gt; <span class="text-cta">BM25</span> (PostgreSQL tsquery) ───┐
-                                        ├──&gt; <span class="text-text">RRF Fusion</span> (k=60) ──&gt; <span class="text-text">Recency Decay</span> ──&gt; <span class="text-cta">Results</span>
-<span class="text-text">Query</span> ──&gt; <span class="text-cta">Vector</span> (pgvector HNSW)  ────┘</pre>
-      </div>
-      <div class="flex flex-wrap gap-2 justify-center">
-        <span class="pill">Go 1.23</span>
-        <span class="pill">PostgreSQL 17</span>
-        <span class="pill">pgvector</span>
-        <span class="pill">Echo v4</span>
-        <span class="pill">sqlc</span>
-        <span class="pill">goose</span>
-        <span class="pill">zerolog</span>
-        <span class="pill">koanf</span>
-        <span class="pill">fsnotify</span>
-      </div>
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stats-inner">
+    <div class="stat">
+      <div class="stat-value">30</div>
+      <div class="stat-label">MCP Tools</div>
     </div>
-  </section>
-
-  <!-- Quick Start -->
-  <section id="quickstart" class="px-6 py-24">
-    <div class="max-w-4xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">Quick Start</h2>
-      <p class="text-muted text-center mb-12">Three steps to persistent AI memory.</p>
-
-      <div class="space-y-8">
-        <div>
-          <p class="font-mono text-cta text-sm mb-2">1. Build</p>
-          <div class="terminal rounded-lg p-4"><pre class="font-mono text-sm text-muted">CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain</pre></div>
-        </div>
-        <div>
-          <p class="font-mono text-cta text-sm mb-2">2. Start PostgreSQL</p>
-          <div class="terminal rounded-lg p-4"><pre class="font-mono text-sm text-muted">docker run -d --name nanobrain-pg -p 5432:5432 \
-  -e POSTGRES_USER=nanobrain \
-  -e POSTGRES_PASSWORD=nanobrain \
-  -e POSTGRES_DB=nanobrain_dev \
-  pgvector/pgvector:pg17</pre></div>
-        </div>
-        <div>
-          <p class="font-mono text-cta text-sm mb-2">3. Run</p>
-          <div class="terminal rounded-lg p-4"><pre class="font-mono text-sm text-muted">DATABASE_URL="postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev" \
-  ./nano-brain</pre></div>
-        </div>
-      </div>
-
-      <div class="mt-12">
-        <p class="font-mono text-sm text-muted mb-4">Then register a workspace, write, and search:</p>
-        <div class="terminal rounded-lg p-4"><pre class="font-mono text-sm text-muted"><span class="text-cta">#</span> Register workspace
-curl -X POST http://localhost:3100/api/v1/init \
-  -H "Content-Type: application/json" \
-  -d '{"root_path":"/path/to/project","name":"my-project"}'
-
-<span class="text-cta">#</span> Write a document
-curl -X POST http://localhost:3100/api/v1/write \
-  -H "Content-Type: application/json" \
-  -d '{"workspace":"&lt;hash&gt;","source_path":"notes/decision.md",
-       "content":"# Decision\nUse PostgreSQL.","tags":["decision"]}'
-
-<span class="text-cta">#</span> Hybrid search
-curl -X POST http://localhost:3100/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{"workspace":"&lt;hash&gt;","query":"database decision"}'</pre></div>
-      </div>
+    <div class="stat">
+      <div class="stat-value">10<span>+</span></div>
+      <div class="stat-label">Search pipeline stages</div>
     </div>
-  </section>
+    <div class="stat">
+      <div class="stat-value">32</div>
+      <div class="stat-label">CLI commands</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">5</div>
+      <div class="stat-label">Background workers</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">3</div>
+      <div class="stat-label">MCP transports</div>
+    </div>
+  </div>
+</div>
 
-  <!-- API Reference -->
-  <section class="px-6 py-24">
-    <div class="max-w-5xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-12">API Reference</h2>
+<!-- FEATURES -->
+<section class="section">
+  <div class="container">
+    <p class="eyebrow">Core capabilities</p>
+    <h2 style="margin-bottom:12px">Everything your AI agent needs<br>to remember</h2>
+    <p class="lead" style="margin-bottom:48px">Six subsystems working together to give your agent persistent, searchable, evolving memory.</p>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <div>
-          <h3 class="font-mono text-lg font-semibold mb-4">REST Endpoints</h3>
-          <div class="overflow-x-auto">
-            <table>
-              <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
-              <tbody class="text-muted">
-                <tr><td class="font-mono text-cta text-xs">GET</td><td class="font-mono text-xs">/health</td><td>Health check</td></tr>
-                <tr><td class="font-mono text-cta text-xs">GET</td><td class="font-mono text-xs">/api/status</td><td>Server status</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/init</td><td>Register workspace</td></tr>
-                <tr><td class="font-mono text-cta text-xs">GET</td><td class="font-mono text-xs">/api/v1/workspaces</td><td>List workspaces</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/write</td><td>Write document</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/search</td><td>BM25 search</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/vsearch</td><td>Vector search</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/query</td><td>Hybrid search</td></tr>
-                <tr><td class="font-mono text-cta text-xs">GET</td><td class="font-mono text-xs">/api/v1/tags</td><td>List tags</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/harvest</td><td>Harvest sessions</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/reload-config</td><td>Hot-reload config</td></tr>
-              </tbody>
-            </table>
-          </div>
+    <div class="grid-2">
+
+      <div class="feature-card">
+        <div class="feature-icon">∑</div>
+        <div class="feature-title">Hybrid Search Pipeline</div>
+        <div class="feature-desc">6-stage ranking pipeline: BM25 via SQLite FTS5, vector cosine via Qdrant, RRF fusion (k=60), PageRank centrality boost, supersede demotion, and VoyageAI neural reranking.</div>
+        <div class="feature-tags">
+          <span class="badge badge-accent">BM25</span>
+          <span class="badge">Qdrant</span>
+          <span class="badge">RRF</span>
+          <span class="badge">PageRank</span>
+          <span class="badge">Reranking</span>
         </div>
+      </div>
 
-        <div>
-          <h3 class="font-mono text-lg font-semibold mb-4">MCP Tools</h3>
-          <div class="overflow-x-auto">
-            <table>
-              <thead><tr><th>Tool</th><th>Description</th></tr></thead>
-              <tbody class="text-muted">
-                <tr><td class="font-mono text-xs">memory_query</td><td>Hybrid search</td></tr>
-                <tr><td class="font-mono text-xs">memory_search</td><td>BM25 keyword search</td></tr>
-                <tr><td class="font-mono text-xs">memory_vsearch</td><td>Vector similarity search</td></tr>
-                <tr><td class="font-mono text-xs">memory_get</td><td>Get document by path</td></tr>
-                <tr><td class="font-mono text-xs">memory_write</td><td>Write/update document</td></tr>
-                <tr><td class="font-mono text-xs">memory_tags</td><td>List tags with counts</td></tr>
-                <tr><td class="font-mono text-xs">memory_status</td><td>Server + embedding status</td></tr>
-                <tr><td class="font-mono text-xs">memory_update</td><td>Trigger re-embedding</td></tr>
-                <tr><td class="font-mono text-xs">memory_wake_up</td><td>Workspace briefing</td></tr>
-              </tbody>
-            </table>
-          </div>
+      <div class="feature-card">
+        <div class="feature-icon">⊕</div>
+        <div class="feature-title">Code Intelligence</div>
+        <div class="feature-desc">Tree-sitter AST parsing for TypeScript, JavaScript, and Python. Extracts symbols, builds call graphs (caller→callee), file dependency graphs, and flow detection for impact analysis.</div>
+        <div class="feature-tags">
+          <span class="badge">Tree-sitter</span>
+          <span class="badge">Call Graph</span>
+          <span class="badge">Impact Analysis</span>
+        </div>
+      </div>
 
-          <h3 class="font-mono text-lg font-semibold mt-8 mb-4">MCP Config</h3>
-          <div class="terminal rounded-lg p-4"><pre class="font-mono text-xs text-muted">{
+      <div class="feature-card">
+        <div class="feature-icon">⬡</div>
+        <div class="feature-title">MCP Server — 22+ Tools</div>
+        <div class="feature-desc">Full MCP server with stdio, HTTP, and SSE transports. Tools for search, memory management, code intelligence, graph traversal, indexing, and workspace control.</div>
+        <div class="feature-tags">
+          <span class="badge badge-accent">stdio</span>
+          <span class="badge">HTTP</span>
+          <span class="badge">SSE</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">◈</div>
+        <div class="feature-title">Memory Intelligence v2</div>
+        <div class="feature-desc">Three adaptive layers: LLM-based entity extraction and categorization, Thompson Sampling bandits that tune search weights from telemetry, and preference learning that adapts to retrieval patterns.</div>
+        <div class="feature-tags">
+          <span class="badge">Entity Graph</span>
+          <span class="badge">Bandits</span>
+          <span class="badge">Preference Learning</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">⟳</div>
+        <div class="feature-title">Session Harvesting</div>
+        <div class="feature-desc">Automatically ingests AI session files from OpenCode and Claude Code. Converts JSON sessions into markdown observations, indexes them with project-hash workspace isolation.</div>
+        <div class="feature-tags">
+          <span class="badge">OpenCode</span>
+          <span class="badge">Claude Code</span>
+          <span class="badge">Auto-index</span>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">▣</div>
+        <div class="feature-title">Workspace Isolation</div>
+        <div class="feature-desc">Every project gets its own SQLite database keyed by workspace path hash. Cross-workspace search is opt-in. Config guards prevent orphaned databases from accumulating on disk.</div>
+        <div class="feature-tags">
+          <span class="badge">Per-project DB</span>
+          <span class="badge badge-green">v2026.8.19 fix</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- PIPELINE DIAGRAM -->
+<section class="section">
+  <div class="container">
+    <p class="eyebrow">Architecture</p>
+    <h2 style="margin-bottom:12px">11-stage search pipeline</h2>
+    <p class="lead" style="margin-bottom:32px">Every query passes through up to 11 ranked stages before returning results.</p>
+
+    <div class="pipeline">
+      <div class="pipeline-steps">
+        <div class="pipeline-step">
+          <div class="pipeline-node accent">BM25 / FTS5</div>
+          <div class="pipeline-arrow">→</div>
+        </div>
+        <div class="pipeline-step">
+          <div class="pipeline-node accent">Vector (Qdrant)</div>
+          <div class="pipeline-arrow">→</div>
+        </div>
+        <div class="pipeline-step">
+          <div class="pipeline-node accent">RRF Fusion</div>
+          <div class="pipeline-arrow">→</div>
+        </div>
+        <div class="pipeline-step">
+          <div class="pipeline-node">PageRank Boost</div>
+          <div class="pipeline-arrow">→</div>
+        </div>
+        <div class="pipeline-step">
+          <div class="pipeline-node">Supersede Filter</div>
+          <div class="pipeline-arrow">→</div>
+        </div>
+        <div class="pipeline-step">
+          <div class="pipeline-node accent">Neural Rerank</div>
+        </div>
+      </div>
+      <p style="margin-top:16px; font-size:13px; color:var(--text-muted)">
+        Search parameters are tuned automatically via Thompson Sampling bandits based on retrieval telemetry.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- QUICK START -->
+<section class="section">
+  <div class="container">
+    <p class="eyebrow">Quick start</p>
+    <h2 style="margin-bottom:12px">Up in 60 seconds</h2>
+    <p class="lead" style="margin-bottom:36px">Install, initialize, and connect to your AI agent.</p>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+      <div class="tab-bar" style="padding:0 16px;background:var(--surface-2);">
+        <div class="tab active" onclick="switchTab(this,'tab-npm')">npm</div>
+        <div class="tab" onclick="switchTab(this,'tab-opencode')">OpenCode</div>
+        <div class="tab" onclick="switchTab(this,'tab-claude')">Claude Code</div>
+      </div>
+
+      <div id="tab-npm" class="tab-content active">
+        <pre style="border:none;border-radius:0;background:var(--surface)"><span class="c-comment"># Install globally</span>
+npm install -g nano-brain
+
+<span class="c-comment"># Initialize in your workspace</span>
+npx nano-brain init
+
+<span class="c-comment"># Start MCP server (stdio)</span>
+npx nano-brain mcp
+
+<span class="c-comment"># Or HTTP mode for containers</span>
+npx nano-brain mcp --http --port 8282</pre>
+      </div>
+
+      <div id="tab-opencode" class="tab-content">
+        <pre style="border:none;border-radius:0;background:var(--surface)"><span class="c-comment"># ~/.config/opencode/opencode.json</span>
+<span class="c-comment"># Option A: Local (stdio)</span>
+{
+  "mcp": {
+    "nano-brain": {
+      "type": "local",
+      "command": ["npx", "nano-brain", "mcp"],
+      "enabled": true
+    }
+  }
+}
+
+<span class="c-comment"># Option B: Docker/remote (recommended for teams)</span>
+{
   "mcp": {
     "nano-brain": {
       "type": "remote",
-      "url": "http://localhost:3100/mcp"
+      "url": "http://localhost:3100/mcp",
+      "enabled": true
     }
   }
-}</pre></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- What's New -->
-  <section class="px-6 py-24">
-    <div class="max-w-4xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">What's New in V2</h2>
-      <p class="text-muted text-center mb-12">Complete rewrite: TypeScript/SQLite to Go/PostgreSQL.</p>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-        <div class="terminal rounded-xl p-6">
-          <p class="font-mono text-sm text-cta mb-3">V2 (current)</p>
-          <ul class="text-sm text-muted space-y-2">
-            <li>Single static Go binary (CGO_ENABLED=0)</li>
-            <li>PostgreSQL 17 + pgvector 0.8.2</li>
-            <li>9 focused MCP tools</li>
-            <li>Session harvesting (OpenCode + Claude Code)</li>
-            <li>Config hot-reload</li>
-            <li>Search telemetry (local-only, 90-day retention)</li>
-            <li>V1 migration (pure Go SQLite reader)</li>
-            <li>Benchmarking suite</li>
-          </ul>
-        </div>
-        <div class="terminal rounded-xl p-6 opacity-60">
-          <p class="font-mono text-sm text-muted mb-3">V1 (legacy)</p>
-          <ul class="text-sm text-muted space-y-2">
-            <li>TypeScript + SQLite + Qdrant</li>
-            <li>22+ MCP tools</li>
-            <li>Tree-sitter code intelligence</li>
-            <li>Knowledge graph with PageRank</li>
-            <li>Neural reranking</li>
-            <li>Query expansion</li>
-            <li>Community detection (Louvain)</li>
-            <li>Self-learning query engine</li>
-          </ul>
-        </div>
+}</pre>
       </div>
 
-      <p class="text-center text-muted text-sm">8 epics, 49 stories, 50+ PRs. V2 is focused and lean — PostgreSQL-only, 9 tools, no code intelligence (yet).</p>
-    </div>
-  </section>
+      <div id="tab-claude" class="tab-content">
+        <pre style="border:none;border-radius:0;background:var(--surface)"><span class="c-comment"># .mcp.json (project root) — via SSE to running server</span>
+{
+  "mcpServers": {
+    "nano-brain": {
+      "command": "npx",
+      "args": ["mcp-remote", "http://localhost:3100/sse"]
+    }
+  }
+}
 
-  <!-- Footer -->
-  <footer class="border-t border-border px-6 py-12">
-    <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-      <p class="font-mono text-sm text-muted">Built with Go + PostgreSQL + pgvector</p>
-      <div class="flex gap-6">
-        <a href="https://github.com/nano-step/nano-brain" target="_blank" rel="noopener" class="text-muted hover:text-text transition-colors duration-200 text-sm cursor-pointer">GitHub</a>
-        <a href="https://github.com/nano-step/nano-brain/blob/main/LICENSE" target="_blank" rel="noopener" class="text-muted hover:text-text transition-colors duration-200 text-sm cursor-pointer">MIT License</a>
-        <a href="https://github.com/nano-step/nano-brain#readme" target="_blank" rel="noopener" class="text-muted hover:text-text transition-colors duration-200 text-sm cursor-pointer">Documentation</a>
+<span class="c-comment"># Or start Docker server first:</span>
+<span class="c-prompt">$</span> <span class="c-cmd">npx nano-brain docker start</span></pre>
       </div>
     </div>
-  </footer>
+  </div>
+</section>
+
+<!-- MCP TOOLS -->
+<section class="section">
+  <div class="container">
+    <p class="eyebrow">MCP Tools</p>
+    <h2 style="margin-bottom:12px">30 tools across 4 categories</h2>
+    <p class="lead" style="margin-bottom:8px">Every tool is accessible via stdio, HTTP, or SSE transport.</p>
+
+    <div style="margin-top:32px">
+      <h3 style="font-size:14px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px">Search & Retrieval</h3>
+      <div class="tools-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));margin-bottom:24px">
+        <div class="tool-item">memory_search<div class="tool-item-cat">BM25 keyword</div><div class="tool-tip">BM25 full-text search via SQLite FTS5. Fast, exact-match keyword lookup across all indexed documents.</div></div>
+        <div class="tool-item">memory_vsearch<div class="tool-item-cat">Semantic vector</div><div class="tool-tip">Semantic vector search via Qdrant. Finds documents by meaning, not just keywords.</div></div>
+        <div class="tool-item">memory_query<div class="tool-item-cat">Hybrid search</div><div class="tool-tip">Full hybrid search: BM25 + vector + RRF fusion + 11 ranking stages. Best results, slightly slower.</div></div>
+        <div class="tool-item">memory_get<div class="tool-item-cat">By path / docid</div><div class="tool-tip">Retrieve a single document by file path or short docid (e.g. #abc123).</div></div>
+        <div class="tool-item">memory_multi_get<div class="tool-item-cat">Batch / glob</div><div class="tool-tip">Batch-retrieve multiple documents matching a glob pattern.</div></div>
+      </div>
+
+      <h3 style="font-size:14px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px">Memory Management</h3>
+      <div class="tools-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));margin-bottom:24px">
+        <div class="tool-item">memory_write<div class="tool-item-cat">Write to daily log</div><div class="tool-tip">Write an observation to the daily log. Supports --tags and --supersedes for replacing stale entries.</div></div>
+        <div class="tool-item">memory_status<div class="tool-item-cat">Index health</div><div class="tool-tip">Show index health: document counts, embedding status, graph stats, model info.</div></div>
+        <div class="tool-item">memory_update<div class="tool-item-cat">Trigger reindex</div><div class="tool-tip">Trigger a full reindex of all configured collections.</div></div>
+        <div class="tool-item">memory_tags<div class="tool-item-cat">List all tags</div><div class="tool-tip">List all tags in the index with document counts per tag.</div></div>
+        <div class="tool-item">memory_consolidate<div class="tool-item-cat">LLM consolidation</div><div class="tool-tip">Trigger LLM-based memory consolidation — merges, deduplicates, and distills entries.</div></div>
+        <div class="tool-item">memory_suggestions<div class="tool-item-cat">Proactive next queries</div><div class="tool-tip">Returns proactive next-query predictions based on detected retrieval patterns.</div></div>
+      </div>
+
+      <h3 style="font-size:14px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px">Code Intelligence</h3>
+      <div class="tools-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));margin-bottom:24px">
+        <div class="tool-item">code_context<div class="tool-item-cat">Symbol 360° view</div><div class="tool-tip">360° view of a code symbol: callers, callees, call flows, PageRank centrality, cluster.</div></div>
+        <div class="tool-item">code_impact<div class="tool-item-cat">Change impact BFS</div><div class="tool-tip">BFS traversal to find all upstream and downstream symbols affected by a change.</div></div>
+        <div class="tool-item">code_detect_changes<div class="tool-item-cat">Git diff → symbols</div><div class="tool-tip">Maps a git diff (staged/unstaged/all) to the set of affected symbols.</div></div>
+        <div class="tool-item">memory_index_codebase<div class="tool-item-cat">AST index workspace</div><div class="tool-tip">Index codebase files in the current workspace using Tree-sitter AST parsing.</div></div>
+      </div>
+
+      <h3 style="font-size:14px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px">Graph & Intelligence</h3>
+      <div class="tools-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+        <div class="tool-item">memory_focus<div class="tool-item-cat">File dependency</div><div class="tool-tip">File dependency context: what this file imports, what imports it, centrality score.</div></div>
+        <div class="tool-item">memory_graph_stats<div class="tool-item-cat">Graph overview</div><div class="tool-tip">Dependency graph overview: total files, symbols, edges, detected cycles.</div></div>
+        <div class="tool-item">memory_graph_query<div class="tool-item-cat">BFS traversal</div><div class="tool-tip">BFS traversal from an entity node through the knowledge graph.</div></div>
+        <div class="tool-item">memory_connect<div class="tool-item-cat">Connect entities</div><div class="tool-tip">Create a relationship edge between two entities in the knowledge graph.</div></div>
+        <div class="tool-item">memory_connections<div class="tool-item-cat">List connections</div><div class="tool-tip">List all relationship edges for a given entity.</div></div>
+        <div class="tool-item">memory_related<div class="tool-item-cat">Related via graph</div><div class="tool-tip">Find memories related to a topic via entity graph connections.</div></div>
+        <div class="tool-item">memory_timeline<div class="tool-item-cat">Temporal view</div><div class="tool-tip">Temporal view of how an entity or topic has changed over time.</div></div>
+        <div class="tool-item">memory_traverse<div class="tool-item-cat">Graph traversal</div><div class="tool-tip">Configurable graph traversal with depth limit and edge-type filters.</div></div>
+        <div class="tool-item">memory_expand<div class="tool-item-cat">Expand context</div><div class="tool-tip">Expand context around a retrieved document (surrounding chunks, linked entities).</div></div>
+        <div class="tool-item">memory_symbols<div class="tool-item-cat">Cross-repo symbols</div><div class="tool-tip">Cross-repo symbol query — find Redis keys, MySQL tables, API endpoints, queues.</div></div>
+        <div class="tool-item">memory_impact<div class="tool-item-cat">Cross-repo impact</div><div class="tool-tip">Cross-repo impact analysis — find all writers and readers of a symbol.</div></div>
+        <div class="tool-item">memory_importance<div class="tool-item-cat">Importance scores</div><div class="tool-tip">View importance scores for documents (based on retrieval frequency and recency).</div></div>
+        <div class="tool-item">memory_learning_status<div class="tool-item-cat">Learning stats</div><div class="tool-tip">View learning system status: telemetry record count, bandit variants, config version.</div></div>
+        <div class="tool-item">memory_wake_up<div class="tool-item-cat">Session context</div><div class="tool-tip">Load session context on agent startup — returns recent memories and active focus.</div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:28px">
+      <a href="docs.html" class="btn btn-secondary">Full documentation →</a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="assets/nano-step-logo.png" alt="nano-step">
+      <span>nano-brain by <a href="https://github.com/nano-step" target="_blank" style="color:var(--text-muted)">nano-step</a> · MIT License</span>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/nano-step/nano-brain" target="_blank">GitHub</a>
+      <a href="https://www.npmjs.com/package/nano-brain" target="_blank">npm</a>
+      <a href="setup.html">Setup</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="docs.html">Docs</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+function copyInstall() {
+  navigator.clipboard.writeText('npx nano-brain init').catch(() => {});
+}
+function switchTab(el, id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(id).classList.add('active');
+}
+</script>
+
+<script>
+window.addEventListener('load', function() {
+  if (!window.THREE) return;
+  const canvas = document.getElementById('brain-canvas');
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+  camera.position.z = 28;
+
+  // ── Nodes ─────────────────────────────────────────
+  const NODE_COUNT = 80;
+  const CONNECT_DIST = 7;
+  const ACCENT = new THREE.Color(0x38bdf8);
+  const ACCENT_DIM = new THREE.Color(0x0e5f82);
+
+  const positions = [];
+  const velocities = [];
+  for (let i = 0; i < NODE_COUNT; i++) {
+    positions.push(new THREE.Vector3(
+      (Math.random() - 0.5) * 40,
+      (Math.random() - 0.5) * 22,
+      (Math.random() - 0.5) * 18
+    ));
+    velocities.push(new THREE.Vector3(
+      (Math.random() - 0.5) * 0.012,
+      (Math.random() - 0.5) * 0.008,
+      (Math.random() - 0.5) * 0.006
+    ));
+  }
+
+  // Node spheres
+  const nodeGeo = new THREE.SphereGeometry(0.18, 6, 6);
+  const nodeMat = new THREE.MeshBasicMaterial({ color: ACCENT });
+  const nodes = positions.map(pos => {
+    const mesh = new THREE.Mesh(nodeGeo, nodeMat.clone());
+    mesh.position.copy(pos);
+    mesh.userData.pulse = Math.random() * Math.PI * 2;
+    mesh.userData.pulseSpeed = 0.4 + Math.random() * 1.2;
+    mesh.userData.isActive = Math.random() < 0.15;
+    scene.add(mesh);
+    return mesh;
+  });
+
+  // Edge lines
+  const MAX_EDGES = 200;
+  const edgePositions = new Float32Array(MAX_EDGES * 6);
+  const edgeGeo = new THREE.BufferGeometry();
+  edgeGeo.setAttribute('position', new THREE.BufferAttribute(edgePositions, 3));
+  const edgeMat = new THREE.LineSegments(
+    edgeGeo,
+    new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.18, linewidth: 1 })
+  );
+  scene.add(edgeMat);
+
+  // Resize
+  function resize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Mouse parallax
+  let mx = 0, my = 0;
+  document.addEventListener('mousemove', e => {
+    mx = (e.clientX / window.innerWidth - 0.5) * 2;
+    my = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+
+  let t = 0;
+  let running = true;
+  document.addEventListener('visibilitychange', () => {
+    running = document.visibilityState === 'visible';
+    if (running) animate();
+  });
+  function animate() {
+    if (!running) return;
+    requestAnimationFrame(animate);
+    t += 0.008;
+
+    // Move nodes
+    nodes.forEach((node, i) => {
+      node.position.addScaledVector(velocities[i], 1);
+      // Bounce
+      ['x','y','z'].forEach((ax, j) => {
+        const limit = [20, 11, 9][j];
+        if (Math.abs(node.position[ax]) > limit) {
+          velocities[i][ax] *= -1;
+          node.position[ax] = Math.sign(node.position[ax]) * limit;
+        }
+      });
+
+      // Pulse brightness
+      node.userData.pulse += node.userData.pulseSpeed * 0.016;
+      const brightness = 0.6 + 0.4 * Math.sin(node.userData.pulse);
+      if (node.userData.isActive) {
+        node.material.color.lerpColors(ACCENT_DIM, ACCENT, brightness);
+        node.scale.setScalar(0.8 + 0.6 * brightness);
+      } else {
+        node.material.color.lerpColors(ACCENT_DIM, ACCENT, brightness * 0.5);
+        node.scale.setScalar(0.6 + 0.2 * brightness);
+      }
+    });
+
+    // Update edges
+    let edgeIdx = 0;
+    for (let i = 0; i < NODE_COUNT && edgeIdx < MAX_EDGES; i++) {
+      for (let j = i + 1; j < NODE_COUNT && edgeIdx < MAX_EDGES; j++) {
+        const d = nodes[i].position.distanceTo(nodes[j].position);
+        if (d < CONNECT_DIST) {
+          const base = edgeIdx * 6;
+          edgePositions[base]     = nodes[i].position.x;
+          edgePositions[base + 1] = nodes[i].position.y;
+          edgePositions[base + 2] = nodes[i].position.z;
+          edgePositions[base + 3] = nodes[j].position.x;
+          edgePositions[base + 4] = nodes[j].position.y;
+          edgePositions[base + 5] = nodes[j].position.z;
+          edgeIdx++;
+        }
+      }
+    }
+    // Clear unused
+    for (let k = edgeIdx; k < MAX_EDGES; k++) {
+      edgePositions.fill(0, k * 6, k * 6 + 6);
+    }
+    edgeGeo.attributes.position.needsUpdate = true;
+    edgeGeo.setDrawRange(0, edgeIdx * 2);
+
+    // Camera: slow rotation + mouse parallax
+    camera.position.x = Math.sin(t * 0.12) * 3 + mx * 2;
+    camera.position.y = Math.cos(t * 0.08) * 1.5 - my * 1.5;
+    camera.lookAt(0, 0, 0);
+
+    renderer.render(scene, camera);
+  }
+  animate();
+});
+</script>
 
 </body>
 </html>

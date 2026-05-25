@@ -1,2 +1,0 @@
-# AGENTS_SNIPPET
-

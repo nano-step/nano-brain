@@ -1,5 +1,0 @@
----
-description: "Expand test automation coverage for codebase. Use when user says \"lets expand test coverage\" or \"I want to automate tests\""
----
-
-@skills/bmad-testarch-automate
