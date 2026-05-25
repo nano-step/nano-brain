@@ -41,6 +41,7 @@ type mockQuerier struct {
 	mu                        sync.Mutex
 	getChunkByIDFn            func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error)
 	getAllPendingChunksFn      func(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	getAllFailedChunksFn       func(ctx context.Context, limit int32) ([]uuid.UUID, error)
 	insertEmbeddingFn         func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	markChunkEmbeddedFn       func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	markChunkEmbedFailedFn    func(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
@@ -63,6 +64,13 @@ func (m *mockQuerier) GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetC
 func (m *mockQuerier) GetAllPendingChunks(ctx context.Context, limit int32) ([]uuid.UUID, error) {
 	if m.getAllPendingChunksFn != nil {
 		return m.getAllPendingChunksFn(ctx, limit)
+	}
+	return nil, nil
+}
+
+func (m *mockQuerier) GetAllFailedChunks(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+	if m.getAllFailedChunksFn != nil {
+		return m.getAllFailedChunksFn(ctx, limit)
 	}
 	return nil, nil
 }
@@ -557,6 +565,39 @@ func TestQueue_Status_Rejecting(t *testing.T) {
 	eq.pending.Store(rejectionThreshold)
 	if s := eq.Status(); s != "rejecting" {
 		t.Errorf("status = %q, want rejecting", s)
+	}
+}
+
+func TestQueue_ScanPendingRecoversFailed(t *testing.T) {
+	failedID := uuid.New()
+	mq := &mockQuerier{
+		getAllFailedChunksFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+			return []uuid.UUID{failedID}, nil
+		},
+	}
+
+	eq := newTestQueue(&mockEmbedder{}, mq)
+	eq.retries[failedID] = maxRetries
+
+	eq.scanPending(context.Background())
+
+	eq.retriesMu.Lock()
+	count := eq.retries[failedID]
+	eq.retriesMu.Unlock()
+	if count != 0 {
+		t.Errorf("retries[failedID] = %d after scan, want 0 (cleared for fresh attempt)", count)
+	}
+
+	found := false
+	for i := 0; i < len(eq.ch); i++ {
+		id := <-eq.ch
+		if id == failedID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("failedID not enqueued by scanPending, want it re-enqueued for retry")
 	}
 }
 

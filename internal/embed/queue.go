@@ -30,6 +30,7 @@ const (
 type QueueQuerier interface {
 	GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error)
 	GetAllPendingChunks(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	GetAllFailedChunks(ctx context.Context, limit int32) ([]uuid.UUID, error)
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
@@ -150,17 +151,32 @@ func (q *Queue) Run(ctx context.Context) error {
 }
 
 func (q *Queue) scanPending(ctx context.Context) {
+	total := q.scanByStatus(ctx, false)
+	recovered := q.scanByStatus(ctx, true)
+	q.logger.Info().Int("pending", total).Int("recovered", recovered).Msg("scan complete")
+}
+
+func (q *Queue) scanByStatus(ctx context.Context, failed bool) int {
 	total := 0
 	for {
-		ids, err := q.queries.GetAllPendingChunks(ctx, scanBatchSize)
+		var ids []uuid.UUID
+		var err error
+		if failed {
+			ids, err = q.queries.GetAllFailedChunks(ctx, scanBatchSize)
+		} else {
+			ids, err = q.queries.GetAllPendingChunks(ctx, scanBatchSize)
+		}
 		if err != nil {
-			q.logger.Error().Err(err).Msg("failed to scan pending chunks")
-			return
+			q.logger.Error().Err(err).Bool("failed", failed).Msg("failed to scan chunks")
+			return total
 		}
 		for _, id := range ids {
+			if failed {
+				q.clearRetries(id)
+			}
 			if !q.Enqueue(id) {
-				q.logger.Info().Int("total", total).Msg("scan complete (queue full)")
-				return
+				q.logger.Info().Int("total", total).Bool("failed", failed).Msg("scan stopped (queue full)")
+				return total
 			}
 			total++
 		}
@@ -168,7 +184,7 @@ func (q *Queue) scanPending(ctx context.Context) {
 			break
 		}
 	}
-	q.logger.Info().Int("total", total).Msg("scan complete")
+	return total
 }
 
 func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
