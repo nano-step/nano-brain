@@ -95,7 +95,7 @@ func runCollectionAdd(args []string) {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
-	io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
 	cliLog.Info().Str("cmd", "collection.add").Str("name", name).Str("workspace", workspace).Msg("cli command completed")
 }
@@ -141,7 +141,7 @@ func runCollectionRemove(args []string) {
 		cliLog.Info().Str("cmd", "collection.remove").Str("name", name).Str("workspace", workspace).Msg("cli command completed")
 		return
 	}
-	io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
 	cliLog.Info().Str("cmd", "collection.remove").Int("status", resp.StatusCode).Msg("cli command completed")
 }
@@ -172,7 +172,7 @@ func runCollectionList(args []string) {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
-	io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
 	cliLog.Info().Str("cmd", "collection.list").Str("workspace", workspace).Msg("cli command completed")
 }
@@ -230,7 +230,7 @@ func runCollectionRename(args []string) {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
-	io.Copy(os.Stdout, resp.Body)
+	_, _ = io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
 	cliLog.Info().Str("cmd", "collection.rename").Str("from", oldName).Str("to", newName).Msg("cli command completed")
 }

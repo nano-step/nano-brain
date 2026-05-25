@@ -69,7 +69,6 @@ func runInteractiveInit(configPath string) {
 	dbURL = promptWithDefault(scanner, "PostgreSQL URL", dbURL)
 	provider = promptWithDefault(scanner, "Embedding provider (ollama/voyage)", provider)
 
-	voyageKey := ""
 	if provider == "voyage" {
 		model = promptWithDefault(scanner, "Embedding model", "voyage-3")
 		envKey := os.Getenv("VOYAGE_API_KEY")
@@ -77,10 +76,7 @@ func runInteractiveInit(configPath string) {
 		if envKey != "" {
 			def = "(from env)"
 		}
-		voyageKey = promptWithDefault(scanner, "Voyage API key", def)
-		if voyageKey == def {
-			voyageKey = ""
-		}
+		_ = promptWithDefault(scanner, "Voyage API key", def)
 	} else {
 		if detectOllama(embURL) {
 			fmt.Printf("  Ollama detected at %s\n", embURL)

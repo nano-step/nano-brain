@@ -44,10 +44,6 @@ func TriggerReindex(logger zerolog.Logger) echo.HandlerFunc {
 	}
 }
 
-type updateRequest struct {
-	Workspace string `json:"workspace"`
-}
-
 func TriggerUpdate(logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

@@ -40,7 +40,7 @@ func TestDoRequest_Success(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}))
 	defer ts.Close()
 
@@ -56,7 +56,7 @@ func TestDoRequest_Success(t *testing.T) {
 func TestDoRequest_ServerError(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"fail"}`))
+		_, _ = w.Write([]byte(`{"error":"fail"}`))
 	}))
 	defer ts.Close()
 
@@ -88,7 +88,7 @@ func TestDoRequest_ConnectionRefused(t *testing.T) {
 func TestDoRequest_NotFound_ReturnsBody(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"not_found"}`))
+		_, _ = w.Write([]byte(`{"error":"not_found"}`))
 	}))
 	defer ts.Close()
 
@@ -112,7 +112,7 @@ func TestDoRequest_SetsContentType(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	doRequest("POST", ts.URL+"/test", strings.NewReader(`{"foo":"bar"}`))
+	_, _, _ = doRequest("POST", ts.URL+"/test", strings.NewReader(`{"foo":"bar"}`))
 	if gotCT != "application/json" {
 		t.Errorf("Content-Type = %q, want %q", gotCT, "application/json")
 	}
@@ -126,7 +126,7 @@ func TestDoRequest_NoContentTypeWithoutBody(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	doRequest("GET", ts.URL+"/test", nil)
+	_, _, _ = doRequest("GET", ts.URL+"/test", nil)
 	if gotCT != "" {
 		t.Errorf("Content-Type = %q, want empty for nil body", gotCT)
 	}
@@ -145,10 +145,10 @@ func TestGetBaseURL_EnvVarsFromOS(t *testing.T) {
 func TestInitCmdBuildsCorrectBody(t *testing.T) {
 	var capturedBody map[string]interface{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&capturedBody)
+		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"workspace_hash": "hash123",
 			"root_path":      "/test/path",
 			"agents_snippet": "",
@@ -169,7 +169,7 @@ func TestInitCmdBuildsCorrectBody(t *testing.T) {
 	}
 
 	var result map[string]string
-	json.Unmarshal(resp, &result)
+	_ = json.Unmarshal(resp, &result)
 	if result["workspace_hash"] != "hash123" {
 		t.Errorf("response workspace_hash = %s, want hash123", result["workspace_hash"])
 	}
@@ -178,10 +178,10 @@ func TestInitCmdBuildsCorrectBody(t *testing.T) {
 func TestWriteCmdWithTagsBuildsCorrectBody(t *testing.T) {
 	var capturedBody map[string]interface{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&capturedBody)
+		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"id": "doc123"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "doc123"})
 	}))
 	defer ts.Close()
 
@@ -205,7 +205,7 @@ func TestWriteCmdWithTagsBuildsCorrectBody(t *testing.T) {
 func TestStubCmdHandles404(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":"not_found"}`))
+		_, _ = w.Write([]byte(`{"error":"not_found"}`))
 	}))
 	defer ts.Close()
 

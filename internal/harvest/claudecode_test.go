@@ -225,8 +225,8 @@ func TestClaudeCodeHarvestAllNonExistentDir(t *testing.T) {
 
 func TestClaudeCodeHarvestAllSkipsNonJSONL(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not a session"), 0o644)
-	os.WriteFile(filepath.Join(dir, "data.json"), []byte("{}"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not a session"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "data.json"), []byte("{}"), 0o644)
 
 	h := &ClaudeCodeHarvester{
 		sessionDir: dir,
