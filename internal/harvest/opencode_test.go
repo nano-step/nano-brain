@@ -69,8 +69,8 @@ func TestParseSessionFile(t *testing.T) {
 	t.Run("invalid json", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "bad.json")
-		os.MkdirAll(filepath.Dir(path), 0o755)
-		os.WriteFile(path, []byte("{not json"), 0o644)
+		_ = os.MkdirAll(filepath.Dir(path), 0o755)
+		_ = os.WriteFile(path, []byte("{not json"), 0o644)
 
 		_, err := parseSessionFile(path)
 		if err == nil {
@@ -340,7 +340,7 @@ func TestHarvestAllEmptyDir(t *testing.T) {
 
 func TestHarvestAllNoSessionSubdir(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "session"), 0o755)
+	_ = os.MkdirAll(filepath.Join(dir, "session"), 0o755)
 	h := &OpenCodeHarvester{
 		sessionDir: dir,
 		logger:     zerolog.Nop(),

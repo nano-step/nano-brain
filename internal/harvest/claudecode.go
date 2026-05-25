@@ -102,7 +102,7 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 	if err != nil {
 		return false, fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback() // no-op after commit
+	defer func() { _ = tx.Rollback() }()
 	tq := sqlc.New(tx)
 
 	meta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
