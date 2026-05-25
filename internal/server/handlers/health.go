@@ -21,17 +21,34 @@ type EmbedQueueInfo interface {
 	PendingCount() int64
 }
 
-type Health struct {
-	pool         PoolChecker
-	queue        EmbedQueueInfo
-	logger       zerolog.Logger
-	version      string
-	startTime    time.Time
-	getCfg       func() (config.HarvesterConfig, config.IntervalsConfig)
+type WorkspaceCounter interface {
+	CountWorkspaces(ctx context.Context) (int64, error)
 }
 
-func NewHealth(pool PoolChecker, logger zerolog.Logger, version string, startTime time.Time, queue EmbedQueueInfo, getCfg func() (config.HarvesterConfig, config.IntervalsConfig)) *Health {
-	return &Health{pool: pool, queue: queue, logger: logger, version: version, startTime: startTime, getCfg: getCfg}
+type Health struct {
+	pool      PoolChecker
+	queue     EmbedQueueInfo
+	logger    zerolog.Logger
+	version   string
+	startTime time.Time
+	getCfg    func() (config.HarvesterConfig, config.IntervalsConfig)
+	counter   WorkspaceCounter
+}
+
+func NewHealth(pool PoolChecker, logger zerolog.Logger, version string, startTime time.Time, queue EmbedQueueInfo, getCfg func() (config.HarvesterConfig, config.IntervalsConfig), counter WorkspaceCounter) *Health {
+	return &Health{pool: pool, queue: queue, logger: logger, version: version, startTime: startTime, getCfg: getCfg, counter: counter}
+}
+
+func (h *Health) workspaceCount(ctx context.Context) int {
+	if h.counter == nil {
+		return 0
+	}
+	n, err := h.counter.CountWorkspaces(ctx)
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("failed to count workspaces; reporting 0")
+		return 0
+	}
+	return int(n)
 }
 
 type healthResponse struct {
@@ -82,7 +99,7 @@ func (h *Health) Health(c echo.Context) error {
 		Ready:          true,
 		Version:        h.version,
 		UptimeS:        int64(time.Since(h.startTime).Seconds()),
-		WorkspaceCount: 0,
+		WorkspaceCount: h.workspaceCount(c.Request().Context()),
 	})
 }
 
@@ -107,7 +124,7 @@ func (h *Health) Status(c echo.Context) error {
 		MigrationVersion:    1,
 		EmbeddingQueueDepth: 0,
 		ActiveProvider:      "none",
-		WorkspaceCount:      0,
+		WorkspaceCount:      h.workspaceCount(c.Request().Context()),
 		HarvesterStatus:     harvestStatus,
 	}
 

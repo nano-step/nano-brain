@@ -16,6 +16,9 @@ SELECT * FROM workspaces ORDER BY name;
 -- name: CountDocumentsByWorkspace :one
 SELECT COUNT(*) FROM documents WHERE workspace_hash = $1;
 
+-- name: CountWorkspaces :one
+SELECT COUNT(*) FROM workspaces;
+
 -- name: ListWorkspacesWithStats :many
 SELECT w.*,
     (SELECT COUNT(*) FROM documents d WHERE d.workspace_hash = w.hash) AS document_count,
