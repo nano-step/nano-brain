@@ -23,6 +23,17 @@ func (q *Queries) CountDocumentsByWorkspace(ctx context.Context, workspaceHash s
 	return count, err
 }
 
+const countWorkspaces = `-- name: CountWorkspaces :one
+SELECT COUNT(*) FROM workspaces
+`
+
+func (q *Queries) CountWorkspaces(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkspaces)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getWorkspaceByHash = `-- name: GetWorkspaceByHash :one
 SELECT id, hash, name, path, created_at, updated_at FROM workspaces WHERE hash = $1
 `

@@ -69,6 +69,9 @@ func main() {
 		case "vsearch":
 			runVSearchCmd(args[1:])
 			return
+		case "workspaces":
+			runWorkspacesCmd(args[1:])
+			return
 		case "harvest":
 			runHarvestCmd(args[1:])
 			return
