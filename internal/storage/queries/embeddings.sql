@@ -36,6 +36,12 @@ WHERE embed_status = 'pending'
 ORDER BY created_at ASC
 LIMIT $1;
 
+-- name: GetAllFailedChunks :many
+SELECT id FROM chunks
+WHERE embed_status = 'embed_failed'
+ORDER BY created_at ASC
+LIMIT $1;
+
 -- name: VectorSearch :many
 SELECT e.id, e.chunk_id, e.workspace_hash,
        c.content, c.metadata, c.document_id,
