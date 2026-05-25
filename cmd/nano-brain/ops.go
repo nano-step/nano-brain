@@ -548,6 +548,7 @@ Commands:
   query              Hybrid search (BM25 + vector)
   search             BM25 keyword search
   vsearch            Vector similarity search
+  workspaces         List registered workspaces (alias: ls)
   write              Write a document
   collection         Manage collections (add/remove/list)
   harvest            Trigger session harvesting
