@@ -371,13 +371,17 @@ phase_pre_merge() {
     
     # 3.10 Self-review evidence exists for current story
     current_branch=$(git branch --show-current 2>/dev/null || echo "")
+    branch_slug=$(echo "$current_branch" | sed 's|^[^/]*/||' | sed 's/-.*//g' 2>/dev/null || echo "")
     story_id=$(echo "$current_branch" | sed 's/story\///' | sed 's/-.*//g' 2>/dev/null || echo "")
-    if [[ -n "$story_id" ]]; then
-        evidence_file=$(find docs/evidence -name "*self-review*${story_id}*" -type f 2>/dev/null | head -1)
+    if [[ -n "$branch_slug" ]]; then
+        evidence_file=$(find docs/evidence -name "*self-review*${branch_slug}*" -type f 2>/dev/null | head -1)
+        if [[ -z "$evidence_file" && -n "$story_id" ]]; then
+            evidence_file=$(find docs/evidence -name "*self-review*${story_id}*" -type f 2>/dev/null | head -1)
+        fi
         if [[ -n "$evidence_file" ]]; then
             add_check "PASS" "3.10 Self-review evidence found: $evidence_file"
         else
-            add_check "FAIL" "3.10 No self-review evidence for story $story_id"
+            add_check "FAIL" "3.10 No self-review evidence for story $branch_slug"
         fi
     else
         add_check "SKIP" "3.10 Cannot determine story ID from branch name"
