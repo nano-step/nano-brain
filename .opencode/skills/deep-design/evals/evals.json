@@ -1,0 +1,23 @@
+{
+  "skill_name": "deep-design",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to add real-time notifications to our app. Users should get notified when someone comments on their post, when they get a new follower, and when there's a system announcement. We're using a NestJS backend with PostgreSQL and a React frontend.",
+      "expected_output": "Full deep-design pipeline execution: Metis + Oracle fired in parallel, synthesis produces design brief with user checkpoint, OpenSpec proposal created with all artifacts, Momus review completed, final delivery with next steps.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "We need to migrate our authentication from session-based to JWT tokens. The app currently uses express-session with Redis store. About 50k daily active users. Can't have any downtime during migration.",
+      "expected_output": "Full deep-design pipeline execution with emphasis on: Metis identifying migration risks and zero-downtime phasing, Oracle recommending JWT architecture and security considerations, synthesis resolving migration strategy, OpenSpec proposal with phased tasks, Momus reviewing for migration gaps.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Plan a multi-tenant billing system. Each tenant has their own subscription plan, usage metering, and invoice generation. We need Stripe integration. Some tenants are on custom enterprise deals with negotiated rates.",
+      "expected_output": "Full deep-design pipeline execution with emphasis on: Metis surfacing hidden complexity around custom enterprise pricing and usage metering edge cases, Oracle validating Stripe integration architecture and data model, synthesis producing comprehensive design brief, OpenSpec with detailed specs covering billing scenarios, Momus catching financial edge cases.",
+      "files": []
+    }
+  ]
+}

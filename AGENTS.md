@@ -54,6 +54,13 @@ curl -s localhost:3100/api/write -d '{"content":"## Summary\n- Decision: ...\n- 
 - Inside containers: use HTTP API (`curl localhost:3100/api/*`) for memory operations
 - MCP tools access the server via remote proxy at `http://host.docker.internal:3100/mcp`
 
+## ⚠️ npx nano-brain — Known Caveats
+
+- **NEVER run `npx nano-brain` from the nano-brain source directory.** npm resolves the local `package.json` (name: `nano-brain`) instead of the registry package, causing binary-not-found errors or running stale source code.
+- Always run `npx nano-brain` from a **different directory** (e.g., your project root, `/tmp`, home dir).
+- The npm package downloads a pre-built Go binary from GitHub Releases — no Go toolchain required on the host.
+- Supported platforms: `darwin-arm64`, `darwin-amd64`, `linux-arm64`, `linux-amd64`.
+
 
 
 
@@ -88,3 +95,42 @@ curl -s localhost:3100/api/write -d '{"content":"## Summary\n- Decision: ...\n- 
 - Refactors that touch multiple files
 
 **Only skip OpenSpec for:** typo fixes, dependency bumps, or single-line config changes.
+
+<!-- HARNESS:START -->
+<!-- Managed block - do not edit manually. Updated by: harness-init skill -->
+
+## Engineering Harness
+
+This project uses an engineering harness for risk-classified, spec-driven development.
+
+**Start here:** [`docs/HARNESS.md`](docs/HARNESS.md)
+
+### Quick reference
+
+| Document | Purpose |
+|---|---|
+| [`docs/HARNESS.md`](docs/HARNESS.md) | Full process — lanes, gates, validation ladder |
+| [`docs/FEATURE_INTAKE.md`](docs/FEATURE_INTAKE.md) | Risk classification (tiny / normal / high-risk) |
+| [`docs/templates/story.md`](docs/templates/story.md) | Story template for new work |
+| [`docs/HARNESS_BACKLOG.md`](docs/HARNESS_BACKLOG.md) | Project-specific friction backlog |
+| [`docs/evidence/`](docs/evidence/) | Screenshots, recordings, decision logs |
+
+### Lanes
+
+- **tiny** — 0-1 risk flags, direct patch
+- **normal** — 2-3 risk flags, proposal required
+- **high-risk** — 4+ flags OR any hard gate (auth, data-model, search-quality, embedding/vector provider, public-api-contract, audit-security, authorization, external-provider)
+
+### Validation ladder
+
+- `validate:quick` → `go build ./... && go test -race -short ./...`
+- `smoke` → `./nano-brain status`
+
+### Flow
+
+1. Read `docs/FEATURE_INTAKE.md` → classify the change
+2. Tiny → patch direct. Normal/high-risk → `/opsx-propose` for OpenSpec proposal
+3. Implement → run validation ladder → open PR
+4. PR review (gemini bot + human) → merge → `openspec archive`
+
+<!-- HARNESS:END -->

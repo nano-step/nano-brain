@@ -1,0 +1,35 @@
+project_name: "capy-home"
+output_language: "en"
+issue_tracker: "github"
+github_repo: "kokorolx/capy-home"
+github_account: "kokorolx"
+validate_quick_cmd: "ruff check . && lint-imports && mypy app/ && pytest tests/ -k 'not db_session' -q"
+validate_integration_cmd: "pytest tests/integration/ -v"
+validate_e2e_cmd: "cd web && npx playwright test"
+validate_smoke_cmd: "curl -fsS http://localhost:8000/health"
+use_openspec: true
+hard_gates:
+  - auth
+  - authorization
+  - data-model
+  - audit-security
+  - external-providers
+  - public-api-contracts
+change_types:
+  - user-feature
+  - bug-fix
+  - infrastructure
+  - refactor
+  - docs
+  - dependency-bump
+conflict_policy: "backup-overwrite"
+lanes:
+  - tiny
+  - normal
+  - high-risk
+pr_bot: "github-claude"
+evidence_dir: "docs/evidence"
+story_template_path: "docs/templates/story.md"
+create_labels_now: true
+update_agents_md: false
+dogfood_issue: false

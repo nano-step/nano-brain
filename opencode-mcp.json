@@ -1,9 +1,0 @@
-{
-  "mcp": {
-    "nano-brain": {
-      "type": "local",
-      "command": ["bun", "run", "/path/to/nano-brain/src/index.ts", "mcp"],
-      "description": "Memory system with hybrid search (BM25 + vector + LLM reranking)"
-    }
-  }
-}

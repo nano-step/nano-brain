@@ -1,0 +1,7 @@
+{
+  "name": "deep-design",
+  "version": "1.0.0",
+  "description": "Multi-agent planning pipeline: Metis + Oracle → Synthesis → OpenSpec → Momus review",
+  "compatibility": "OpenCode",
+  "tags": ["planning", "architecture", "design", "openspec", "orchestration"]
+}
