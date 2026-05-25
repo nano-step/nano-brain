@@ -35,8 +35,8 @@ func TestRegisterTools_CountAndNames(t *testing.T) {
 		t.Fatalf("ListTools: %v", err)
 	}
 
-	if len(result.Tools) != 12 {
-		t.Errorf("expected 12 tools, got %d", len(result.Tools))
+	if len(result.Tools) != 13 {
+		t.Errorf("expected 13 tools, got %d", len(result.Tools))
 		for _, tool := range result.Tools {
 			t.Logf("  - %s", tool.Name)
 		}
@@ -55,6 +55,7 @@ func TestRegisterTools_CountAndNames(t *testing.T) {
 		"memory_symbols",
 		"memory_graph",
 		"memory_impact",
+		"memory_trace",
 	}
 	sort.Strings(expected)
 

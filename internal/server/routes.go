@@ -42,6 +42,7 @@ func registerRoutes(s *Server) {
 	data.GET("/symbols", handlers.ListSymbols(s.queries, s.logger))
 	data.POST("/graph/query", handlers.GraphQuery(s.queries, s.logger))
 	data.POST("/graph/impact", handlers.GraphImpact(s.queries, s.logger))
+	data.POST("/graph/trace", handlers.GraphTrace(s.queries, s.logger))
 	data.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.logger))
 	data.POST("/update", handlers.TriggerUpdate(s.logger))
 
