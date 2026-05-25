@@ -88,7 +88,24 @@ func runInitCmd(args []string, configPath string) {
 	fmt.Printf("Root path: %s\n", result.RootPath)
 	fmt.Println()
 	fmt.Println(result.AgentsSnippet)
+
+	triggerInitBackground(result.WorkspaceHash, root)
+
 	cliLog.Info().Str("cmd", "init").Str("workspace_hash", result.WorkspaceHash).Msg("cli command completed")
+}
+
+func triggerInitBackground(workspaceHash, root string) {
+	reindexBody, _ := json.Marshal(map[string]string{"workspace": workspaceHash, "root": root})
+	if _, _, err := doRequest("POST", getBaseURL()+"/api/v1/reindex", bytes.NewReader(reindexBody)); err != nil {
+		cliLog.Warn().Err(err).Str("workspace", workspaceHash).Msg("auto reindex trigger failed")
+	}
+
+	if _, _, err := doRequest("POST", getBaseURL()+"/api/harvest", nil); err != nil {
+		cliLog.Warn().Err(err).Msg("auto harvest trigger failed")
+	}
+
+	fmt.Println()
+	fmt.Println("Indexing codebase in background. Run 'nano-brain status' to check progress.")
 }
 
 func runWriteCmd(args []string) {
