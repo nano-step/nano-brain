@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -216,5 +217,142 @@ func TestStubCmdHandles404(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "server returned 404") {
 		t.Errorf("error = %s, want to contain 'server returned 404'", err.Error())
+	}
+}
+
+func TestIsNpxLaunched(t *testing.T) {
+	cases := []struct {
+		name        string
+		execpath    string
+		packageName string
+		want        bool
+	}{
+		{"both unset", "", "", false},
+		{"npm_execpath set", "/path/to/npx-cli.js", "", true},
+		{"npm_package_name set", "", "@nano-step/nano-brain", true},
+		{"both set", "/path/to/npx-cli.js", "@nano-step/nano-brain", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("npm_execpath", tc.execpath)
+			t.Setenv("npm_package_name", tc.packageName)
+			if got := isNpxLaunched(); got != tc.want {
+				t.Errorf("isNpxLaunched() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSuggestStartCommand(t *testing.T) {
+	cases := []struct {
+		name        string
+		execpath    string
+		packageName string
+		want        string
+	}{
+		{"binary", "", "", "nano-brain serve -d"},
+		{"npx via execpath", "/path/to/npx-cli.js", "", "npx @nano-step/nano-brain@beta serve -d"},
+		{"npx via package_name", "", "@nano-step/nano-brain", "npx @nano-step/nano-brain@beta serve -d"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("npm_execpath", tc.execpath)
+			t.Setenv("npm_package_name", tc.packageName)
+			if got := suggestStartCommand(); got != tc.want {
+				t.Errorf("suggestStartCommand() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFormatConnectError_Structure(t *testing.T) {
+	t.Setenv("npm_execpath", "")
+	t.Setenv("npm_package_name", "")
+
+	got := formatConnectError("localhost", 3100)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d: %q", len(lines), got)
+	}
+	if lines[0] != "Error: cannot connect to nano-brain server at localhost:3100" {
+		t.Errorf("line 1 = %q", lines[0])
+	}
+	if lines[1] != "The server does not appear to be running." {
+		t.Errorf("line 2 = %q", lines[1])
+	}
+	if lines[2] != "Run this to start it: nano-brain serve -d" {
+		t.Errorf("line 3 = %q", lines[2])
+	}
+}
+
+func TestFormatConnectError_CustomHostPort(t *testing.T) {
+	t.Setenv("npm_execpath", "")
+	t.Setenv("npm_package_name", "")
+
+	got := formatConnectError("my-host", 9999)
+	if !strings.Contains(got, "my-host:9999") {
+		t.Errorf("expected host:port in output, got %q", got)
+	}
+}
+
+func TestFormatConnectError_NpxSuggestion(t *testing.T) {
+	t.Setenv("npm_execpath", "/path/to/npx-cli.js")
+
+	got := formatConnectError("localhost", 3100)
+	if !strings.Contains(got, "npx @nano-step/nano-brain@beta serve -d") {
+		t.Errorf("expected npx suggestion, got %q", got)
+	}
+}
+
+func TestIsTTY_NonTTYStdin(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	if isTTY() {
+		t.Error("isTTY() = true when stdin is a pipe, want false")
+	}
+}
+
+func TestIsTTY_NonTTYStderr(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+
+	origStderr := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = origStderr }()
+
+	if isTTY() {
+		t.Error("isTTY() = true when stderr is a pipe, want false")
+	}
+}
+
+func TestIsCharDevice_NilFile(t *testing.T) {
+	if isCharDevice(nil) {
+		t.Error("isCharDevice(nil) = true, want false")
+	}
+}
+
+func TestIsCharDevice_RegularFile(t *testing.T) {
+	tmp, err := os.CreateTemp("", "nano-brain-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+
+	if isCharDevice(tmp) {
+		t.Error("isCharDevice(regular file) = true, want false")
 	}
 }
