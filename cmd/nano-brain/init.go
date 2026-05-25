@@ -34,24 +34,6 @@ func runInteractiveInit(configPath string) {
 	model := "nomic-embed-text"
 	port := 3100
 
-	if cfg, err := config.Load(configPath); err == nil {
-		if cfg.Database.URL != "" {
-			dbURL = cfg.Database.URL
-		}
-		if cfg.Embedding.Provider != "" {
-			provider = cfg.Embedding.Provider
-		}
-		if cfg.Embedding.URL != "" {
-			embURL = cfg.Embedding.URL
-		}
-		if cfg.Embedding.Model != "" {
-			model = cfg.Embedding.Model
-		}
-		if cfg.Server.Port > 0 {
-			port = cfg.Server.Port
-		}
-	}
-
 	fmt.Print("\nnano-brain setup\n────────────────\n\n")
 
 	scanner := bufio.NewScanner(os.Stdin)
