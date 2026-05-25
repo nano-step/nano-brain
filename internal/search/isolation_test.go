@@ -387,7 +387,7 @@ func TestHTTP400WhenWorkspaceMissing(t *testing.T) {
 	}{
 		{"bm25_search", handlers.BM25Search(q, logger)},
 		{"vector_search", handlers.VectorSearch(q, &fakeEmbedder{vec: makeVec(0.5)}, logger)},
-		{"query_hybrid", handlers.Query(svc, 20, logger)},
+		{"query_hybrid", handlers.Query(svc, logger)},
 	}
 
 	for _, tt := range tests {
