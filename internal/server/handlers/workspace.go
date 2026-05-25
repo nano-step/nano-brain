@@ -127,6 +127,12 @@ func InitWorkspace(q WorkspaceQuerier, db *sql.DB, logger zerolog.Logger) echo.H
 		snippet := "## nano-brain Access\n\nnano-brain workspace: " + ws.Hash + "\n" +
 			"nano-brain is accessed via CLI: `npx nano-brain <command>`."
 
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
+			Str("workspace_hash", ws.Hash).
+			Str("root_path", ws.Path).
+			Msg("workspace registered")
+
 		return c.JSON(http.StatusOK, initResponse{
 			WorkspaceHash: ws.Hash,
 			RootPath:      ws.Path,

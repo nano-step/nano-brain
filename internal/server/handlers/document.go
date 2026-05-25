@@ -180,6 +180,13 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger
 			}
 		}
 
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
+			Str("workspace", workspace).
+			Str("document_id", row.ID.String()).
+			Int("chunk_count", len(chunks)).
+			Msg("document written")
+
 		return c.JSON(http.StatusCreated, WriteResponse{
 			ID:            row.ID.String(),
 			Hash:          row.ContentHash,

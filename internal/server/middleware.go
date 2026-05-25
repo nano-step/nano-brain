@@ -2,20 +2,90 @@ package server
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog"
 )
 
-const versionHeader = "X-Nano-Brain-Version"
+const (
+	versionHeader   = "X-Nano-Brain-Version"
+	requestIDHeader = "X-Request-ID"
+)
 
 func registerMiddleware(s *Server) {
+	s.echo.Use(requestLoggingMiddleware(s.logger))
 	s.echo.Use(versionHeaderMiddleware(s.version))
 	s.echo.HTTPErrorHandler = httpErrorHandler(s)
+}
+
+// generateShortID returns an 8-character hex request ID derived from 4 random
+// bytes. Falls back to a timestamp-based string if crypto/rand fails.
+func generateShortID() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return time.Now().UTC().Format("150405.000000")
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// requestLoggingMiddleware attaches a per-request zerolog.Logger to the Echo
+// context, generates or propagates X-Request-ID, and emits start/completion
+// log entries. Stored under context key "logger" for handlers to retrieve via
+// handlers.LoggerFromCtx.
+func requestLoggingMiddleware(logger zerolog.Logger) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			req := c.Request()
+
+			reqID := req.Header.Get(requestIDHeader)
+			if reqID == "" {
+				reqID = generateShortID()
+			}
+			c.Response().Header().Set(requestIDHeader, reqID)
+
+			reqLogger := logger.With().
+				Str("request_id", reqID).
+				Str("method", req.Method).
+				Str("path", req.URL.Path).
+				Logger()
+			c.Set("logger", reqLogger)
+			c.Set("request_id", reqID)
+
+			reqLogger.Debug().Msg("request started")
+
+			start := time.Now()
+			err := next(c)
+			latency := time.Since(start)
+
+			status := c.Response().Status
+			if err != nil {
+				var he *echo.HTTPError
+				if errors.As(err, &he) {
+					status = he.Code
+				} else if status < 400 {
+					status = http.StatusInternalServerError
+				}
+			}
+
+			evt := reqLogger.Info()
+			if status >= 500 {
+				evt = reqLogger.Error()
+			}
+			evt.Int("status", status).
+				Int64("latency_ms", latency.Milliseconds()).
+				Msg("request completed")
+
+			return err
+		}
+	}
 }
 
 func versionHeaderMiddleware(version string) echo.MiddlewareFunc {

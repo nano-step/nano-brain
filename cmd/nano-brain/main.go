@@ -21,17 +21,30 @@ import (
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 )
 
 var Version = "dev"
+
+// cliLog is the process-wide logger for CLI command paths.
+// Initialized in main() once flags are parsed; remains a no-op logger
+// for commands that run before initialization or when logger setup fails.
+var cliLog = zerolog.Nop()
+
+// verbose holds the -v/--verbose count: 0=info, 1=debug, 2+=trace.
+var verbose int
 
 func main() {
 	var configPath string
 	var daemonChild bool
 	flag.StringVar(&configPath, "config", "", "path to config file (default: ~/.nano-brain/config.yml)")
 	flag.BoolVar(&daemonChild, "daemon-child", false, "")
+	flag.IntVar(&verbose, "v", 0, "verbosity: 0=info, 1=debug, 2=trace")
+	flag.IntVar(&verbose, "verbose", 0, "")
 	flag.Parse()
+
+	initCLILog(configPath)
 
 	// Hidden --daemon-child flag: run server directly (called by serve -d)
 	if daemonChild {
@@ -113,6 +126,36 @@ func main() {
 	startServer(configPath)
 }
 
+// initCLILog builds a best-effort logger for CLI commands before they dispatch.
+// Failures are non-fatal: cliLog falls back to zerolog.Nop().
+func initCLILog(configPath string) {
+	path := configPath
+	if path == "" {
+		path = config.DefaultConfigPath()
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return
+	}
+	applyVerbose(&cfg.Logging)
+	logger, err := health.NewLogger(cfg.Logging)
+	if err != nil {
+		return
+	}
+	cliLog = logger
+}
+
+// applyVerbose maps the -v/--verbose flag count to a log level string.
+// Counts above the explicit cases clamp to "trace".
+func applyVerbose(cfg *config.LoggingConfig) {
+	switch {
+	case verbose >= 2:
+		cfg.Level = "trace"
+	case verbose == 1:
+		cfg.Level = "debug"
+	}
+}
+
 // startServer runs the nano-brain HTTP server (blocking).
 func startServer(configPath string) {
 	if err := guardBeforeStart(); err != nil {
@@ -129,10 +172,13 @@ func startServer(configPath string) {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	applyVerbose(&cfg.Logging)
+
 	logger, err := health.NewLogger(cfg.Logging)
 	if err != nil {
 		log.Fatalf("failed to create logger: %v", err)
 	}
+	cliLog = logger
 
 	logger.Info().
 		Str("version", Version).

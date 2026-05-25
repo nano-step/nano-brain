@@ -37,6 +37,7 @@ func isRunning(pid int) bool {
 }
 
 func runServeCmd(args []string, configPath string) {
+	cliLog.Debug().Str("cmd", "serve").Msg("cli command started")
 	daemon := false
 	for _, a := range args {
 		switch a {
@@ -126,12 +127,15 @@ func runServeDaemon(configPath string) {
 
 	fmt.Printf("nano-brain started (PID: %d)\n", childPID)
 	fmt.Printf("Logs: %s\n", logPath)
+	cliLog.Debug().Str("cmd", "serve").Int("pid", childPID).Str("pid_file", pidFilePath()).Msg("daemon started")
 }
 
 func runStopCmd() {
+	cliLog.Debug().Str("cmd", "stop").Msg("cli command started")
 	pid, err := readPID()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "nano-brain is not running")
+		cliLog.Error().Err(err).Str("cmd", "stop").Msg("read pid file failed")
 		os.Exit(1)
 	}
 
@@ -157,6 +161,7 @@ func runStopCmd() {
 		if !isRunning(pid) {
 			_ = os.Remove(pidFilePath())
 			fmt.Println("nano-brain stopped")
+			cliLog.Debug().Str("cmd", "stop").Int("pid", pid).Msg("cli command completed")
 			return
 		}
 	}
@@ -164,9 +169,11 @@ func runStopCmd() {
 	_ = proc.Signal(syscall.SIGKILL)
 	_ = os.Remove(pidFilePath())
 	fmt.Println("nano-brain stopped (forced)")
+	cliLog.Debug().Str("cmd", "stop").Int("pid", pid).Bool("forced", true).Msg("cli command completed")
 }
 
 func runRestartCmd(args []string, configPath string) {
+	cliLog.Debug().Str("cmd", "restart").Msg("cli command started")
 	if pid, err := readPID(); err == nil && isRunning(pid) {
 		proc, _ := os.FindProcess(pid)
 		_ = proc.Signal(syscall.SIGTERM)

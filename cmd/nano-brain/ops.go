@@ -31,6 +31,7 @@ func defaultLogPath() string {
 
 // runLogsCmd implements the "logs" CLI command.
 func runLogsCmd(args []string) {
+	cliLog.Info().Str("cmd", "logs").Msg("cli command started")
 	count := 50
 	follow := false
 	jsonFlag := false
@@ -64,14 +65,17 @@ func runLogsCmd(args []string) {
 	if follow {
 		if err := tailFollow(logPath, jsonFlag); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			cliLog.Error().Err(err).Str("cmd", "logs").Msg("tail follow failed")
 			os.Exit(1)
 		}
+		cliLog.Info().Str("cmd", "logs").Msg("cli command completed")
 		return
 	}
 
 	lines, err := tailLines(logPath, count)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		cliLog.Error().Err(err).Str("cmd", "logs").Msg("tail lines failed")
 		os.Exit(1)
 	}
 
@@ -82,12 +86,14 @@ func runLogsCmd(args []string) {
 			"count": len(lines),
 		})
 		fmt.Println(string(out))
+		cliLog.Info().Str("cmd", "logs").Int("lines", len(lines)).Msg("cli command completed")
 		return
 	}
 
 	for _, line := range lines {
 		fmt.Println(line)
 	}
+	cliLog.Info().Str("cmd", "logs").Int("lines", len(lines)).Msg("cli command completed")
 }
 
 // resolveLogPath determines the log file path from config or defaults.
@@ -207,6 +213,7 @@ func tailFollow(path string, jsonFlag bool) error {
 
 // runDockerCmd implements the "docker" CLI command.
 func runDockerCmd(args []string) {
+	cliLog.Info().Str("cmd", "docker").Msg("cli command started")
 	jsonFlag := false
 	var subCmd string
 
@@ -237,6 +244,7 @@ func runDockerCmd(args []string) {
 	case "status":
 		runDockerStatus(composeDir, jsonFlag)
 	}
+	cliLog.Info().Str("cmd", "docker."+subCmd).Msg("cli command completed")
 }
 
 // resolveComposeDir determines the docker-compose directory.
@@ -363,6 +371,7 @@ func runDockerStatus(dir string, jsonFlag bool) {
 
 // runStatusCmd implements the enhanced "status" CLI command.
 func runStatusCmd(args []string) {
+	cliLog.Info().Str("cmd", "status").Msg("cli command started")
 	jsonFlag := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -385,19 +394,23 @@ func runStatusCmd(args []string) {
 		} else {
 			fmt.Fprintf(os.Stderr, "Cannot reach nano-brain server: %v\n", err)
 		}
+		cliLog.Error().Err(err).Str("cmd", "status").Msg("status request failed")
 		os.Exit(1)
 	}
 
 	if jsonFlag {
 		fmt.Println(string(resp))
+		cliLog.Info().Str("cmd", "status").Msg("cli command completed")
 		return
 	}
 
 	var status map[string]interface{}
 	if err := json.Unmarshal(resp, &status); err != nil {
 		fmt.Println(string(resp))
+		cliLog.Info().Str("cmd", "status").Msg("cli command completed")
 		return
 	}
+	defer cliLog.Info().Str("cmd", "status").Msg("cli command completed")
 
 	fmt.Println("nano-brain status")
 	fmt.Println(strings.Repeat("=", 40))

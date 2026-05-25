@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/natefinch/lumberjack"
@@ -46,7 +47,18 @@ func NewLogger(cfg config.LoggingConfig) (zerolog.Logger, error) {
 		Compress:   true,
 	}
 
-	multiWriter := io.MultiWriter(os.Stdout, fileWriter)
+	// TTY-aware stdout: use ConsoleWriter for human-readable output on terminals,
+	// raw JSON when piped/redirected. Honors NO_COLOR env var.
+	var stdoutWriter io.Writer = os.Stdout
+	if stat, statErr := os.Stdout.Stat(); statErr == nil && stat.Mode()&os.ModeCharDevice != 0 {
+		stdoutWriter = zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			TimeFormat: time.RFC3339,
+			NoColor:    os.Getenv("NO_COLOR") != "",
+		}
+	}
+
+	multiWriter := io.MultiWriter(stdoutWriter, fileWriter)
 
 	logger := zerolog.New(multiWriter).
 		With().
@@ -60,6 +72,8 @@ func NewLogger(cfg config.LoggingConfig) (zerolog.Logger, error) {
 func parseLogLevel(levelStr string) (zerolog.Level, error) {
 	levelStr = strings.ToLower(strings.TrimSpace(levelStr))
 	switch levelStr {
+	case "trace":
+		return zerolog.TraceLevel, nil
 	case "debug":
 		return zerolog.DebugLevel, nil
 	case "info":

@@ -135,6 +135,13 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, re
 			rec[0].Record(c.Request().Context(), req.Query, len(results), elapsed, "", workspace)
 		}
 
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
+			Str("workspace", workspace).
+			Int("results", len(results)).
+			Int64("latency_ms", elapsed).
+			Msg("vector search complete")
+
 		return c.JSON(http.StatusOK, SearchResponse{
 			Results: results,
 			Total:   len(results),

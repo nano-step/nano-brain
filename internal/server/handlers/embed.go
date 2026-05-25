@@ -118,6 +118,13 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model strin
 			}
 		}
 
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
+			Str("workspace", workspace).
+			Int("embedded", embedded).
+			Int64("remaining", remaining).
+			Msg("embed triggered")
+
 		return c.JSON(http.StatusOK, EmbedResponse{
 			Embedded:  embedded,
 			Remaining: remaining,

@@ -112,6 +112,12 @@ func AddCollection(q CollectionQuerier, fw *watcher.Watcher, logger zerolog.Logg
 			}
 		}
 
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
+			Str("name", col.Name).
+			Str("workspace", workspace).
+			Msg("collection added")
+
 		return c.JSON(http.StatusCreated, toCollectionResponse(col, 0))
 	}
 }
@@ -202,6 +208,13 @@ func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, logger ze
 			}
 		}
 
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
+			Str("from", name).
+			Str("to", req.NewName).
+			Str("workspace", workspace).
+			Msg("collection renamed")
+
 		return c.JSON(http.StatusOK, toCollectionResponse(col, 0))
 	}
 }
@@ -240,6 +253,12 @@ func RemoveCollection(q CollectionQuerier, fw *watcher.Watcher, logger zerolog.L
 				logger.Warn().Err(err).Str("path", col.Path).Msg("failed to detach watcher")
 			}
 		}
+
+		reqLog := LoggerFromCtx(c, logger)
+		reqLog.Info().
+			Str("name", name).
+			Str("workspace", workspace).
+			Msg("collection removed")
 
 		return c.NoContent(http.StatusNoContent)
 	}
