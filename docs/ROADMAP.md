@@ -108,7 +108,7 @@ harvester:
 | Semantic search | `nano-brain query "..."` | ✅ |
 | Tag-based filter | `--tags decision,auth` | ✅ |
 | Supersede | Replace stale memory entries | ✅ |
-| Auto-memory from sessions | Extract decisions từ harvested sessions | 🔲 |
+| Auto-memory from sessions | Extract decisions từ harvested sessions | ✅ |
 
 ---
 
