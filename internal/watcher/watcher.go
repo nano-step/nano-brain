@@ -104,6 +104,21 @@ func (w *Watcher) Unwatch(dirPath string) error {
 	return nil
 }
 
+// TriggerRescanByName marks the directory of a named collection dirty so the
+// watcher will re-scan it on the next debounce tick. Returns true if the
+// collection was found, false if it is not registered with this watcher.
+func (w *Watcher) TriggerRescanByName(collectionName, workspaceHash string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for path, col := range w.collections {
+		if col.name == collectionName && col.workspaceHash == workspaceHash {
+			w.dirty[path] = true
+			return true
+		}
+	}
+	return false
+}
+
 func (w *Watcher) Run(ctx context.Context) error {
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {

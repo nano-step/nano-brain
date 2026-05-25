@@ -264,3 +264,37 @@ func TestWatchUnwatch(t *testing.T) {
 	}
 	w.mu.Unlock()
 }
+
+func TestTriggerRescanByName(t *testing.T) {
+	dir := t.TempDir()
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+
+	if err := w.Watch("mycol", dir, "ws42", "*.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	absDir, _ := filepath.Abs(dir)
+
+	found := w.TriggerRescanByName("mycol", "ws42")
+	if !found {
+		t.Fatal("expected TriggerRescanByName to return true for registered collection")
+	}
+
+	w.mu.Lock()
+	if !w.dirty[absDir] {
+		w.mu.Unlock()
+		t.Fatal("expected directory to be marked dirty")
+	}
+	w.mu.Unlock()
+
+	notFound := w.TriggerRescanByName("other", "ws42")
+	if notFound {
+		t.Fatal("expected TriggerRescanByName to return false for unregistered collection")
+	}
+
+	notFoundWS := w.TriggerRescanByName("mycol", "wrongws")
+	if notFoundWS {
+		t.Fatal("expected TriggerRescanByName to return false for wrong workspace")
+	}
+}
