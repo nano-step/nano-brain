@@ -15,6 +15,7 @@ import (
 )
 
 func runDBMigrateCmd(args []string) {
+	cliLog.Info().Str("cmd", "db:migrate").Msg("cli command started")
 	var fromV1 string
 	var workspace string
 	var jsonFlag bool
@@ -45,6 +46,7 @@ func runDBMigrateCmd(args []string) {
 
 	if fromV1 == "" {
 		runGooseMigrateCmd(jsonFlag)
+		cliLog.Info().Str("cmd", "db:migrate").Msg("cli command completed")
 		return
 	}
 
@@ -92,6 +94,7 @@ func runDBMigrateCmd(args []string) {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nMigration failed: %v\n", err)
+		cliLog.Error().Err(err).Str("cmd", "db:migrate").Msg("v1 migration failed")
 		os.Exit(1)
 	}
 
@@ -104,6 +107,13 @@ func runDBMigrateCmd(args []string) {
 		}
 	}
 	fmt.Println("Run 'nano-brain embed' to regenerate embeddings.")
+	cliLog.Info().
+		Str("cmd", "db:migrate").
+		Int("migrated", res.Migrated).
+		Int("skipped", res.Skipped).
+		Int("failed", res.Failed).
+		Int("total", res.Total).
+		Msg("cli command completed")
 }
 
 type sqlcWriter struct {

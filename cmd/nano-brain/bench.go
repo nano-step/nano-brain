@@ -50,6 +50,7 @@ Commands:
 }
 
 func runBenchCmd(args []string) {
+	cliLog.Info().Str("cmd", "bench").Msg("cli command started")
 	if len(args) == 0 || (len(args) > 0 && (args[0] == "--help" || args[0] == "-h")) {
 		printBenchHelp()
 		os.Exit(1)
@@ -68,6 +69,7 @@ func runBenchCmd(args []string) {
 		printBenchHelp()
 		os.Exit(1)
 	}
+	cliLog.Info().Str("cmd", "bench."+args[0]).Msg("cli command completed")
 }
 
 func splitEqualsArgs(args []string) []string {

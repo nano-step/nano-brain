@@ -23,6 +23,7 @@ type checkResult struct {
 }
 
 func runDoctorCmd(args []string, configPath string) {
+	cliLog.Debug().Str("cmd", "doctor").Msg("cli command started")
 	var jsonFlag bool
 	for _, a := range args {
 		if a == "--json" {
@@ -100,6 +101,8 @@ func runDoctorCmd(args []string, configPath string) {
 		}
 		fmt.Println()
 	}
+
+	cliLog.Debug().Str("cmd", "doctor").Bool("all_passed", allPassed).Int("checks", len(results)).Msg("cli command completed")
 
 	if !allPassed {
 		os.Exit(1)

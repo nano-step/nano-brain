@@ -37,6 +37,7 @@ func runCollectionCmd(args []string) {
 }
 
 func runCollectionAdd(args []string) {
+	cliLog.Info().Str("cmd", "collection.add").Msg("cli command started")
 	var name, path, workspace, glob string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -90,14 +91,17 @@ func runCollectionAdd(args []string) {
 	resp, err := http.Post(getBaseURL()+"/api/v1/collections", "application/json", bytes.NewReader(data))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		cliLog.Error().Err(err).Str("cmd", "collection.add").Msg("request failed")
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
 	io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
+	cliLog.Info().Str("cmd", "collection.add").Str("name", name).Str("workspace", workspace).Msg("cli command completed")
 }
 
 func runCollectionRemove(args []string) {
+	cliLog.Info().Str("cmd", "collection.remove").Msg("cli command started")
 	var name, workspace string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -127,19 +131,23 @@ func runCollectionRemove(args []string) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		cliLog.Error().Err(err).Str("cmd", "collection.remove").Msg("request failed")
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent {
 		fmt.Println("collection removed")
+		cliLog.Info().Str("cmd", "collection.remove").Str("name", name).Str("workspace", workspace).Msg("cli command completed")
 		return
 	}
 	io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
+	cliLog.Info().Str("cmd", "collection.remove").Int("status", resp.StatusCode).Msg("cli command completed")
 }
 
 func runCollectionList(args []string) {
+	cliLog.Info().Str("cmd", "collection.list").Msg("cli command started")
 	var workspace string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--workspace" {
@@ -160,14 +168,17 @@ func runCollectionList(args []string) {
 	resp, err := http.Get(reqURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		cliLog.Error().Err(err).Str("cmd", "collection.list").Msg("request failed")
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
 	io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
+	cliLog.Info().Str("cmd", "collection.list").Str("workspace", workspace).Msg("cli command completed")
 }
 
 func runCollectionRename(args []string) {
+	cliLog.Info().Str("cmd", "collection.rename").Msg("cli command started")
 	var oldName, newName, workspace string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -215,9 +226,11 @@ func runCollectionRename(args []string) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		cliLog.Error().Err(err).Str("cmd", "collection.rename").Msg("request failed")
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
 	io.Copy(os.Stdout, resp.Body)
 	fmt.Println()
+	cliLog.Info().Str("cmd", "collection.rename").Str("from", oldName).Str("to", newName).Msg("cli command completed")
 }

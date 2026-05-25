@@ -10,6 +10,7 @@ import (
 )
 
 func runConfigCmd(args []string, configPath string) {
+	cliLog.Debug().Str("cmd", "config").Msg("cli command started")
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: nano-brain config <show|check> [--json]")
 		os.Exit(1)
@@ -30,6 +31,7 @@ func runConfigCmd(args []string, configPath string) {
 		fmt.Fprintln(os.Stderr, "Usage: nano-brain config <show|check> [--json]")
 		os.Exit(1)
 	}
+	cliLog.Debug().Str("cmd", "config."+args[0]).Msg("cli command completed")
 }
 
 func runConfigShow(configPath string, jsonFlag bool) {
@@ -39,6 +41,7 @@ func runConfigShow(configPath string, jsonFlag bool) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		cliLog.Error().Err(err).Str("cmd", "config.show").Msg("config load failed")
 		os.Exit(1)
 	}
 
