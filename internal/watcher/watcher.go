@@ -78,6 +78,10 @@ func (w *Watcher) Watch(collectionName, dirPath, workspaceHash, globPattern stri
 	}
 
 	if w.fsw != nil {
+		if _, err := os.Stat(absPath); err != nil {
+			w.logger.Info().Str("dir", absPath).Str("collection", collectionName).Msg("collection path not found, skipping watch")
+			return nil
+		}
 		if err := w.fsw.Add(absPath); err != nil {
 			return fmt.Errorf("watch dir %s: %w", absPath, err)
 		}
@@ -134,6 +138,10 @@ func (w *Watcher) Run(ctx context.Context) error {
 	w.mu.Lock()
 	w.fsw = fsw
 	for absPath, col := range w.collections {
+		if _, err := os.Stat(absPath); err != nil {
+			w.logger.Info().Str("dir", absPath).Str("collection", col.name).Msg("collection path not found, skipping watch")
+			continue
+		}
 		if err := fsw.Add(absPath); err != nil {
 			w.logger.Warn().Err(err).Str("dir", absPath).Msg("failed to add watch")
 			continue
