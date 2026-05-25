@@ -59,6 +59,7 @@ type HarvesterConfig struct {
 // OpenCodeHarvesterConfig holds OpenCode harvester configuration.
 type OpenCodeHarvesterConfig struct {
 	SessionDir string `koanf:"session_dir"`
+	DBPath     string `koanf:"db_path"`
 }
 
 // ClaudeCodeHarvesterConfig holds ClaudeCode harvester configuration.

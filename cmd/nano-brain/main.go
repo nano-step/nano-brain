@@ -303,7 +303,26 @@ func startServer(configPath string) {
 		}
 	}
 
-	if cfg.Harvester.OpenCode.SessionDir != "" {
+	if cfg.Harvester.OpenCode.DBPath == "" {
+		if detected := detectOpenCodeDBPath(); detected != "" {
+			cfg.Harvester.OpenCode.DBPath = detected
+			logger.Info().Str("path", detected).Msg("auto-detected opencode sqlite db")
+		}
+	}
+
+	if cfg.Harvester.OpenCode.DBPath != "" {
+		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.DBPath)
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode sqlite harvester")
+		} else {
+			oh := harvest.NewOpenCodeSQLiteHarvester(db, logger, cfg.Harvester.OpenCode.DBPath, wsHash)
+			hr = harvest.NewRunner(oh, eq, interval, logger)
+			logger.Info().
+				Str("db_path", cfg.Harvester.OpenCode.DBPath).
+				Dur("interval", interval).
+				Msg("opencode sqlite harvester started")
+		}
+	} else if cfg.Harvester.OpenCode.SessionDir != "" {
 		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
 		if err != nil {
 			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode harvester")
@@ -316,7 +335,7 @@ func startServer(configPath string) {
 				Msg("opencode session harvester started")
 		}
 	} else {
-		logger.Info().Msg("opencode session harvester disabled (no session_dir configured)")
+		logger.Info().Msg("opencode harvester disabled (no db_path or session_dir configured)")
 	}
 
 	if cfg.Harvester.ClaudeCode.Enabled {
