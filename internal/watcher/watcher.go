@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/symbol"
@@ -56,6 +57,7 @@ type Watcher struct {
 	maxFileSize    int64
 	symbolRegistry *symbol.Registry
 	graphRegistry  *graph.Registry
+	embedQueue     *embed.Queue
 
 	fsw         *fsnotify.Watcher
 	mu          sync.Mutex
@@ -84,6 +86,11 @@ func (w *Watcher) WithSymbolRegistry(r *symbol.Registry) *Watcher {
 func (w *Watcher) WithGraphRegistry(r *graph.Registry, gq GraphQuerier) *Watcher {
 	w.graphRegistry = r
 	w.graphQuerier = gq
+	return w
+}
+
+func (w *Watcher) WithEmbedQueue(eq *embed.Queue) *Watcher {
+	w.embedQueue = eq
 	return w
 }
 
@@ -309,6 +316,11 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 }
 
 func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePath string) {
+	w.logger.Info().
+		Str("path", filePath).
+		Str("collection", col.name).
+		Msg("processing file")
+
 	info, err := os.Stat(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("stat failed, skipping")
@@ -360,23 +372,34 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		Metadata:      meta,
 	}
 
+	var chunkIDs []uuid.UUID
 	if w.db != nil {
-		if err := w.upsertWithTx(ctx, col.workspaceHash, filePath, params, chunks, meta); err != nil {
+		ids, err := w.upsertWithTx(ctx, col.workspaceHash, filePath, params, chunks, meta)
+		if err != nil {
 			w.logger.Error().Err(err).Str("file", filePath).Msg("index failed")
 			return
 		}
+		chunkIDs = ids
 	} else {
-		if err := w.upsertWithoutTx(ctx, col.workspaceHash, params, chunks, meta); err != nil {
+		ids, err := w.upsertWithoutTx(ctx, col.workspaceHash, params, chunks, meta)
+		if err != nil {
 			w.logger.Error().Err(err).Str("file", filePath).Msg("index failed")
 			return
 		}
+		chunkIDs = ids
 	}
 
 	w.logger.Info().
 		Str("file", filePath).
 		Str("collection", col.name).
-		Int("chunks", len(chunks)).
+		Int("chunks", len(chunkIDs)).
 		Msg("indexed file")
+
+	if w.embedQueue != nil {
+		for _, id := range chunkIDs {
+			w.embedQueue.Enqueue(id)
+		}
+	}
 
 	if w.symbolRegistry != nil {
 		w.extractAndUpsertSymbols(ctx, col, filePath, content)
@@ -474,50 +497,53 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		Msg("graph edges extracted")
 }
 
-func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {
+func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck // Rollback after Commit is a no-op in database/sql.
 
 	tq := sqlc.New(tx)
 	docRow, err := tq.UpsertDocumentBySourcePath(ctx, params)
 	if err != nil {
-		return fmt.Errorf("upsert document: %w", err)
+		return nil, fmt.Errorf("upsert document: %w", err)
 	}
 
-	if err := w.writeChunks(ctx, tq, docRow.ID, workspace, chunks, meta); err != nil {
-		return fmt.Errorf("write chunks: %w", err)
+	ids, err := w.writeChunks(ctx, tq, docRow.ID, workspace, chunks, meta)
+	if err != nil {
+		return nil, fmt.Errorf("write chunks: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
+		return nil, fmt.Errorf("commit: %w", err)
 	}
-	return nil
+	return ids, nil
 }
 
-func (w *Watcher) upsertWithoutTx(ctx context.Context, workspace string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {
+func (w *Watcher) upsertWithoutTx(ctx context.Context, workspace string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
 	docRow, err := w.queries.UpsertDocumentBySourcePath(ctx, params)
 	if err != nil {
-		return fmt.Errorf("upsert document: %w", err)
+		return nil, fmt.Errorf("upsert document: %w", err)
 	}
 
-	if err := w.writeChunks(ctx, w.queries, docRow.ID, workspace, chunks, meta); err != nil {
-		return fmt.Errorf("write chunks: %w", err)
+	ids, err := w.writeChunks(ctx, w.queries, docRow.ID, workspace, chunks, meta)
+	if err != nil {
+		return nil, fmt.Errorf("write chunks: %w", err)
 	}
-	return nil
+	return ids, nil
 }
 
-func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.UUID, workspace string, chunks []chunk.Chunk, meta pqtype.NullRawMessage) error {
+func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.UUID, workspace string, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
 	if err := q.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
 		DocumentID:    docID,
 		WorkspaceHash: workspace,
 	}); err != nil {
-		return err
+		return nil, err
 	}
+	ids := make([]uuid.UUID, 0, len(chunks))
 	for _, ch := range chunks {
-		if _, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
+		id, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
 			DocumentID:    docID,
 			WorkspaceHash: workspace,
 			ContentHash:   ch.Hash,
@@ -526,9 +552,11 @@ func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.
 			StartLine:     sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
 			EndLine:       sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
 			Metadata:      meta,
-		}); err != nil {
-			return err
+		})
+		if err != nil {
+			return nil, err
 		}
+		ids = append(ids, id)
 	}
-	return nil
+	return ids, nil
 }

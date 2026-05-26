@@ -7,7 +7,8 @@ ON CONFLICT (content_hash, workspace_hash, document_id) DO UPDATE SET
     chunk_index = EXCLUDED.chunk_index,
     start_line = EXCLUDED.start_line,
     end_line = EXCLUDED.end_line,
-    metadata = EXCLUDED.metadata
+    metadata = EXCLUDED.metadata,
+    embed_status = 'pending'
 RETURNING id;
 
 -- name: DeleteChunksByDocumentID :exec
@@ -17,8 +18,11 @@ DELETE FROM chunks WHERE document_id = $1 AND workspace_hash = $2;
 SELECT count(*) FROM chunks WHERE document_id = $1 AND workspace_hash = $2;
 
 -- name: GetChunkByID :one
-SELECT id, document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, embed_status, created_at
-FROM chunks WHERE id = $1;
+SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.embed_status, c.created_at,
+       COALESCE(d.source_path, '') AS source_path
+FROM chunks c
+LEFT JOIN documents d ON d.id = c.document_id
+WHERE c.id = $1;
 
 -- name: ListChunksByDocumentID :many
 SELECT id, document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, created_at

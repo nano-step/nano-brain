@@ -216,11 +216,19 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		return
 	}
 
+	q.logger.Info().
+		Str("chunk_id", chunkID.String()).
+		Str("file", chunk.SourcePath).
+		Msg("embedding chunk")
+
 	embedCtx, cancel := context.WithTimeout(ctx, embedTimeout)
 	defer cancel()
 	vec, err := q.embedder.Embed(embedCtx, chunk.Content)
 	if err != nil {
-		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("embedding failed")
+		q.logger.Error().Err(err).
+			Str("chunk_id", chunkID.String()).
+			Str("file", chunk.SourcePath).
+			Msg("embedding failed")
 		q.increaseBackoff()
 		q.handleRetry(ctx, chunkID, chunk.WorkspaceHash)
 		return
@@ -257,7 +265,10 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 	q.pending.Add(-1)
 	q.clearRetries(chunkID)
 	q.resetBackoff()
-	q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("chunk embedded")
+	q.logger.Info().
+		Str("chunk_id", chunkID.String()).
+		Str("file", chunk.SourcePath).
+		Msg("chunk embedded")
 }
 
 func (q *Queue) increaseBackoff() {

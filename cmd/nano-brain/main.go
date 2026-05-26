@@ -246,10 +246,11 @@ func startServer(configPath string) {
 	if cfg.Embedding.Provider != "" {
 		e, embedErr := embed.NewFromConfig(cfg.Embedding)
 		if embedErr != nil {
-			logger.Warn().Err(embedErr).Msg("embedding disabled — provider not configured")
+			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", cfg.Embedding.URL).Msg("embedding provider init failed")
 		} else {
 			embedder = e
 			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency)
+			fw.WithEmbedQueue(eq)
 		}
 	}
 

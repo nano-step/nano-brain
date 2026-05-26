@@ -215,6 +215,44 @@ func (q *Queries) MarkChunkEmbedded(ctx context.Context, arg MarkChunkEmbeddedPa
 	return err
 }
 
+const resetAndReturnChunkIDsByCollection = `-- name: ResetAndReturnChunkIDsByCollection :many
+UPDATE chunks
+SET embed_status = 'pending'
+FROM documents
+WHERE chunks.document_id = documents.id
+  AND chunks.workspace_hash = $1
+  AND documents.collection = $2
+RETURNING chunks.id
+`
+
+type ResetAndReturnChunkIDsByCollectionParams struct {
+	WorkspaceHash string
+	Collection    string
+}
+
+func (q *Queries) ResetAndReturnChunkIDsByCollection(ctx context.Context, arg ResetAndReturnChunkIDsByCollectionParams) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, resetAndReturnChunkIDsByCollection, arg.WorkspaceHash, arg.Collection)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resetEmbedStatus = `-- name: ResetEmbedStatus :exec
 UPDATE chunks SET embed_status = 'pending' WHERE workspace_hash = $1
 `

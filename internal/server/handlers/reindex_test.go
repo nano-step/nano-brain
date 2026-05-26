@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -18,16 +19,19 @@ import (
 
 type mockReindexQuerier struct {
 	called      bool
-	returnN     int64
+	returnIDs   []uuid.UUID
 	returnErr   error
-	lastParams  sqlc.ResetEmbedStatusByCollectionParams
+	lastParams  sqlc.ResetAndReturnChunkIDsByCollectionParams
 	collections []sqlc.Collection
 }
 
-func (m *mockReindexQuerier) ResetEmbedStatusByCollection(_ context.Context, arg sqlc.ResetEmbedStatusByCollectionParams) (int64, error) {
+func (m *mockReindexQuerier) ResetAndReturnChunkIDsByCollection(_ context.Context, arg sqlc.ResetAndReturnChunkIDsByCollectionParams) ([]uuid.UUID, error) {
 	m.called = true
 	m.lastParams = arg
-	return m.returnN, m.returnErr
+	if m.returnIDs != nil {
+		return m.returnIDs, m.returnErr
+	}
+	return []uuid.UUID{uuid.New()}, m.returnErr
 }
 
 func (m *mockReindexQuerier) ListCollections(_ context.Context, _ string) ([]sqlc.Collection, error) {
@@ -58,13 +62,14 @@ func TestTriggerReindex(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.Set("workspace", "ws123")
 
+	fakeIDs := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()}
 	mq := &mockReindexQuerier{
-		returnN:     5,
+		returnIDs:   fakeIDs,
 		collections: []sqlc.Collection{{Name: "code", Path: "/tmp/code"}},
 	}
 	w := newTestWatcherForHandler()
 
-	h := handlers.TriggerReindex(mq, w, zerolog.Nop())
+	h := handlers.TriggerReindex(mq, w, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -73,7 +78,7 @@ func TestTriggerReindex(t *testing.T) {
 		t.Fatalf("expected 202, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	if !mq.called {
-		t.Fatal("expected ResetEmbedStatusByCollection to be called")
+		t.Fatal("expected ResetAndReturnChunkIDsByCollection to be called")
 	}
 	if mq.lastParams.WorkspaceHash != "ws123" || mq.lastParams.Collection != "code" {
 		t.Errorf("unexpected params: %+v", mq.lastParams)
@@ -105,12 +110,12 @@ func TestTriggerReindexByPath(t *testing.T) {
 	c.Set("workspace", "ws123")
 
 	mq := &mockReindexQuerier{
-		returnN:     3,
+		returnIDs:   []uuid.UUID{uuid.New(), uuid.New(), uuid.New()},
 		collections: []sqlc.Collection{{Name: "code", Path: "/my/project"}},
 	}
 	w := newTestWatcherForHandler()
 
-	h := handlers.TriggerReindex(mq, w, zerolog.Nop())
+	h := handlers.TriggerReindex(mq, w, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -118,7 +123,7 @@ func TestTriggerReindexByPath(t *testing.T) {
 		t.Fatalf("expected 202, got %d", rec.Code)
 	}
 	if !mq.called {
-		t.Fatal("expected ResetEmbedStatusByCollection to be called for path-matched collection")
+		t.Fatal("expected ResetAndReturnChunkIDsByCollection to be called for path-matched collection")
 	}
 	if mq.lastParams.Collection != "code" {
 		t.Errorf("expected collection name 'code', got %q", mq.lastParams.Collection)
@@ -135,12 +140,12 @@ func TestTriggerReindexNoRoot(t *testing.T) {
 	c.Set("workspace", "ws123")
 
 	mq := &mockReindexQuerier{
-		returnN:     2,
+		returnIDs:   []uuid.UUID{uuid.New(), uuid.New()},
 		collections: []sqlc.Collection{{Name: "code", Path: "/tmp/code"}, {Name: "memory", Path: "/tmp/mem"}},
 	}
 	w := newTestWatcherForHandler()
 
-	h := handlers.TriggerReindex(mq, w, zerolog.Nop())
+	h := handlers.TriggerReindex(mq, w, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -148,7 +153,7 @@ func TestTriggerReindexNoRoot(t *testing.T) {
 		t.Fatalf("expected 202, got %d", rec.Code)
 	}
 	if !mq.called {
-		t.Fatal("expected ResetEmbedStatusByCollection to be called for all collections")
+		t.Fatal("expected ResetAndReturnChunkIDsByCollection to be called for all collections")
 	}
 }
 

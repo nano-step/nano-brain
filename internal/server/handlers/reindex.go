@@ -6,14 +6,16 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
 )
 
 type ReindexQuerier interface {
-	ResetEmbedStatusByCollection(ctx context.Context, arg sqlc.ResetEmbedStatusByCollectionParams) (int64, error)
+	ResetAndReturnChunkIDsByCollection(ctx context.Context, arg sqlc.ResetAndReturnChunkIDsByCollectionParams) ([]uuid.UUID, error)
 	ListCollections(ctx context.Context, workspaceHash string) ([]sqlc.Collection, error)
 	DeleteSymbolDocumentsByCollection(ctx context.Context, arg sqlc.DeleteSymbolDocumentsByCollectionParams) error
 }
@@ -30,7 +32,7 @@ type reindexResponse struct {
 	Message          string `json:"message"`
 }
 
-func TriggerReindex(queries ReindexQuerier, w *watcher.Watcher, logger zerolog.Logger) echo.HandlerFunc {
+func TriggerReindex(queries ReindexQuerier, w *watcher.Watcher, eq *embed.Queue, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req reindexRequest
 		if err := c.Bind(&req); err != nil {
@@ -58,14 +60,22 @@ func TriggerReindex(queries ReindexQuerier, w *watcher.Watcher, logger zerolog.L
 		var totalChunks int64
 		var watcherTriggered bool
 		for _, col := range targets {
-			n, err := queries.ResetEmbedStatusByCollection(c.Request().Context(), sqlc.ResetEmbedStatusByCollectionParams{
+			ids, err := queries.ResetAndReturnChunkIDsByCollection(c.Request().Context(), sqlc.ResetAndReturnChunkIDsByCollectionParams{
 				WorkspaceHash: workspace,
 				Collection:    col.Name,
 			})
 			if err != nil {
 				return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("reset embed status: %v", err))
 			}
-			totalChunks += n
+			if eq != nil {
+				for _, id := range ids {
+					if eq.Enqueue(id) {
+						totalChunks++
+					}
+				}
+			} else {
+				totalChunks += int64(len(ids))
+			}
 			_ = queries.DeleteSymbolDocumentsByCollection(c.Request().Context(), sqlc.DeleteSymbolDocumentsByCollectionParams{
 				WorkspaceHash: workspace,
 				Collection:    col.Name,
