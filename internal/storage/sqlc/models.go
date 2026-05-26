@@ -36,9 +36,9 @@ type Collection struct {
 	GlobPattern       string
 	UpdateMode        string
 	ExcludePatterns   []string
-	AllowedExtensions []string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+	AllowedExtensions []string
 }
 
 type Document struct {

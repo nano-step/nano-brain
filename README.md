@@ -130,7 +130,45 @@ telemetry:
 logging:
   level: info
   file: ""                      # empty = stdout only
+
+summarization:
+  enabled: false                # set to true to generate LLM summaries of harvested sessions
+  provider_url: ""              # OpenAI-compatible endpoint, e.g. https://ai-proxy.example.com/v1
+  api_key: ""                   # or set NANO_BRAIN_SUMMARIZE_API_KEY env var
+  model: "nano-brain"           # model name passed to the provider
+  max_tokens: 4096              # max tokens per LLM completion
+  concurrency: 3                # parallel map-phase LLM calls
+  output_dir: "~/.nano-brain/summaries"  # directory for .md summary files
 ```
+
+### Session Summarization
+
+When `summarization.enabled: true`, nano-brain automatically generates structured markdown summaries of each harvested session using an OpenAI-compatible LLM provider. Summaries are:
+
+- Written as `.md` files to `output_dir` (`{source}_{title-slug}_{YYYY-MM-DD}.md`)
+- Stored in the vector DB under collection `session-summary` for semantic search
+- Idempotent — unchanged sessions are skipped; re-harvested sessions overwrite old summaries
+
+**Quick setup with ai-proxy:**
+
+```yaml
+summarization:
+  enabled: true
+  provider_url: "https://ai-proxy.example.com/v1"
+  api_key: ""           # set NANO_BRAIN_SUMMARIZE_API_KEY instead
+  model: "claude-sonnet-4-5"
+  max_tokens: 4096
+  concurrency: 3
+  output_dir: "~/.nano-brain/summaries"
+```
+
+Or via environment variable:
+
+```bash
+export NANO_BRAIN_SUMMARIZE_API_KEY="sk-..."
+```
+
+Large sessions (100K+ tokens) are handled via map-reduce chunking — no session is too large.
 
 ### Environment Variables
 
@@ -139,6 +177,7 @@ logging:
 | `DATABASE_URL` | PostgreSQL connection string |
 | `VOYAGE_API_KEY` | Voyage AI API key |
 | `OPENCODE_STORAGE_DIR` | OpenCode session directory |
+| `NANO_BRAIN_SUMMARIZE_API_KEY` | API key for the summarization LLM provider |
 | `NANO_BRAIN_*` | Override any config (e.g., `NANO_BRAIN_SERVER_PORT=3100`) |
 
 ## REST API

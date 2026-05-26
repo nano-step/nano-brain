@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2026.5.267] — 2026-05-26
+
+### Features
+- feat(summarize): session summarization pipeline — LLM-powered structured summaries for harvested sessions
+- feat(summarize): map-reduce pipeline with strip, parallel map, hierarchical reduce for sessions up to 1M tokens
+- feat(summarize): OpenAI-compatible LLM client with SSE streaming, retry (3x backoff for 429/5xx)
+- feat(summarize): persist summaries as `.md` files + embed in vector DB under `session-summary` collection
+- feat(summarize): idempotent upsert via `summary://opencode/{id}` source path — unchanged sessions skipped
+- feat(summarize): cross-session relationship links (parent/child/sibling) in summary header
+- feat(harvest): wire summarizer into OpenCode SQLite + Claude Code harvesters — runs after successful harvest
+- feat(config): `summarization` config block — provider_url, api_key, model, max_tokens, concurrency, output_dir
+
+### Documentation
+- docs: add `summarization` config section to README with ai-proxy setup example
+- docs: document `NANO_BRAIN_SUMMARIZE_API_KEY` env var
+
+**Install:** `npm install nano-brain@2026.5.267` · `npx nano-brain@latest`
+
+---
+
 ## [2026.8.19] — 2026-05-25
 
 ### Features

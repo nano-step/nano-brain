@@ -19,11 +19,19 @@ import (
 )
 
 type OpenCodeSQLiteHarvester struct {
-	pgDB      *sql.DB
-	sqdb      *sql.DB
-	dbPath    string
-	workspace string
-	logger    zerolog.Logger
+	pgDB       *sql.DB
+	sqdb       *sql.DB
+	dbPath     string
+	workspace  string
+	logger     zerolog.Logger
+	summarizer SessionSummarizer
+}
+
+func (h *OpenCodeSQLiteHarvester) setSummarizer(s SessionSummarizer) { h.summarizer = s }
+
+func (h *OpenCodeSQLiteHarvester) WithSummarizer(s SessionSummarizer) *OpenCodeSQLiteHarvester {
+	h.summarizer = s
+	return h
 }
 
 func NewOpenCodeSQLiteHarvester(pgDB *sql.DB, logger zerolog.Logger, dbPath, workspace string) *OpenCodeSQLiteHarvester {
@@ -207,6 +215,18 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 
 		h.logger.Info().Str("session", sess.id).Int("chunks", len(chunks)).Msg("harvested opencode session")
 		harvested++
+
+		if h.summarizer != nil {
+			smeta := SummaryMeta{
+				Source:    "opencode",
+				SessionID: sess.id,
+				Title:     title,
+				CreatedAt: sess.createdAt,
+			}
+			if err := h.summarizer.SummarizeAndPersist(ctx, md, smeta); err != nil {
+				h.logger.Warn().Err(err).Str("session", sess.id).Msg("summarization failed, session still harvested")
+			}
+		}
 	}
 
 	h.logger.Info().Int("harvested", harvested).Int("skipped", skipped).Int("errors", errCount).Msg("opencode sqlite harvest complete")

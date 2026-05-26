@@ -13,6 +13,11 @@ type Harvester interface {
 	HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harvested, skipped, errCount int)
 }
 
+// summarizerSettable is implemented by harvesters that accept a SessionSummarizer.
+type summarizerSettable interface {
+	setSummarizer(SessionSummarizer)
+}
+
 // Runner periodically invokes one or more Harvesters.
 type Runner struct {
 	mu         sync.Mutex
@@ -20,6 +25,7 @@ type Runner struct {
 	enqueuer   ChunkEnqueuer
 	interval   time.Duration
 	logger     zerolog.Logger
+	summarizer SessionSummarizer
 }
 
 // NewRunner creates a Runner that calls HarvestAll at the given interval.
@@ -35,6 +41,21 @@ func NewRunner(harvester Harvester, enqueuer ChunkEnqueuer, interval time.Durati
 // AddHarvester appends an additional harvester to the runner.
 func (r *Runner) AddHarvester(h Harvester) {
 	r.harvesters = append(r.harvesters, h)
+	if r.summarizer != nil {
+		if ss, ok := h.(summarizerSettable); ok {
+			ss.setSummarizer(r.summarizer)
+		}
+	}
+}
+
+func (r *Runner) WithSummarizer(s SessionSummarizer) *Runner {
+	r.summarizer = s
+	for _, h := range r.harvesters {
+		if ss, ok := h.(summarizerSettable); ok {
+			ss.setSummarizer(s)
+		}
+	}
+	return r
 }
 
 // Run executes an immediate harvest then ticks at the configured interval.

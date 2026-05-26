@@ -20,6 +20,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/server"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/summarize"
 	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -370,6 +371,17 @@ func startServer(configPath string) {
 	}
 
 	if hr != nil {
+		if cfg.Summarization.Enabled {
+			llmClient := summarize.New(cfg.Summarization, logger)
+			pipeline := summarize.NewPipeline(llmClient, nil, cfg.Summarization.Concurrency, logger)
+			persister := summarize.NewPersister(db, cfg.Summarization.OutputDir, "", eq, logger)
+			adapter := summarize.NewHarvestSummarizer(pipeline, persister, logger)
+			hr.WithSummarizer(adapter)
+			logger.Info().
+				Str("output_dir", cfg.Summarization.OutputDir).
+				Str("model", cfg.Summarization.Model).
+				Msg("session summarization enabled")
+		}
 		srv.SetHarvestRunner(hr)
 		g.Go(func() error {
 			return hr.Run(gctx)

@@ -60,6 +60,15 @@ func getDefaults() *Config {
 			Level: "info",
 			File:  "",
 		},
+		Summarization: SummarizationConfig{
+			Enabled:     false,
+			ProviderURL: "",
+			APIKey:      "",
+			Model:       "nano-brain",
+			MaxTokens:   4096,
+			Concurrency: 3,
+			OutputDir:   "~/.nano-brain/summaries",
+		},
 	}
 }
 

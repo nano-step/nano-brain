@@ -44,7 +44,7 @@ func (q *Queries) DeleteCollection(ctx context.Context, arg DeleteCollectionPara
 }
 
 const getCollectionByName = `-- name: GetCollectionByName :one
-SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, allowed_extensions, created_at, updated_at FROM collections WHERE name = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at, allowed_extensions FROM collections WHERE name = $1 AND workspace_hash = $2
 `
 
 type GetCollectionByNameParams struct {
@@ -63,15 +63,15 @@ func (q *Queries) GetCollectionByName(ctx context.Context, arg GetCollectionByNa
 		&i.GlobPattern,
 		&i.UpdateMode,
 		pq.Array(&i.ExcludePatterns),
-		pq.Array(&i.AllowedExtensions),
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		pq.Array(&i.AllowedExtensions),
 	)
 	return i, err
 }
 
 const listCollections = `-- name: ListCollections :many
-SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, allowed_extensions, created_at, updated_at FROM collections WHERE workspace_hash = $1 ORDER BY name
+SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at, allowed_extensions FROM collections WHERE workspace_hash = $1 ORDER BY name
 `
 
 func (q *Queries) ListCollections(ctx context.Context, workspaceHash string) ([]Collection, error) {
@@ -91,9 +91,9 @@ func (q *Queries) ListCollections(ctx context.Context, workspaceHash string) ([]
 			&i.GlobPattern,
 			&i.UpdateMode,
 			pq.Array(&i.ExcludePatterns),
-			pq.Array(&i.AllowedExtensions),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			pq.Array(&i.AllowedExtensions),
 		); err != nil {
 			return nil, err
 		}
@@ -172,7 +172,7 @@ func (q *Queries) ListCollectionsWithDocCount(ctx context.Context, workspaceHash
 const renameCollection = `-- name: RenameCollection :one
 UPDATE collections SET name = $2, updated_at = now()
 WHERE name = $1 AND workspace_hash = $3
-RETURNING id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, allowed_extensions, created_at, updated_at
+RETURNING id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at, allowed_extensions
 `
 
 type RenameCollectionParams struct {
@@ -192,9 +192,9 @@ func (q *Queries) RenameCollection(ctx context.Context, arg RenameCollectionPara
 		&i.GlobPattern,
 		&i.UpdateMode,
 		pq.Array(&i.ExcludePatterns),
-		pq.Array(&i.AllowedExtensions),
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		pq.Array(&i.AllowedExtensions),
 	)
 	return i, err
 }
@@ -207,7 +207,7 @@ ON CONFLICT (name, workspace_hash) DO UPDATE SET
     glob_pattern = EXCLUDED.glob_pattern,
     update_mode = EXCLUDED.update_mode,
     updated_at = now()
-RETURNING id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, allowed_extensions, created_at, updated_at
+RETURNING id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at, allowed_extensions
 `
 
 type UpsertCollectionParams struct {
@@ -235,9 +235,9 @@ func (q *Queries) UpsertCollection(ctx context.Context, arg UpsertCollectionPara
 		&i.GlobPattern,
 		&i.UpdateMode,
 		pq.Array(&i.ExcludePatterns),
-		pq.Array(&i.AllowedExtensions),
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		pq.Array(&i.AllowedExtensions),
 	)
 	return i, err
 }

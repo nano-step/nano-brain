@@ -17,16 +17,17 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	Server    ServerConfig    `koanf:"server"`
-	Database  DatabaseConfig  `koanf:"database"`
-	Embedding EmbeddingConfig `koanf:"embedding"`
-	Harvester HarvesterConfig `koanf:"harvester"`
-	Intervals IntervalsConfig `koanf:"intervals"`
-	Watcher   WatcherConfig   `koanf:"watcher"`
-	Search    SearchConfig    `koanf:"search"`
-	Storage   StorageConfig   `koanf:"storage"`
-	Telemetry TelemetryConfig `koanf:"telemetry"`
-	Logging   LoggingConfig   `koanf:"logging"`
+	Server         ServerConfig         `koanf:"server"`
+	Database       DatabaseConfig       `koanf:"database"`
+	Embedding      EmbeddingConfig      `koanf:"embedding"`
+	Harvester      HarvesterConfig      `koanf:"harvester"`
+	Intervals      IntervalsConfig      `koanf:"intervals"`
+	Watcher        WatcherConfig        `koanf:"watcher"`
+	Search         SearchConfig         `koanf:"search"`
+	Storage        StorageConfig        `koanf:"storage"`
+	Telemetry      TelemetryConfig      `koanf:"telemetry"`
+	Logging        LoggingConfig        `koanf:"logging"`
+	Summarization  SummarizationConfig  `koanf:"summarization"`
 }
 
 // ServerConfig holds server configuration.
@@ -110,6 +111,17 @@ type LoggingConfig struct {
 	File  string `koanf:"file"`
 }
 
+// SummarizationConfig holds summarization configuration.
+type SummarizationConfig struct {
+	Enabled     bool   `koanf:"enabled"`
+	ProviderURL string `koanf:"provider_url"`
+	APIKey      string `koanf:"api_key"`
+	Model       string `koanf:"model"`
+	MaxTokens   int    `koanf:"max_tokens"`
+	Concurrency int    `koanf:"concurrency"`
+	OutputDir   string `koanf:"output_dir"`
+}
+
 // Load loads configuration from file and environment variables.
 // Config file path can be overridden via NANO_BRAIN_CONFIG env var.
 // If no file is provided, defaults are used and merged with env vars.
@@ -174,9 +186,10 @@ func Load(configPath string) (*Config, error) {
 
 	// Special non-prefixed env vars
 	specialEnvVars := map[string]string{
-		"VOYAGE_API_KEY":       "embedding.voyage_api_key",
-		"DATABASE_URL":         "database.url",
-		"OPENCODE_STORAGE_DIR": "harvester.opencode.session_dir",
+		"VOYAGE_API_KEY":           "embedding.voyage_api_key",
+		"DATABASE_URL":             "database.url",
+		"OPENCODE_STORAGE_DIR":     "harvester.opencode.session_dir",
+		"NANO_BRAIN_SUMMARIZE_API_KEY": "summarization.api_key",
 	}
 	for envVar, key := range specialEnvVars {
 		if value, exists := os.LookupEnv(envVar); exists {
@@ -259,6 +272,16 @@ func validate(cfg *Config) error {
 	if cfg.Logging.Level != "" {
 		if _, err := zerolog.ParseLevel(cfg.Logging.Level); err != nil {
 			errs = append(errs, fmt.Errorf("logging.level %q is not valid", cfg.Logging.Level))
+		}
+	}
+
+	// Validate Summarization
+	if cfg.Summarization.Enabled {
+		if cfg.Summarization.ProviderURL == "" {
+			errs = append(errs, errors.New("summarization.provider_url is required when summarization.enabled is true"))
+		}
+		if cfg.Summarization.Concurrency < 1 {
+			errs = append(errs, errors.New("summarization.concurrency must be >= 1 when summarization.enabled is true"))
 		}
 	}
 
