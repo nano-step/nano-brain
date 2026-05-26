@@ -262,12 +262,18 @@ func startServer(configPath string) {
 				logger.Warn().Err(err).Str("workspace", ws.Hash).Msg("failed to list collections for watcher")
 				continue
 			}
+			cfgExclude, cfgExtensions := cfg.Watcher.ResolveFilter(ws.Path)
 			for _, col := range collections {
 				if _, statErr := os.Stat(col.Path); os.IsNotExist(statErr) {
 					logger.Debug().Str("collection", col.Name).Str("path", col.Path).Msg("skipping watch — path does not exist")
 					continue
 				}
-				if watchErr := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, col.ExcludePatterns, col.AllowedExtensions); watchErr != nil {
+				excludePatterns := append(cfgExclude, col.ExcludePatterns...)
+				allowedExtensions := col.AllowedExtensions
+				if len(allowedExtensions) == 0 {
+					allowedExtensions = cfgExtensions
+				}
+				if watchErr := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, excludePatterns, allowedExtensions); watchErr != nil {
 					logger.Warn().Err(watchErr).Str("collection", col.Name).Msg("failed to watch collection")
 				}
 			}

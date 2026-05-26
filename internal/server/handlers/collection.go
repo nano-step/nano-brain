@@ -9,6 +9,7 @@ import (
 	"regexp"
 
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
@@ -69,7 +70,7 @@ func toCollectionResponse(col sqlc.Collection, docCount int64) CollectionRespons
 	}
 }
 
-func AddCollection(q CollectionQuerier, fw *watcher.Watcher, logger zerolog.Logger) echo.HandlerFunc {
+func AddCollection(q CollectionQuerier, fw *watcher.Watcher, watcherCfg config.WatcherConfig, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req AddCollectionRequest
 		if err := c.Bind(&req); err != nil {
@@ -113,7 +114,13 @@ func AddCollection(q CollectionQuerier, fw *watcher.Watcher, logger zerolog.Logg
 		}
 
 		if fw != nil {
-			if err := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, col.ExcludePatterns, col.AllowedExtensions); err != nil {
+			cfgExclude, cfgExtensions := watcherCfg.ResolveFilterForPath(col.Path)
+			excludePatterns := append(cfgExclude, col.ExcludePatterns...)
+			allowedExtensions := col.AllowedExtensions
+			if len(allowedExtensions) == 0 {
+				allowedExtensions = cfgExtensions
+			}
+			if err := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, excludePatterns, allowedExtensions); err != nil {
 				logger.Warn().Err(err).Str("name", col.Name).Msg("failed to attach watcher")
 			}
 		}
@@ -164,7 +171,7 @@ func ListCollectionsHandler(q CollectionQuerier, logger zerolog.Logger) echo.Han
 	}
 }
 
-func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, logger zerolog.Logger) echo.HandlerFunc {
+func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, watcherCfg config.WatcherConfig, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")
 		if name == "" {
@@ -211,7 +218,13 @@ func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, logger ze
 	}
 
 		if fw != nil {
-			if err := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, col.ExcludePatterns, col.AllowedExtensions); err != nil {
+			cfgExclude, cfgExtensions := watcherCfg.ResolveFilterForPath(col.Path)
+			excludePatterns := append(cfgExclude, col.ExcludePatterns...)
+			allowedExtensions := col.AllowedExtensions
+			if len(allowedExtensions) == 0 {
+				allowedExtensions = cfgExtensions
+			}
+			if err := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, excludePatterns, allowedExtensions); err != nil {
 				logger.Warn().Err(err).Str("name", col.Name).Msg("failed to update watcher after rename")
 			}
 		}

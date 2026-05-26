@@ -421,3 +421,71 @@ func TestGenerateDefaultCreatesDirectories(t *testing.T) {
 func contains(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
+
+func TestResolveFilter_GlobalOnly(t *testing.T) {
+	cfg := WatcherConfig{
+		ExcludePatterns:   []string{"*.log"},
+		AllowedExtensions: []string{".go"},
+	}
+	excl, exts := cfg.ResolveFilter("/some/dir")
+	if len(excl) != 1 || excl[0] != "*.log" {
+		t.Errorf("unexpected exclude: %v", excl)
+	}
+	if len(exts) != 1 || exts[0] != ".go" {
+		t.Errorf("unexpected extensions: %v", exts)
+	}
+}
+
+func TestResolveFilter_WorkspaceOverride(t *testing.T) {
+	cfg := WatcherConfig{
+		ExcludePatterns:   []string{"*.log"},
+		AllowedExtensions: []string{".go"},
+		Workspaces: map[string]WorkspaceFilterConfig{
+			"/my/project": {
+				ExcludePatterns:   []string{"*.test.js"},
+				AllowedExtensions: []string{".ts"},
+			},
+		},
+	}
+	excl, exts := cfg.ResolveFilter("/my/project")
+	if len(excl) != 2 {
+		t.Errorf("expected 2 exclude patterns (global+workspace), got %v", excl)
+	}
+	if len(exts) != 1 || exts[0] != ".ts" {
+		t.Errorf("expected workspace extensions [.ts], got %v", exts)
+	}
+}
+
+func TestResolveFilterForPath_PrefixMatch(t *testing.T) {
+	cfg := WatcherConfig{
+		ExcludePatterns: []string{"*.log"},
+		Workspaces: map[string]WorkspaceFilterConfig{
+			"/my/project": {
+				AllowedExtensions: []string{".ts"},
+			},
+		},
+	}
+	excl, exts := cfg.ResolveFilterForPath("/my/project/src/components")
+	if len(excl) != 1 || excl[0] != "*.log" {
+		t.Errorf("unexpected exclude: %v", excl)
+	}
+	if len(exts) != 1 || exts[0] != ".ts" {
+		t.Errorf("expected .ts from workspace match, got %v", exts)
+	}
+}
+
+func TestResolveFilterForPath_NoMatch(t *testing.T) {
+	cfg := WatcherConfig{
+		ExcludePatterns: []string{"*.log"},
+		Workspaces: map[string]WorkspaceFilterConfig{
+			"/my/project": {AllowedExtensions: []string{".ts"}},
+		},
+	}
+	excl, exts := cfg.ResolveFilterForPath("/other/project/src")
+	if len(excl) != 1 || excl[0] != "*.log" {
+		t.Errorf("unexpected exclude: %v", excl)
+	}
+	if len(exts) != 0 {
+		t.Errorf("expected no extensions for unmatched path, got %v", exts)
+	}
+}

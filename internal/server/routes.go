@@ -33,9 +33,9 @@ func registerRoutes(s *Server) {
 	data.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize))
 	data.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
 
-	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.logger))
+	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.currentConfig().Watcher, s.logger))
 	data.GET("/collections", handlers.ListCollectionsHandler(s.queries, s.logger))
-	data.PUT("/collections/:name", handlers.RenameCollectionHandler(s.queries, s.watcher, s.logger))
+	data.PUT("/collections/:name", handlers.RenameCollectionHandler(s.queries, s.watcher, s.currentConfig().Watcher, s.logger))
 	data.DELETE("/collections/:name", handlers.RemoveCollection(s.queries, s.watcher, s.logger))
 
 	data.GET("/tags", handlers.ListTags(s.queries, s.logger))

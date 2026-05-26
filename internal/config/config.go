@@ -73,10 +73,17 @@ type IntervalsConfig struct {
 	SessionPoll int `koanf:"session_poll"`
 }
 
-// WatcherConfig holds watcher configuration.
+type WorkspaceFilterConfig struct {
+	ExcludePatterns   []string `koanf:"exclude_patterns"`
+	AllowedExtensions []string `koanf:"allowed_extensions"`
+}
+
 type WatcherConfig struct {
-	DebounceMs       int `koanf:"debounce_ms"`
-	ReindexInterval  int `koanf:"reindex_interval"`
+	DebounceMs        int                               `koanf:"debounce_ms"`
+	ReindexInterval   int                               `koanf:"reindex_interval"`
+	ExcludePatterns   []string                          `koanf:"exclude_patterns"`
+	AllowedExtensions []string                          `koanf:"allowed_extensions"`
+	Workspaces        map[string]WorkspaceFilterConfig  `koanf:"workspaces"`
 }
 
 // SearchConfig holds search configuration.
@@ -266,6 +273,42 @@ func validate(cfg *Config) error {
 	}
 
 	return nil
+}
+
+func (w WatcherConfig) ResolveFilter(workspaceDir string) (excludePatterns, allowedExtensions []string) {
+	excludePatterns = append(excludePatterns, w.ExcludePatterns...)
+	allowedExtensions = append(allowedExtensions, w.AllowedExtensions...)
+
+	if ws, ok := w.Workspaces[workspaceDir]; ok {
+		excludePatterns = append(excludePatterns, ws.ExcludePatterns...)
+		if len(ws.AllowedExtensions) > 0 {
+			allowedExtensions = ws.AllowedExtensions
+		}
+	}
+
+	return excludePatterns, allowedExtensions
+}
+
+func (w WatcherConfig) ResolveFilterForPath(collectionPath string) (excludePatterns, allowedExtensions []string) {
+	excludePatterns = append(excludePatterns, w.ExcludePatterns...)
+	allowedExtensions = append(allowedExtensions, w.AllowedExtensions...)
+
+	best := ""
+	for wsDir, wsCfg := range w.Workspaces {
+		if strings.HasPrefix(collectionPath, wsDir) && len(wsDir) > len(best) {
+			best = wsDir
+			_ = wsCfg
+		}
+	}
+	if best != "" {
+		ws := w.Workspaces[best]
+		excludePatterns = append(excludePatterns, ws.ExcludePatterns...)
+		if len(ws.AllowedExtensions) > 0 {
+			allowedExtensions = ws.AllowedExtensions
+		}
+	}
+
+	return excludePatterns, allowedExtensions
 }
 
 // DefaultConfigPath returns the default config file path.
