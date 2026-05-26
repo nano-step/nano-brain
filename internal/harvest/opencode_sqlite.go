@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
@@ -171,6 +172,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 			continue
 		}
 
+		var chunkIDs []uuid.UUID
 		for i, c := range chunks {
 			chunkHash := sha256.Sum256([]byte(c.Content))
 			chunkID, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
@@ -187,9 +189,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 				h.logger.Warn().Err(err).Str("session", sess.id).Int("chunk", i).Msg("chunk upsert failed")
 				continue
 			}
-			if enqueuer != nil {
-				enqueuer.Enqueue(chunkID)
-			}
+			chunkIDs = append(chunkIDs, chunkID)
 		}
 
 		if err := tx.Commit(); err != nil {
@@ -197,6 +197,12 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 			h.logger.Warn().Err(err).Str("session", sess.id).Msg("commit failed")
 			errCount++
 			continue
+		}
+
+		if enqueuer != nil {
+			for _, id := range chunkIDs {
+				enqueuer.Enqueue(id)
+			}
 		}
 
 		h.logger.Info().Str("session", sess.id).Int("chunks", len(chunks)).Msg("harvested opencode session")
