@@ -113,7 +113,10 @@ func platformOpenCodeDBPaths() []string {
 		return paths
 	case "darwin":
 		if home := os.Getenv("HOME"); home != "" {
-			return []string{filepath.Join(home, "Library", "Application Support", "opencode", "opencode.db")}
+			return []string{
+				filepath.Join(home, ".local", "share", "opencode", "opencode.db"),
+				filepath.Join(home, "Library", "Application Support", "opencode", "opencode.db"),
+			}
 		}
 	case "windows":
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
