@@ -316,11 +316,6 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 }
 
 func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePath string) {
-	w.logger.Info().
-		Str("path", filePath).
-		Str("collection", col.name).
-		Msg("processing file")
-
 	info, err := os.Stat(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("stat failed, skipping")
@@ -330,6 +325,11 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	if info.IsDir() {
 		return
 	}
+
+	w.logger.Info().
+		Str("path", filePath).
+		Str("collection", col.name).
+		Msg("processing file")
 
 	if info.Size() > w.maxFileSize {
 		w.logger.Warn().
