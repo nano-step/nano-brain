@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	pgvector "github.com/pgvector/pgvector-go"
 	"github.com/rs/zerolog"
 
@@ -233,6 +234,12 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		Embedding:     pgvector.NewVector(vec),
 	})
 	if err != nil {
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+			q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("chunk deleted before embedding insert, skipping stale chunk")
+			q.pending.Add(-1)
+			q.clearRetries(chunkID)
+			return
+		}
 		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("insert embedding failed")
 		q.pending.Add(-1)
 		return

@@ -267,7 +267,7 @@ func startServer(configPath string) {
 					logger.Debug().Str("collection", col.Name).Str("path", col.Path).Msg("skipping watch — path does not exist")
 					continue
 				}
-				if watchErr := fw.Watch(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern); watchErr != nil {
+				if watchErr := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, col.ExcludePatterns, col.AllowedExtensions); watchErr != nil {
 					logger.Warn().Err(watchErr).Str("collection", col.Name).Msg("failed to watch collection")
 				}
 			}

@@ -29,15 +29,16 @@ type Chunk struct {
 }
 
 type Collection struct {
-	ID              uuid.UUID
-	WorkspaceHash   string
-	Name            string
-	Path            string
-	GlobPattern     string
-	UpdateMode      string
-	ExcludePatterns []string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                uuid.UUID
+	WorkspaceHash     string
+	Name              string
+	Path              string
+	GlobPattern       string
+	UpdateMode        string
+	ExcludePatterns   []string
+	AllowedExtensions []string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type Document struct {

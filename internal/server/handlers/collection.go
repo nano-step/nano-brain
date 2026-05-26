@@ -28,10 +28,12 @@ type CollectionQuerier interface {
 }
 
 type AddCollectionRequest struct {
-	Workspace   string `json:"workspace"`
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	GlobPattern string `json:"glob_pattern"`
+	Workspace         string   `json:"workspace"`
+	Name              string   `json:"name"`
+	Path              string   `json:"path"`
+	GlobPattern       string   `json:"glob_pattern"`
+	ExcludePatterns   []string `json:"exclude_patterns"`
+	AllowedExtensions []string `json:"allowed_extensions"`
 }
 
 type RenameCollectionRequest struct {
@@ -40,26 +42,30 @@ type RenameCollectionRequest struct {
 }
 
 type CollectionResponse struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Path          string `json:"path"`
-	GlobPattern   string `json:"glob_pattern"`
-	UpdateMode    string `json:"update_mode"`
-	DocumentCount int64  `json:"document_count"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	Path              string   `json:"path"`
+	GlobPattern       string   `json:"glob_pattern"`
+	UpdateMode        string   `json:"update_mode"`
+	ExcludePatterns   []string `json:"exclude_patterns"`
+	AllowedExtensions []string `json:"allowed_extensions"`
+	DocumentCount     int64    `json:"document_count"`
+	CreatedAt         string   `json:"created_at"`
+	UpdatedAt         string   `json:"updated_at"`
 }
 
 func toCollectionResponse(col sqlc.Collection, docCount int64) CollectionResponse {
 	return CollectionResponse{
-		ID:            col.ID.String(),
-		Name:          col.Name,
-		Path:          col.Path,
-		GlobPattern:   col.GlobPattern,
-		UpdateMode:    col.UpdateMode,
-		DocumentCount: docCount,
-		CreatedAt:     col.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:     col.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:                col.ID.String(),
+		Name:              col.Name,
+		Path:              col.Path,
+		GlobPattern:       col.GlobPattern,
+		UpdateMode:        col.UpdateMode,
+		ExcludePatterns:   col.ExcludePatterns,
+		AllowedExtensions: col.AllowedExtensions,
+		DocumentCount:     docCount,
+		CreatedAt:         col.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:         col.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 }
 
@@ -107,7 +113,7 @@ func AddCollection(q CollectionQuerier, fw *watcher.Watcher, logger zerolog.Logg
 		}
 
 		if fw != nil {
-			if err := fw.Watch(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern); err != nil {
+			if err := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, col.ExcludePatterns, col.AllowedExtensions); err != nil {
 				logger.Warn().Err(err).Str("name", col.Name).Msg("failed to attach watcher")
 			}
 		}
@@ -141,14 +147,16 @@ func ListCollectionsHandler(q CollectionQuerier, logger zerolog.Logger) echo.Han
 		items := make([]CollectionResponse, 0, len(cols))
 		for _, col := range cols {
 			items = append(items, CollectionResponse{
-				ID:            col.ID.String(),
-				Name:          col.Name,
-				Path:          col.Path,
-				GlobPattern:   col.GlobPattern,
-				UpdateMode:    col.UpdateMode,
-				DocumentCount: col.DocumentCount,
-				CreatedAt:     col.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-				UpdatedAt:     col.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				ID:                col.ID.String(),
+				Name:              col.Name,
+				Path:              col.Path,
+				GlobPattern:       col.GlobPattern,
+				UpdateMode:        col.UpdateMode,
+				ExcludePatterns:   col.ExcludePatterns,
+				AllowedExtensions: col.AllowedExtensions,
+				DocumentCount:     col.DocumentCount,
+				CreatedAt:         col.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				UpdatedAt:         col.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			})
 		}
 
@@ -203,7 +211,7 @@ func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, logger ze
 	}
 
 		if fw != nil {
-			if err := fw.Watch(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern); err != nil {
+			if err := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, col.ExcludePatterns, col.AllowedExtensions); err != nil {
 				logger.Warn().Err(err).Str("name", col.Name).Msg("failed to update watcher after rename")
 			}
 		}

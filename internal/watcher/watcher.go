@@ -37,10 +37,13 @@ type WatcherQuerier interface {
 }
 
 type watchedCollection struct {
-	name          string
-	dirPath       string
-	workspaceHash string
-	globPattern   string
+	name              string
+	dirPath           string
+	workspaceHash     string
+	globPattern       string
+	excludePatterns   []string
+	allowedExtensions []string
+	filter            *fileFilter
 }
 
 type Watcher struct {
@@ -85,6 +88,10 @@ func (w *Watcher) WithGraphRegistry(r *graph.Registry, gq GraphQuerier) *Watcher
 }
 
 func (w *Watcher) Watch(collectionName, dirPath, workspaceHash, globPattern string) error {
+	return w.WatchWithFilter(collectionName, dirPath, workspaceHash, globPattern, nil, nil)
+}
+
+func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPattern string, excludePatterns, allowedExtensions []string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -94,10 +101,13 @@ func (w *Watcher) Watch(collectionName, dirPath, workspaceHash, globPattern stri
 	}
 
 	w.collections[absPath] = watchedCollection{
-		name:          collectionName,
-		dirPath:       absPath,
-		workspaceHash: workspaceHash,
-		globPattern:   globPattern,
+		name:              collectionName,
+		dirPath:           absPath,
+		workspaceHash:     workspaceHash,
+		globPattern:       globPattern,
+		excludePatterns:   excludePatterns,
+		allowedExtensions: allowedExtensions,
+		filter:            newFileFilter(absPath, excludePatterns, allowedExtensions),
 	}
 
 	if w.fsw != nil {
@@ -287,6 +297,10 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 	}
 
 	for _, filePath := range matches {
+		if col.filter != nil && col.filter.shouldSkip(filePath) {
+			w.logger.Debug().Str("file", filePath).Msg("skipping filtered file")
+			continue
+		}
 		if ctx.Err() != nil {
 			return
 		}
