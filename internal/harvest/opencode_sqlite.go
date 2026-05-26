@@ -221,9 +221,9 @@ type sqMessage struct {
 
 func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB) ([]sqSession, error) {
 	rows, err := sqdb.QueryContext(ctx, `
-		SELECT id, COALESCE(title, ''), COALESCE(created_at, 0)
+		SELECT id, COALESCE(title, ''), COALESCE(time_created, 0)
 		FROM session
-		ORDER BY created_at DESC
+		ORDER BY time_created DESC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("query sessions: %w", err)
@@ -245,38 +245,83 @@ func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB
 	return sessions, rows.Err()
 }
 
+type msgDataJSON struct {
+	Role string `json:"role"`
+}
+
+type partDataJSON struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
 func (h *OpenCodeSQLiteHarvester) listMessages(ctx context.Context, sqdb *sql.DB, sessionID string) ([]sqMessage, error) {
 	rows, err := sqdb.QueryContext(ctx, `
-		SELECT m.id, COALESCE(m.role, 'unknown'), COALESCE(m.created_at, 0),
-		       COALESCE(GROUP_CONCAT(p.content, ''), '')
+		SELECT m.id, m.time_created, m.data, p.data
 		FROM message m
-		LEFT JOIN part p ON p.message_id = m.id AND p.type = 'text'
+		LEFT JOIN part p ON p.message_id = m.id
 		WHERE m.session_id = ?
-		GROUP BY m.id, m.role, m.created_at
-		ORDER BY m.created_at ASC
+		ORDER BY m.time_created ASC, p.rowid ASC
 	`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("query messages: %w", err)
 	}
 	defer rows.Close()
 
-	var msgs []sqMessage
+	type msgAccum struct {
+		role      string
+		createdMs int64
+		texts     []string
+	}
+	order := []string{}
+	accum := map[string]*msgAccum{}
+
 	for rows.Next() {
-		var msgID, role, content string
+		var msgID string
 		var createdMs int64
-		if err := rows.Scan(&msgID, &role, &createdMs, &content); err != nil {
-			return nil, fmt.Errorf("scan message: %w", err)
+		var msgDataRaw string
+		var partDataRaw sql.NullString
+		if err := rows.Scan(&msgID, &createdMs, &msgDataRaw, &partDataRaw); err != nil {
+			return nil, fmt.Errorf("scan message row: %w", err)
 		}
+
+		if _, seen := accum[msgID]; !seen {
+			var md msgDataJSON
+			_ = json.Unmarshal([]byte(msgDataRaw), &md)
+			role := md.Role
+			if role == "" {
+				role = "unknown"
+			}
+			accum[msgID] = &msgAccum{role: role, createdMs: createdMs}
+			order = append(order, msgID)
+		}
+
+		if partDataRaw.Valid {
+			var pd partDataJSON
+			if err := json.Unmarshal([]byte(partDataRaw.String), &pd); err == nil {
+				if pd.Type == "text" && strings.TrimSpace(pd.Text) != "" {
+					accum[msgID].texts = append(accum[msgID].texts, pd.Text)
+				}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var msgs []sqMessage
+	for _, id := range order {
+		a := accum[id]
+		content := strings.Join(a.texts, "")
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
 		msgs = append(msgs, sqMessage{
-			role:      role,
+			role:      a.role,
 			content:   content,
-			createdAt: time.UnixMilli(createdMs).UTC(),
+			createdAt: time.UnixMilli(a.createdMs).UTC(),
 		})
 	}
-	return msgs, rows.Err()
+	return msgs, nil
 }
 
 func renderSQLiteMarkdown(sess sqSession, msgs []sqMessage) string {

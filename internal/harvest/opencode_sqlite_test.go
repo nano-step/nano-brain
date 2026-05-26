@@ -22,19 +22,20 @@ func setupTestSQLiteDB(t *testing.T) *sql.DB {
 		CREATE TABLE session (
 			id TEXT PRIMARY KEY,
 			title TEXT,
-			created_at INTEGER
+			time_created INTEGER
 		);
 		CREATE TABLE message (
 			id TEXT PRIMARY KEY,
 			session_id TEXT,
-			role TEXT,
-			created_at INTEGER
+			time_created INTEGER,
+			data TEXT
 		);
 		CREATE TABLE part (
 			id TEXT PRIMARY KEY,
 			message_id TEXT,
-			type TEXT,
-			content TEXT
+			session_id TEXT,
+			time_created INTEGER,
+			data TEXT
 		);
 	`)
 	if err != nil {
@@ -45,7 +46,7 @@ func setupTestSQLiteDB(t *testing.T) *sql.DB {
 
 func insertTestSession(t *testing.T, db *sql.DB, id, title string, createdMs int64) {
 	t.Helper()
-	_, err := db.Exec(`INSERT INTO session (id, title, created_at) VALUES (?, ?, ?)`, id, title, createdMs)
+	_, err := db.Exec(`INSERT INTO session (id, title, time_created) VALUES (?, ?, ?)`, id, title, createdMs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +54,8 @@ func insertTestSession(t *testing.T, db *sql.DB, id, title string, createdMs int
 
 func insertTestMessage(t *testing.T, db *sql.DB, id, sessionID, role string, createdMs int64) {
 	t.Helper()
-	_, err := db.Exec(`INSERT INTO message (id, session_id, role, created_at) VALUES (?, ?, ?, ?)`, id, sessionID, role, createdMs)
+	data := `{"role":"` + role + `"}`
+	_, err := db.Exec(`INSERT INTO message (id, session_id, time_created, data) VALUES (?, ?, ?, ?)`, id, sessionID, createdMs, data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +63,8 @@ func insertTestMessage(t *testing.T, db *sql.DB, id, sessionID, role string, cre
 
 func insertTestPart(t *testing.T, db *sql.DB, id, messageID, partType, content string) {
 	t.Helper()
-	_, err := db.Exec(`INSERT INTO part (id, message_id, type, content) VALUES (?, ?, ?, ?)`, id, messageID, partType, content)
+	data := `{"type":"` + partType + `","text":"` + content + `"}`
+	_, err := db.Exec(`INSERT INTO part (id, message_id, session_id, time_created, data) VALUES (?, ?, '', 0, ?)`, id, messageID, data)
 	if err != nil {
 		t.Fatal(err)
 	}
