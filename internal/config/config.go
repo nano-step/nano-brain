@@ -206,12 +206,33 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	if err := expandPaths(cfg); err != nil {
+		return nil, err
+	}
+
 	// Validate configuration
 	if err := validate(cfg); err != nil {
 		return nil, err
 	}
 
 	return cfg, nil
+}
+
+// expandPaths expands "~/" prefixes in path-type config fields to the real home directory.
+// os.MkdirAll and os.Open do not interpret tilde — it must be resolved explicitly.
+func expandPaths(cfg *Config) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory for path expansion: %w", err)
+	}
+	expand := func(p string) string {
+		if strings.HasPrefix(p, "~/") {
+			return filepath.Join(home, p[2:])
+		}
+		return p
+	}
+	cfg.Summarization.OutputDir = expand(cfg.Summarization.OutputDir)
+	return nil
 }
 
 // validate checks configuration validity.

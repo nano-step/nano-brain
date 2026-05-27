@@ -34,15 +34,18 @@ type Persister struct {
 	logger    zerolog.Logger
 }
 
-// NewPersister constructs a Persister.
-func NewPersister(db *sql.DB, outputDir string, workspace string, enqueuer PersisterEnqueuer, logger zerolog.Logger) *Persister {
+// NewPersister constructs a Persister and ensures the output directory exists.
+func NewPersister(db *sql.DB, outputDir string, workspace string, enqueuer PersisterEnqueuer, logger zerolog.Logger) (*Persister, error) {
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return nil, fmt.Errorf("summary output_dir %q: %w", outputDir, err)
+	}
 	return &Persister{
 		db:        db,
 		outputDir: outputDir,
 		workspace: workspace,
 		enqueuer:  enqueuer,
 		logger:    logger.With().Str("component", "summary-persister").Logger(),
-	}
+	}, nil
 }
 
 // Save writes summaryMarkdown to a file and upserts it in the document store.

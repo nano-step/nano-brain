@@ -374,7 +374,10 @@ func startServer(configPath string) {
 		if cfg.Summarization.Enabled {
 			llmClient := summarize.New(cfg.Summarization, logger)
 			pipeline := summarize.NewPipeline(llmClient, nil, cfg.Summarization.Concurrency, logger)
-			persister := summarize.NewPersister(db, cfg.Summarization.OutputDir, "", eq, logger)
+			persister, err := summarize.NewPersister(db, cfg.Summarization.OutputDir, "", eq, logger)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("failed to initialize summary persister")
+			}
 			adapter := summarize.NewHarvestSummarizer(pipeline, persister, logger)
 			hr.WithSummarizer(adapter)
 			logger.Info().
