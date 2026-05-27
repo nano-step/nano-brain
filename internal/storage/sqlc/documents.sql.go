@@ -364,10 +364,10 @@ func (q *Queries) UpdateDocumentsCollection(ctx context.Context, arg UpdateDocum
 const upsertDocument = `-- name: UpsertDocument :one
 INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-ON CONFLICT (content_hash, workspace_hash) DO UPDATE SET
+ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
+    content_hash = EXCLUDED.content_hash,
     title = EXCLUDED.title,
     content = EXCLUDED.content,
-    source_path = EXCLUDED.source_path,
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
