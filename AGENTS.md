@@ -12,36 +12,38 @@ This project uses **nano-brain** for persistent context across sessions.
 
 All commands use HTTP API (nano-brain runs as Docker service on port 3100):
 
+> **Container agents:** server is on the HOST — always use `http://host.docker.internal:3100` inside containers. `localhost:3100` only works on the host itself.
+
 | I want to... | Command |
 |--------------|---------|
-| Recall past work on a topic | `curl -s localhost:3100/api/query -d '{"query":"topic"}'` |
-| Find exact error/function name | `curl -s localhost:3100/api/search -d '{"query":"exact term"}'` |
-| Explore a concept semantically | `curl -s localhost:3100/api/query -d '{"query":"concept"}'` |
-| Save a decision for future sessions | `curl -s localhost:3100/api/write -d '{"content":"...","tags":"decision"}'` |
-| Check index health | `curl -s localhost:3100/api/status` |
-| Write a note with tags | `curl -s localhost:3100/api/write -d '{"content":"...","tags":"decision,auth"}'` |
-| Supersede old info | `curl -s localhost:3100/api/write -d '{"content":"new info","supersedes":"<path>"}'` |
+| Recall past work on a topic | `curl -s http://host.docker.internal:3100/api/query -d '{"query":"topic"}'` |
+| Find exact error/function name | `curl -s http://host.docker.internal:3100/api/search -d '{"query":"exact term"}'` |
+| Explore a concept semantically | `curl -s http://host.docker.internal:3100/api/query -d '{"query":"concept"}'` |
+| Save a decision for future sessions | `curl -s http://host.docker.internal:3100/api/write -d '{"content":"...","tags":"decision"}'` |
+| Check index health | `curl -s http://host.docker.internal:3100/api/status` |
+| Write a note with tags | `curl -s http://host.docker.internal:3100/api/write -d '{"content":"...","tags":"decision,auth"}'` |
+| Supersede old info | `curl -s http://host.docker.internal:3100/api/write -d '{"content":"new info","supersedes":"<path>"}'` |
 | See file dependencies | Use MCP tool: `memory_focus` with `{"filePath":"src/server.ts"}` |
 | Find cross-repo Redis usage | Use MCP tool: `memory_symbols` with `{"type":"redis_key","pattern":"sinv:*"}` |
 | Analyze cross-repo impact | Use MCP tool: `memory_impact` with `{"type":"redis_key","pattern":"sinv:*:compressed"}` |
-| Search across all workspaces | `curl -s localhost:3100/api/query -d '{"query":"topic","scope":"all"}'` |
-| Filter by tags | `curl -s localhost:3100/api/query -d '{"query":"topic","tags":"decision"}'` |
+| Search across all workspaces | `curl -s http://host.docker.internal:3100/api/query -d '{"query":"topic","scope":"all"}'` |
+| Filter by tags | `curl -s http://host.docker.internal:3100/api/query -d '{"query":"topic","tags":"decision"}'` |
 
 ### Session Workflow
 
 **Start of session:** Check memory for relevant past context before exploring the codebase.
 ```
-curl -s localhost:3100/api/query -d '{"query":"what have we done regarding {current task topic}"}'
+curl -s http://host.docker.internal:3100/api/query -d '{"query":"what have we done regarding {current task topic}"}'
 ```
 
 **End of session:** Save key decisions, patterns discovered, and debugging insights.
 ```bash
-curl -s localhost:3100/api/write -d '{"content":"## Summary\n- Decision: ...\n- Why: ...\n- Files: ...","tags":"summary"}'
+curl -s http://host.docker.internal:3100/api/write -d '{"content":"## Summary\n- Decision: ...\n- Why: ...\n- Files: ...","tags":"summary"}'
 ```
 
 ### When to Search Memory vs Codebase
 
-- **"Have we done this before?"** → `curl -s localhost:3100/api/query` (searches past sessions)
+- **"Have we done this before?"** → `curl -s http://host.docker.internal:3100/api/query` (searches past sessions)
 - **"Where is this in the code?"** → grep / ast-grep (searches current files)
 - **"How does this concept work here?"** → Both (memory for past context + grep for current code)
 
@@ -51,7 +53,7 @@ curl -s localhost:3100/api/write -d '{"content":"## Summary\n- Decision: ...\n- 
 
 **NEVER start nano-brain server inside the container.** The server runs via Docker compose on the HOST only.
 - nano-brain server starts ONLY via `npx nano-brain docker start` or `docker compose up -d` in the nano-brain project directory
-- Inside containers: use HTTP API (`curl localhost:3100/api/*`) for memory operations
+- Inside containers: use HTTP API (`curl http://host.docker.internal:3100/api/*`) for memory operations — `localhost:3100` does NOT work inside containers
 - MCP tools access the server via remote proxy at `http://host.docker.internal:3100/mcp`
 
 ## ⚠️ npx nano-brain — Known Caveats
