@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -296,22 +298,27 @@ func (w *Watcher) processAll(ctx context.Context) {
 }
 
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
-	pattern := filepath.Join(col.dirPath, col.globPattern)
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		w.logger.Error().Err(err).Str("pattern", pattern).Msg("glob failed")
-		return
-	}
-
-	for _, filePath := range matches {
-		if col.filter != nil && col.filter.shouldSkip(filePath) {
-			w.logger.Debug().Str("file", filePath).Msg("skipping filtered file")
-			continue
+	err := filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			w.logger.Warn().Err(err).Str("path", path).Msg("walk error, skipping")
+			return nil
 		}
 		if ctx.Err() != nil {
-			return
+			return ctx.Err()
 		}
-		w.processFile(ctx, col, filePath)
+		if col.filter != nil && col.filter.shouldSkip(path) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.IsDir() {
+			w.processFile(ctx, col, path)
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		w.logger.Error().Err(err).Str("dir", col.dirPath).Msg("walk failed")
 	}
 }
 

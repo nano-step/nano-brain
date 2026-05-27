@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -51,8 +53,12 @@ func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath 
 		return sqlc.Workspace{}, err
 	}
 
-	memoryPath := "~/.nano-brain/memory/"
-	sessionsPath := "~/.nano-brain/sessions/"
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return sqlc.Workspace{}, fmt.Errorf("failed to get home directory: %w", err)
+	}
+	memoryPath := filepath.Join(home, ".nano-brain", "memory")
+	sessionsPath := filepath.Join(home, ".nano-brain", "sessions")
 
 	if _, err := q.UpsertCollection(ctx, sqlc.UpsertCollectionParams{
 		WorkspaceHash: ws.Hash,
@@ -137,10 +143,15 @@ func InitWorkspace(q WorkspaceQuerier, db *sql.DB, fw *watcher.Watcher, watcherC
 		}
 
 		if fw != nil {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				logger.Warn().Err(err).Msg("failed to get home directory for watcher paths")
+				home = "~"
+			}
 			type colSpec struct{ name, path, glob string }
 			cols := []colSpec{
-				{"memory", "~/.nano-brain/memory/", "**/*"},
-				{"sessions", "~/.nano-brain/sessions/", "**/*"},
+				{"memory", filepath.Join(home, ".nano-brain", "memory"), "**/*"},
+				{"sessions", filepath.Join(home, ".nano-brain", "sessions"), "**/*"},
 				{"code", absPath, "**/*"},
 			}
 			cfgExclude, cfgExtensions := watcherCfg.ResolveFilterForPath(absPath)
