@@ -24,4 +24,4 @@
 - [x] 4.1 `go build ./...` passes with no errors
 - [x] 4.2 `go test -race -short ./...` passes (all harvester tests green)
 - [x] 4.3 `go test -race -tags=integration ./...` passes
-- [ ] 4.4 Smoke: start server, trigger harvest, verify sessions appear under `WorkspaceHash(worktree)` workspace in `GET /api/v1/workspaces`
+- [x] 4.4 Smoke: start server, trigger harvest, verify sessions appear under `WorkspaceHash(worktree)` workspace in `GET /api/v1/workspaces`

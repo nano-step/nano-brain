@@ -1,6 +1,6 @@
 # workspace-scoping Delta Specification
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Workspace hash derived from project directory path
 
