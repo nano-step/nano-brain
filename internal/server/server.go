@@ -53,11 +53,12 @@ type Server struct {
 	harvesterCfg   config.HarvesterConfig
 	telemetryCfg   config.TelemetryConfig
 	intervalsCfg   config.IntervalsConfig
-	version        string
-	startTime      time.Time
+	version          string
+	startTime        time.Time
+	migrationVersion int64
 }
 
-func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
+func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string, migrationVersion int64) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -101,8 +102,9 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		harvesterCfg:   fullCfg.Harvester,
 		telemetryCfg:   fullCfg.Telemetry,
 		intervalsCfg:   fullCfg.Intervals,
-		version:        version,
-		startTime:      time.Now(),
+		version:          version,
+		startTime:        time.Now(),
+		migrationVersion: migrationVersion,
 	}
 
 	registerMiddleware(s)

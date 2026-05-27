@@ -40,3 +40,14 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, logger zerolog.Logge
 	logger.Info().Int64("version", after).Msg("database migrations complete")
 	return nil
 }
+
+// GetCurrentVersion returns the current goose migration version from the database.
+func GetCurrentVersion(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		return 0, fmt.Errorf("failed to set goose dialect: %w", err)
+	}
+	return goose.GetDBVersionContext(ctx, db)
+}

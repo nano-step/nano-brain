@@ -123,11 +123,22 @@ func triggerInitBackground(workspaceHash, root string) {
 		cliLog.Warn().Err(err).Str("workspace", workspaceHash).Msg("auto reindex trigger failed")
 	}
 
-	if _, status, err := doRequest("POST", getBaseURL()+"/api/harvest", nil); err != nil {
+	harvestResp, status, err := doRequest("POST", getBaseURL()+"/api/harvest", nil)
+	if err != nil {
 		if status == 503 {
 			cliLog.Info().Msg("harvest skipped: no session harvester configured")
 		} else {
 			cliLog.Warn().Err(err).Msg("auto harvest trigger failed")
+			fmt.Println("Warning: harvest failed:", err)
+		}
+	} else {
+		var result struct {
+			Harvested int `json:"harvested"`
+			Skipped   int `json:"skipped"`
+			Errors    int `json:"errors"`
+		}
+		if jsonErr := json.Unmarshal(harvestResp, &result); jsonErr == nil {
+			fmt.Printf("Harvest: %d harvested, %d skipped, %d errors\n", result.Harvested, result.Skipped, result.Errors)
 		}
 	}
 

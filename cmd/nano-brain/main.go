@@ -204,6 +204,11 @@ func startServer(configPath string) {
 		logger.Fatal().Err(err).Msg("failed to run migrations")
 	}
 
+	migrationVersion, err := storage.GetCurrentVersion(ctx, pool)
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to get migration version for status")
+	}
+
 	db := stdlib.OpenDBFromPool(pool)
 	queries := sqlc.New(db)
 
@@ -255,7 +260,7 @@ func startServer(configPath string) {
 		}
 	}
 
-	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, logger, Version)
+	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, logger, Version, migrationVersion)
 
 	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
 		for _, ws := range workspaces {
