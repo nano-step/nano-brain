@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -36,7 +37,7 @@ func doInit(t *testing.T, q *sqlc.Queries, rootPath string) map[string]interface
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("InitWorkspace handler error: %v", err)
 	}

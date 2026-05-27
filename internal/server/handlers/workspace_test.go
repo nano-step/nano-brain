@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -102,7 +103,7 @@ func TestInitWorkspaceHandler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -135,7 +136,7 @@ func TestInitWorkspaceHandlerMissingRootPath(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for missing root_path")
@@ -223,7 +224,7 @@ func TestInitWorkspaceCreatesCodeCollection(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -266,7 +267,7 @@ func TestInitWorkspaceCodeCollectionIdempotent(t *testing.T) {
 	}
 
 	e := echo.New()
-	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
 
 	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/init", strings.NewReader(`{"root_path":"/tmp/test-project"}`))
@@ -313,7 +314,7 @@ func TestInitWorkspaceCodeCollectionErrorRollback(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.InitWorkspace(q, nil, zerolog.Nop())
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error when code collection upsert fails")

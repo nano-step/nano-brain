@@ -21,7 +21,7 @@ func registerRoutes(s *Server) {
 	s.echo.GET("/api/status", h.Status)
 
 	api := s.echo.Group("/api/v1", contentTypeMiddleware())
-	api.POST("/init", handlers.InitWorkspace(s.queries, s.db, s.logger))
+	api.POST("/init", handlers.InitWorkspace(s.queries, s.db, s.watcher, s.currentConfig().Watcher, s.logger))
 	api.GET("/workspaces", handlers.ListWorkspaces(s.queries, s.logger))
 	api.POST("/reset-workspace", handlers.ResetWorkspace(s.queries, s.logger))
 
