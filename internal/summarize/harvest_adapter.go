@@ -20,6 +20,13 @@ func NewHarvestSummarizer(pipeline *Pipeline, persister *Persister, logger zerol
 }
 
 func (s *HarvestSummarizer) SummarizeAndPersist(ctx context.Context, content string, meta harvest.SummaryMeta) error {
+	s.logger.Info().
+		Str("session_id", meta.SessionID).
+		Str("source", meta.Source).
+		Str("title", meta.Title).
+		Int("content_len", len(content)).
+		Msg("summarize: starting summarization")
+
 	sessionMeta := SessionMetadata{
 		Source:      Source(meta.Source),
 		SessionID:   meta.SessionID,
@@ -32,7 +39,10 @@ func (s *HarvestSummarizer) SummarizeAndPersist(ctx context.Context, content str
 	}
 	summary, err := s.pipeline.Summarize(ctx, content, sessionMeta)
 	if err != nil {
+		s.logger.Error().Err(err).Str("session_id", meta.SessionID).Msg("summarize: pipeline failed")
 		return fmt.Errorf("summarize: %w", err)
 	}
+
+	s.logger.Info().Str("session_id", meta.SessionID).Int("summary_len", len(summary)).Msg("summarize: pipeline done, persisting")
 	return s.persister.Save(ctx, summary, sessionMeta)
 }

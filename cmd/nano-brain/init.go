@@ -110,6 +110,35 @@ func runInteractiveInit(configPath string) {
 	}
 	harvesterBlock = fmt.Sprintf("\nharvester:\n  opencode:\n    session_dir: %s\n  claudecode:\n    enabled: %v\n    session_dir: %s\n", ocLine, ccEnabled, ccLine)
 
+	fmt.Print("\n── Summarization (LLM session summaries) ──\n")
+	sumEnabled := promptWithDefault(scanner, "Enable session summarization?", "n")
+	sumEnabledBool := sumEnabled == "y" || sumEnabled == "Y"
+
+	var summaryBlock string
+	if sumEnabledBool {
+		sumProviderURL := promptWithDefault(scanner, "LLM provider URL (OpenAI-compatible)", "")
+		if sumProviderURL == "" {
+			fmt.Fprintln(os.Stderr, "  provider_url is required when summarization is enabled.")
+			os.Exit(1)
+		}
+		sumAPIKey := promptWithDefault(scanner, "LLM API key (or set NANO_BRAIN_SUMMARIZE_API_KEY env)", "")
+		sumModel := promptWithDefault(scanner, "LLM model name", "claude-sonnet-4-5")
+		sumMaxTokens := promptWithDefault(scanner, "Max tokens per summary", "4096")
+		sumConcurrency := promptWithDefault(scanner, "Parallel LLM calls (map phase)", "3")
+		sumRPS := promptWithDefault(scanner, "Rate limit (requests/second, 0 = unlimited)", "1")
+		sumOutputDir := promptWithDefault(scanner, "Summary output directory", "~/.nano-brain/summaries")
+		apiKeyLine := ""
+		if sumAPIKey != "" {
+			apiKeyLine = fmt.Sprintf("\n  api_key: %s", sumAPIKey)
+		} else {
+			apiKeyLine = "\n  # api_key: set NANO_BRAIN_SUMMARIZE_API_KEY env var"
+		}
+		summaryBlock = fmt.Sprintf("\nsummarization:\n  enabled: true\n  provider_url: %s%s\n  model: %s\n  max_tokens: %s\n  concurrency: %s\n  requests_per_second: %s\n  output_dir: %s\n",
+			sumProviderURL, apiKeyLine, sumModel, sumMaxTokens, sumConcurrency, sumRPS, sumOutputDir)
+	} else {
+		summaryBlock = "\nsummarization:\n  enabled: false\n"
+	}
+
 	yaml := fmt.Sprintf(`server:
   host: localhost
   port: %d
@@ -130,7 +159,7 @@ watcher:
 
 logging:
   level: info
-%s`, port, dbURL, embBlock, harvesterBlock)
+%s%s`, port, dbURL, embBlock, harvesterBlock, summaryBlock)
 
 	fmt.Println("\n── Config preview ──────────────")
 	fmt.Print(yaml)

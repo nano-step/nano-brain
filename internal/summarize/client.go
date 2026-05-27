@@ -123,6 +123,12 @@ func (c *Client) ChatCompletion(ctx context.Context, systemPrompt, userPrompt st
 
 	endpoint := c.providerURL + "/chat/completions"
 
+	c.logger.Info().
+		Str("endpoint", endpoint).
+		Str("model", c.model).
+		Int("prompt_chars", len(systemPrompt)+len(userPrompt)).
+		Msg("summarize: sending LLM request")
+
 	var lastErr error
 	maxAttempts := 3
 

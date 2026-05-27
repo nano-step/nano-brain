@@ -86,6 +86,12 @@ func (p *Pipeline) Summarize(ctx context.Context, sessionContent string, meta Se
 		stripped = StripOpenCode(sessionContent)
 	}
 
+	p.logger.Info().
+		Str("session_id", meta.SessionID).
+		Int("raw_len", len(sessionContent)).
+		Int("stripped_len", len(stripped)).
+		Msg("summarize: content stripped")
+
 	if p.lookup != nil {
 		if err := p.lookup.Lookup(ctx, &meta); err != nil {
 			p.logger.Warn().Err(err).Msg("summarize: relationship lookup failed, continuing")
@@ -95,8 +101,10 @@ func (p *Pipeline) Summarize(ctx context.Context, sessionContent string, meta Se
 	var summaryBody string
 	var err error
 	if len(stripped) <= SingleShotThreshold {
+		p.logger.Info().Str("session_id", meta.SessionID).Msg("summarize: using single-shot mode")
 		summaryBody, err = p.singleShot(ctx, stripped)
 	} else {
+		p.logger.Info().Str("session_id", meta.SessionID).Msg("summarize: using map-reduce mode")
 		summaryBody, err = p.mapReduce(ctx, stripped)
 	}
 	if err != nil {
