@@ -319,17 +319,12 @@ func startServer(configPath string) {
 	}
 
 	if cfg.Harvester.OpenCode.DBPath != "" {
-		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.DBPath)
-		if err != nil {
-			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode sqlite harvester")
-		} else {
-			oh := harvest.NewOpenCodeSQLiteHarvester(db, logger, cfg.Harvester.OpenCode.DBPath, wsHash)
-			hr = harvest.NewRunner(oh, eq, interval, logger)
-			logger.Info().
-				Str("db_path", cfg.Harvester.OpenCode.DBPath).
-				Dur("interval", interval).
-				Msg("opencode sqlite harvester started")
-		}
+		oh := harvest.NewOpenCodeSQLiteHarvester(db, logger, cfg.Harvester.OpenCode.DBPath)
+		hr = harvest.NewRunner(oh, eq, interval, logger)
+		logger.Info().
+			Str("db_path", cfg.Harvester.OpenCode.DBPath).
+			Dur("interval", interval).
+			Msg("opencode sqlite harvester started")
 	} else if cfg.Harvester.OpenCode.SessionDir != "" {
 		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
 		if err != nil {

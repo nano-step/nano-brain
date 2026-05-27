@@ -19,8 +19,13 @@ func setupTestSQLiteDB(t *testing.T) *sql.DB {
 	t.Cleanup(func() { db.Close() })
 
 	_, err = db.Exec(`
+		CREATE TABLE project (
+			id TEXT PRIMARY KEY,
+			worktree TEXT NOT NULL
+		);
 		CREATE TABLE session (
 			id TEXT PRIMARY KEY,
+			project_id TEXT,
 			title TEXT,
 			time_created INTEGER
 		);
@@ -44,9 +49,17 @@ func setupTestSQLiteDB(t *testing.T) *sql.DB {
 	return db
 }
 
-func insertTestSession(t *testing.T, db *sql.DB, id, title string, createdMs int64) {
+func insertTestProject(t *testing.T, db *sql.DB, id, worktree string) {
 	t.Helper()
-	_, err := db.Exec(`INSERT INTO session (id, title, time_created) VALUES (?, ?, ?)`, id, title, createdMs)
+	_, err := db.Exec(`INSERT INTO project (id, worktree) VALUES (?, ?)`, id, worktree)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func insertTestSession(t *testing.T, db *sql.DB, id, projectID, title string, createdMs int64) {
+	t.Helper()
+	_, err := db.Exec(`INSERT INTO session (id, project_id, title, time_created) VALUES (?, ?, ?, ?)`, id, projectID, title, createdMs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,13 +87,14 @@ func TestRenderSQLiteMarkdown_Format(t *testing.T) {
 	sqdb := setupTestSQLiteDB(t)
 	now := time.Now().UnixMilli()
 
-	insertTestSession(t, sqdb, "sess1", "My Session", now)
+	insertTestProject(t, sqdb, "proj1", "/home/user/app")
+	insertTestSession(t, sqdb, "sess1", "proj1", "My Session", now)
 	insertTestMessage(t, sqdb, "msg1", "sess1", "user", now)
 	insertTestMessage(t, sqdb, "msg2", "sess1", "assistant", now+1000)
 	insertTestPart(t, sqdb, "p1", "msg1", "text", "Hello!")
 	insertTestPart(t, sqdb, "p2", "msg2", "text", "World!")
 
-	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, nil, "test-workspace")
+	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, nil)
 
 	md, err := h.RenderSession(context.Background(), "sess1", "My Session", time.UnixMilli(now))
 	if err != nil {
@@ -99,7 +113,7 @@ func TestRenderSQLiteMarkdown_Format(t *testing.T) {
 
 func TestOpenCodeSQLiteHarvester_EmptyDB(t *testing.T) {
 	sqdb := setupTestSQLiteDB(t)
-	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, nil, "test-workspace")
+	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, nil)
 	sessions, err := h.ListSessions(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -112,16 +126,73 @@ func TestOpenCodeSQLiteHarvester_EmptyDB(t *testing.T) {
 func TestOpenCodeSQLiteHarvester_ListSessions(t *testing.T) {
 	sqdb := setupTestSQLiteDB(t)
 	now := time.Now().UnixMilli()
-	insertTestSession(t, sqdb, "s1", "Session One", now)
-	insertTestSession(t, sqdb, "s2", "Session Two", now+1000)
+	insertTestProject(t, sqdb, "proj1", "/home/user/app")
+	insertTestSession(t, sqdb, "s1", "proj1", "Session One", now)
+	insertTestSession(t, sqdb, "s2", "proj1", "Session Two", now+1000)
 
-	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, nil, "test-workspace")
+	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, nil)
 	sessions, err := h.ListSessions(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(sessions) != 2 {
 		t.Errorf("expected 2 sessions, got %d", len(sessions))
+	}
+}
+
+func TestOpenCodeSQLiteHarvester_PerProjectWorkspace(t *testing.T) {
+	sqdb := setupTestSQLiteDB(t)
+	insertTestProject(t, sqdb, "proj-a", "/home/user/app-a")
+	insertTestProject(t, sqdb, "proj-b", "/home/user/app-b")
+	now := time.Now().UnixMilli()
+	insertTestSession(t, sqdb, "s-a", "proj-a", "Session A", now)
+	insertTestSession(t, sqdb, "s-b", "proj-b", "Session B", now+1000)
+
+	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, nil)
+	sessions, err := h.ListSessions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(sessions))
+	}
+
+	var sA, sB harvest.SqSession
+	for _, s := range sessions {
+		if s.ID == "s-a" {
+			sA = s
+		}
+		if s.ID == "s-b" {
+			sB = s
+		}
+	}
+	if sA.Worktree != "/home/user/app-a" {
+		t.Errorf("s-a worktree = %q, want /home/user/app-a", sA.Worktree)
+	}
+	if sB.Worktree != "/home/user/app-b" {
+		t.Errorf("s-b worktree = %q, want /home/user/app-b", sB.Worktree)
+	}
+}
+
+func TestOpenCodeSQLiteHarvester_OrphanedSession(t *testing.T) {
+	sqdb := setupTestSQLiteDB(t)
+	now := time.Now().UnixMilli()
+	_, err := sqdb.Exec(`INSERT INTO session (id, project_id, title, time_created) VALUES (?, ?, ?, ?)`,
+		"orphan", "nonexistent-proj", "Orphan", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, nil)
+	sessions, err := h.ListSessions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(sessions))
+	}
+	if sessions[0].Worktree != "" {
+		t.Errorf("orphaned session worktree = %q, want empty string", sessions[0].Worktree)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
@@ -22,7 +23,6 @@ type OpenCodeSQLiteHarvester struct {
 	pgDB       *sql.DB
 	sqdb       *sql.DB
 	dbPath     string
-	workspace  string
 	logger     zerolog.Logger
 	summarizer SessionSummarizer
 }
@@ -34,21 +34,19 @@ func (h *OpenCodeSQLiteHarvester) WithSummarizer(s SessionSummarizer) *OpenCodeS
 	return h
 }
 
-func NewOpenCodeSQLiteHarvester(pgDB *sql.DB, logger zerolog.Logger, dbPath, workspace string) *OpenCodeSQLiteHarvester {
+func NewOpenCodeSQLiteHarvester(pgDB *sql.DB, logger zerolog.Logger, dbPath string) *OpenCodeSQLiteHarvester {
 	return &OpenCodeSQLiteHarvester{
-		pgDB:      pgDB,
-		dbPath:    dbPath,
-		workspace: workspace,
-		logger:    logger.With().Str("component", "opencode-sqlite-harvester").Logger(),
+		pgDB:   pgDB,
+		dbPath: dbPath,
+		logger: logger.With().Str("component", "opencode-sqlite-harvester").Logger(),
 	}
 }
 
-func NewOpenCodeSQLiteHarvesterFromDB(sqdb *sql.DB, pgDB *sql.DB, workspace string) *OpenCodeSQLiteHarvester {
+func NewOpenCodeSQLiteHarvesterFromDB(sqdb *sql.DB, pgDB *sql.DB) *OpenCodeSQLiteHarvester {
 	return &OpenCodeSQLiteHarvester{
-		pgDB:      pgDB,
-		sqdb:      sqdb,
-		workspace: workspace,
-		logger:    zerolog.Nop(),
+		pgDB:   pgDB,
+		sqdb:   sqdb,
+		logger: zerolog.Nop(),
 	}
 }
 
@@ -67,7 +65,7 @@ func (h *OpenCodeSQLiteHarvester) openSQLite(ctx context.Context) (*sql.DB, bool
 	return db, true, nil
 }
 
-func (h *OpenCodeSQLiteHarvester) ListSessions(ctx context.Context) ([]sqSession, error) {
+func (h *OpenCodeSQLiteHarvester) ListSessions(ctx context.Context) ([]SqSession, error) {
 	sqdb, owned, err := h.openSQLite(ctx)
 	if err != nil {
 		return nil, err
@@ -90,7 +88,7 @@ func (h *OpenCodeSQLiteHarvester) RenderSession(ctx context.Context, sessionID, 
 	if err != nil {
 		return "", err
 	}
-	return renderSQLiteMarkdown(sqSession{id: sessionID, title: title, createdAt: createdAt}, msgs), nil
+	return renderSQLiteMarkdown(SqSession{ID: sessionID, Title: title, CreatedAt: createdAt}, msgs), nil
 }
 
 func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harvested, skipped, errCount int) {
@@ -114,20 +112,49 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 	h.logger.Info().Int("count", len(sessions)).Msg("found opencode sessions")
 
 	q := sqlc.New(h.pgDB)
+	wsCache := make(map[string]string) // worktree → wsHash
 	for _, sess := range sessions {
-		sourcePath := "opencode://session/" + sess.id
+		// Derive workspace hash for this session's project
+		worktree := sess.Worktree
+		wsHash, ok := wsCache[worktree]
+		if !ok {
+			var hashErr error
+			if worktree == "" {
+				h.logger.Warn().Str("session_id", sess.ID).Msg("session has no project row, using fallback workspace")
+				wsHash, hashErr = storage.WorkspaceHash(h.dbPath)
+			} else {
+				wsHash, hashErr = storage.WorkspaceHash(worktree)
+			}
+			if hashErr != nil {
+				h.logger.Warn().Err(hashErr).Str("session", sess.ID).Msg("workspace hash failed, skipping")
+				errCount++
+				continue
+			}
+			if worktree != "" {
+				rq := sqlc.New(h.pgDB)
+				if _, uErr := rq.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+					Hash: wsHash,
+					Path: worktree,
+				}); uErr != nil {
+					h.logger.Warn().Err(uErr).Str("worktree", worktree).Msg("upsert workspace failed")
+				}
+			}
+			wsCache[worktree] = wsHash
+		}
+
+		sourcePath := "opencode://session/" + sess.ID
 		existing, lookupErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    sourcePath,
-			WorkspaceHash: h.workspace,
+			WorkspaceHash: wsHash,
 		})
 		if lookupErr == nil && existing.ContentHash != "" {
 			skipped++
 			continue
 		}
 
-		msgs, err := h.listMessages(ctx, sqdb, sess.id)
+		msgs, err := h.listMessages(ctx, sqdb, sess.ID)
 		if err != nil {
-			h.logger.Warn().Err(err).Str("session", sess.id).Msg("failed to list messages")
+			h.logger.Warn().Err(err).Str("session", sess.ID).Msg("failed to list messages")
 			errCount++
 			continue
 		}
@@ -140,21 +167,21 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 		sum := sha256.Sum256([]byte(md))
 		contentHash := hex.EncodeToString(sum[:])
 
-		title := sess.title
+		title := sess.Title
 		if title == "" {
-			title = "OpenCode session " + sess.id[:8]
+			title = "OpenCode session " + sess.ID[:8]
 		}
 
 		meta, _ := marshalJSON(map[string]any{
 			"source":        "opencode",
-			"session_id":    sess.id,
+			"session_id":    sess.ID,
 			"message_count": len(msgs),
-			"created_at":    sess.createdAt.Format(time.RFC3339),
+			"created_at":    sess.CreatedAt.Format(time.RFC3339),
 		})
 
 		chunks := chunk.Split(md, chunk.DefaultConfig())
 		params := sqlc.UpsertDocumentBySourcePathParams{
-			WorkspaceHash: h.workspace,
+			WorkspaceHash: wsHash,
 			ContentHash:   contentHash,
 			Title:         title,
 			Content:       md,
@@ -166,7 +193,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 
 		tx, err := h.pgDB.BeginTx(ctx, nil)
 		if err != nil {
-			h.logger.Warn().Err(err).Str("session", sess.id).Msg("begin tx failed")
+			h.logger.Warn().Err(err).Str("session", sess.ID).Msg("begin tx failed")
 			errCount++
 			continue
 		}
@@ -175,7 +202,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 		docRow, err := tq.UpsertDocumentBySourcePath(ctx, params)
 		if err != nil {
 			tx.Rollback() //nolint:errcheck
-			h.logger.Warn().Err(err).Str("session", sess.id).Msg("upsert document failed")
+			h.logger.Warn().Err(err).Str("session", sess.ID).Msg("upsert document failed")
 			errCount++
 			continue
 		}
@@ -185,7 +212,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 			chunkHash := sha256.Sum256([]byte(c.Content))
 			chunkID, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
 				DocumentID:    docRow.ID,
-				WorkspaceHash: h.workspace,
+				WorkspaceHash: wsHash,
 				ContentHash:   hex.EncodeToString(chunkHash[:]),
 				Content:       c.Content,
 				ChunkIndex:    int32(i),
@@ -194,7 +221,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 				Metadata:      pqtype.NullRawMessage{},
 			})
 			if err != nil {
-				h.logger.Warn().Err(err).Str("session", sess.id).Int("chunk", i).Msg("chunk upsert failed")
+				h.logger.Warn().Err(err).Str("session", sess.ID).Int("chunk", i).Msg("chunk upsert failed")
 				continue
 			}
 			chunkIDs = append(chunkIDs, chunkID)
@@ -202,7 +229,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 
 		if err := tx.Commit(); err != nil {
 			tx.Rollback() //nolint:errcheck
-			h.logger.Warn().Err(err).Str("session", sess.id).Msg("commit failed")
+			h.logger.Warn().Err(err).Str("session", sess.ID).Msg("commit failed")
 			errCount++
 			continue
 		}
@@ -213,18 +240,18 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 			}
 		}
 
-		h.logger.Info().Str("session", sess.id).Int("chunks", len(chunks)).Msg("harvested opencode session")
+		h.logger.Info().Str("session", sess.ID).Int("chunks", len(chunks)).Msg("harvested opencode session")
 		harvested++
 
 		if h.summarizer != nil {
 			smeta := SummaryMeta{
 				Source:    "opencode",
-				SessionID: sess.id,
+				SessionID: sess.ID,
 				Title:     title,
-				CreatedAt: sess.createdAt,
+				CreatedAt: sess.CreatedAt,
 			}
 			if err := h.summarizer.SummarizeAndPersist(ctx, md, smeta); err != nil {
-				h.logger.Warn().Err(err).Str("session", sess.id).Msg("summarization failed, session still harvested")
+				h.logger.Warn().Err(err).Str("session", sess.ID).Msg("summarization failed, session still harvested")
 			}
 		}
 	}
@@ -233,10 +260,11 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 	return
 }
 
-type sqSession struct {
-	id        string
-	title     string
-	createdAt time.Time
+type SqSession struct {
+	ID        string
+	Title     string
+	CreatedAt time.Time
+	Worktree  string
 }
 
 type sqMessage struct {
@@ -245,26 +273,28 @@ type sqMessage struct {
 	createdAt time.Time
 }
 
-func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB) ([]sqSession, error) {
+func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB) ([]SqSession, error) {
 	rows, err := sqdb.QueryContext(ctx, `
-		SELECT id, COALESCE(title, ''), COALESCE(time_created, 0)
-		FROM session
-		ORDER BY time_created DESC
+		SELECT s.id, COALESCE(s.title, ''), COALESCE(s.time_created, 0),
+		       COALESCE(p.worktree, '')
+		FROM session s
+		LEFT JOIN project p ON s.project_id = p.id
+		ORDER BY s.time_created DESC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("query sessions: %w", err)
 	}
 	defer rows.Close()
 
-	var sessions []sqSession
+	var sessions []SqSession
 	for rows.Next() {
-		var s sqSession
+		var s SqSession
 		var createdMs int64
-		if err := rows.Scan(&s.id, &s.title, &createdMs); err != nil {
+		if err := rows.Scan(&s.ID, &s.Title, &createdMs, &s.Worktree); err != nil {
 			return nil, fmt.Errorf("scan session: %w", err)
 		}
 		if createdMs > 0 {
-			s.createdAt = time.UnixMilli(createdMs).UTC()
+			s.CreatedAt = time.UnixMilli(createdMs).UTC()
 		}
 		sessions = append(sessions, s)
 	}
@@ -356,15 +386,15 @@ func sanitizeText(s string) string {
 	return strings.ReplaceAll(s, "\x00", "")
 }
 
-func renderSQLiteMarkdown(sess sqSession, msgs []sqMessage) string {
+func renderSQLiteMarkdown(sess SqSession, msgs []sqMessage) string {
 	var b strings.Builder
 	b.WriteString("---\n")
-	fmt.Fprintf(&b, "session_id: %s\n", sess.id)
+	fmt.Fprintf(&b, "session_id: %s\n", sess.ID)
 	b.WriteString("source: opencode\n")
 	fmt.Fprintf(&b, "message_count: %d\n", len(msgs))
-	fmt.Fprintf(&b, "created_at: %s\n", sess.createdAt.Format(time.RFC3339))
-	if sess.title != "" {
-		fmt.Fprintf(&b, "title: %q\n", sanitizeText(sess.title))
+	fmt.Fprintf(&b, "created_at: %s\n", sess.CreatedAt.Format(time.RFC3339))
+	if sess.Title != "" {
+		fmt.Fprintf(&b, "title: %q\n", sanitizeText(sess.Title))
 	}
 	b.WriteString("---\n")
 
