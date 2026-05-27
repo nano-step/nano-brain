@@ -208,13 +208,9 @@ func runInteractiveInit(configPath string) {
 	fmt.Print("\n── Logging ──\n")
 	fmt.Println("  level: trace | debug | info | warn | error")
 	logLevel := promptWithDefault(scanner, "Log level", "info")
-	fmt.Println("  file: path to log file (leave blank to log to stdout only).")
-	logFile := promptWithDefault(scanner, "Log file path (blank = stdout only)", "")
-	logFileBlock := ""
-	if logFile != "" {
-		logFileBlock = fmt.Sprintf("\n  file: %s", logFile)
-	}
-	loggingBlock := fmt.Sprintf("\nlogging:\n  level: %s%s\n", logLevel, logFileBlock)
+	fmt.Println("  file: path to log file. Uses default path if left blank.")
+	logFile := promptWithDefault(scanner, "Log file path", defaultLogPath())
+	loggingBlock := fmt.Sprintf("\nlogging:\n  level: %s\n  file: %s\n", logLevel, logFile)
 
 	// ── Assemble YAML ─────────────────────────────────────────────────────
 	yaml := fmt.Sprintf(`server:
