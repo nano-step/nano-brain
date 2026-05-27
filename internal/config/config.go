@@ -113,13 +113,14 @@ type LoggingConfig struct {
 
 // SummarizationConfig holds summarization configuration.
 type SummarizationConfig struct {
-	Enabled     bool   `koanf:"enabled"`
-	ProviderURL string `koanf:"provider_url"`
-	APIKey      string `koanf:"api_key"`
-	Model       string `koanf:"model"`
-	MaxTokens   int    `koanf:"max_tokens"`
-	Concurrency int    `koanf:"concurrency"`
-	OutputDir   string `koanf:"output_dir"`
+	Enabled           bool    `koanf:"enabled"`
+	ProviderURL       string  `koanf:"provider_url"`
+	APIKey            string  `koanf:"api_key"`
+	Model             string  `koanf:"model"`
+	MaxTokens         int     `koanf:"max_tokens"`
+	Concurrency       int     `koanf:"concurrency"`
+	RequestsPerSecond float64 `koanf:"requests_per_second"`
+	OutputDir         string  `koanf:"output_dir"`
 }
 
 // Load loads configuration from file and environment variables.

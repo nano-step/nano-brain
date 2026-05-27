@@ -15,6 +15,7 @@ import (
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/rs/zerolog"
+	"golang.org/x/time/rate"
 )
 
 // TokenUsage holds token counts from an LLM completion response.
@@ -31,6 +32,7 @@ type Client struct {
 	model       string
 	maxTokens   int
 	httpClient  *http.Client
+	limiter     *rate.Limiter
 	logger      zerolog.Logger
 
 	backoff func(attempt int) time.Duration
@@ -38,6 +40,10 @@ type Client struct {
 
 // New creates a Client from config.
 func New(cfg config.SummarizationConfig, logger zerolog.Logger) *Client {
+	rps := cfg.RequestsPerSecond
+	if rps <= 0 {
+		rps = 1
+	}
 	return &Client{
 		providerURL: strings.TrimRight(cfg.ProviderURL, "/"),
 		apiKey:      cfg.APIKey,
@@ -46,9 +52,10 @@ func New(cfg config.SummarizationConfig, logger zerolog.Logger) *Client {
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
-		logger: logger,
+		limiter: rate.NewLimiter(rate.Limit(rps), 1),
+		logger:  logger,
 		backoff: func(attempt int) time.Duration {
-		return time.Duration(1<<uint(attempt)) * time.Second
+			return time.Duration(1<<uint(attempt)) * time.Second
 		},
 	}
 }
@@ -93,6 +100,10 @@ type tokenUsageJSON struct {
 // token usage, and any error. It handles both streaming (SSE) and non-streaming
 // responses, and retries on transient errors (429, 5xx).
 func (c *Client) ChatCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, TokenUsage, error) {
+	if err := c.limiter.Wait(ctx); err != nil {
+		return "", TokenUsage{}, fmt.Errorf("summarize: rate limiter: %w", err)
+	}
+
 	start := time.Now()
 
 	reqBody := chatRequest{
