@@ -103,7 +103,7 @@ curl -s localhost:3100/api/write -d '{"content":"## Summary\n- Decision: ...\n- 
 
 This project uses an engineering harness for risk-classified, spec-driven development.
 
-**Start here:** [`docs/HARNESS.md`](docs/HARNESS.md)
+**Full spec:** [`docs/HARNESS.md`](docs/HARNESS.md) | **Gates:** [`docs/HARNESS_GATES.md`](docs/HARNESS_GATES.md)
 
 ### Quick reference
 
@@ -123,14 +123,52 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 
 ### Validation ladder
 
-- `validate:quick` → `go build ./... && go test -race -short ./...`
-- `smoke` → `./nano-brain status`
+| Layer | Command | Required for |
+|---|---|---|
+| `validate:quick` | `go build ./... && go test -race -short ./...` | every lane |
+| `self-review:response-shape` | Read struct + mapping loop, verify all fields assigned | user-feature only |
+| `self-review:staged-files` | `git status` before every commit — no `.opencode/`, no `package-lock.json` | every lane |
+| `test:integration` | `go test -race -tags=integration ./...` | normal + high-risk |
+| `smoke:e2e` | Build binary → start server → curl endpoints → verify | normal + high-risk (user-feature/bug-fix) |
+| `test:release` | `./nano-brain status` | before deploy |
+
+### Change types
+
+| Type | smoke:e2e | Review gate |
+|---|:-:|:-:|
+| user-feature | ✅ | ✅ |
+| bug-fix | ✅ | ✅ |
+| infrastructure | ❌ | ⚠️ self-verify |
+| refactor | ❌ | ⚠️ self-verify |
+| docs | ❌ | ❌ |
+| dependency-bump | ❌ | ⚠️ self-verify |
 
 ### Flow
 
-1. Read `docs/FEATURE_INTAKE.md` → classify the change
-2. Tiny → patch direct. Normal/high-risk → `/opsx-propose` for OpenSpec proposal
-3. Implement → run validation ladder → open PR
-4. PR review (gemini bot + human) → merge → `openspec archive`
+1. Create GitHub issue (`gh issue create --repo nano-step/nano-brain`) **before** classification
+2. Read `docs/FEATURE_INTAKE.md` → classify lane + change type → label issue
+3. Tiny → patch direct. Normal/high-risk → `/opsx-propose` for OpenSpec proposal
+4. Run deep-design gap analysis (Metis + Oracle) → revise until clean pass
+5. Implement → run validation ladder → user-flow test (if required)
+6. Review gate → PR → bot review loop → merge → `openspec archive`
+
+### Gate lifecycle
+
+```
+① PRE-WORK → ② IN-PROGRESS → ③ PRE-MERGE → ④ POST-MERGE → ⑤ NEXT-READY → ⑥ RETRO-GATE
+```
+
+- All gates must PASS before proceeding. FAIL = BLOCK.
+- Agent MUST NOT start next feature until ⑤ NEXT-READY passes.
+- Run via: `./scripts/harness-check.sh <phase>`
+
+### Key forbidden practices
+
+- **No `_ = err` on constructor calls in startup paths.** Use `log.Warn` (optional) or `log.Fatal` (critical).
+- **No claiming "tests pass" without pasting output.**
+- **No self-review.** Implementing agent must not run its own Review Gate.
+- **No starting work without a GitHub issue.**
+- **No archiving without Review Verdict = PASS.**
+- **No modifying harness rules without user approval.**
 
 <!-- HARNESS:END -->
