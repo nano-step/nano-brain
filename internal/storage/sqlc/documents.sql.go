@@ -14,6 +14,15 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+const deleteDocumentsByWorkspace = `-- name: DeleteDocumentsByWorkspace :exec
+DELETE FROM documents WHERE workspace_hash = $1
+`
+
+func (q *Queries) DeleteDocumentsByWorkspace(ctx context.Context, workspaceHash string) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentsByWorkspace, workspaceHash)
+	return err
+}
+
 const deleteSymbolDocumentsByCollection = `-- name: DeleteSymbolDocumentsByCollection :exec
 DELETE FROM documents
 WHERE workspace_hash = $1

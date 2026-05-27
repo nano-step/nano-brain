@@ -26,7 +26,7 @@ func runInitCmd(args []string, configPath string) {
 	}
 
 	var root, workspace string
-	var jsonFlag bool
+	var jsonFlag, forceFlag bool
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--root":
@@ -45,9 +45,32 @@ func runInitCmd(args []string, configPath string) {
 			workspace = args[i]
 		case "--json":
 			jsonFlag = true
+		case "--force":
+			forceFlag = true
 		default:
 			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
 			os.Exit(1)
+		}
+	}
+
+	if forceFlag && root != "" {
+		hash, err := storage.WorkspaceHash(root)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: could not resolve workspace for path %q: %v\n", root, err)
+			os.Exit(1)
+		}
+		resetData, _ := json.Marshal(map[string]string{"workspace": hash})
+		resetResp, _, err := doRequest("POST", getBaseURL()+"/api/v1/reset-workspace", bytes.NewReader(resetData))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error resetting workspace: %v\n", err)
+			os.Exit(1)
+		}
+		var resetResult struct {
+			DeletedDocuments int64  `json:"deleted_documents"`
+			Workspace        string `json:"workspace"`
+		}
+		if jsonErr := json.Unmarshal(resetResp, &resetResult); jsonErr == nil {
+			fmt.Printf("Resetting workspace %s... deleted %d documents.\n", resetResult.Workspace, resetResult.DeletedDocuments)
 		}
 	}
 

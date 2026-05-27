@@ -73,3 +73,6 @@ WHERE workspace_hash = @workspace_hash
   AND (@tag_filter::text = '' OR @tag_filter::text = ANY(tags))
 ORDER BY created_at DESC
 LIMIT @lim;
+
+-- name: DeleteDocumentsByWorkspace :exec
+DELETE FROM documents WHERE workspace_hash = $1;

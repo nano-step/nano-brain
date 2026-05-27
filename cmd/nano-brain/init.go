@@ -246,8 +246,7 @@ database:
 
 	runDoctorCmd([]string{}, configPath)
 
-	cwd, _ := os.Getwd()
-	wsDir := promptWithDefault(scanner, "Register workspace directory?", cwd)
+	wsDir := promptWithDefault(scanner, "Register workspace directory?", "")
 	if wsDir != "" {
 		fmt.Printf("\nTo register this workspace, start the server and run:\n")
 		fmt.Printf("  nano-brain init --root %s\n\n", wsDir)

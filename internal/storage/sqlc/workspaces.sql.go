@@ -34,6 +34,15 @@ func (q *Queries) CountWorkspaces(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const deleteWorkspace = `-- name: DeleteWorkspace :exec
+DELETE FROM workspaces WHERE hash = $1
+`
+
+func (q *Queries) DeleteWorkspace(ctx context.Context, hash string) error {
+	_, err := q.db.ExecContext(ctx, deleteWorkspace, hash)
+	return err
+}
+
 const getWorkspaceByHash = `-- name: GetWorkspaceByHash :one
 SELECT id, hash, name, path, created_at, updated_at FROM workspaces WHERE hash = $1
 `
