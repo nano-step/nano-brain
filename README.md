@@ -212,6 +212,7 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | GET | `/api/v1/tags` | List tags with counts |
 | POST | `/api/v1/reindex` | Queue reindex (202) |
 | POST | `/api/v1/update` | Queue update (202) |
+| POST | `/api/v1/summarize` | Trigger LLM summarization of harvested sessions |
 | POST | `/api/v1/wake-up` | Workspace briefing with session_dir |
 
 ### MCP Endpoints

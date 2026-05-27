@@ -41,6 +41,8 @@ type Server struct {
 	cleanupCancel  context.CancelFunc
 	harvestMu      sync.RWMutex
 	harvestRunner  handlers.HarvestRunner
+	summarizeMu    sync.RWMutex
+	summarizer     handlers.SummarizeSummarizer
 	configMu       sync.RWMutex
 	fullCfg        *config.Config
 	configPath     string
@@ -150,6 +152,18 @@ func (s *Server) getHarvestRunner() handlers.HarvestRunner {
 	s.harvestMu.RLock()
 	defer s.harvestMu.RUnlock()
 	return s.harvestRunner
+}
+
+func (s *Server) SetSummarizer(sum handlers.SummarizeSummarizer) {
+	s.summarizeMu.Lock()
+	defer s.summarizeMu.Unlock()
+	s.summarizer = sum
+}
+
+func (s *Server) getSummarizer() handlers.SummarizeSummarizer {
+	s.summarizeMu.RLock()
+	defer s.summarizeMu.RUnlock()
+	return s.summarizer
 }
 
 func (s *Server) getHealthCfg() (config.HarvesterConfig, config.IntervalsConfig) {

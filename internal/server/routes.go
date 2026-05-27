@@ -45,6 +45,7 @@ func registerRoutes(s *Server) {
 	data.POST("/graph/trace", handlers.GraphTrace(s.queries, s.logger))
 	data.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, s.logger))
 	data.POST("/update", handlers.TriggerUpdate(s.logger))
+	data.POST("/summarize", handlers.TriggerSummarize(s.getSummarizer, s.queries, s.logger))
 
 	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger, s.recorder))
 	data.POST("/search", handlers.BM25Search(s.queries, s.logger, s.recorder))

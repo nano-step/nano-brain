@@ -64,3 +64,12 @@ FROM documents
 WHERE workspace_hash = $1 AND tags IS NOT NULL AND array_length(tags, 1) > 0
 GROUP BY tag
 ORDER BY count DESC, tag;
+
+-- name: ListSessionDocumentsByWorkspace :many
+SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, content, created_at, updated_at
+FROM documents
+WHERE workspace_hash = @workspace_hash
+  AND collection = 'sessions'
+  AND (@tag_filter::text = '' OR @tag_filter::text = ANY(tags))
+ORDER BY created_at DESC
+LIMIT @lim;

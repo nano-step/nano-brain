@@ -371,6 +371,7 @@ func startServer(configPath string) {
 	}
 
 	if hr != nil {
+		var harvestSummarizer *summarize.HarvestSummarizer
 		if cfg.Summarization.Enabled {
 			llmClient := summarize.New(cfg.Summarization, logger)
 			pipeline := summarize.NewPipeline(llmClient, nil, cfg.Summarization.Concurrency, logger)
@@ -378,12 +379,15 @@ func startServer(configPath string) {
 			if err != nil {
 				logger.Fatal().Err(err).Msg("failed to initialize summary persister")
 			}
-			adapter := summarize.NewHarvestSummarizer(pipeline, persister, logger)
-			hr.WithSummarizer(adapter)
+			harvestSummarizer = summarize.NewHarvestSummarizer(pipeline, persister, logger)
+			hr.WithSummarizer(harvestSummarizer)
 			logger.Info().
 				Str("output_dir", cfg.Summarization.OutputDir).
 				Str("model", cfg.Summarization.Model).
 				Msg("session summarization enabled")
+		}
+		if harvestSummarizer != nil {
+			srv.SetSummarizer(harvestSummarizer)
 		}
 		srv.SetHarvestRunner(hr)
 		g.Go(func() error {
