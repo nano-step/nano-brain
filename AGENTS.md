@@ -171,4 +171,25 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 - **No archiving without Review Verdict = PASS.**
 - **No modifying harness rules without user approval.**
 
+### Git push workflow (container environment)
+
+SSH is blocked inside agent containers. Always push via HTTPS using the `kokorolx` gh token:
+
+```bash
+# Step 1 — switch to kokorolx account (has write access to nano-step/nano-brain)
+gh auth switch --user kokorolx
+
+# Step 2 — push using HTTPS with token (SSH won't work in container)
+KOKOROLX_TOKEN=$(gh auth token --user kokorolx) && \
+  git push "https://kokorolx:${KOKOROLX_TOKEN}@github.com/nano-step/nano-brain.git" master <tag>
+
+# Step 3 — close GitHub issues (now has write permission)
+gh issue close <number> --repo nano-step/nano-brain --comment "..."
+
+# Step 4 — switch back to nus-rick for day-to-day gh CLI use
+gh auth switch --user nus-rick
+```
+
+**Why:** `origin` uses `git@github.com` (SSH). Container has no SSH key. `kokorolx` token has `repo` scope and is the repo owner — use it for push + issue close. `nus-rick` is a contributor only.
+
 <!-- HARNESS:END -->
