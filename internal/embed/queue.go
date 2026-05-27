@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -26,6 +27,9 @@ const (
 	backoffMax         = 300 * time.Second
 	rejectionThreshold = 50000
 	maxRetries         = 3
+	// maxEmbedChars is a conservative char limit per embed call.
+	// nomic-embed-text has a 2048-token context window; ~8000 chars is a safe upper bound.
+	maxEmbedChars = 8000
 )
 
 type QueueQuerier interface {
@@ -223,7 +227,15 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 
 	embedCtx, cancel := context.WithTimeout(ctx, embedTimeout)
 	defer cancel()
-	vec, err := q.embedder.Embed(embedCtx, chunk.Content)
+	content := truncateToMaxChars(chunk.Content, maxEmbedChars)
+	if len(content) < len(chunk.Content) {
+		q.logger.Warn().
+			Str("chunk_id", chunkID.String()).
+			Int("original_len", len(chunk.Content)).
+			Int("truncated_len", len(content)).
+			Msg("chunk truncated before embedding (exceeds context limit)")
+	}
+	vec, err := q.embedder.Embed(embedCtx, content)
 	if err != nil {
 		q.logger.Error().Err(err).
 			Str("chunk_id", chunkID.String()).
@@ -323,6 +335,17 @@ func (q *Queue) clearRetries(chunkID uuid.UUID) {
 	q.retriesMu.Lock()
 	delete(q.retries, chunkID)
 	q.retriesMu.Unlock()
+}
+
+func truncateToMaxChars(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	truncated := s[:max]
+	for len(truncated) > 0 && !utf8.ValidString(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return truncated
 }
 
 func (q *Queue) checkCapacity() {

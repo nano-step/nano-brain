@@ -350,6 +350,12 @@ func (h *OpenCodeSQLiteHarvester) listMessages(ctx context.Context, sqdb *sql.DB
 	return msgs, nil
 }
 
+// sanitizeText removes characters that PostgreSQL UTF-8 encoding rejects,
+// specifically null bytes (0x00) which cause "invalid byte sequence" errors.
+func sanitizeText(s string) string {
+	return strings.ReplaceAll(s, "\x00", "")
+}
+
 func renderSQLiteMarkdown(sess sqSession, msgs []sqMessage) string {
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -358,14 +364,14 @@ func renderSQLiteMarkdown(sess sqSession, msgs []sqMessage) string {
 	fmt.Fprintf(&b, "message_count: %d\n", len(msgs))
 	fmt.Fprintf(&b, "created_at: %s\n", sess.createdAt.Format(time.RFC3339))
 	if sess.title != "" {
-		fmt.Fprintf(&b, "title: %q\n", sess.title)
+		fmt.Fprintf(&b, "title: %q\n", sanitizeText(sess.title))
 	}
 	b.WriteString("---\n")
 
 	for _, msg := range msgs {
 		ts := msg.createdAt.UTC().Format(time.RFC3339)
 		fmt.Fprintf(&b, "\n## %s (%s)\n\n", msg.role, ts)
-		b.WriteString(msg.content)
+		b.WriteString(sanitizeText(msg.content))
 		b.WriteString("\n")
 	}
 	return b.String()
