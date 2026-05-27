@@ -28,8 +28,9 @@ const (
 	rejectionThreshold = 50000
 	maxRetries         = 3
 	// maxEmbedChars is a conservative char limit per embed call.
-	// nomic-embed-text has a 2048-token context window; ~8000 chars is a safe upper bound.
-	maxEmbedChars = 8000
+	// nomic-embed-text has a 2048-token context window. With ~2 chars/token worst-case
+	// (CJK, code), 4000 chars gives a safe margin below the hard limit.
+	maxEmbedChars = 4000
 )
 
 type QueueQuerier interface {
