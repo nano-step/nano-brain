@@ -16,8 +16,7 @@ var (
 	reToolResultBlock = regexp.MustCompile(`(?m)^\*\*Tool result\*\*\s*\(([^)]*)\):\s*\n`)
 	reToolOutputLabel = regexp.MustCompile(`(?im)^(tool_output:|(\*\*output:\*\*))\s*\n`)
 
-	reClaudeToolUseCmd  = regexp.MustCompile(`(?m)^\*\*tool_use\*\*\s+(\S+):\s*\n`)
-	reClaudeToolResult  = regexp.MustCompile(`(?m)^##\s+tool_result\s+\([^)]*\)\s*\n`)
+	reClaudeToolUseCmd = regexp.MustCompile(`(?m)^\*\*tool_use\*\*\s+(\S+):\s*\n`)
 )
 
 // StripOpenCode reduces rendered OpenCode session markdown by removing

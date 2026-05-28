@@ -38,16 +38,16 @@ func (m *mockEmbedder) callCount() int {
 }
 
 type mockQuerier struct {
-	mu                        sync.Mutex
-	getChunkByIDFn            func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error)
-	getAllPendingChunksFn      func(ctx context.Context, limit int32) ([]uuid.UUID, error)
-	getAllFailedChunksFn       func(ctx context.Context, limit int32) ([]uuid.UUID, error)
-	insertEmbeddingFn         func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
-	markChunkEmbeddedFn       func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
-	markChunkEmbedFailedFn    func(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
-	insertEmbeddingCalls      int
-	markChunkEmbeddedCalls    int
-	markChunkEmbedFailedCalls int
+	mu                                    sync.Mutex
+	getChunkByIDFn                        func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error)
+	getPendingChunksAllWorkspacesFn       func(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	getFailedChunksAllWorkspacesFn        func(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	insertEmbeddingFn                     func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
+	markChunkEmbeddedFn                   func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
+	markChunkEmbedFailedFn                func(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
+	insertEmbeddingCalls                  int
+	markChunkEmbeddedCalls                int
+	markChunkEmbedFailedCalls             int
 }
 
 func (m *mockQuerier) GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
@@ -61,16 +61,16 @@ func (m *mockQuerier) GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetC
 	}, nil
 }
 
-func (m *mockQuerier) GetAllPendingChunks(ctx context.Context, limit int32) ([]uuid.UUID, error) {
-	if m.getAllPendingChunksFn != nil {
-		return m.getAllPendingChunksFn(ctx, limit)
+func (m *mockQuerier) GetPendingChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+	if m.getPendingChunksAllWorkspacesFn != nil {
+		return m.getPendingChunksAllWorkspacesFn(ctx, limit)
 	}
 	return nil, nil
 }
 
-func (m *mockQuerier) GetAllFailedChunks(ctx context.Context, limit int32) ([]uuid.UUID, error) {
-	if m.getAllFailedChunksFn != nil {
-		return m.getAllFailedChunksFn(ctx, limit)
+func (m *mockQuerier) GetFailedChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+	if m.getFailedChunksAllWorkspacesFn != nil {
+		return m.getFailedChunksAllWorkspacesFn(ctx, limit)
 	}
 	return nil, nil
 }
@@ -220,7 +220,7 @@ func TestQueue_BackoffMax(t *testing.T) {
 func TestQueue_ScanPendingSingleBatch(t *testing.T) {
 	pending := []uuid.UUID{uuid.New(), uuid.New()}
 	mq := &mockQuerier{
-		getAllPendingChunksFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+		getPendingChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
 			return pending, nil
 		},
 	}
@@ -236,7 +236,7 @@ func TestQueue_ScanPendingSingleBatch(t *testing.T) {
 func TestQueue_ScanPendingMultiBatch(t *testing.T) {
 	callCount := 0
 	mq := &mockQuerier{
-		getAllPendingChunksFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+		getPendingChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
 			callCount++
 			if callCount == 1 {
 				ids := make([]uuid.UUID, scanBatchSize)
@@ -253,7 +253,7 @@ func TestQueue_ScanPendingMultiBatch(t *testing.T) {
 	eq.scanPending(context.Background())
 
 	if callCount != 2 {
-		t.Errorf("GetAllPendingChunks called %d times, want 2", callCount)
+		t.Errorf("GetPendingChunksAllWorkspaces called %d times, want 2", callCount)
 	}
 	if len(eq.ch) != scanBatchSize+2 {
 		t.Errorf("channel len = %d, want %d", len(eq.ch), scanBatchSize+2)
@@ -262,7 +262,7 @@ func TestQueue_ScanPendingMultiBatch(t *testing.T) {
 
 func TestQueue_ScanPendingStopsWhenQueueFull(t *testing.T) {
 	mq := &mockQuerier{
-		getAllPendingChunksFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+		getPendingChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
 			ids := make([]uuid.UUID, scanBatchSize)
 			for i := range ids {
 				ids[i] = uuid.New()
@@ -571,7 +571,7 @@ func TestQueue_Status_Rejecting(t *testing.T) {
 func TestQueue_ScanPendingRecoversFailed(t *testing.T) {
 	failedID := uuid.New()
 	mq := &mockQuerier{
-		getAllFailedChunksFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+		getFailedChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
 			return []uuid.UUID{failedID}, nil
 		},
 	}
@@ -614,5 +614,52 @@ func TestQueue_PendingDecrementsOnMarkEmbeddedError(t *testing.T) {
 
 	if eq.pending.Load() != 0 {
 		t.Errorf("pending = %d, want 0 after MarkChunkEmbedded error", eq.pending.Load())
+	}
+}
+
+func TestScanPending_WorkspaceScoped(t *testing.T) {
+	mq := &mockQuerier{
+		getPendingChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+			return nil, nil
+		},
+	}
+
+	eq := newTestQueue(&mockEmbedder{}, mq)
+	eq.scanPending(context.Background())
+
+	if len(eq.ch) != 0 {
+		t.Errorf("channel len = %d, want 0: unregistered workspace chunks must not be enqueued", len(eq.ch))
+	}
+}
+
+func TestScanPending_RegisteredOnly(t *testing.T) {
+	id1 := uuid.New()
+	id2 := uuid.New()
+	mq := &mockQuerier{
+		getPendingChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+			return []uuid.UUID{id1, id2}, nil
+		},
+	}
+
+	eq := newTestQueue(&mockEmbedder{}, mq)
+	eq.scanPending(context.Background())
+
+	if len(eq.ch) != 2 {
+		t.Errorf("channel len = %d, want 2: registered workspace chunks must be enqueued", len(eq.ch))
+	}
+}
+
+func TestScanFailed_WorkspaceScoped(t *testing.T) {
+	mq := &mockQuerier{
+		getFailedChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+			return nil, nil
+		},
+	}
+
+	eq := newTestQueue(&mockEmbedder{}, mq)
+	eq.scanPending(context.Background())
+
+	if len(eq.ch) != 0 {
+		t.Errorf("channel len = %d, want 0: failed chunks for unregistered workspace must not be enqueued", len(eq.ch))
 	}
 }

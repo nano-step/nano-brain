@@ -37,6 +37,18 @@ func (q *Queries) CountPendingChunks(ctx context.Context, workspaceHash string) 
 	return count, err
 }
 
+const deleteEmbeddingsByWorkspace = `-- name: DeleteEmbeddingsByWorkspace :execrows
+DELETE FROM embeddings WHERE workspace_hash = $1
+`
+
+func (q *Queries) DeleteEmbeddingsByWorkspace(ctx context.Context, workspaceHash string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteEmbeddingsByWorkspace, workspaceHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getAllFailedChunks = `-- name: GetAllFailedChunks :many
 SELECT id FROM chunks
 WHERE embed_status = 'embed_failed'
@@ -97,6 +109,40 @@ func (q *Queries) GetAllPendingChunks(ctx context.Context, limit int32) ([]uuid.
 	return items, nil
 }
 
+const getFailedChunksAllWorkspaces = `-- name: GetFailedChunksAllWorkspaces :many
+SELECT c.id FROM chunks c
+WHERE c.embed_status = 'embed_failed'
+  AND EXISTS (
+    SELECT 1 FROM workspaces w
+    WHERE w.hash = c.workspace_hash
+  )
+ORDER BY c.created_at ASC
+LIMIT $1
+`
+
+func (q *Queries) GetFailedChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, getFailedChunksAllWorkspaces, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPendingChunks = `-- name: GetPendingChunks :many
 SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.created_at, c.embed_status, c.search_vector FROM chunks c
 WHERE c.workspace_hash = $1
@@ -136,6 +182,40 @@ func (q *Queries) GetPendingChunks(ctx context.Context, arg GetPendingChunksPara
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPendingChunksAllWorkspaces = `-- name: GetPendingChunksAllWorkspaces :many
+SELECT c.id FROM chunks c
+WHERE c.embed_status = 'pending'
+  AND EXISTS (
+    SELECT 1 FROM workspaces w
+    WHERE w.hash = c.workspace_hash
+  )
+ORDER BY c.created_at ASC
+LIMIT $1
+`
+
+func (q *Queries) GetPendingChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, getPendingChunksAllWorkspaces, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -253,13 +333,16 @@ func (q *Queries) ResetAndReturnChunkIDsByCollection(ctx context.Context, arg Re
 	return items, nil
 }
 
-const resetEmbedStatus = `-- name: ResetEmbedStatus :exec
+const resetEmbedStatus = `-- name: ResetEmbedStatus :execrows
 UPDATE chunks SET embed_status = 'pending' WHERE workspace_hash = $1
 `
 
-func (q *Queries) ResetEmbedStatus(ctx context.Context, workspaceHash string) error {
-	_, err := q.db.ExecContext(ctx, resetEmbedStatus, workspaceHash)
-	return err
+func (q *Queries) ResetEmbedStatus(ctx context.Context, workspaceHash string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, resetEmbedStatus, workspaceHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const resetEmbedStatusByCollection = `-- name: ResetEmbedStatusByCollection :execrows

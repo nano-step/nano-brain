@@ -2,6 +2,7 @@ package embed
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -9,7 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgconn"
 	pgvector "github.com/pgvector/pgvector-go"
 	"github.com/rs/zerolog"
 
@@ -35,8 +36,8 @@ const (
 
 type QueueQuerier interface {
 	GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error)
-	GetAllPendingChunks(ctx context.Context, limit int32) ([]uuid.UUID, error)
-	GetAllFailedChunks(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	GetPendingChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	GetFailedChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error)
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
@@ -168,9 +169,9 @@ func (q *Queue) scanByStatus(ctx context.Context, failed bool) int {
 		var ids []uuid.UUID
 		var err error
 		if failed {
-			ids, err = q.queries.GetAllFailedChunks(ctx, scanBatchSize)
+			ids, err = q.queries.GetFailedChunksAllWorkspaces(ctx, scanBatchSize)
 		} else {
-			ids, err = q.queries.GetAllPendingChunks(ctx, scanBatchSize)
+			ids, err = q.queries.GetPendingChunksAllWorkspaces(ctx, scanBatchSize)
 		}
 		if err != nil {
 			q.logger.Error().Err(err).Bool("failed", failed).Msg("failed to scan chunks")
@@ -255,7 +256,8 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		Embedding:     pgvector.NewVector(vec),
 	})
 	if err != nil {
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 			q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("chunk deleted before embedding insert, skipping stale chunk")
 			q.pending.Add(-1)
 			q.clearRetries(chunkID)

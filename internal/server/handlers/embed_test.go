@@ -21,7 +21,7 @@ type mockEmbedQuerier struct {
 	insertEmbeddingFn   func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	markChunkEmbeddedFn func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	countPendingFn      func(ctx context.Context, ws string) (int64, error)
-	resetEmbedStatusFn  func(ctx context.Context, ws string) error
+	resetEmbedStatusFn  func(ctx context.Context, ws string) (int64, error)
 	resetCalled         bool
 }
 
@@ -53,12 +53,12 @@ func (m *mockEmbedQuerier) CountPendingChunks(ctx context.Context, ws string) (i
 	return 0, nil
 }
 
-func (m *mockEmbedQuerier) ResetEmbedStatus(ctx context.Context, ws string) error {
+func (m *mockEmbedQuerier) ResetEmbedStatus(ctx context.Context, ws string) (int64, error) {
 	m.resetCalled = true
 	if m.resetEmbedStatusFn != nil {
 		return m.resetEmbedStatusFn(ctx, ws)
 	}
-	return nil
+	return 0, nil
 }
 
 func newEmbedContext(e *echo.Echo, body, workspace string) (echo.Context, *httptest.ResponseRecorder) {

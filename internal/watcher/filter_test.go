@@ -23,7 +23,7 @@ func TestShouldSkip_DefaultExcludeDirs(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := f.shouldSkip(tc.path)
+		got := f.shouldSkip(tc.path, false)
 		if got != tc.skip {
 			t.Errorf("shouldSkip(%q) = %v, want %v", tc.path, got, tc.skip)
 		}
@@ -45,7 +45,7 @@ func TestShouldSkip_ExcludePatterns(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := f.shouldSkip(tc.path)
+		got := f.shouldSkip(tc.path, false)
 		if got != tc.skip {
 			t.Errorf("shouldSkip(%q) = %v, want %v", tc.path, got, tc.skip)
 		}
@@ -68,7 +68,7 @@ func TestShouldSkip_AllowedExtensions(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := f.shouldSkip(tc.path)
+		got := f.shouldSkip(tc.path, false)
 		if got != tc.skip {
 			t.Errorf("shouldSkip(%q) = %v, want %v", tc.path, got, tc.skip)
 		}
@@ -79,10 +79,10 @@ func TestShouldSkip_AllowedExtensionsNoDot(t *testing.T) {
 	root := t.TempDir()
 	f := newFileFilter(root, nil, []string{"go", "ts"})
 
-	if f.shouldSkip(filepath.Join(root, "main.go")) {
+	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should not be skipped when go is allowed")
 	}
-	if !f.shouldSkip(filepath.Join(root, "index.js")) {
+	if !f.shouldSkip(filepath.Join(root, "index.js"), false) {
 		t.Error("index.js should be skipped when only go,ts are allowed")
 	}
 }
@@ -106,7 +106,7 @@ func TestShouldSkip_Gitignore(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := f.shouldSkip(tc.path)
+		got := f.shouldSkip(tc.path, false)
 		if got != tc.skip {
 			t.Errorf("shouldSkip(%q) = %v, want %v", tc.path, got, tc.skip)
 		}
@@ -117,7 +117,7 @@ func TestShouldSkip_NoGitignore(t *testing.T) {
 	root := t.TempDir()
 	f := newFileFilter(root, nil, nil)
 
-	if f.shouldSkip(filepath.Join(root, "main.go")) {
+	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should not be skipped when no .gitignore")
 	}
 }
