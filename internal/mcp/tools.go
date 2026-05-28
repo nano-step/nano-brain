@@ -29,6 +29,9 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryUpdate(server, a)
 	registerMemoryWakeUp(server, a)
 	registerMemorySymbols(server, a)
+	registerMemoryGraph(server, a)
+	registerMemoryImpact(server, a)
+	registerMemoryTrace(server, a)
 }
 
 func toolSchema(props map[string]map[string]any, required []string) json.RawMessage {
@@ -893,6 +896,249 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 	)
 }
 
+func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_graph",
+			Description: "Query the knowledge graph: find imports, calls, and symbol containment relationships for a node",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"workspace": {"type": "string", "description": "Workspace hash"},
+				"node":      {"type": "string", "description": "Source node (file path or file::symbol)"},
+				"direction": {"type": "string", "description": "Edge direction: out (default), in, both"},
+				"edge_type": {"type": "string", "description": "Filter by edge type: contains, imports, calls (empty = all)"},
+			}, []string{"workspace", "node"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ws, errRes := requireWorkspace(args)
+			if errRes != nil {
+				return errRes, nil
+			}
+			node := argString(args, "node")
+			if node == "" {
+				return errResult("node is required"), nil
+			}
+			direction := argString(args, "direction")
+			if direction == "" {
+				direction = "out"
+			}
+			edgeType := argString(args, "edge_type")
+
+			type edgeResult struct {
+				Source   string `json:"source"`
+				Target   string `json:"target"`
+				EdgeType string `json:"edge_type"`
+			}
+
+			var rows []sqlc.GraphEdge
+			switch direction {
+			case "in":
+				rows, err = a.queries.GetIncomingEdges(ctx, sqlc.GetIncomingEdgesParams{
+					WorkspaceHash: ws,
+					TargetNode:    node,
+					Column3:       edgeType,
+				})
+			case "both":
+				out, errOut := a.queries.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
+					WorkspaceHash: ws,
+					SourceNode:    node,
+					Column3:       edgeType,
+				})
+				in, errIn := a.queries.GetIncomingEdges(ctx, sqlc.GetIncomingEdgesParams{
+					WorkspaceHash: ws,
+					TargetNode:    node,
+					Column3:       edgeType,
+				})
+				if errOut != nil {
+					err = errOut
+				} else if errIn != nil {
+					err = errIn
+				} else {
+					rows = append(out, in...)
+				}
+			default:
+				rows, err = a.queries.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
+					WorkspaceHash: ws,
+					SourceNode:    node,
+					Column3:       edgeType,
+				})
+			}
+
+			if err != nil {
+				return errResult(fmt.Sprintf("graph query failed: %v", err)), nil
+			}
+
+			results := make([]edgeResult, 0, len(rows))
+			for _, r := range rows {
+				results = append(results, edgeResult{
+					Source:   r.SourceNode,
+					Target:   r.TargetNode,
+					EdgeType: r.EdgeType,
+				})
+			}
+			return textResult(map[string]any{
+				"node":      node,
+				"direction": direction,
+				"edges":     results,
+				"count":     len(results),
+			})
+		},
+	)
+}
+
+func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_trace",
+			Description: "Trace the call chain from an entry symbol — shows what a function calls, transitively, with cycle detection",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"workspace": {"type": "string", "description": "Workspace hash"},
+				"node":      {"type": "string", "description": "Entry symbol (e.g. file::FunctionName)"},
+				"max_depth": {"type": "number", "description": "Max traversal depth 1-10 (default 5)"},
+			}, []string{"workspace", "node"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ws, errRes := requireWorkspace(args)
+			if errRes != nil {
+				return errRes, nil
+			}
+			node := argString(args, "node")
+			if node == "" {
+				return errResult("node is required"), nil
+			}
+			maxDepth := argInt(args, "max_depth", 5, 10)
+
+			seen := map[string]bool{node: true}
+			type traceItem struct {
+				Node  string `json:"node"`
+				Depth int    `json:"depth"`
+				Via   string `json:"via"`
+			}
+			var chain []traceItem
+
+			type frame struct {
+				node  string
+				depth int
+				via   string
+			}
+			queue := []frame{{node: node, depth: 0, via: ""}}
+
+			for len(queue) > 0 {
+				cur := queue[0]
+				queue = queue[1:]
+				if cur.depth >= maxDepth {
+					continue
+				}
+				edges, err := a.queries.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
+					WorkspaceHash: ws,
+					SourceNode:    cur.node,
+					Column3:       "calls",
+				})
+				if err != nil {
+					return errResult(fmt.Sprintf("trace query failed: %v", err)), nil
+				}
+				for _, e := range edges {
+					if seen[e.TargetNode] {
+						continue
+					}
+					seen[e.TargetNode] = true
+					chain = append(chain, traceItem{
+						Node:  e.TargetNode,
+						Depth: cur.depth + 1,
+						Via:   cur.node,
+					})
+					queue = append(queue, frame{node: e.TargetNode, depth: cur.depth + 1, via: cur.node})
+				}
+			}
+
+			return textResult(map[string]any{
+				"entry": node,
+				"chain": chain,
+				"count": len(chain),
+			})
+		},
+	)
+}
+
+func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_impact",
+			Description: "Find what would be affected if a node (file or symbol) changes — reverse import/call lookup with optional depth traversal",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"workspace": {"type": "string", "description": "Workspace hash"},
+				"node":      {"type": "string", "description": "The node to analyze (file path or file::symbol)"},
+				"edge_type": {"type": "string", "description": "Filter by edge type: imports, calls (empty = all)"},
+				"max_depth": {"type": "number", "description": "Traversal depth 1-3 (default 1)"},
+			}, []string{"workspace", "node"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ws, errRes := requireWorkspace(args)
+			if errRes != nil {
+				return errRes, nil
+			}
+			node := argString(args, "node")
+			if node == "" {
+				return errResult("node is required"), nil
+			}
+			edgeType := argString(args, "edge_type")
+			maxDepth := argInt(args, "max_depth", 1, 3)
+
+			frontier := []string{node}
+			seen := map[string]bool{node: true}
+
+			type impactItem struct {
+				Node     string `json:"node"`
+				Depth    int    `json:"depth"`
+				EdgeType string `json:"edge_type"`
+			}
+			var impacted []impactItem
+
+			for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
+				rows, err := a.queries.GetImpactorsByTargets(ctx, sqlc.GetImpactorsByTargetsParams{
+					WorkspaceHash: ws,
+					Column2:       frontier,
+					Column3:       edgeType,
+				})
+				if err != nil {
+					return errResult(fmt.Sprintf("impact query failed: %v", err)), nil
+				}
+				var next []string
+				for _, r := range rows {
+					if seen[r.SourceNode] {
+						continue
+					}
+					seen[r.SourceNode] = true
+					impacted = append(impacted, impactItem{
+						Node:     r.SourceNode,
+						Depth:    depth,
+						EdgeType: r.EdgeType,
+					})
+					next = append(next, r.SourceNode)
+				}
+				frontier = next
+			}
+
+			return textResult(map[string]any{
+				"node":     node,
+				"impacted": impacted,
+				"count":    len(impacted),
+			})
+		},
+	)
+}
+
 func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
@@ -930,16 +1176,26 @@ func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 
 			type symbolResult struct {
 				Name       string `json:"name"`
+				Kind       string `json:"kind,omitempty"`
+				Language   string `json:"language,omitempty"`
+				Signature  string `json:"signature,omitempty"`
 				SourcePath string `json:"source_path"`
-				Metadata   any    `json:"metadata,omitempty"`
 			}
 			results := make([]symbolResult, 0, len(rows))
 			for _, r := range rows {
-				results = append(results, symbolResult{
+				item := symbolResult{
 					Name:       r.Title,
 					SourcePath: r.SourcePath,
-					Metadata:   r.Metadata,
-				})
+				}
+				if r.Metadata.Valid {
+					var meta map[string]string
+					if err := json.Unmarshal(r.Metadata.RawMessage, &meta); err == nil {
+						item.Kind = meta["kind"]
+						item.Language = meta["language"]
+						item.Signature = meta["signature"]
+					}
+				}
+				results = append(results, item)
 			}
 			return textResult(map[string]any{
 				"symbols": results,

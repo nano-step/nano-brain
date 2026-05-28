@@ -26,17 +26,19 @@ type WorkspaceCounter interface {
 }
 
 type Health struct {
-	pool      PoolChecker
-	queue     EmbedQueueInfo
-	logger    zerolog.Logger
-	version   string
-	startTime time.Time
-	getCfg    func() (config.HarvesterConfig, config.IntervalsConfig)
-	counter   WorkspaceCounter
+	pool             PoolChecker
+	queue            EmbedQueueInfo
+	logger           zerolog.Logger
+	version          string
+	startTime        time.Time
+	getCfg           func() (config.HarvesterConfig, config.IntervalsConfig)
+	counter          WorkspaceCounter
+	embedCfg         config.EmbeddingConfig
+	migrationVersion int64
 }
 
-func NewHealth(pool PoolChecker, logger zerolog.Logger, version string, startTime time.Time, queue EmbedQueueInfo, getCfg func() (config.HarvesterConfig, config.IntervalsConfig), counter WorkspaceCounter) *Health {
-	return &Health{pool: pool, queue: queue, logger: logger, version: version, startTime: startTime, getCfg: getCfg, counter: counter}
+func NewHealth(pool PoolChecker, logger zerolog.Logger, version string, startTime time.Time, queue EmbedQueueInfo, getCfg func() (config.HarvesterConfig, config.IntervalsConfig), counter WorkspaceCounter, embedCfg config.EmbeddingConfig, migrationVersion int64) *Health {
+	return &Health{pool: pool, queue: queue, logger: logger, version: version, startTime: startTime, getCfg: getCfg, counter: counter, embedCfg: embedCfg, migrationVersion: migrationVersion}
 }
 
 func (h *Health) workspaceCount(ctx context.Context) int {
@@ -121,9 +123,9 @@ func (h *Health) Status(c echo.Context) error {
 
 	resp := statusResponse{
 		PGStatus:            pgStatus,
-		MigrationVersion:    1,
+		MigrationVersion:    int(h.migrationVersion),
 		EmbeddingQueueDepth: 0,
-		ActiveProvider:      "none",
+		ActiveProvider:      h.embedCfg.Provider,
 		WorkspaceCount:      h.workspaceCount(c.Request().Context()),
 		HarvesterStatus:     harvestStatus,
 	}

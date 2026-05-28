@@ -70,8 +70,9 @@ The review flow is designed for parallelism: create the PR first so Gemini bot s
 4. **Fix ALL critical and major Oracle findings** — push fixes to the same PR branch
 5. **Save Oracle review** to `docs/evidence/self-review-{story-id}.md`
 6. **Check Gemini PR comments** — read all comments from `gh pr view <N> --comments`
-7. **Fix ALL critical and high severity Gemini comments** — push fixes to the same PR branch
-8. **Only after both reviews are clean** → merge is allowed
+7. **Verify each Gemini finding against actual codebase context** — Gemini lacks full context; fire explore subagents to confirm validity before fixing. Mark each finding as VALID / FALSE POSITIVE / DEFER with reasoning.
+8. **Fix VALID critical and high severity Gemini comments** — push fixes to the same PR branch. FALSE POSITIVEs must be documented with explanation in PR thread.
+9. **Only after both reviews are clean** → merge is allowed
 
 **Parallelism rules:**
 
@@ -79,10 +80,20 @@ The review flow is designed for parallelism: create the PR first so Gemini bot s
 - **POST-MERGE gates run in parallel**: After confirming 4.1 (merged), gates 4.2–4.4 run simultaneously. Gate 4.5 (validation) runs last since it depends on merged code.
 
 **PR comment review rules:**
-- Critical/High severity Gemini comments → MUST fix before merge (BLOCKING)
-- Medium severity Gemini comments → FIX if effort < 15 min, otherwise note in PR and defer
+- Critical/High severity Gemini comments → VERIFY first (explore subagents), then fix VALID ones before merge (BLOCKING). FALSE POSITIVEs must be replied to in PR with explanation.
+- Medium severity Gemini comments → VERIFY first, fix VALID ones if effort < 15 min, otherwise note in PR and defer
 - Low/Informational comments → ACKNOWLEDGE in PR, fix is optional
 - If Gemini finds nothing → proceed (no evidence needed beyond PR review thread)
+
+**Gemini verification rule (MANDATORY):**
+Gemini reviews without full codebase context and frequently flags false positives (e.g., missing deferred rollback it didn't read, wrong driver assumptions, buffer limits that don't apply to the actual usage). Before fixing ANY Gemini comment, fire explore subagents to verify the finding against actual code. This saves wasted fix cycles and prevents introducing unnecessary complexity.
+
+**Verification triage output (save to evidence file):**
+| Finding | File | Gemini Severity | Verified Verdict | Action |
+|---------|------|----------------|-----------------|--------|
+| shouldSkip isDir | filter.go | Critical | VALID — no isDir guard exists | Fix |
+| pq.Error assertion | queue.go | High | VALID — pgx/v5 never returns pq.Error | Fix |
+| defer rollback missing | persist.go | High | FALSE POSITIVE — defer at line 90 covers it | Reply in PR |
 
 **Self-review evidence file format:**
 

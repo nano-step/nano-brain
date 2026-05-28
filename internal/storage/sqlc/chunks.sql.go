@@ -45,8 +45,11 @@ func (q *Queries) DeleteChunksByDocumentID(ctx context.Context, arg DeleteChunks
 }
 
 const getChunkByID = `-- name: GetChunkByID :one
-SELECT id, document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, embed_status, created_at
-FROM chunks WHERE id = $1
+SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.embed_status, c.created_at,
+       COALESCE(d.source_path, '') AS source_path
+FROM chunks c
+LEFT JOIN documents d ON d.id = c.document_id
+WHERE c.id = $1
 `
 
 type GetChunkByIDRow struct {
@@ -61,6 +64,7 @@ type GetChunkByIDRow struct {
 	Metadata      pqtype.NullRawMessage
 	EmbedStatus   string
 	CreatedAt     time.Time
+	SourcePath    string
 }
 
 func (q *Queries) GetChunkByID(ctx context.Context, id uuid.UUID) (GetChunkByIDRow, error) {
@@ -78,6 +82,7 @@ func (q *Queries) GetChunkByID(ctx context.Context, id uuid.UUID) (GetChunkByIDR
 		&i.Metadata,
 		&i.EmbedStatus,
 		&i.CreatedAt,
+		&i.SourcePath,
 	)
 	return i, err
 }
@@ -148,7 +153,8 @@ ON CONFLICT (content_hash, workspace_hash, document_id) DO UPDATE SET
     chunk_index = EXCLUDED.chunk_index,
     start_line = EXCLUDED.start_line,
     end_line = EXCLUDED.end_line,
-    metadata = EXCLUDED.metadata
+    metadata = EXCLUDED.metadata,
+    embed_status = 'pending'
 RETURNING id
 `
 

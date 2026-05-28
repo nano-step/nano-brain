@@ -6,6 +6,7 @@ package sqlc
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,15 +29,16 @@ type Chunk struct {
 }
 
 type Collection struct {
-	ID              uuid.UUID
-	WorkspaceHash   string
-	Name            string
-	Path            string
-	GlobPattern     string
-	UpdateMode      string
-	ExcludePatterns []string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                uuid.UUID
+	WorkspaceHash     string
+	Name              string
+	Path              string
+	GlobPattern       string
+	UpdateMode        string
+	ExcludePatterns   []string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	AllowedExtensions []string
 }
 
 type Document struct {
@@ -63,6 +65,17 @@ type Embedding struct {
 	Embedding     interface{}
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+type GraphEdge struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+	SourceNode    string
+	TargetNode    string
+	EdgeType      string
+	SourceFile    string
+	Metadata      json.RawMessage
+	CreatedAt     time.Time
 }
 
 type TelemetryLog struct {

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
@@ -26,6 +27,14 @@ type ClaudeCodeHarvester struct {
 	logger     zerolog.Logger
 	sessionDir string
 	workspace  string
+	summarizer SessionSummarizer
+}
+
+func (h *ClaudeCodeHarvester) setSummarizer(s SessionSummarizer) { h.summarizer = s }
+
+func (h *ClaudeCodeHarvester) WithSummarizer(s SessionSummarizer) *ClaudeCodeHarvester {
+	h.summarizer = s
+	return h
 }
 
 // NewClaudeCodeHarvester creates a new Claude Code session harvester.
@@ -157,6 +166,24 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 	if enqueuer != nil {
 		for _, id := range chunkIDs {
 			enqueuer.Enqueue(id)
+		}
+	}
+
+	if h.summarizer != nil {
+		var createdAt time.Time
+		if len(msgs) > 0 && msgs[0].Timestamp != "" {
+			if t, err := time.Parse(time.RFC3339, msgs[0].Timestamp); err == nil {
+				createdAt = t
+			}
+		}
+		smeta := SummaryMeta{
+			Source:    "claude",
+			SessionID: sessionID,
+			Title:     "Claude Code Session " + sessionID,
+			CreatedAt: createdAt,
+		}
+		if err := h.summarizer.SummarizeAndPersist(ctx, md, smeta); err != nil {
+			h.logger.Warn().Err(err).Str("session", sessionID).Msg("summarization failed")
 		}
 	}
 

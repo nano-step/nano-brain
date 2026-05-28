@@ -207,6 +207,21 @@ running it and seeing exit code 0.
 validate:quick   (always — every lane)
   go build ./... && go test -race -short ./...
 
+self-review:response-shape   (user-feature change type only)
+  For each new REST endpoint and MCP tool added or modified:
+  1. Read the response struct definition.
+  2. Read the mapping loop that populates it.
+  3. Verify every declared field is explicitly assigned (no zero-value gaps).
+  4. If a field is populated from a secondary source (e.g. JSONB metadata),
+     verify the unmarshal path exists and is tested.
+  This check runs BEFORE push, takes < 2 minutes, and catches
+  "struct has fields but loop doesn't fill them" bugs that tests won't catch.
+
+self-review:staged-files   (every lane, before every commit)
+  Run `git status` and read the staged file list before committing.
+  Confirm no .opencode/ metadata, package-lock.json, or empty doc scaffolds.
+  Never run `git add -A` without this step.
+
 test:integration   (normal + high-risk)
   go test -race -tags=integration ./...
 
@@ -473,6 +488,17 @@ and retro output template.
 13. **Modifying harness rules without user approval.** Retro-proposed rule
     changes must be approved by the user before being applied to HARNESS.md
     or HARNESS_GATES.md.
+14. **`_ = err` on constructor calls in `main.go` or any startup path.**
+    Use `log.Warn` + skip the nil value, or `log.Fatal` if the component is
+    critical. The `_` discard is only permitted in deferred cleanup
+    (e.g. `defer f.Close()`). Concrete pattern for optional components:
+    ```go
+    goE, err := symbol.NewGoExtractor()
+    if err != nil {
+        logger.Warn().Err(err).Msg("go extractor init failed, skipping")
+    }
+    // Pass only non-nil values to registry
+    ```
 
 ## GitHub Issue Tracking
 

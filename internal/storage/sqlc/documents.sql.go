@@ -14,6 +14,15 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+const deleteDocumentsByWorkspace = `-- name: DeleteDocumentsByWorkspace :exec
+DELETE FROM documents WHERE workspace_hash = $1
+`
+
+func (q *Queries) DeleteDocumentsByWorkspace(ctx context.Context, workspaceHash string) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentsByWorkspace, workspaceHash)
+	return err
+}
+
 const deleteSymbolDocumentsByCollection = `-- name: DeleteSymbolDocumentsByCollection :exec
 DELETE FROM documents
 WHERE workspace_hash = $1
@@ -168,6 +177,69 @@ func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash st
 	return items, nil
 }
 
+const listSessionDocumentsByWorkspace = `-- name: ListSessionDocumentsByWorkspace :many
+SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, content, created_at, updated_at
+FROM documents
+WHERE workspace_hash = $1
+  AND collection = 'sessions'
+  AND ($2::text = '' OR $2::text = ANY(tags))
+ORDER BY created_at DESC
+LIMIT $3
+`
+
+type ListSessionDocumentsByWorkspaceParams struct {
+	WorkspaceHash string
+	TagFilter     string
+	Lim           int32
+}
+
+type ListSessionDocumentsByWorkspaceRow struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+	ContentHash   string
+	Title         string
+	SourcePath    string
+	Collection    string
+	Tags          []string
+	Content       string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func (q *Queries) ListSessionDocumentsByWorkspace(ctx context.Context, arg ListSessionDocumentsByWorkspaceParams) ([]ListSessionDocumentsByWorkspaceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionDocumentsByWorkspace, arg.WorkspaceHash, arg.TagFilter, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSessionDocumentsByWorkspaceRow
+	for rows.Next() {
+		var i ListSessionDocumentsByWorkspaceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.ContentHash,
+			&i.Title,
+			&i.SourcePath,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.Content,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSymbolsByWorkspace = `-- name: ListSymbolsByWorkspace :many
 SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, metadata, created_at, updated_at
 FROM documents
@@ -292,10 +364,10 @@ func (q *Queries) UpdateDocumentsCollection(ctx context.Context, arg UpdateDocum
 const upsertDocument = `-- name: UpsertDocument :one
 INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-ON CONFLICT (content_hash, workspace_hash) DO UPDATE SET
+ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
+    content_hash = EXCLUDED.content_hash,
     title = EXCLUDED.title,
     content = EXCLUDED.content,
-    source_path = EXCLUDED.source_path,
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,

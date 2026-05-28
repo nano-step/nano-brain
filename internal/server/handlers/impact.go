@@ -1,0 +1,93 @@
+package handlers
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/rs/zerolog"
+)
+
+type ImpactQuerier interface {
+	GetImpactors(ctx context.Context, arg sqlc.GetImpactorsParams) ([]sqlc.GetImpactorsRow, error)
+	GetImpactorsByTargets(ctx context.Context, arg sqlc.GetImpactorsByTargetsParams) ([]sqlc.GetImpactorsByTargetsRow, error)
+}
+
+type impactRequest struct {
+	Node     string `json:"node"`
+	EdgeType string `json:"edge_type"`
+	MaxDepth int    `json:"max_depth"`
+}
+
+type impactNode struct {
+	Node     string `json:"node"`
+	Depth    int    `json:"depth"`
+	EdgeType string `json:"edge_type"`
+}
+
+type impactResponse struct {
+	Node    string       `json:"node"`
+	Impacted []impactNode `json:"impacted"`
+}
+
+func GraphImpact(q ImpactQuerier, logger zerolog.Logger) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		workspace := c.Get("workspace").(string)
+
+		var req impactRequest
+		if err := c.Bind(&req); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		}
+		if req.Node == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "node is required")
+		}
+		if req.MaxDepth <= 0 || req.MaxDepth > 3 {
+			req.MaxDepth = 1
+		}
+
+		ctx := c.Request().Context()
+		impacted, err := collectImpact(ctx, q, workspace, req.Node, req.EdgeType, req.MaxDepth)
+		if err != nil {
+			logger.Error().Err(err).Str("workspace", workspace).Str("node", req.Node).Msg("impact query failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "impact query failed")
+		}
+
+		return c.JSON(http.StatusOK, impactResponse{
+			Node:    req.Node,
+			Impacted: impacted,
+		})
+	}
+}
+
+func collectImpact(ctx context.Context, q ImpactQuerier, workspace, node, edgeType string, maxDepth int) ([]impactNode, error) {
+	seen := map[string]bool{node: true}
+	var result []impactNode
+
+	frontier := []string{node}
+	for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
+		rows, err := q.GetImpactorsByTargets(ctx, sqlc.GetImpactorsByTargetsParams{
+			WorkspaceHash: workspace,
+			Column2:       frontier,
+			Column3:       edgeType,
+		})
+		if err != nil {
+			return nil, err
+		}
+		var next []string
+		for _, r := range rows {
+			if seen[r.SourceNode] {
+				continue
+			}
+			seen[r.SourceNode] = true
+			result = append(result, impactNode{
+				Node:     r.SourceNode,
+				Depth:    depth,
+				EdgeType: r.EdgeType,
+			})
+			next = append(next, r.SourceNode)
+		}
+		frontier = next
+	}
+	return result, nil
+}

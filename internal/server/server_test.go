@@ -34,7 +34,7 @@ func newTestServer(pool *mockPool) *server.Server {
 		Logging:   config.LoggingConfig{Level: "info"},
 	}
 	logger := zerolog.Nop()
-	return server.New(fullCfg, "", pool, nil, nil, nil, nil, nil, logger, "test-v1")
+	return server.New(fullCfg, "", pool, nil, nil, nil, nil, nil, logger, "test-v1", 0)
 }
 
 func TestHealthEndpointHealthyDB(t *testing.T) {

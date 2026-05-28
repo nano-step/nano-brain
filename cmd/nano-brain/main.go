@@ -14,11 +14,13 @@ import (
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/harvest"
 	"github.com/nano-brain/nano-brain/internal/health"
 	"github.com/nano-brain/nano-brain/internal/server"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/summarize"
 	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -113,6 +115,9 @@ func main() {
 		case "doctor":
 			runDoctorCmd(args[1:], configPath)
 			return
+		case "reset-embeddings":
+			runResetEmbeddingsCmd(args[1:])
+			return
 		case "version":
 			runVersionCmd(args[1:])
 			return
@@ -202,6 +207,11 @@ func startServer(configPath string) {
 		logger.Fatal().Err(err).Msg("failed to run migrations")
 	}
 
+	migrationVersion, err := storage.GetCurrentVersion(ctx, pool)
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to get migration version for status")
+	}
+
 	db := stdlib.OpenDBFromPool(pool)
 	queries := sqlc.New(db)
 
@@ -228,21 +238,32 @@ func startServer(configPath string) {
 	}
 	symRegistry := symbol.NewRegistry(extractors...)
 
-	fw := watcher.New(db, queries, logger, *cfg).WithSymbolRegistry(symRegistry)
+	var graphExtractors []graph.Extractor
+	if goGE, err := graph.NewGoGraphExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("go graph extractor init failed, skipping")
+	} else {
+		graphExtractors = append(graphExtractors, goGE)
+	}
+	graphRegistry := graph.NewRegistry(graphExtractors...)
+
+	fw := watcher.New(db, queries, logger, *cfg).
+		WithSymbolRegistry(symRegistry).
+		WithGraphRegistry(graphRegistry, queries)
 
 	var eq *embed.Queue
 	var embedder embed.Embedder
 	if cfg.Embedding.Provider != "" {
 		e, embedErr := embed.NewFromConfig(cfg.Embedding)
 		if embedErr != nil {
-			logger.Warn().Err(embedErr).Msg("embedding disabled — provider not configured")
+			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", cfg.Embedding.URL).Msg("embedding provider init failed")
 		} else {
 			embedder = e
 			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency)
+			fw.WithEmbedQueue(eq)
 		}
 	}
 
-	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, logger, Version)
+	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, logger, Version, migrationVersion)
 
 	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
 		for _, ws := range workspaces {
@@ -251,12 +272,18 @@ func startServer(configPath string) {
 				logger.Warn().Err(err).Str("workspace", ws.Hash).Msg("failed to list collections for watcher")
 				continue
 			}
+			cfgExclude, cfgExtensions := cfg.Watcher.ResolveFilter(ws.Path)
 			for _, col := range collections {
 				if _, statErr := os.Stat(col.Path); os.IsNotExist(statErr) {
 					logger.Debug().Str("collection", col.Name).Str("path", col.Path).Msg("skipping watch — path does not exist")
 					continue
 				}
-				if watchErr := fw.Watch(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern); watchErr != nil {
+				excludePatterns := append(cfgExclude, col.ExcludePatterns...)
+				allowedExtensions := col.AllowedExtensions
+				if len(allowedExtensions) == 0 {
+					allowedExtensions = cfgExtensions
+				}
+				if watchErr := fw.WatchWithFilter(col.Name, col.Path, col.WorkspaceHash, col.GlobPattern, excludePatterns, allowedExtensions); watchErr != nil {
 					logger.Warn().Err(watchErr).Str("collection", col.Name).Msg("failed to watch collection")
 				}
 			}
@@ -292,7 +319,21 @@ func startServer(configPath string) {
 		}
 	}
 
-	if cfg.Harvester.OpenCode.SessionDir != "" {
+	if cfg.Harvester.OpenCode.DBPath == "" {
+		if detected := detectOpenCodeDBPath(); detected != "" {
+			cfg.Harvester.OpenCode.DBPath = detected
+			logger.Info().Str("path", detected).Msg("auto-detected opencode sqlite db")
+		}
+	}
+
+	if cfg.Harvester.OpenCode.DBPath != "" {
+		oh := harvest.NewOpenCodeSQLiteHarvester(db, logger, cfg.Harvester.OpenCode.DBPath)
+		hr = harvest.NewRunner(oh, eq, interval, logger)
+		logger.Info().
+			Str("db_path", cfg.Harvester.OpenCode.DBPath).
+			Dur("interval", interval).
+			Msg("opencode sqlite harvester started")
+	} else if cfg.Harvester.OpenCode.SessionDir != "" {
 		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
 		if err != nil {
 			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode harvester")
@@ -305,7 +346,7 @@ func startServer(configPath string) {
 				Msg("opencode session harvester started")
 		}
 	} else {
-		logger.Info().Msg("opencode session harvester disabled (no session_dir configured)")
+		logger.Info().Msg("opencode harvester disabled (no db_path or session_dir configured)")
 	}
 
 	if cfg.Harvester.ClaudeCode.Enabled {
@@ -333,6 +374,24 @@ func startServer(configPath string) {
 	}
 
 	if hr != nil {
+		var harvestSummarizer *summarize.HarvestSummarizer
+		if cfg.Summarization.Enabled {
+			llmClient := summarize.New(cfg.Summarization, logger)
+			pipeline := summarize.NewPipeline(llmClient, nil, cfg.Summarization.Concurrency, logger)
+			persister, err := summarize.NewPersister(db, cfg.Summarization.OutputDir, "", eq, logger)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("failed to initialize summary persister")
+			}
+			harvestSummarizer = summarize.NewHarvestSummarizer(pipeline, persister, logger)
+			hr.WithSummarizer(harvestSummarizer)
+			logger.Info().
+				Str("output_dir", cfg.Summarization.OutputDir).
+				Str("model", cfg.Summarization.Model).
+				Msg("session summarization enabled")
+		}
+		if harvestSummarizer != nil {
+			srv.SetSummarizer(harvestSummarizer)
+		}
 		srv.SetHarvestRunner(hr)
 		g.Go(func() error {
 			return hr.Run(gctx)

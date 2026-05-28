@@ -41,6 +41,8 @@ type Server struct {
 	cleanupCancel  context.CancelFunc
 	harvestMu      sync.RWMutex
 	harvestRunner  handlers.HarvestRunner
+	summarizeMu    sync.RWMutex
+	summarizer     handlers.SummarizeSummarizer
 	configMu       sync.RWMutex
 	fullCfg        *config.Config
 	configPath     string
@@ -51,11 +53,12 @@ type Server struct {
 	harvesterCfg   config.HarvesterConfig
 	telemetryCfg   config.TelemetryConfig
 	intervalsCfg   config.IntervalsConfig
-	version        string
-	startTime      time.Time
+	version          string
+	startTime        time.Time
+	migrationVersion int64
 }
 
-func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string) *Server {
+func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string, migrationVersion int64) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -99,8 +102,9 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		harvesterCfg:   fullCfg.Harvester,
 		telemetryCfg:   fullCfg.Telemetry,
 		intervalsCfg:   fullCfg.Intervals,
-		version:        version,
-		startTime:      time.Now(),
+		version:          version,
+		startTime:        time.Now(),
+		migrationVersion: migrationVersion,
 	}
 
 	registerMiddleware(s)
@@ -150,6 +154,18 @@ func (s *Server) getHarvestRunner() handlers.HarvestRunner {
 	s.harvestMu.RLock()
 	defer s.harvestMu.RUnlock()
 	return s.harvestRunner
+}
+
+func (s *Server) SetSummarizer(sum handlers.SummarizeSummarizer) {
+	s.summarizeMu.Lock()
+	defer s.summarizeMu.Unlock()
+	s.summarizer = sum
+}
+
+func (s *Server) getSummarizer() handlers.SummarizeSummarizer {
+	s.summarizeMu.RLock()
+	defer s.summarizeMu.RUnlock()
+	return s.summarizer
 }
 
 func (s *Server) getHealthCfg() (config.HarvesterConfig, config.IntervalsConfig) {

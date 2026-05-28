@@ -44,7 +44,7 @@ func (q *Queries) DeleteCollection(ctx context.Context, arg DeleteCollectionPara
 }
 
 const getCollectionByName = `-- name: GetCollectionByName :one
-SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at FROM collections WHERE name = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at, allowed_extensions FROM collections WHERE name = $1 AND workspace_hash = $2
 `
 
 type GetCollectionByNameParams struct {
@@ -65,12 +65,13 @@ func (q *Queries) GetCollectionByName(ctx context.Context, arg GetCollectionByNa
 		pq.Array(&i.ExcludePatterns),
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		pq.Array(&i.AllowedExtensions),
 	)
 	return i, err
 }
 
 const listCollections = `-- name: ListCollections :many
-SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at FROM collections WHERE workspace_hash = $1 ORDER BY name
+SELECT id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at, allowed_extensions FROM collections WHERE workspace_hash = $1 ORDER BY name
 `
 
 func (q *Queries) ListCollections(ctx context.Context, workspaceHash string) ([]Collection, error) {
@@ -92,6 +93,7 @@ func (q *Queries) ListCollections(ctx context.Context, workspaceHash string) ([]
 			pq.Array(&i.ExcludePatterns),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			pq.Array(&i.AllowedExtensions),
 		); err != nil {
 			return nil, err
 		}
@@ -107,7 +109,7 @@ func (q *Queries) ListCollections(ctx context.Context, workspaceHash string) ([]
 }
 
 const listCollectionsWithDocCount = `-- name: ListCollectionsWithDocCount :many
-SELECT c.id, c.workspace_hash, c.name, c.path, c.glob_pattern, c.update_mode, c.exclude_patterns, c.created_at, c.updated_at, COALESCE(d.cnt, 0)::bigint AS document_count
+SELECT c.id, c.workspace_hash, c.name, c.path, c.glob_pattern, c.update_mode, c.exclude_patterns, c.allowed_extensions, c.created_at, c.updated_at, COALESCE(d.cnt, 0)::bigint AS document_count
 FROM collections c
 LEFT JOIN (
     SELECT collection, workspace_hash, count(*) AS cnt
@@ -119,16 +121,17 @@ ORDER BY c.name
 `
 
 type ListCollectionsWithDocCountRow struct {
-	ID              uuid.UUID
-	WorkspaceHash   string
-	Name            string
-	Path            string
-	GlobPattern     string
-	UpdateMode      string
-	ExcludePatterns []string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	DocumentCount   int64
+	ID                uuid.UUID
+	WorkspaceHash     string
+	Name              string
+	Path              string
+	GlobPattern       string
+	UpdateMode        string
+	ExcludePatterns   []string
+	AllowedExtensions []string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	DocumentCount     int64
 }
 
 func (q *Queries) ListCollectionsWithDocCount(ctx context.Context, workspaceHash string) ([]ListCollectionsWithDocCountRow, error) {
@@ -148,6 +151,7 @@ func (q *Queries) ListCollectionsWithDocCount(ctx context.Context, workspaceHash
 			&i.GlobPattern,
 			&i.UpdateMode,
 			pq.Array(&i.ExcludePatterns),
+			pq.Array(&i.AllowedExtensions),
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DocumentCount,
@@ -168,7 +172,7 @@ func (q *Queries) ListCollectionsWithDocCount(ctx context.Context, workspaceHash
 const renameCollection = `-- name: RenameCollection :one
 UPDATE collections SET name = $2, updated_at = now()
 WHERE name = $1 AND workspace_hash = $3
-RETURNING id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at
+RETURNING id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at, allowed_extensions
 `
 
 type RenameCollectionParams struct {
@@ -190,6 +194,7 @@ func (q *Queries) RenameCollection(ctx context.Context, arg RenameCollectionPara
 		pq.Array(&i.ExcludePatterns),
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		pq.Array(&i.AllowedExtensions),
 	)
 	return i, err
 }
@@ -202,7 +207,7 @@ ON CONFLICT (name, workspace_hash) DO UPDATE SET
     glob_pattern = EXCLUDED.glob_pattern,
     update_mode = EXCLUDED.update_mode,
     updated_at = now()
-RETURNING id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at
+RETURNING id, workspace_hash, name, path, glob_pattern, update_mode, exclude_patterns, created_at, updated_at, allowed_extensions
 `
 
 type UpsertCollectionParams struct {
@@ -232,6 +237,7 @@ func (q *Queries) UpsertCollection(ctx context.Context, arg UpsertCollectionPara
 		pq.Array(&i.ExcludePatterns),
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		pq.Array(&i.AllowedExtensions),
 	)
 	return i, err
 }

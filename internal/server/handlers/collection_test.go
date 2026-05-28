@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
@@ -96,7 +97,7 @@ func TestAddCollection_Success(t *testing.T) {
 	body := `{"workspace":"ws-test","name":"codebase","path":"/tmp","glob_pattern":"**/*.go"}`
 	c, rec := newCollectionContext(e, http.MethodPost, "/api/v1/collections", body, "ws-test")
 
-	h := handlers.AddCollection(q, nil, zerolog.Nop())
+	h := handlers.AddCollection(q, nil, config.WatcherConfig{}, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -119,7 +120,7 @@ func TestAddCollection_InvalidPath(t *testing.T) {
 	body := `{"workspace":"ws-test","name":"bad","path":"/nonexistent-path-xyz-12345"}`
 	c, _ := newCollectionContext(e, http.MethodPost, "/api/v1/collections", body, "ws-test")
 
-	h := handlers.AddCollection(q, nil, zerolog.Nop())
+	h := handlers.AddCollection(q, nil, config.WatcherConfig{}, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for invalid path")
@@ -139,7 +140,7 @@ func TestAddCollection_MissingName(t *testing.T) {
 	body := `{"workspace":"ws-test","path":"/tmp"}`
 	c, _ := newCollectionContext(e, http.MethodPost, "/api/v1/collections", body, "ws-test")
 
-	h := handlers.AddCollection(q, nil, zerolog.Nop())
+	h := handlers.AddCollection(q, nil, config.WatcherConfig{}, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for missing name")
@@ -207,7 +208,7 @@ func TestRenameCollection_Success(t *testing.T) {
 	c.SetParamNames("name")
 	c.SetParamValues("old-name")
 
-	h := handlers.RenameCollectionHandler(q, nil, zerolog.Nop())
+	h := handlers.RenameCollectionHandler(q, nil, config.WatcherConfig{}, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}

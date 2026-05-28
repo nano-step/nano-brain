@@ -85,3 +85,43 @@ func platformOpenCodePaths() []string {
 	}
 	return nil
 }
+
+func detectOpenCodeDBPath() string {
+	if v := os.Getenv("OPENCODE_DB_PATH"); v != "" {
+		if _, err := os.Stat(v); err == nil {
+			return v
+		}
+	}
+	for _, p := range platformOpenCodeDBPaths() {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func platformOpenCodeDBPaths() []string {
+	switch runtime.GOOS {
+	case "linux":
+		var paths []string
+		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+			paths = append(paths, filepath.Join(xdg, "opencode", "opencode.db"))
+		}
+		if home := os.Getenv("HOME"); home != "" {
+			paths = append(paths, filepath.Join(home, ".local", "share", "opencode", "opencode.db"))
+		}
+		return paths
+	case "darwin":
+		if home := os.Getenv("HOME"); home != "" {
+			return []string{
+				filepath.Join(home, ".local", "share", "opencode", "opencode.db"),
+				filepath.Join(home, "Library", "Application Support", "opencode", "opencode.db"),
+			}
+		}
+	case "windows":
+		if appdata := os.Getenv("APPDATA"); appdata != "" {
+			return []string{filepath.Join(appdata, "opencode", "opencode.db")}
+		}
+	}
+	return nil
+}

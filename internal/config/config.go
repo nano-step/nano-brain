@@ -17,16 +17,17 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	Server    ServerConfig    `koanf:"server"`
-	Database  DatabaseConfig  `koanf:"database"`
-	Embedding EmbeddingConfig `koanf:"embedding"`
-	Harvester HarvesterConfig `koanf:"harvester"`
-	Intervals IntervalsConfig `koanf:"intervals"`
-	Watcher   WatcherConfig   `koanf:"watcher"`
-	Search    SearchConfig    `koanf:"search"`
-	Storage   StorageConfig   `koanf:"storage"`
-	Telemetry TelemetryConfig `koanf:"telemetry"`
-	Logging   LoggingConfig   `koanf:"logging"`
+	Server         ServerConfig         `koanf:"server"`
+	Database       DatabaseConfig       `koanf:"database"`
+	Embedding      EmbeddingConfig      `koanf:"embedding"`
+	Harvester      HarvesterConfig      `koanf:"harvester"`
+	Intervals      IntervalsConfig      `koanf:"intervals"`
+	Watcher        WatcherConfig        `koanf:"watcher"`
+	Search         SearchConfig         `koanf:"search"`
+	Storage        StorageConfig        `koanf:"storage"`
+	Telemetry      TelemetryConfig      `koanf:"telemetry"`
+	Logging        LoggingConfig        `koanf:"logging"`
+	Summarization  SummarizationConfig  `koanf:"summarization"`
 }
 
 // ServerConfig holds server configuration.
@@ -59,6 +60,7 @@ type HarvesterConfig struct {
 // OpenCodeHarvesterConfig holds OpenCode harvester configuration.
 type OpenCodeHarvesterConfig struct {
 	SessionDir string `koanf:"session_dir"`
+	DBPath     string `koanf:"db_path"`
 }
 
 // ClaudeCodeHarvesterConfig holds ClaudeCode harvester configuration.
@@ -72,10 +74,17 @@ type IntervalsConfig struct {
 	SessionPoll int `koanf:"session_poll"`
 }
 
-// WatcherConfig holds watcher configuration.
+type WorkspaceFilterConfig struct {
+	ExcludePatterns   []string `koanf:"exclude_patterns"`
+	AllowedExtensions []string `koanf:"allowed_extensions"`
+}
+
 type WatcherConfig struct {
-	DebounceMs       int `koanf:"debounce_ms"`
-	ReindexInterval  int `koanf:"reindex_interval"`
+	DebounceMs        int                               `koanf:"debounce_ms"`
+	ReindexInterval   int                               `koanf:"reindex_interval"`
+	ExcludePatterns   []string                          `koanf:"exclude_patterns"`
+	AllowedExtensions []string                          `koanf:"allowed_extensions"`
+	Workspaces        map[string]WorkspaceFilterConfig  `koanf:"workspaces"`
 }
 
 // SearchConfig holds search configuration.
@@ -100,6 +109,18 @@ type TelemetryConfig struct {
 type LoggingConfig struct {
 	Level string `koanf:"level"`
 	File  string `koanf:"file"`
+}
+
+// SummarizationConfig holds summarization configuration.
+type SummarizationConfig struct {
+	Enabled           bool    `koanf:"enabled"`
+	ProviderURL       string  `koanf:"provider_url"`
+	APIKey            string  `koanf:"api_key"`
+	Model             string  `koanf:"model"`
+	MaxTokens         int     `koanf:"max_tokens"`
+	Concurrency       int     `koanf:"concurrency"`
+	RequestsPerSecond float64 `koanf:"requests_per_second"`
+	OutputDir         string  `koanf:"output_dir"`
 }
 
 // Load loads configuration from file and environment variables.
@@ -166,9 +187,10 @@ func Load(configPath string) (*Config, error) {
 
 	// Special non-prefixed env vars
 	specialEnvVars := map[string]string{
-		"VOYAGE_API_KEY":       "embedding.voyage_api_key",
-		"DATABASE_URL":         "database.url",
-		"OPENCODE_STORAGE_DIR": "harvester.opencode.session_dir",
+		"VOYAGE_API_KEY":           "embedding.voyage_api_key",
+		"DATABASE_URL":             "database.url",
+		"OPENCODE_STORAGE_DIR":     "harvester.opencode.session_dir",
+		"NANO_BRAIN_SUMMARIZE_API_KEY": "summarization.api_key",
 	}
 	for envVar, key := range specialEnvVars {
 		if value, exists := os.LookupEnv(envVar); exists {
@@ -184,12 +206,33 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	if err := expandPaths(cfg); err != nil {
+		return nil, err
+	}
+
 	// Validate configuration
 	if err := validate(cfg); err != nil {
 		return nil, err
 	}
 
 	return cfg, nil
+}
+
+// expandPaths expands "~/" prefixes in path-type config fields to the real home directory.
+// os.MkdirAll and os.Open do not interpret tilde — it must be resolved explicitly.
+func expandPaths(cfg *Config) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory for path expansion: %w", err)
+	}
+	expand := func(p string) string {
+		if strings.HasPrefix(p, "~/") {
+			return filepath.Join(home, p[2:])
+		}
+		return p
+	}
+	cfg.Summarization.OutputDir = expand(cfg.Summarization.OutputDir)
+	return nil
 }
 
 // validate checks configuration validity.
@@ -254,6 +297,16 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	// Validate Summarization
+	if cfg.Summarization.Enabled {
+		if cfg.Summarization.ProviderURL == "" {
+			errs = append(errs, errors.New("summarization.provider_url is required when summarization.enabled is true"))
+		}
+		if cfg.Summarization.Concurrency < 1 {
+			errs = append(errs, errors.New("summarization.concurrency must be >= 1 when summarization.enabled is true"))
+		}
+	}
+
 	if len(errs) > 0 {
 		var msg strings.Builder
 		msg.WriteString("configuration validation failed:")
@@ -265,6 +318,42 @@ func validate(cfg *Config) error {
 	}
 
 	return nil
+}
+
+func (w WatcherConfig) ResolveFilter(workspaceDir string) (excludePatterns, allowedExtensions []string) {
+	excludePatterns = append(excludePatterns, w.ExcludePatterns...)
+	allowedExtensions = append(allowedExtensions, w.AllowedExtensions...)
+
+	if ws, ok := w.Workspaces[workspaceDir]; ok {
+		excludePatterns = append(excludePatterns, ws.ExcludePatterns...)
+		if len(ws.AllowedExtensions) > 0 {
+			allowedExtensions = ws.AllowedExtensions
+		}
+	}
+
+	return excludePatterns, allowedExtensions
+}
+
+func (w WatcherConfig) ResolveFilterForPath(collectionPath string) (excludePatterns, allowedExtensions []string) {
+	excludePatterns = append(excludePatterns, w.ExcludePatterns...)
+	allowedExtensions = append(allowedExtensions, w.AllowedExtensions...)
+
+	best := ""
+	for wsDir, wsCfg := range w.Workspaces {
+		if strings.HasPrefix(collectionPath, wsDir) && len(wsDir) > len(best) {
+			best = wsDir
+			_ = wsCfg
+		}
+	}
+	if best != "" {
+		ws := w.Workspaces[best]
+		excludePatterns = append(excludePatterns, ws.ExcludePatterns...)
+		if len(ws.AllowedExtensions) > 0 {
+			allowedExtensions = ws.AllowedExtensions
+		}
+	}
+
+	return excludePatterns, allowedExtensions
 }
 
 // DefaultConfigPath returns the default config file path.

@@ -1,6 +1,5 @@
 # nano-brain Roadmap
 
-> Draft — brainstorm phase. Not finalized.
 > Last updated: 2026-05-25
 
 ---
@@ -18,11 +17,11 @@ Goal: agent biết context của project, lịch sử decision, và có thể d�
 
 | Feature | Description | Status |
 |---|---|---|
-| File indexing | Watch + chunk + embed toàn bộ source files | ✅ partial (watcher bug) |
-| Symbol extraction | Functions, types, interfaces, constants | 🔲 |
-| Knowledge graph | Module → function → dependency relationships | 🔲 |
-| Impact analytics | Thay đổi X → affects Y, Z (cross-file) | 🔲 |
-| Call chain tracing | Trace execution path từ entry point | 🔲 |
+| File indexing | Watch + chunk + embed toàn bộ source files | ✅ |
+| Symbol extraction | Functions, types, interfaces, constants | ✅ |
+| Knowledge graph | Module → function → dependency relationships | ✅ |
+| Impact analytics | Thay đổi X → affects Y, Z (cross-file) | ✅ |
+| Call chain tracing | Trace execution path từ entry point | ✅ |
 
 ---
 
@@ -30,10 +29,10 @@ Goal: agent biết context của project, lịch sử decision, và có thể d�
 
 **What:** Thu thập + summarize sessions từ AI tools, không lưu raw.
 
-### 2a. OpenCode Harvester (SQLite)
+### 2a. OpenCode Harvester (SQLite) ✅
 
 OpenCode đã migrate sang SQLite (`~/.local/share/opencode/opencode.db`).
-Current JSONL-based harvester không hoạt động.
+SQLite harvester implemented in `internal/harvest/opencode_sqlite.go`. Auto-detects db path.
 
 | Field | Value |
 |---|---|
@@ -55,7 +54,7 @@ harvester:
     since: 2026-01-01                              # incremental
 ```
 
-### 2b. Claude Code Harvester (JSONL)
+### 2b. Claude Code Harvester (JSONL) ✅
 
 Claude Code lưu transcripts dưới dạng JSONL.
 
@@ -109,7 +108,7 @@ harvester:
 | Semantic search | `nano-brain query "..."` | ✅ |
 | Tag-based filter | `--tags decision,auth` | ✅ |
 | Supersede | Replace stale memory entries | ✅ |
-| Auto-memory from sessions | Extract decisions từ harvested sessions | 🔲 |
+| Auto-memory from sessions | Extract decisions từ harvested sessions | ✅ |
 
 ---
 

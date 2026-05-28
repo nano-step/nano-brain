@@ -26,7 +26,7 @@ func runInitCmd(args []string, configPath string) {
 	}
 
 	var root, workspace string
-	var jsonFlag bool
+	var jsonFlag, forceFlag bool
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--root":
@@ -45,9 +45,32 @@ func runInitCmd(args []string, configPath string) {
 			workspace = args[i]
 		case "--json":
 			jsonFlag = true
+		case "--force":
+			forceFlag = true
 		default:
 			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
 			os.Exit(1)
+		}
+	}
+
+	if forceFlag && root != "" {
+		hash, err := storage.WorkspaceHash(root)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: could not resolve workspace for path %q: %v\n", root, err)
+			os.Exit(1)
+		}
+		resetData, _ := json.Marshal(map[string]string{"workspace": hash})
+		resetResp, _, err := doRequest("POST", getBaseURL()+"/api/v1/reset-workspace", bytes.NewReader(resetData))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error resetting workspace: %v\n", err)
+			os.Exit(1)
+		}
+		var resetResult struct {
+			DeletedDocuments int64  `json:"deleted_documents"`
+			Workspace        string `json:"workspace"`
+		}
+		if jsonErr := json.Unmarshal(resetResp, &resetResult); jsonErr == nil {
+			fmt.Printf("Resetting workspace %s... deleted %d documents.\n", resetResult.Workspace, resetResult.DeletedDocuments)
 		}
 	}
 
@@ -100,11 +123,22 @@ func triggerInitBackground(workspaceHash, root string) {
 		cliLog.Warn().Err(err).Str("workspace", workspaceHash).Msg("auto reindex trigger failed")
 	}
 
-	if _, status, err := doRequest("POST", getBaseURL()+"/api/harvest", nil); err != nil {
+	harvestResp, status, err := doRequest("POST", getBaseURL()+"/api/harvest", nil)
+	if err != nil {
 		if status == 503 {
 			cliLog.Info().Msg("harvest skipped: no session harvester configured")
 		} else {
 			cliLog.Warn().Err(err).Msg("auto harvest trigger failed")
+			fmt.Println("Warning: harvest failed:", err)
+		}
+	} else {
+		var result struct {
+			Harvested int `json:"harvested"`
+			Skipped   int `json:"skipped"`
+			Errors    int `json:"errors"`
+		}
+		if jsonErr := json.Unmarshal(harvestResp, &result); jsonErr == nil {
+			fmt.Printf("Harvest: %d harvested, %d skipped, %d errors\n", result.Harvested, result.Skipped, result.Errors)
 		}
 	}
 

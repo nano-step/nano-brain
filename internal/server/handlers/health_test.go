@@ -40,7 +40,7 @@ func newTestHealth(counter handlers.WorkspaceCounter) *handlers.Health {
 	getCfg := func() (config.HarvesterConfig, config.IntervalsConfig) {
 		return config.HarvesterConfig{}, config.IntervalsConfig{}
 	}
-	return handlers.NewHealth(&mockPool{}, zerolog.Nop(), "test", time.Now(), &mockQueue{}, getCfg, counter)
+	return handlers.NewHealth(&mockPool{}, zerolog.Nop(), "test", time.Now(), &mockQueue{}, getCfg, counter, config.EmbeddingConfig{Provider: "ollama"}, 0)
 }
 
 func decodeJSON(t *testing.T, r io.Reader) map[string]interface{} {

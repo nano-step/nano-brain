@@ -1,10 +1,10 @@
 -- name: UpsertDocument :one
 INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-ON CONFLICT (content_hash, workspace_hash) DO UPDATE SET
+ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
+    content_hash = EXCLUDED.content_hash,
     title = EXCLUDED.title,
     content = EXCLUDED.content,
-    source_path = EXCLUDED.source_path,
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
@@ -64,3 +64,15 @@ FROM documents
 WHERE workspace_hash = $1 AND tags IS NOT NULL AND array_length(tags, 1) > 0
 GROUP BY tag
 ORDER BY count DESC, tag;
+
+-- name: ListSessionDocumentsByWorkspace :many
+SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, content, created_at, updated_at
+FROM documents
+WHERE workspace_hash = @workspace_hash
+  AND collection = 'sessions'
+  AND (@tag_filter::text = '' OR @tag_filter::text = ANY(tags))
+ORDER BY created_at DESC
+LIMIT @lim;
+
+-- name: DeleteDocumentsByWorkspace :exec
+DELETE FROM documents WHERE workspace_hash = $1;

@@ -25,3 +25,6 @@ SELECT w.*,
     (SELECT MAX(d.updated_at) FROM documents d WHERE d.workspace_hash = w.hash) AS last_document_updated
 FROM workspaces w
 ORDER BY w.name;
+
+-- name: DeleteWorkspace :exec
+DELETE FROM workspaces WHERE hash = $1;

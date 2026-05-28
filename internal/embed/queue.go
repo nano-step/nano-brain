@@ -2,12 +2,15 @@ package embed
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	pgvector "github.com/pgvector/pgvector-go"
 	"github.com/rs/zerolog"
 
@@ -25,12 +28,16 @@ const (
 	backoffMax         = 300 * time.Second
 	rejectionThreshold = 50000
 	maxRetries         = 3
+	// maxEmbedChars is a conservative char limit per embed call.
+	// nomic-embed-text has a 2048-token context window. With ~2 chars/token worst-case
+	// (CJK, code), 4000 chars gives a safe margin below the hard limit.
+	maxEmbedChars = 4000
 )
 
 type QueueQuerier interface {
 	GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error)
-	GetAllPendingChunks(ctx context.Context, limit int32) ([]uuid.UUID, error)
-	GetAllFailedChunks(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	GetPendingChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	GetFailedChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error)
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
@@ -162,9 +169,9 @@ func (q *Queue) scanByStatus(ctx context.Context, failed bool) int {
 		var ids []uuid.UUID
 		var err error
 		if failed {
-			ids, err = q.queries.GetAllFailedChunks(ctx, scanBatchSize)
+			ids, err = q.queries.GetFailedChunksAllWorkspaces(ctx, scanBatchSize)
 		} else {
-			ids, err = q.queries.GetAllPendingChunks(ctx, scanBatchSize)
+			ids, err = q.queries.GetPendingChunksAllWorkspaces(ctx, scanBatchSize)
 		}
 		if err != nil {
 			q.logger.Error().Err(err).Bool("failed", failed).Msg("failed to scan chunks")
@@ -215,11 +222,27 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		return
 	}
 
+	q.logger.Info().
+		Str("chunk_id", chunkID.String()).
+		Str("file", chunk.SourcePath).
+		Msg("embedding chunk")
+
 	embedCtx, cancel := context.WithTimeout(ctx, embedTimeout)
 	defer cancel()
-	vec, err := q.embedder.Embed(embedCtx, chunk.Content)
+	content := truncateToMaxChars(chunk.Content, maxEmbedChars)
+	if len(content) < len(chunk.Content) {
+		q.logger.Warn().
+			Str("chunk_id", chunkID.String()).
+			Int("original_len", len(chunk.Content)).
+			Int("truncated_len", len(content)).
+			Msg("chunk truncated before embedding (exceeds context limit)")
+	}
+	vec, err := q.embedder.Embed(embedCtx, content)
 	if err != nil {
-		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("embedding failed")
+		q.logger.Error().Err(err).
+			Str("chunk_id", chunkID.String()).
+			Str("file", chunk.SourcePath).
+			Msg("embedding failed")
 		q.increaseBackoff()
 		q.handleRetry(ctx, chunkID, chunk.WorkspaceHash)
 		return
@@ -233,6 +256,13 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		Embedding:     pgvector.NewVector(vec),
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("chunk deleted before embedding insert, skipping stale chunk")
+			q.pending.Add(-1)
+			q.clearRetries(chunkID)
+			return
+		}
 		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("insert embedding failed")
 		q.pending.Add(-1)
 		return
@@ -250,7 +280,10 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 	q.pending.Add(-1)
 	q.clearRetries(chunkID)
 	q.resetBackoff()
-	q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("chunk embedded")
+	q.logger.Info().
+		Str("chunk_id", chunkID.String()).
+		Str("file", chunk.SourcePath).
+		Msg("chunk embedded")
 }
 
 func (q *Queue) increaseBackoff() {
@@ -305,6 +338,17 @@ func (q *Queue) clearRetries(chunkID uuid.UUID) {
 	q.retriesMu.Lock()
 	delete(q.retries, chunkID)
 	q.retriesMu.Unlock()
+}
+
+func truncateToMaxChars(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	truncated := s[:max]
+	for len(truncated) > 0 && !utf8.ValidString(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return truncated
 }
 
 func (q *Queue) checkCapacity() {

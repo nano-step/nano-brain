@@ -48,26 +48,13 @@ func runInteractiveInit(configPath string) {
 		fmt.Println()
 	}
 
+	// ── Database ──────────────────────────────────────────────────────────
+	fmt.Print("── Database ──\n")
+	fmt.Println("  PostgreSQL connection string. Format: postgres://user:pass@host:port/db")
 	dbURL = promptWithDefault(scanner, "PostgreSQL URL", dbURL)
-	provider = promptWithDefault(scanner, "Embedding provider (ollama/voyage)", provider)
 
-	if provider == "voyage" {
-		model = promptWithDefault(scanner, "Embedding model", "voyage-3")
-		envKey := os.Getenv("VOYAGE_API_KEY")
-		def := ""
-		if envKey != "" {
-			def = "(from env)"
-		}
-		_ = promptWithDefault(scanner, "Voyage API key", def)
-	} else {
-		if detectOllama(embURL) {
-			fmt.Printf("  Ollama detected at %s\n", embURL)
-		} else {
-			embURL = promptWithDefault(scanner, "Ollama URL", embURL)
-		}
-		model = promptWithDefault(scanner, "Embedding model", model)
-	}
-
+	// ── Server ────────────────────────────────────────────────────────────
+	fmt.Print("\n── Server ──\n")
 	portStr := promptWithDefault(scanner, "Server port", strconv.Itoa(port))
 	p, err := strconv.Atoi(portStr)
 	if err != nil || p < 1 || p > 65535 {
@@ -76,17 +63,43 @@ func runInteractiveInit(configPath string) {
 	}
 	port = p
 
+	// ── Embedding ─────────────────────────────────────────────────────────
+	fmt.Print("\n── Embedding ──\n")
+	fmt.Println("  Converts text chunks into vectors for semantic search.")
+	fmt.Println("  Providers: ollama (local, free) | voyage (cloud, higher quality)")
+	provider = promptWithDefault(scanner, "Embedding provider (ollama/voyage)", provider)
+
 	var embBlock string
 	if provider == "voyage" {
-		embBlock = fmt.Sprintf("embedding:\n  provider: voyage\n  model: %s\n  concurrency: 3\n", model)
+		model = promptWithDefault(scanner, "Embedding model", "voyage-3")
+		envKey := os.Getenv("VOYAGE_API_KEY")
+		def := ""
+		if envKey != "" {
+			def = "(from env)"
+		}
+		_ = promptWithDefault(scanner, "Voyage API key (or set VOYAGE_API_KEY env)", def)
+		embConcurrency := promptWithDefault(scanner, "Embedding concurrency (parallel requests)", "3")
+		embBlock = fmt.Sprintf("embedding:\n  provider: voyage\n  model: %s\n  concurrency: %s\n", model, embConcurrency)
 	} else {
-		embBlock = fmt.Sprintf("embedding:\n  provider: %s\n  url: %s\n  model: %s\n  concurrency: 3\n", provider, embURL, model)
+		if detectOllama(embURL) {
+			fmt.Printf("  ✓ Ollama detected at %s\n", embURL)
+		} else {
+			fmt.Println("  Ollama not found at default URL. Make sure Ollama is running.")
+			embURL = promptWithDefault(scanner, "Ollama URL", embURL)
+		}
+		fmt.Println("  Recommended embed models: nomic-embed-text (fast), mxbai-embed-large (better quality)")
+		model = promptWithDefault(scanner, "Embedding model", model)
+		embConcurrency := promptWithDefault(scanner, "Embedding concurrency (parallel Ollama requests)", "3")
+		embBlock = fmt.Sprintf("embedding:\n  provider: %s\n  url: %s\n  model: %s\n  concurrency: %s\n", provider, embURL, model, embConcurrency)
 	}
 
+	// ── Harvester ─────────────────────────────────────────────────────────
 	fmt.Print("\n── Harvester (session indexing) ──\n")
+	fmt.Println("  Harvests AI coding sessions (OpenCode / Claude Code) into the memory index.")
+
 	detectedOC := detectOpenCodeStorageDir()
 	if detectedOC != "" {
-		fmt.Printf("  OpenCode storage auto-detected: %s\n", detectedOC)
+		fmt.Printf("  ✓ OpenCode storage auto-detected: %s\n", detectedOC)
 	} else {
 		fmt.Println("  OpenCode storage not found automatically.")
 	}
@@ -94,11 +107,12 @@ func runInteractiveInit(configPath string) {
 
 	detectedCC := detectClaudeCodeStorageDir()
 	if detectedCC != "" {
-		fmt.Printf("  Claude Code storage auto-detected: %s\n", detectedCC)
+		fmt.Printf("  ✓ Claude Code storage auto-detected: %s\n", detectedCC)
+	} else {
+		fmt.Println("  Claude Code storage not found automatically.")
 	}
 	ccSessionDir := promptWithDefault(scanner, "Claude Code session_dir (leave blank to skip)", detectedCC)
 
-	var harvesterBlock string
 	ocLine := "\"\""
 	if ocSessionDir != "" {
 		ocLine = ocSessionDir
@@ -108,8 +122,97 @@ func runInteractiveInit(configPath string) {
 	if ccSessionDir != "" {
 		ccLine = ccSessionDir
 	}
-	harvesterBlock = fmt.Sprintf("\nharvester:\n  opencode:\n    session_dir: %s\n  claudecode:\n    enabled: %v\n    session_dir: %s\n", ocLine, ccEnabled, ccLine)
 
+	fmt.Println("  Session poll interval: how often (seconds) to check for new sessions.")
+	sessionPollStr := promptWithDefault(scanner, "Session poll interval (seconds)", "120")
+	sessionPoll, err2 := strconv.Atoi(sessionPollStr)
+	if err2 != nil || sessionPoll < 10 {
+		sessionPoll = 120
+	}
+	harvesterBlock := fmt.Sprintf("\nharvester:\n  opencode:\n    session_dir: %s\n  claudecode:\n    enabled: %v\n    session_dir: %s\n\nintervals:\n  session_poll: %d\n", ocLine, ccEnabled, ccLine, sessionPoll)
+
+	// ── Summarization ─────────────────────────────────────────────────────
+	fmt.Print("\n── Summarization (LLM session summaries) ──\n")
+	fmt.Println("  Uses an LLM to summarize harvested sessions into condensed memory notes.")
+	fmt.Println("  Requires an OpenAI-compatible chat endpoint (Ollama, OpenAI, Anthropic proxy, etc.)")
+
+	sumEnabled := promptWithDefault(scanner, "Enable session summarization? (y/n)", "n")
+	sumEnabledBool := sumEnabled == "y" || sumEnabled == "Y"
+
+	var summaryBlock string
+	if sumEnabledBool {
+		// Auto-detect Ollama as default summarization provider
+		defaultSumURL := ""
+		defaultSumModel := ""
+		if detectOllama(embURL) {
+			// Ollama v1-compat endpoint
+			defaultSumURL = strings.TrimSuffix(embURL, "/") + "/v1"
+			fmt.Printf("  ✓ Ollama detected — defaulting provider_url to %s\n", defaultSumURL)
+			fmt.Println("  Make sure you have a chat model pulled (e.g. ollama pull llama3.2)")
+			defaultSumModel = "llama3.2"
+		}
+
+		sumProviderURL := promptWithDefault(scanner, "LLM provider URL (OpenAI-compatible /v1 base)", defaultSumURL)
+		if sumProviderURL == "" {
+			fmt.Fprintln(os.Stderr, "  provider_url is required when summarization is enabled.")
+			os.Exit(1)
+		}
+		sumAPIKey := promptWithDefault(scanner, "LLM API key (leave blank to use NANO_BRAIN_SUMMARIZE_API_KEY env)", "")
+		if defaultSumModel == "" {
+			defaultSumModel = "gpt-4o-mini"
+		}
+		sumModel := promptWithDefault(scanner, "LLM model name", defaultSumModel)
+		fmt.Println("  max_tokens: max output tokens per summary chunk (not input context).")
+		sumMaxTokens := promptWithDefault(scanner, "Max tokens per summary", "1024")
+		fmt.Println("  concurrency: parallel LLM calls during map phase. Keep low for local Ollama.")
+		sumConcurrency := promptWithDefault(scanner, "Parallel LLM calls", "1")
+		fmt.Println("  requests_per_second: rate limit to avoid overloading provider (0 = unlimited).")
+		sumRPS := promptWithDefault(scanner, "Rate limit (requests/second, 0 = unlimited)", "1")
+		sumOutputDir := promptWithDefault(scanner, "Summary output directory", "~/.nano-brain/summaries")
+
+		apiKeyLine := ""
+		if sumAPIKey != "" {
+			apiKeyLine = fmt.Sprintf("\n  api_key: %s", sumAPIKey)
+		} else {
+			apiKeyLine = "\n  # api_key: set NANO_BRAIN_SUMMARIZE_API_KEY env var"
+		}
+		summaryBlock = fmt.Sprintf("\nsummarization:\n  enabled: true\n  provider_url: %s%s\n  model: %s\n  max_tokens: %s\n  concurrency: %s\n  requests_per_second: %s\n  output_dir: %s\n",
+			sumProviderURL, apiKeyLine, sumModel, sumMaxTokens, sumConcurrency, sumRPS, sumOutputDir)
+	} else {
+		summaryBlock = "\nsummarization:\n  enabled: false\n"
+	}
+
+	// ── Search ────────────────────────────────────────────────────────────
+	fmt.Print("\n── Search tuning ──\n")
+	fmt.Println("  Controls how BM25 + vector results are fused and ranked.")
+	fmt.Println("  rrf_k: Reciprocal Rank Fusion constant (higher = smoother blending, default 60).")
+	rrfK := promptWithDefault(scanner, "RRF k constant", "60")
+	fmt.Println("  recency_weight: boost for recent documents (0 = off, 1 = strong boost, default 0.3).")
+	recencyWeight := promptWithDefault(scanner, "Recency weight (0.0–1.0)", "0.3")
+	fmt.Println("  recency_half_life_days: days until recency boost halves (default 180).")
+	recencyHalfLife := promptWithDefault(scanner, "Recency half-life (days)", "180")
+	fmt.Println("  limit: default max results returned per query.")
+	searchLimit := promptWithDefault(scanner, "Default result limit", "20")
+	searchBlock := fmt.Sprintf("\nsearch:\n  rrf_k: %s\n  recency_weight: %s\n  recency_half_life_days: %s\n  limit: %s\n", rrfK, recencyWeight, recencyHalfLife, searchLimit)
+
+	// ── Watcher ───────────────────────────────────────────────────────────
+	fmt.Print("\n── Watcher (file indexing) ──\n")
+	fmt.Println("  Watches collection directories for file changes and re-indexes automatically.")
+	fmt.Println("  debounce_ms: wait after last file change before triggering re-index (default 2000ms).")
+	debounceMs := promptWithDefault(scanner, "Debounce delay (ms)", "2000")
+	fmt.Println("  reindex_interval: full re-scan interval in seconds (default 300 = 5 min).")
+	reindexInterval := promptWithDefault(scanner, "Full reindex interval (seconds)", "300")
+	watcherBlock := fmt.Sprintf("\nwatcher:\n  debounce_ms: %s\n  reindex_interval: %s\n", debounceMs, reindexInterval)
+
+	// ── Logging ───────────────────────────────────────────────────────────
+	fmt.Print("\n── Logging ──\n")
+	fmt.Println("  level: trace | debug | info | warn | error")
+	logLevel := promptWithDefault(scanner, "Log level", "info")
+	fmt.Println("  file: path to log file. Uses default path if left blank.")
+	logFile := promptWithDefault(scanner, "Log file path", defaultLogPath())
+	loggingBlock := fmt.Sprintf("\nlogging:\n  level: %s\n  file: %s\n", logLevel, logFile)
+
+	// ── Assemble YAML ─────────────────────────────────────────────────────
 	yaml := fmt.Sprintf(`server:
   host: localhost
   port: %d
@@ -117,20 +220,7 @@ func runInteractiveInit(configPath string) {
 database:
   url: %s
 
-%s
-search:
-  rrf_k: 60
-  recency_weight: 0.3
-  recency_half_life_days: 180
-  limit: 20
-
-watcher:
-  debounce_ms: 2000
-  reindex_interval: 300
-
-logging:
-  level: info
-%s`, port, dbURL, embBlock, harvesterBlock)
+%s%s%s%s%s%s`, port, dbURL, embBlock, harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock)
 
 	fmt.Println("\n── Config preview ──────────────")
 	fmt.Print(yaml)
@@ -156,8 +246,7 @@ logging:
 
 	runDoctorCmd([]string{}, configPath)
 
-	cwd, _ := os.Getwd()
-	wsDir := promptWithDefault(scanner, "Register workspace directory?", cwd)
+	wsDir := promptWithDefault(scanner, "Register workspace directory?", "")
 	if wsDir != "" {
 		fmt.Printf("\nTo register this workspace, start the server and run:\n")
 		fmt.Printf("  nano-brain init --root %s\n\n", wsDir)

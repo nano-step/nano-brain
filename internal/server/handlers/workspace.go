@@ -3,13 +3,17 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
 )
 
@@ -49,8 +53,12 @@ func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath 
 		return sqlc.Workspace{}, err
 	}
 
-	memoryPath := "~/.nano-brain/memory/"
-	sessionsPath := "~/.nano-brain/sessions/"
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return sqlc.Workspace{}, fmt.Errorf("failed to get home directory: %w", err)
+	}
+	memoryPath := filepath.Join(home, ".nano-brain", "memory")
+	sessionsPath := filepath.Join(home, ".nano-brain", "sessions")
 
 	if _, err := q.UpsertCollection(ctx, sqlc.UpsertCollectionParams{
 		WorkspaceHash: ws.Hash,
@@ -88,7 +96,7 @@ func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath 
 // InitWorkspace handles POST /api/v1/init. When db is non-nil, all three DB
 // operations are wrapped in a single transaction. Pass nil db in tests that
 // use a mock querier.
-func InitWorkspace(q WorkspaceQuerier, db *sql.DB, logger zerolog.Logger) echo.HandlerFunc {
+func InitWorkspace(q WorkspaceQuerier, db *sql.DB, fw *watcher.Watcher, watcherCfg config.WatcherConfig, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req initRequest
 		if err := c.Bind(&req); err != nil {
@@ -131,6 +139,26 @@ func InitWorkspace(q WorkspaceQuerier, db *sql.DB, logger zerolog.Logger) echo.H
 			if err != nil {
 				logger.Error().Err(err).Str("hash", hash).Msg("init workspace failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to register workspace")
+			}
+		}
+
+		if fw != nil {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				logger.Warn().Err(err).Msg("failed to get home directory for watcher paths")
+				home = "~"
+			}
+			type colSpec struct{ name, path, glob string }
+			cols := []colSpec{
+				{"memory", filepath.Join(home, ".nano-brain", "memory"), "**/*"},
+				{"sessions", filepath.Join(home, ".nano-brain", "sessions"), "**/*"},
+				{"code", absPath, "**/*"},
+			}
+			cfgExclude, cfgExtensions := watcherCfg.ResolveFilterForPath(absPath)
+			for _, col := range cols {
+				if err := fw.WatchWithFilter(col.name, col.path, hash, col.glob, cfgExclude, cfgExtensions); err != nil {
+					logger.Warn().Err(err).Str("collection", col.name).Msg("failed to attach watcher after init")
+				}
 			}
 		}
 
