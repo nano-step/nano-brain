@@ -67,7 +67,6 @@ func getDefaults() *Config {
 			Model:       "nano-brain",
 			MaxTokens:   4096,
 			Concurrency: 3,
-			OutputDir:   "~/.nano-brain/summaries",
 		},
 	}
 }

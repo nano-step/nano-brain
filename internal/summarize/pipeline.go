@@ -40,7 +40,8 @@ type SessionMetadata struct {
 	ParentID    string
 	ParentTitle string
 	Children    []RelatedSession
-	Siblings    []RelatedSession
+	Siblings      []RelatedSession
+	WorkspaceHash string
 }
 
 // RelatedSession describes a parent/child/sibling session.

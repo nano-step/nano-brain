@@ -422,6 +422,36 @@ func contains(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
 
+func TestSummarizationConfig_OutputDirIgnored(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yamlContent := `summarization:
+  enabled: true
+  provider_url: "https://test/v1"
+  model: "test-model"
+  output_dir: /tmp/foo
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if !cfg.Summarization.Enabled {
+		t.Error("expected Summarization.Enabled=true, got false")
+	}
+	if cfg.Summarization.ProviderURL != "https://test/v1" {
+		t.Errorf("expected ProviderURL=%q, got %q", "https://test/v1", cfg.Summarization.ProviderURL)
+	}
+	if cfg.Summarization.Model != "test-model" {
+		t.Errorf("expected Model=%q, got %q", "test-model", cfg.Summarization.Model)
+	}
+}
+
 func TestResolveFilter_GlobalOnly(t *testing.T) {
 	cfg := WatcherConfig{
 		ExcludePatterns:   []string{"*.log"},

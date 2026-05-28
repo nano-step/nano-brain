@@ -168,7 +168,6 @@ func runInteractiveInit(configPath string) {
 		sumConcurrency := promptWithDefault(scanner, "Parallel LLM calls", "1")
 		fmt.Println("  requests_per_second: rate limit to avoid overloading provider (0 = unlimited).")
 		sumRPS := promptWithDefault(scanner, "Rate limit (requests/second, 0 = unlimited)", "1")
-		sumOutputDir := promptWithDefault(scanner, "Summary output directory", "~/.nano-brain/summaries")
 
 		apiKeyLine := ""
 		if sumAPIKey != "" {
@@ -176,8 +175,8 @@ func runInteractiveInit(configPath string) {
 		} else {
 			apiKeyLine = "\n  # api_key: set NANO_BRAIN_SUMMARIZE_API_KEY env var"
 		}
-		summaryBlock = fmt.Sprintf("\nsummarization:\n  enabled: true\n  provider_url: %s%s\n  model: %s\n  max_tokens: %s\n  concurrency: %s\n  requests_per_second: %s\n  output_dir: %s\n",
-			sumProviderURL, apiKeyLine, sumModel, sumMaxTokens, sumConcurrency, sumRPS, sumOutputDir)
+		summaryBlock = fmt.Sprintf("\nsummarization:\n  enabled: true\n  provider_url: %s%s\n  model: %s\n  max_tokens: %s\n  concurrency: %s\n  requests_per_second: %s\n",
+			sumProviderURL, apiKeyLine, sumModel, sumMaxTokens, sumConcurrency, sumRPS)
 	} else {
 		summaryBlock = "\nsummarization:\n  enabled: false\n"
 	}

@@ -7,10 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
@@ -25,27 +21,20 @@ type PersisterEnqueuer interface {
 	Enqueue(chunkID uuid.UUID) bool
 }
 
-// Persister saves a summary markdown to disk and upserts it into the DB.
+// Persister saves a summary to the DB.
 type Persister struct {
-	db        *sql.DB
-	outputDir string
-	workspace string
-	enqueuer  PersisterEnqueuer
-	logger    zerolog.Logger
+	db       *sql.DB
+	enqueuer PersisterEnqueuer
+	logger   zerolog.Logger
 }
 
-// NewPersister constructs a Persister and ensures the output directory exists.
-func NewPersister(db *sql.DB, outputDir string, workspace string, enqueuer PersisterEnqueuer, logger zerolog.Logger) (*Persister, error) {
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return nil, fmt.Errorf("summary output_dir %q: %w", outputDir, err)
-	}
+// NewPersister constructs a Persister.
+func NewPersister(db *sql.DB, enqueuer PersisterEnqueuer, logger zerolog.Logger) *Persister {
 	return &Persister{
-		db:        db,
-		outputDir: outputDir,
-		workspace: workspace,
-		enqueuer:  enqueuer,
-		logger:    logger.With().Str("component", "summary-persister").Logger(),
-	}, nil
+		db:       db,
+		enqueuer: enqueuer,
+		logger:   logger.With().Str("component", "summary-persister").Logger(),
+	}
 }
 
 // Save writes summaryMarkdown to a file and upserts it in the document store.
@@ -59,15 +48,11 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 	q := sqlc.New(p.db)
 	existing, lookupErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    sourcePath,
-		WorkspaceHash: p.workspace,
+		WorkspaceHash: meta.WorkspaceHash,
 	})
 	if lookupErr == nil && existing.ContentHash == contentHash {
 		p.logger.Debug().Str("source_path", sourcePath).Msg("summary unchanged, skipping")
 		return nil
-	}
-
-	if err := p.writeFile(summaryMarkdown, meta); err != nil {
-		return fmt.Errorf("persist: write file: %w", err)
 	}
 
 	title := "Summary: " + meta.Title
@@ -91,7 +76,7 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 
 	tq := sqlc.New(tx)
 	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
-		WorkspaceHash: p.workspace,
+		WorkspaceHash: meta.WorkspaceHash,
 		ContentHash:   contentHash,
 		Title:         title,
 		Content:       summaryMarkdown,
@@ -109,7 +94,7 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 		chunkHash := sha256.Sum256([]byte(c.Content))
 		chunkID, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
 			DocumentID:    docRow.ID,
-			WorkspaceHash: p.workspace,
+			WorkspaceHash: meta.WorkspaceHash,
 			ContentHash:   hex.EncodeToString(chunkHash[:]),
 			Content:       c.Content,
 			ChunkIndex:    int32(i),
@@ -140,38 +125,6 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 		Msg("summary persisted")
 
 	return nil
-}
-
-// writeFile writes the summary markdown to {outputDir}/{source}_{title_slug}_{date}.md.
-func (p *Persister) writeFile(summaryMarkdown string, meta SessionMetadata) error {
-	if err := os.MkdirAll(p.outputDir, 0755); err != nil {
-		return fmt.Errorf("mkdir output_dir: %w", err)
-	}
-	slug := titleSlug(meta.Title)
-	date := meta.CreatedAt.Format("2006-01-02")
-	filename := fmt.Sprintf("%s_%s_%s.md", string(meta.Source), slug, date)
-	path := filepath.Join(p.outputDir, filename)
-	if err := os.WriteFile(path, []byte(summaryMarkdown), 0644); err != nil {
-		return fmt.Errorf("write file %s: %w", path, err)
-	}
-	return nil
-}
-
-var reNonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
-
-// titleSlug converts a title to a URL-safe slug (max 80 chars).
-func titleSlug(title string) string {
-	s := strings.ToLower(title)
-	s = reNonAlnum.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
-	if len(s) > 80 {
-		s = s[:80]
-		s = strings.TrimRight(s, "-")
-	}
-	if s == "" {
-		s = "untitled"
-	}
-	return s
 }
 
 // buildSourcePath returns the canonical source path for summary documents.

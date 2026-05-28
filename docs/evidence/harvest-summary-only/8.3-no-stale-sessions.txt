@@ -1,0 +1,8 @@
+=== Task 8.3: No stale docs in sessions collection ===
+Query: SELECT source_path, collection, metadata->>'fallback' FROM documents WHERE collection = 'sessions'
+
+Result: (empty — no rows)
+
+Expected: No NEW docs in sessions collection (summarization succeeded, no fallback needed)
+Actual: Zero rows in sessions collection
+VERDICT: PASS

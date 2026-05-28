@@ -120,7 +120,6 @@ type SummarizationConfig struct {
 	MaxTokens         int     `koanf:"max_tokens"`
 	Concurrency       int     `koanf:"concurrency"`
 	RequestsPerSecond float64 `koanf:"requests_per_second"`
-	OutputDir         string  `koanf:"output_dir"`
 }
 
 // Load loads configuration from file and environment variables.
@@ -221,17 +220,6 @@ func Load(configPath string) (*Config, error) {
 // expandPaths expands "~/" prefixes in path-type config fields to the real home directory.
 // os.MkdirAll and os.Open do not interpret tilde — it must be resolved explicitly.
 func expandPaths(cfg *Config) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory for path expansion: %w", err)
-	}
-	expand := func(p string) string {
-		if strings.HasPrefix(p, "~/") {
-			return filepath.Join(home, p[2:])
-		}
-		return p
-	}
-	cfg.Summarization.OutputDir = expand(cfg.Summarization.OutputDir)
 	return nil
 }
 

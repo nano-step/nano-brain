@@ -99,13 +99,14 @@ func TriggerSummarize(
 				}
 			}
 
-			source := sourceFromTags(doc.Tags)
-			meta := harvest.SummaryMeta{
-				Source:    source,
-				SessionID: sessionID,
-				Title:     strings.TrimPrefix(doc.Title, "Session: "),
-				CreatedAt: doc.CreatedAt,
-			}
+		source := sourceFromTags(doc.Tags)
+		meta := harvest.SummaryMeta{
+			Source:        source,
+			SessionID:     sessionID,
+			Title:         strings.TrimPrefix(doc.Title, "Session: "),
+			CreatedAt:     doc.CreatedAt,
+			WorkspaceHash: workspace,
+		}
 
 			if err := s.SummarizeAndPersist(ctx, doc.Content, meta); err != nil {
 				reqLog.Warn().Err(err).Str("session_id", sessionID).Msg("summarize_failed")

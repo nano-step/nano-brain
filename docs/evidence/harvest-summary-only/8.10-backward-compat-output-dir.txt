@@ -1,0 +1,17 @@
+=== Task 8.10: Backward-Compatible Config (M4) ===
+
+Config: output_dir: /tmp/nano-brain-section8/summaries added to summarization section
+
+Server startup:
+  - Started cleanly (PID obtained, health check passed)
+  - No errors or fatals in log
+
+Files in /tmp/nano-brain-section8/summaries/:
+  ls: cannot access '/tmp/nano-brain-section8/summaries/': No such file or directory
+  (directory not created, no .md files written)
+
+Errors in log: (none)
+
+Expected: Server starts without error, no .md files written (output_dir parsed but not used)
+Actual: Matches expected. M4 backward-compat working.
+VERDICT: PASS

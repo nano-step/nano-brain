@@ -1,0 +1,16 @@
+=== Task 8.6: Structured Log Verification ===
+
+Opencode harvester cycle log lines (component=opencode-sqlite-harvester):
+
+Cycle 1 (initial harvest):
+  {"level":"info","component":"opencode-sqlite-harvester","source":"opencode","summary_success":3,"summary_fallback":0,"skipped":0,"active":0,"errors":0,"time":"2026-05-28T11:20:58Z","message":"harvest cycle complete"}
+
+Cycle 2 (manual POST /api/harvest):
+  {"level":"info","component":"opencode-sqlite-harvester","source":"opencode","summary_success":0,"summary_fallback":0,"skipped":3,"active":0,"errors":0,"time":"2026-05-28T11:20:58Z","message":"harvest cycle complete"}
+
+Cycle 3 (periodic auto-harvest):
+  {"level":"info","component":"opencode-sqlite-harvester","source":"opencode","summary_success":0,"summary_fallback":0,"skipped":3,"active":0,"errors":0,"time":"2026-05-28T11:22:58Z","message":"harvest cycle complete"}
+
+Expected: Exactly one INFO log per harvest cycle with all M3 counters.
+Actual: Each cycle emits exactly one line with source, summary_success, summary_fallback, skipped, active, errors.
+VERDICT: PASS

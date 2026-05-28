@@ -1,0 +1,24 @@
+=== Task 8.7: LLM Failure -> Fallback ===
+
+Config: provider_url set to http://invalid-url-xxx.local/v1 (DNS failure)
+
+Log evidence:
+  - LLM request failed: "dial tcp: lookup invalid-url-xxx.local on 127.0.0.11:53: no such host"
+  - 3 retries per session, all failed
+  - "summarization failed, falling back to raw" for each session
+  - "raw fallback persisted" with fallback:true for each
+
+Harvest cycle log:
+  {"component":"opencode-sqlite-harvester","source":"opencode","summary_success":0,"summary_fallback":3,"skipped":0,"active":0,"errors":0}
+
+DB state after fallback:
+  summary://opencode/test-active    collection=sessions fallback=true workspace_hash=22847dd8...
+  summary://opencode/test-success-1 collection=sessions fallback=true workspace_hash=22847dd8...
+  summary://opencode/test-success-2 collection=sessions fallback=true workspace_hash=22847dd8...
+
+Collections count:
+  sessions: 3
+
+Expected: Fallback docs at summary://opencode/<id> with collection="sessions", metadata.fallback=true
+Actual: Matches expected exactly. B1 unified path + M2 fallback marker working.
+VERDICT: PASS

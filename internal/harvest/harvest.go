@@ -15,7 +15,8 @@ type SummaryMeta struct {
 	ProjectPath string
 	CreatedAt   time.Time
 	Duration    time.Duration
-	ParentID    string
+	ParentID      string
+	WorkspaceHash string
 }
 
 // SessionSummarizer is called after a successful harvest to generate and persist session summaries.

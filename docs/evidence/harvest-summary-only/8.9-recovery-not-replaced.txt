@@ -1,0 +1,28 @@
+=== Task 8.9: LLM Recovery Test (B2 Trade-off) ===
+
+Pre-condition: LLM re-enabled (valid provider_url). 3 fallback docs exist from 8.7.
+
+Harvest cycle log (auto-harvest on startup):
+  {"component":"opencode-sqlite-harvester","source":"opencode","summary_success":0,"summary_fallback":0,"skipped":3,"active":0,"errors":0}
+
+DB state after recovery:
+  summary://opencode/test-active    collection=sessions fallback=true
+  summary://opencode/test-success-1 collection=sessions fallback=true
+  summary://opencode/test-success-2 collection=sessions fallback=true
+
+Collections:
+  sessions: 3
+
+Key observations:
+  - skipped=3: fallback docs match content_hash, so skip-check fires
+  - NO new session-summary docs created (LLM not called)
+  - Fallback docs REMAIN with collection=sessions and fallback=true
+  - This is the B2 known trade-off: fallback docs are never auto-replaced
+
+Manual recovery procedure (documented):
+  DELETE FROM documents WHERE source_path='summary://opencode/<id>' AND collection='sessions'
+  Then re-trigger harvest to get proper LLM summaries.
+
+Expected: Fallback docs remain at collection=sessions with fallback=true, NOT auto-replaced
+Actual: Matches expected exactly.
+VERDICT: PASS
