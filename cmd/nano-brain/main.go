@@ -428,7 +428,14 @@ func buildHarvestSummarizer(cfg *config.Config, db *sql.DB, eq *embed.Queue, log
 		logger.Warn().Msg("pipeline init returned nil, disabling summarization")
 		return nil
 	}
-	persister := summarize.NewPersister(db, eq, logger)
+	// Avoid nil-interface trap: a nil *embed.Queue stored in a PersisterEnqueuer
+	// interface produces a non-nil interface with nil dynamic value, bypassing
+	// the `p.enqueuer != nil` check in Persister.Save and panicking on Enqueue.
+	var enqueuer summarize.PersisterEnqueuer
+	if eq != nil {
+		enqueuer = eq
+	}
+	persister := summarize.NewPersister(db, enqueuer, logger)
 	if persister == nil {
 		logger.Warn().Msg("persister init returned nil, disabling summarization")
 		return nil

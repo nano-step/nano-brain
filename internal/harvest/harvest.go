@@ -8,13 +8,13 @@ import (
 
 // SummaryMeta carries session metadata from a harvester to the summarizer.
 type SummaryMeta struct {
-	Source      string
-	SessionID   string
-	Title       string
-	Agent       string
-	ProjectPath string
-	CreatedAt   time.Time
-	Duration    time.Duration
+	Source        string
+	SessionID     string
+	Title         string
+	Agent         string
+	ProjectPath   string
+	CreatedAt     time.Time
+	Duration      time.Duration
 	ParentID      string
 	WorkspaceHash string
 }

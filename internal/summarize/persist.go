@@ -37,7 +37,7 @@ func NewPersister(db *sql.DB, enqueuer PersisterEnqueuer, logger zerolog.Logger)
 	}
 }
 
-// Save writes summaryMarkdown to a file and upserts it in the document store.
+// Save upserts summaryMarkdown into the document store.
 // It is idempotent: if the content hash matches the stored hash, it skips all work.
 func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta SessionMetadata) error {
 	sum := sha256.Sum256([]byte(summaryMarkdown))

@@ -431,6 +431,14 @@ func (h *OpenCodeSQLiteHarvester) writeRawFallback(
 		return fmt.Errorf("upsert document: %w", err)
 	}
 
+	if err := tq.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
+		DocumentID:    docRow.ID,
+		WorkspaceHash: wsHash,
+	}); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete old chunks: %w", err)
+	}
+
 	var chunkIDs []uuid.UUID
 	for i, c := range chunks {
 		chunkHash := sha256.Sum256([]byte(c.Content))
