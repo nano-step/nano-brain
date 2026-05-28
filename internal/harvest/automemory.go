@@ -58,6 +58,7 @@ func (e *AutoMemoryExtractor) ExtractAndStore(ctx context.Context, sessionID, se
 	q := sqlc.New(e.db)
 	stored := 0
 
+memoryLoop:
 	for _, m := range memories {
 		sourcePath := "automemory://" + sessionID + "/" + string(m.kind) + "/" + shortHash(m.content)
 		existing, err := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
@@ -114,8 +115,9 @@ func (e *AutoMemoryExtractor) ExtractAndStore(ctx context.Context, sessionID, se
 				Metadata:      pqtype.NullRawMessage{},
 			})
 			if err != nil {
-				e.logger.Warn().Err(err).Str("session", sessionID).Msg("auto-memory chunk upsert failed")
-				continue
+				_ = tx.Rollback()
+				e.logger.Warn().Err(err).Str("session", sessionID).Int("chunk", i).Msg("auto-memory chunk upsert failed, rolling back")
+				continue memoryLoop
 			}
 			if enqueuer != nil {
 				enqueuer.Enqueue(chunkID)

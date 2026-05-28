@@ -2,6 +2,7 @@ package embed
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -9,7 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgconn"
 	pgvector "github.com/pgvector/pgvector-go"
 	"github.com/rs/zerolog"
 
@@ -255,7 +256,8 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		Embedding:     pgvector.NewVector(vec),
 	})
 	if err != nil {
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 			q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("chunk deleted before embedding insert, skipping stale chunk")
 			q.pending.Add(-1)
 			q.clearRetries(chunkID)

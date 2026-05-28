@@ -249,6 +249,8 @@ func (c *Client) parseSSE(body io.Reader) (string, TokenUsage, error) {
 	var usage TokenUsage
 
 	scanner := bufio.NewScanner(body)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024) // allow up to 1MB SSE lines
 	for scanner.Scan() {
 		line := scanner.Text()
 

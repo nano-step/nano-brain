@@ -306,7 +306,7 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if col.filter != nil && col.filter.shouldSkip(path) {
+		if col.filter != nil && col.filter.shouldSkip(path, d.IsDir()) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -489,7 +489,8 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 			SourceFile:    e.SourceFile,
 			Metadata:      meta,
 		}); err != nil {
-			w.logger.Warn().Err(err).Str("edge", e.SourceNode+"->"+e.TargetNode).Msg("graph edge upsert failed")
+			w.logger.Warn().Err(err).Str("edge", e.SourceNode+"->"+e.TargetNode).Msg("graph edge upsert failed, rolling back")
+			return
 		}
 	}
 

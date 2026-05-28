@@ -65,7 +65,7 @@ func newFileFilter(rootDir string, excludePatterns, allowedExtensions []string) 
 	return f
 }
 
-func (f *fileFilter) shouldSkip(absPath string) bool {
+func (f *fileFilter) shouldSkip(absPath string, isDir bool) bool {
 	rel, err := filepath.Rel(f.rootDir, absPath)
 	if err != nil {
 		rel = absPath
@@ -95,7 +95,7 @@ func (f *fileFilter) shouldSkip(absPath string) bool {
 		}
 	}
 
-	if len(f.allowedExtensions) > 0 {
+	if len(f.allowedExtensions) > 0 && !isDir {
 		ext := strings.ToLower(filepath.Ext(absPath))
 		if !f.allowedExtensions[ext] {
 			return true

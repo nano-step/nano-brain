@@ -113,6 +113,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 
 	q := sqlc.New(h.pgDB)
 	wsCache := make(map[string]string) // worktree → wsHash
+sessionLoop:
 	for _, sess := range sessions {
 		// Derive workspace hash for this session's project
 		worktree := sess.Worktree
@@ -220,9 +221,11 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 				EndLine:       sql.NullInt32{Int32: int32(c.EndLine), Valid: true},
 				Metadata:      pqtype.NullRawMessage{},
 			})
-			if err != nil {
-				h.logger.Warn().Err(err).Str("session", sess.ID).Int("chunk", i).Msg("chunk upsert failed")
-				continue
+		if err != nil {
+				_ = tx.Rollback()
+				h.logger.Warn().Err(err).Str("session", sess.ID).Int("chunk", i).Msg("chunk upsert failed, rolling back")
+				errCount++
+				continue sessionLoop
 			}
 			chunkIDs = append(chunkIDs, chunkID)
 		}
