@@ -19,7 +19,7 @@ type EmbedQuerier interface {
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	CountPendingChunks(ctx context.Context, workspaceHash string) (int64, error)
-	ResetEmbedStatus(ctx context.Context, workspaceHash string) error
+	ResetEmbedStatus(ctx context.Context, workspaceHash string) (int64, error)
 }
 
 type embedRequest struct {
@@ -49,7 +49,7 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model strin
 		ctx := c.Request().Context()
 
 		if req.Force {
-			if err := q.ResetEmbedStatus(ctx, workspace); err != nil {
+			if _, err := q.ResetEmbedStatus(ctx, workspace); err != nil {
 				logger.Error().Err(err).Str("workspace", workspace).Msg("reset embed status failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to reset embed status")
 			}

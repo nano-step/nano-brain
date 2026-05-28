@@ -35,8 +35,8 @@ const (
 
 type QueueQuerier interface {
 	GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error)
-	GetAllPendingChunks(ctx context.Context, limit int32) ([]uuid.UUID, error)
-	GetAllFailedChunks(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	GetPendingChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error)
+	GetFailedChunksAllWorkspaces(ctx context.Context, limit int32) ([]uuid.UUID, error)
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
@@ -168,9 +168,9 @@ func (q *Queue) scanByStatus(ctx context.Context, failed bool) int {
 		var ids []uuid.UUID
 		var err error
 		if failed {
-			ids, err = q.queries.GetAllFailedChunks(ctx, scanBatchSize)
+			ids, err = q.queries.GetFailedChunksAllWorkspaces(ctx, scanBatchSize)
 		} else {
-			ids, err = q.queries.GetAllPendingChunks(ctx, scanBatchSize)
+			ids, err = q.queries.GetPendingChunksAllWorkspaces(ctx, scanBatchSize)
 		}
 		if err != nil {
 			q.logger.Error().Err(err).Bool("failed", failed).Msg("failed to scan chunks")

@@ -115,6 +115,9 @@ func main() {
 		case "doctor":
 			runDoctorCmd(args[1:], configPath)
 			return
+		case "reset-embeddings":
+			runResetEmbeddingsCmd(args[1:])
+			return
 		case "version":
 			runVersionCmd(args[1:])
 			return

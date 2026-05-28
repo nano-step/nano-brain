@@ -27,7 +27,7 @@ SELECT count(*) FROM chunks WHERE workspace_hash = $1 AND embed_status = 'pendin
 -- name: CountEmbedFailedChunks :one
 SELECT count(*) FROM chunks WHERE workspace_hash = $1 AND embed_status = 'embed_failed';
 
--- name: ResetEmbedStatus :exec
+-- name: ResetEmbedStatus :execrows
 UPDATE chunks SET embed_status = 'pending' WHERE workspace_hash = $1;
 
 -- name: GetAllPendingChunks :many
@@ -41,6 +41,29 @@ SELECT id FROM chunks
 WHERE embed_status = 'embed_failed'
 ORDER BY created_at ASC
 LIMIT $1;
+
+-- name: GetPendingChunksAllWorkspaces :many
+SELECT c.id FROM chunks c
+WHERE c.embed_status = 'pending'
+  AND EXISTS (
+    SELECT 1 FROM workspaces w
+    WHERE w.hash = c.workspace_hash
+  )
+ORDER BY c.created_at ASC
+LIMIT $1;
+
+-- name: GetFailedChunksAllWorkspaces :many
+SELECT c.id FROM chunks c
+WHERE c.embed_status = 'embed_failed'
+  AND EXISTS (
+    SELECT 1 FROM workspaces w
+    WHERE w.hash = c.workspace_hash
+  )
+ORDER BY c.created_at ASC
+LIMIT $1;
+
+-- name: DeleteEmbeddingsByWorkspace :execrows
+DELETE FROM embeddings WHERE workspace_hash = $1;
 
 -- name: VectorSearch :many
 SELECT e.id, e.chunk_id, e.workspace_hash,

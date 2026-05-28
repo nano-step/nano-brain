@@ -136,7 +136,7 @@ phase_pre_work() {
     # 1.2 No active OpenSpec changes
     if cmd_exists openspec; then
         ospec_out=$(openspec list 2>/dev/null || echo "")
-        if echo "$ospec_out" | grep -qE "active|pending"; then
+        if echo "$ospec_out" | grep -qE "active|pending|in-progress"; then
             add_check "FAIL" "1.2 Active OpenSpec changes still exist"
         else
             add_check "PASS" "1.2 No active OpenSpec changes"
@@ -211,8 +211,8 @@ phase_in_progress() {
     
     # 2.2 OpenSpec change active
     if cmd_exists openspec; then
-        ospec_out=$(openspec list 2>/dev/null || echo "")
-        if echo "$ospec_out" | grep -qE "active|pending"; then
+        ospec_out=$(openspec list --json 2>/dev/null || openspec list 2>/dev/null || echo "")
+        if echo "$ospec_out" | grep -qE "active|pending|in-progress"; then
             add_check "PASS" "2.2 OpenSpec change is active"
         else
             add_check "FAIL" "2.2 No active OpenSpec change"
@@ -432,7 +432,7 @@ phase_post_merge() {
     # 4.3 OpenSpec archived
     if cmd_exists openspec; then
         ospec_out=$(openspec list 2>/dev/null || echo "")
-        if echo "$ospec_out" | grep -qE "active|pending"; then
+        if echo "$ospec_out" | grep -qE "active|pending|in-progress"; then
             add_check "FAIL" "4.3 OpenSpec change still active"
         else
             add_check "PASS" "4.3 OpenSpec change archived"
