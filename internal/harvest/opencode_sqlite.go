@@ -113,8 +113,19 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 
 	q := sqlc.New(h.pgDB)
 	wsCache := make(map[string]string) // worktree → wsHash
-sessionLoop:
+
+	var (
+		summarySuccess  int
+		summaryFallback int
+		activeCount     int
+	)
+
 	for _, sess := range sessions {
+		if isActiveSession(sess) {
+			activeCount++
+			continue
+		}
+
 		// Derive workspace hash for this session's project
 		worktree := sess.Worktree
 		wsHash, ok := wsCache[worktree]
@@ -143,7 +154,7 @@ sessionLoop:
 			wsCache[worktree] = wsHash
 		}
 
-		sourcePath := "opencode://session/" + sess.ID
+		sourcePath := "summary://opencode/" + sess.ID
 		existing, lookupErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    sourcePath,
 			WorkspaceHash: wsHash,
@@ -165,101 +176,50 @@ sessionLoop:
 		}
 
 		md := renderSQLiteMarkdown(sess, msgs)
-		sum := sha256.Sum256([]byte(md))
-		contentHash := hex.EncodeToString(sum[:])
 
 		title := sess.Title
 		if title == "" {
 			title = "OpenCode session " + sess.ID[:8]
 		}
 
-		meta, _ := marshalJSON(map[string]any{
-			"source":        "opencode",
-			"session_id":    sess.ID,
-			"message_count": len(msgs),
-			"created_at":    sess.CreatedAt.Format(time.RFC3339),
-		})
-
-		chunks := chunk.Split(md, chunk.DefaultConfig())
-		params := sqlc.UpsertDocumentBySourcePathParams{
-			WorkspaceHash: wsHash,
-			ContentHash:   contentHash,
-			Title:         title,
-			Content:       md,
-			SourcePath:    sourcePath,
-			Collection:    "sessions",
-			Tags:          []string{"opencode", "session"},
-			Metadata:      pqtype.NullRawMessage{RawMessage: meta, Valid: true},
-		}
-
-		tx, err := h.pgDB.BeginTx(ctx, nil)
-		if err != nil {
-			h.logger.Warn().Err(err).Str("session", sess.ID).Msg("begin tx failed")
-			errCount++
-			continue
-		}
-
-		tq := sqlc.New(tx)
-		docRow, err := tq.UpsertDocumentBySourcePath(ctx, params)
-		if err != nil {
-			tx.Rollback() //nolint:errcheck
-			h.logger.Warn().Err(err).Str("session", sess.ID).Msg("upsert document failed")
-			errCount++
-			continue
-		}
-
-		var chunkIDs []uuid.UUID
-		for i, c := range chunks {
-			chunkHash := sha256.Sum256([]byte(c.Content))
-			chunkID, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-				DocumentID:    docRow.ID,
-				WorkspaceHash: wsHash,
-				ContentHash:   hex.EncodeToString(chunkHash[:]),
-				Content:       c.Content,
-				ChunkIndex:    int32(i),
-				StartLine:     sql.NullInt32{Int32: int32(c.StartLine), Valid: true},
-				EndLine:       sql.NullInt32{Int32: int32(c.EndLine), Valid: true},
-				Metadata:      pqtype.NullRawMessage{},
-			})
-		if err != nil {
-				_ = tx.Rollback()
-				h.logger.Warn().Err(err).Str("session", sess.ID).Int("chunk", i).Msg("chunk upsert failed, rolling back")
-				errCount++
-				continue sessionLoop
-			}
-			chunkIDs = append(chunkIDs, chunkID)
-		}
-
-		if err := tx.Commit(); err != nil {
-			tx.Rollback() //nolint:errcheck
-			h.logger.Warn().Err(err).Str("session", sess.ID).Msg("commit failed")
-			errCount++
-			continue
-		}
-
-		if enqueuer != nil {
-			for _, id := range chunkIDs {
-				enqueuer.Enqueue(id)
-			}
-		}
-
-		h.logger.Info().Str("session", sess.ID).Int("chunks", len(chunks)).Msg("harvested opencode session")
-		harvested++
-
 		if h.summarizer != nil {
 			smeta := SummaryMeta{
-				Source:    "opencode",
-				SessionID: sess.ID,
-				Title:     title,
-				CreatedAt: sess.CreatedAt,
+				Source:        "opencode",
+				SessionID:     sess.ID,
+				Title:         title,
+				CreatedAt:     sess.CreatedAt,
+				WorkspaceHash: wsHash,
 			}
-			if err := h.summarizer.SummarizeAndPersist(ctx, md, smeta); err != nil {
-				h.logger.Warn().Err(err).Str("session", sess.ID).Msg("summarization failed, session still harvested")
+			if sumErr := h.summarizer.SummarizeAndPersist(ctx, md, smeta); sumErr != nil {
+				h.logger.Warn().Err(sumErr).Str("session", sess.ID).Msg("summarization failed, falling back to raw")
+				if fbErr := h.writeRawFallback(ctx, sess, md, wsHash, title, sourcePath, len(msgs), enqueuer); fbErr != nil {
+					h.logger.Error().Err(fbErr).Str("session", sess.ID).Msg("raw fallback failed, skipping session")
+					errCount++
+					continue
+				}
+				summaryFallback++
+			} else {
+				summarySuccess++
 			}
+		} else {
+			if fbErr := h.writeRawFallback(ctx, sess, md, wsHash, title, sourcePath, len(msgs), enqueuer); fbErr != nil {
+				h.logger.Error().Err(fbErr).Str("session", sess.ID).Msg("raw fallback failed, skipping session")
+				errCount++
+				continue
+			}
+			summaryFallback++
 		}
 	}
 
-	h.logger.Info().Int("harvested", harvested).Int("skipped", skipped).Int("errors", errCount).Msg("opencode sqlite harvest complete")
+	harvested = summarySuccess + summaryFallback
+	h.logger.Info().
+		Str("source", "opencode").
+		Int("summary_success", summarySuccess).
+		Int("summary_fallback", summaryFallback).
+		Int("skipped", skipped).
+		Int("active", activeCount).
+		Int("errors", errCount).
+		Msg("harvest cycle complete")
 	return
 }
 
@@ -267,7 +227,12 @@ type SqSession struct {
 	ID        string
 	Title     string
 	CreatedAt time.Time
+	UpdatedAt time.Time
 	Worktree  string
+}
+
+func isActiveSession(sess SqSession) bool {
+	return !sess.UpdatedAt.IsZero() && time.Since(sess.UpdatedAt) < 10*time.Minute
 }
 
 type sqMessage struct {
@@ -279,7 +244,7 @@ type sqMessage struct {
 func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB) ([]SqSession, error) {
 	rows, err := sqdb.QueryContext(ctx, `
 		SELECT s.id, COALESCE(s.title, ''), COALESCE(s.time_created, 0),
-		       COALESCE(p.worktree, '')
+		       COALESCE(s.time_updated, s.time_created, 0), COALESCE(p.worktree, '')
 		FROM session s
 		LEFT JOIN project p ON s.project_id = p.id
 		ORDER BY s.time_created DESC
@@ -292,12 +257,15 @@ func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB
 	var sessions []SqSession
 	for rows.Next() {
 		var s SqSession
-		var createdMs int64
-		if err := rows.Scan(&s.ID, &s.Title, &createdMs, &s.Worktree); err != nil {
+		var createdMs, updatedMs int64
+		if err := rows.Scan(&s.ID, &s.Title, &createdMs, &updatedMs, &s.Worktree); err != nil {
 			return nil, fmt.Errorf("scan session: %w", err)
 		}
 		if createdMs > 0 {
 			s.CreatedAt = time.UnixMilli(createdMs).UTC()
+		}
+		if updatedMs > 0 {
+			s.UpdatedAt = time.UnixMilli(updatedMs).UTC()
 		}
 		sessions = append(sessions, s)
 	}
@@ -408,6 +376,102 @@ func renderSQLiteMarkdown(sess SqSession, msgs []sqMessage) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// writeRawFallback persists raw rendered markdown at the unified summary:// source_path
+// with collection="sessions" and metadata.fallback=true. This is used when the summarizer
+// is nil or returns an error.
+//
+// Because UpsertDocumentBySourcePath uses (source_path, workspace_hash) as the upsert key,
+// calling this after a failed SummarizeAndPersist will OVERWRITE any partial summary
+// that Persister.Save may have committed before the error. This is correct behavior —
+// the fallback doc replaces any partial/corrupt summary at the same path.
+func (h *OpenCodeSQLiteHarvester) writeRawFallback(
+	ctx context.Context,
+	sess SqSession,
+	md string,
+	wsHash string,
+	title string,
+	sourcePath string,
+	messageCount int,
+	enqueuer ChunkEnqueuer,
+) error {
+	sum := sha256.Sum256([]byte(md))
+	contentHash := hex.EncodeToString(sum[:])
+
+	meta, _ := marshalJSON(map[string]any{
+		"source":        "opencode",
+		"session_id":    sess.ID,
+		"message_count": messageCount,
+		"created_at":    sess.CreatedAt.Format(time.RFC3339),
+		"fallback":      true,
+	})
+
+	chunks := chunk.Split(md, chunk.DefaultConfig())
+	params := sqlc.UpsertDocumentBySourcePathParams{
+		WorkspaceHash: wsHash,
+		ContentHash:   contentHash,
+		Title:         title,
+		Content:       md,
+		SourcePath:    sourcePath,
+		Collection:    "sessions",
+		Tags:          []string{"opencode", "session", "fallback"},
+		Metadata:      pqtype.NullRawMessage{RawMessage: meta, Valid: true},
+	}
+
+	tx, err := h.pgDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	tq := sqlc.New(tx)
+	docRow, err := tq.UpsertDocumentBySourcePath(ctx, params)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("upsert document: %w", err)
+	}
+
+	if err := tq.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
+		DocumentID:    docRow.ID,
+		WorkspaceHash: wsHash,
+	}); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete old chunks: %w", err)
+	}
+
+	var chunkIDs []uuid.UUID
+	for i, c := range chunks {
+		chunkHash := sha256.Sum256([]byte(c.Content))
+		chunkID, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
+			DocumentID:    docRow.ID,
+			WorkspaceHash: wsHash,
+			ContentHash:   hex.EncodeToString(chunkHash[:]),
+			Content:       c.Content,
+			ChunkIndex:    int32(i),
+			StartLine:     sql.NullInt32{Int32: int32(c.StartLine), Valid: true},
+			EndLine:       sql.NullInt32{Int32: int32(c.EndLine), Valid: true},
+			Metadata:      pqtype.NullRawMessage{},
+		})
+		if err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("chunk upsert %d: %w", i, err)
+		}
+		chunkIDs = append(chunkIDs, chunkID)
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	if enqueuer != nil {
+		for _, id := range chunkIDs {
+			enqueuer.Enqueue(id)
+		}
+	}
+
+	h.logger.Info().Str("session", sess.ID).Bool("fallback", true).Int("chunks", len(chunkIDs)).Msg("raw fallback persisted")
+	return nil
 }
 
 func marshalJSON(v any) ([]byte, error) {

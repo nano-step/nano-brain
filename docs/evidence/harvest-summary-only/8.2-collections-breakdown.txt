@@ -1,0 +1,9 @@
+=== Task 8.2: Collections Breakdown ===
+Query: SELECT collection, COUNT(*) FROM documents GROUP BY collection
+
+Result:
+  collection=session-summary count=3
+
+Expected: session-summary > 0
+Actual: session-summary = 3
+VERDICT: PASS

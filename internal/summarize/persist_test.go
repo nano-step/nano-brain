@@ -1,37 +1,77 @@
 package summarize
 
 import (
-	"os"
-	"path/filepath"
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/migrations"
+	"github.com/pressly/goose/v3"
+	"github.com/rs/zerolog"
 )
 
-func TestTitleSlug(t *testing.T) {
-	cases := []struct {
-		input string
-		want  string
-	}{
-		{"Hello World", "hello-world"},
-		{"  Leading/Trailing  ", "leading-trailing"},
-		{"Multiple---dashes", "multiple-dashes"},
-		{"", "untitled"},
-		{"UPPER CASE", "upper-case"},
-	}
-	for _, tc := range cases {
-		got := titleSlug(tc.input)
-		if got != tc.want {
-			t.Errorf("titleSlug(%q) = %q, want %q", tc.input, got, tc.want)
-		}
-	}
-}
+const persistTestDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
 
-func TestTitleSlug_MaxLength(t *testing.T) {
-	long := "this-is-a-very-long-title-that-exceeds-eighty-characters-and-should-be-truncated-here-yes"
-	got := titleSlug(long)
-	if len(got) > 80 {
-		t.Errorf("slug length %d > 80 for %q", len(got), long)
+func setupPersistTestPG(t *testing.T) *sql.DB {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping postgres-dependent test in -short mode")
 	}
+
+	ctx := context.Background()
+	poolCfg, err := pgxpool.ParseConfig(persistTestDSN)
+	if err != nil {
+		t.Skip("postgres not available: parse config: " + err.Error())
+	}
+
+	schema := fmt.Sprintf("test_%x", sha256.Sum256([]byte(t.Name())))[:18]
+	poolCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, fmt.Sprintf("SET search_path TO %s, public", schema))
+		return err
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		t.Skip("postgres not available: connect: " + err.Error())
+	}
+
+	_, _ = pool.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE")
+	if _, err := pool.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
+		pool.Close()
+		t.Skip("postgres not available: create schema: " + err.Error())
+	}
+
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		pool.Close()
+		t.Fatal("goose dialect: " + err.Error())
+	}
+	goose.SetTableName(schema + "_goose_version")
+	migrateDB := stdlib.OpenDBFromPool(pool)
+	if err := goose.UpContext(ctx, migrateDB, "."); err != nil {
+		migrateDB.Close()
+		pool.Close()
+		t.Fatal("goose migrate: " + err.Error())
+	}
+	migrateDB.Close()
+	goose.SetTableName("goose_db_version")
+
+	pgDB := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() {
+		pgDB.Close()
+		cleanCtx := context.Background()
+		_, _ = pool.Exec(cleanCtx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE")
+		pool.Close()
+	})
+
+	return pgDB
 }
 
 func TestBuildSourcePath(t *testing.T) {
@@ -50,71 +90,46 @@ func TestBuildSourcePath(t *testing.T) {
 	}
 }
 
-func TestPersister_WriteFile(t *testing.T) {
-	dir := t.TempDir()
-	p := &Persister{outputDir: dir}
+func TestPersister_Save_UsesWorkspaceHashFromMeta(t *testing.T) {
+	pgDB := setupPersistTestPG(t)
+
+	logger := zerolog.Nop()
+	p := NewPersister(pgDB, nil, logger)
 
 	meta := SessionMetadata{
-		Source:    SourceOpenCode,
-		Title:     "My Test Session",
-		CreatedAt: time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC),
-	}
-	content := "# Summary\nThis is the content."
-
-	if err := p.writeFile(content, meta); err != nil {
-		t.Fatalf("writeFile: %v", err)
+		Source:        SourceOpenCode,
+		SessionID:     "ws-hash-test-123",
+		Title:         "WS Hash Test",
+		CreatedAt:     time.Now(),
+		WorkspaceHash: "test-ws-hash-abc",
 	}
 
-	expected := filepath.Join(dir, "opencode_my-test-session_2026-05-26.md")
-	data, err := os.ReadFile(expected)
+	if err := p.Save(context.Background(), "# Test Summary\n\nContent here.", meta); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	q := sqlc.New(pgDB)
+	doc, err := q.GetDocumentBySourcePath(context.Background(), sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    "summary://opencode/ws-hash-test-123",
+		WorkspaceHash: "test-ws-hash-abc",
+	})
 	if err != nil {
-		t.Fatalf("expected file %q not found: %v", expected, err)
-	}
-	if string(data) != content {
-		t.Errorf("file content mismatch: got %q, want %q", string(data), content)
-	}
-}
-
-func TestPersister_WriteFile_CreatesDir(t *testing.T) {
-	base := t.TempDir()
-	dir := filepath.Join(base, "sub", "dir")
-	p := &Persister{outputDir: dir}
-
-	meta := SessionMetadata{
-		Source:    SourceClaude,
-		Title:     "Claude Session",
-		CreatedAt: time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC),
+		t.Fatalf("doc not found with workspace_hash=test-ws-hash-abc: %v", err)
 	}
 
-	if err := p.writeFile("content", meta); err != nil {
-		t.Fatalf("writeFile should create dir: %v", err)
+	if doc.Collection != "session-summary" {
+		t.Errorf("collection = %q, want %q", doc.Collection, "session-summary")
+	}
+	if doc.ContentHash == "" {
+		t.Error("content_hash should not be empty")
 	}
 
-	expected := filepath.Join(dir, "claude_claude-session_2026-01-15.md")
-	if _, err := os.Stat(expected); err != nil {
-		t.Errorf("expected file %q: %v", expected, err)
-	}
-}
-
-func TestPersister_WriteFile_Overwrite(t *testing.T) {
-	dir := t.TempDir()
-	p := &Persister{outputDir: dir}
-
-	meta := SessionMetadata{
-		Source:    SourceOpenCode,
-		Title:     "Repeated",
-		CreatedAt: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC),
-	}
-
-	if err := p.writeFile("first", meta); err != nil {
-		t.Fatal(err)
-	}
-	if err := p.writeFile("second", meta); err != nil {
-		t.Fatal(err)
-	}
-
-	data, _ := os.ReadFile(filepath.Join(dir, "opencode_repeated_2026-03-01.md"))
-	if string(data) != "second" {
-		t.Errorf("overwrite failed: got %q", string(data))
+	// Verify doc is NOT found with empty workspace_hash
+	_, err = q.GetDocumentBySourcePath(context.Background(), sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    "summary://opencode/ws-hash-test-123",
+		WorkspaceHash: "",
+	})
+	if err == nil {
+		t.Error("expected no doc at empty workspace_hash, but found one")
 	}
 }

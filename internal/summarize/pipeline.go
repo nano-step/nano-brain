@@ -30,17 +30,18 @@ const (
 
 // SessionMetadata is supplied by the harvester for the metadata header.
 type SessionMetadata struct {
-	Source      Source
-	SessionID   string
-	Title       string
-	Agent       string
-	ProjectPath string
-	CreatedAt   time.Time
-	Duration    time.Duration
-	ParentID    string
-	ParentTitle string
-	Children    []RelatedSession
-	Siblings    []RelatedSession
+	Source        Source
+	SessionID     string
+	Title         string
+	Agent         string
+	ProjectPath   string
+	CreatedAt     time.Time
+	Duration      time.Duration
+	ParentID      string
+	ParentTitle   string
+	Children      []RelatedSession
+	Siblings      []RelatedSession
+	WorkspaceHash string
 }
 
 // RelatedSession describes a parent/child/sibling session.

@@ -580,7 +580,7 @@ func TestDoRequest_RetrySucceeds_HappyPath(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"retried":true}`))
+		_, _ = w.Write([]byte(`{"retried":true}`))
 	}))
 	defer ts.Close()
 	pointHTTPClientAt(t, ts)
@@ -616,7 +616,7 @@ func TestDoRequest_BodyBufferedForReplay(t *testing.T) {
 		bodies = append(bodies, string(b))
 		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{}`))
 	}))
 	defer ts.Close()
 	pointHTTPClientAt(t, ts)
