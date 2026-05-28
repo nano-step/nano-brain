@@ -1,0 +1,11 @@
+=== Task 8.5: Workspace Hash on Summary Docs ===
+Query: SELECT source_path, collection, workspace_hash FROM documents WHERE source_path LIKE 'summary://%'
+
+Result:
+  summary://opencode/test-active    collection=session-summary  workspace_hash=22847dd82066d239d13ad8b7cfed2253b1835c75f9f3e8e6b82b1bd22500fb93 [PASS]
+  summary://opencode/test-success-1 collection=session-summary  workspace_hash=22847dd82066d239d13ad8b7cfed2253b1835c75f9f3e8e6b82b1bd22500fb93 [PASS]
+  summary://opencode/test-success-2 collection=session-summary  workspace_hash=22847dd82066d239d13ad8b7cfed2253b1835c75f9f3e8e6b82b1bd22500fb93 [PASS]
+
+Expected: workspace_hash NOT empty string (proves Section 1's threading worked)
+Actual: All 3 docs have correct workspace_hash matching registered workspace
+VERDICT: PASS

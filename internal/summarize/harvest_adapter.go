@@ -35,7 +35,8 @@ func (s *HarvestSummarizer) SummarizeAndPersist(ctx context.Context, content str
 		ProjectPath: meta.ProjectPath,
 		CreatedAt:   meta.CreatedAt,
 		Duration:    meta.Duration,
-		ParentID:    meta.ParentID,
+		ParentID:      meta.ParentID,
+		WorkspaceHash: meta.WorkspaceHash,
 	}
 	summary, err := s.pipeline.Summarize(ctx, content, sessionMeta)
 	if err != nil {

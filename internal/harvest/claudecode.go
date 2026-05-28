@@ -21,6 +21,15 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+// harvestResult indicates the outcome of a single claudecode session harvest.
+type harvestResult int
+
+const (
+	harvestSkipped  harvestResult = iota // unchanged, skipped
+	harvestSummary                       // summary-first success
+	harvestFallback                      // raw fallback (summarizer nil, errored, or DB upsert failed)
+)
+
 // ClaudeCodeHarvester ingests Claude Code JSONL session files into the document store.
 type ClaudeCodeHarvester struct {
 	db         *sql.DB
@@ -61,35 +70,51 @@ func (h *ClaudeCodeHarvester) HarvestAll(ctx context.Context, enqueuer ChunkEnqu
 		return 0, 0, 1
 	}
 
+	var (
+		summarySuccess  int
+		summaryFallback int
+	)
+
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
 			continue
 		}
 		filePath := filepath.Join(h.sessionDir, e.Name())
-		result, err := h.harvestSession(ctx, filePath, enqueuer)
+		res, err := h.harvestSession(ctx, filePath, enqueuer)
 		if err != nil {
 			h.logger.Error().Err(err).Str("file", filePath).Msg("failed to harvest session")
 			errCount++
 			continue
 		}
-		if result {
-			harvested++
-		} else {
+		switch res {
+		case harvestSummary:
+			summarySuccess++
+		case harvestFallback:
+			summaryFallback++
+		case harvestSkipped:
 			skipped++
 		}
 	}
+
+	harvested = summarySuccess + summaryFallback
+	h.logger.Info().
+		Str("source", "claudecode").
+		Int("summary_success", summarySuccess).
+		Int("summary_fallback", summaryFallback).
+		Int("skipped", skipped).
+		Int("errors", errCount).
+		Msg("harvest cycle complete")
 	return
 }
 
-// harvestSession processes a single JSONL session file. Returns true if ingested, false if skipped (unchanged).
-func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile string, enqueuer ChunkEnqueuer) (bool, error) {
+func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile string, enqueuer ChunkEnqueuer) (harvestResult, error) {
 	msgs, err := parseJSONLFile(sessionFile)
 	if err != nil {
-		return false, fmt.Errorf("parse JSONL: %w", err)
+		return harvestSkipped, fmt.Errorf("parse JSONL: %w", err)
 	}
 
 	if len(msgs) == 0 {
-		return false, nil
+		return harvestSkipped, nil
 	}
 
 	sessionID := strings.TrimSuffix(filepath.Base(sessionFile), ".jsonl")
@@ -98,69 +123,119 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 	sum := sha256.Sum256([]byte(md))
 	contentHash := hex.EncodeToString(sum[:])
 
+	sourcePath := "summary://claude/" + sessionID
+
 	queries := sqlc.New(h.db)
 	existing, err := queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
-		SourcePath:    sessionFile,
+		SourcePath:    sourcePath,
 		WorkspaceHash: h.workspace,
 	})
 	if err == nil && existing.ContentHash == contentHash {
-		return false, nil
+		return harvestSkipped, nil
+	}
+
+	var createdAt time.Time
+	if len(msgs) > 0 && msgs[0].Timestamp != "" {
+		if t, parseErr := time.Parse(time.RFC3339, msgs[0].Timestamp); parseErr == nil {
+			createdAt = t
+		}
+	}
+
+	title := "Claude Code Session " + sessionID
+
+	if h.summarizer != nil {
+		smeta := SummaryMeta{
+			Source:        "claude",
+			SessionID:     sessionID,
+			Title:         title,
+			CreatedAt:     createdAt,
+			WorkspaceHash: h.workspace,
+		}
+		if sumErr := h.summarizer.SummarizeAndPersist(ctx, md, smeta); sumErr != nil {
+			h.logger.Warn().Err(sumErr).Str("session", sessionID).Msg("summarization failed, falling back to raw")
+			if fbErr := h.writeRawFallback(ctx, sessionID, md, contentHash, title, sourcePath, len(msgs), enqueuer); fbErr != nil {
+				return harvestSkipped, fmt.Errorf("raw fallback failed: %w", fbErr)
+			}
+			return harvestFallback, nil
+		}
+		return harvestSummary, nil
+	}
+
+	if fbErr := h.writeRawFallback(ctx, sessionID, md, contentHash, title, sourcePath, len(msgs), enqueuer); fbErr != nil {
+		return harvestSkipped, fmt.Errorf("raw fallback failed: %w", fbErr)
+	}
+	return harvestFallback, nil
+}
+
+func (h *ClaudeCodeHarvester) writeRawFallback(
+	ctx context.Context,
+	sessionID, md, contentHash, title, sourcePath string,
+	messageCount int,
+	enqueuer ChunkEnqueuer,
+) error {
+	metaBytes, _ := json.Marshal(map[string]any{
+		"source":        "claude",
+		"session_id":    sessionID,
+		"message_count": messageCount,
+		"fallback":      true,
+	})
+	meta := pqtype.NullRawMessage{RawMessage: metaBytes, Valid: true}
+
+	chunks := chunk.Split(md, chunk.DefaultConfig())
+	params := sqlc.UpsertDocumentBySourcePathParams{
+		WorkspaceHash: h.workspace,
+		ContentHash:   contentHash,
+		Title:         title,
+		Content:       md,
+		SourcePath:    sourcePath,
+		Collection:    "sessions",
+		Tags:          []string{"claude_code", "session", "fallback"},
+		Metadata:      meta,
 	}
 
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, fmt.Errorf("begin tx: %w", err)
+		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+
 	tq := sqlc.New(tx)
-
-	meta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
-	tags := []string{"claude_code", "session"}
-
-	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
-		WorkspaceHash: h.workspace,
-		ContentHash:   contentHash,
-		Title:         "Claude Code Session " + sessionID,
-		Content:       md,
-		SourcePath:    sessionFile,
-		Collection:    "sessions",
-		Tags:          tags,
-		Metadata:      meta,
-	})
+	docRow, err := tq.UpsertDocumentBySourcePath(ctx, params)
 	if err != nil {
-		return false, fmt.Errorf("upsert document: %w", err)
+		_ = tx.Rollback()
+		return fmt.Errorf("upsert document: %w", err)
 	}
 
 	if err := tq.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
 		DocumentID:    docRow.ID,
 		WorkspaceHash: h.workspace,
 	}); err != nil {
-		return false, fmt.Errorf("delete old chunks: %w", err)
+		_ = tx.Rollback()
+		return fmt.Errorf("delete old chunks: %w", err)
 	}
 
-	chunks := chunk.Split(md, chunk.DefaultConfig())
-	chunkMeta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
-	chunkIDs := make([]uuid.UUID, 0, len(chunks))
-
-	for _, ch := range chunks {
-		id, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
+	var chunkIDs []uuid.UUID
+	for i, c := range chunks {
+		chunkHash := sha256.Sum256([]byte(c.Content))
+		chunkID, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
 			DocumentID:    docRow.ID,
 			WorkspaceHash: h.workspace,
-			ContentHash:   ch.Hash,
-			Content:       ch.Content,
-			ChunkIndex:    int32(ch.Sequence),
-			StartLine:     sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
-			EndLine:       sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
-			Metadata:      chunkMeta,
+			ContentHash:   hex.EncodeToString(chunkHash[:]),
+			Content:       c.Content,
+			ChunkIndex:    int32(i),
+			StartLine:     sql.NullInt32{Int32: int32(c.StartLine), Valid: true},
+			EndLine:       sql.NullInt32{Int32: int32(c.EndLine), Valid: true},
+			Metadata:      pqtype.NullRawMessage{},
 		})
 		if err != nil {
-			return false, fmt.Errorf("upsert chunk: %w", err)
+			_ = tx.Rollback()
+			return fmt.Errorf("chunk upsert %d: %w", i, err)
 		}
-		chunkIDs = append(chunkIDs, id)
+		chunkIDs = append(chunkIDs, chunkID)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("commit tx: %w", err)
+		_ = tx.Rollback()
+		return fmt.Errorf("commit: %w", err)
 	}
 
 	if enqueuer != nil {
@@ -169,25 +244,8 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 		}
 	}
 
-	if h.summarizer != nil {
-		var createdAt time.Time
-		if len(msgs) > 0 && msgs[0].Timestamp != "" {
-			if t, err := time.Parse(time.RFC3339, msgs[0].Timestamp); err == nil {
-				createdAt = t
-			}
-		}
-		smeta := SummaryMeta{
-			Source:    "claude",
-			SessionID: sessionID,
-			Title:     "Claude Code Session " + sessionID,
-			CreatedAt: createdAt,
-		}
-		if err := h.summarizer.SummarizeAndPersist(ctx, md, smeta); err != nil {
-			h.logger.Warn().Err(err).Str("session", sessionID).Msg("summarization failed")
-		}
-	}
-
-	return true, nil
+	h.logger.Info().Str("session", sessionID).Bool("fallback", true).Int("chunks", len(chunkIDs)).Msg("raw fallback persisted")
+	return nil
 }
 
 // claudeCodeMessage represents a single line from a Claude Code JSONL transcript.

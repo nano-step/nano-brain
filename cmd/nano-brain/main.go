@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -326,6 +327,16 @@ func startServer(configPath string) {
 		}
 	}
 
+	var harvestSummarizer *summarize.HarvestSummarizer
+	if cfg.Summarization.Enabled {
+		harvestSummarizer = buildHarvestSummarizer(cfg, db, eq, logger)
+		if harvestSummarizer == nil {
+			logger.Warn().Msg("summarization enabled but init failed — falling back to raw harvest")
+		} else {
+			logger.Info().Str("model", cfg.Summarization.Model).Msg("session summarization enabled")
+		}
+	}
+
 	if cfg.Harvester.OpenCode.DBPath != "" {
 		oh := harvest.NewOpenCodeSQLiteHarvester(db, logger, cfg.Harvester.OpenCode.DBPath)
 		hr = harvest.NewRunner(oh, eq, interval, logger)
@@ -374,22 +385,8 @@ func startServer(configPath string) {
 	}
 
 	if hr != nil {
-		var harvestSummarizer *summarize.HarvestSummarizer
-		if cfg.Summarization.Enabled {
-			llmClient := summarize.New(cfg.Summarization, logger)
-			pipeline := summarize.NewPipeline(llmClient, nil, cfg.Summarization.Concurrency, logger)
-			persister, err := summarize.NewPersister(db, cfg.Summarization.OutputDir, "", eq, logger)
-			if err != nil {
-				logger.Fatal().Err(err).Msg("failed to initialize summary persister")
-			}
-			harvestSummarizer = summarize.NewHarvestSummarizer(pipeline, persister, logger)
-			hr.WithSummarizer(harvestSummarizer)
-			logger.Info().
-				Str("output_dir", cfg.Summarization.OutputDir).
-				Str("model", cfg.Summarization.Model).
-				Msg("session summarization enabled")
-		}
 		if harvestSummarizer != nil {
+			hr.WithSummarizer(harvestSummarizer)
 			srv.SetSummarizer(harvestSummarizer)
 		}
 		srv.SetHarvestRunner(hr)
@@ -409,5 +406,40 @@ func startServer(configPath string) {
 	if err := g.Wait(); err != nil {
 		logger.Fatal().Err(err).Msg("server exited with error")
 	}
+}
+
+// buildHarvestSummarizer constructs the harvest summarizer with graceful degradation.
+// Returns nil + logs warn if any init step fails or panics. This prevents a misconfigured
+// summarization block from crashing the server — harvest falls back to raw storage instead.
+func buildHarvestSummarizer(cfg *config.Config, db *sql.DB, eq *embed.Queue, logger zerolog.Logger) (result *summarize.HarvestSummarizer) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Warn().Interface("panic", r).Msg("summarizer init panicked, disabling summarization")
+			result = nil
+		}
+	}()
+	llmClient := summarize.New(cfg.Summarization, logger)
+	if llmClient == nil {
+		logger.Warn().Msg("LLM client init returned nil, disabling summarization")
+		return nil
+	}
+	pipeline := summarize.NewPipeline(llmClient, nil, cfg.Summarization.Concurrency, logger)
+	if pipeline == nil {
+		logger.Warn().Msg("pipeline init returned nil, disabling summarization")
+		return nil
+	}
+	// Avoid nil-interface trap: a nil *embed.Queue stored in a PersisterEnqueuer
+	// interface produces a non-nil interface with nil dynamic value, bypassing
+	// the `p.enqueuer != nil` check in Persister.Save and panicking on Enqueue.
+	var enqueuer summarize.PersisterEnqueuer
+	if eq != nil {
+		enqueuer = eq
+	}
+	persister := summarize.NewPersister(db, enqueuer, logger)
+	if persister == nil {
+		logger.Warn().Msg("persister init returned nil, disabling summarization")
+		return nil
+	}
+	return summarize.NewHarvestSummarizer(pipeline, persister, logger)
 }
 

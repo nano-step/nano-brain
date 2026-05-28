@@ -1,0 +1,45 @@
+=== Task 8.1: Server Start + Harvest Evidence ===
+
+--- Server Startup Log (first harvest cycle) ---
+{"level":"info","version":"dev","port":3199,"time":"2026-05-28T11:20:41Z","message":"nano-brain starting"}
+{"level":"info","db_path":"/tmp/nano-brain-section8/test-opencode.db","interval":120000,"time":"2026-05-28T11:20:41Z","message":"opencode sqlite harvester started"}
+{"level":"info","addr":"localhost:3199","time":"2026-05-28T11:20:41Z","message":"HTTP server listening"}
+{"level":"info","component":"opencode-sqlite-harvester","count":3,"time":"2026-05-28T11:20:41Z","message":"found opencode sessions"}
+{"level":"info","session_id":"test-active","source":"opencode","title":"Active session","content_len":208,"time":"2026-05-28T11:20:41Z","message":"summarize: starting summarization"}
+{"level":"info","session_id":"test-active","raw_len":208,"stripped_len":208,"time":"2026-05-28T11:20:41Z","message":"summarize: content stripped"}
+{"level":"info","session_id":"test-active","time":"2026-05-28T11:20:41Z","message":"summarize: using single-shot mode"}
+{"level":"info","endpoint":"https://ai-proxy.thnkandgrow.com/v1/chat/completions","model":"nano-brain","prompt_chars":939,"time":"2026-05-28T11:20:41Z","message":"summarize: sending LLM request"}
+{"level":"info","model":"nano-brain","prompt_tokens":2000,"completion_tokens":103,"latency_ms":4257,"time":"2026-05-28T11:20:45Z","message":"summarize: chat completion succeeded"}
+{"level":"info","session_id":"test-active","summary_len":556,"time":"2026-05-28T11:20:45Z","message":"summarize: pipeline done, persisting"}
+{"level":"info","component":"summary-persister","source_path":"summary://opencode/test-active","chunks":1,"time":"2026-05-28T11:20:45Z","message":"summary persisted"}
+{"level":"info","session_id":"test-success-1","source":"opencode","title":"First test session","content_len":648,"time":"2026-05-28T11:20:45Z","message":"summarize: starting summarization"}
+{"level":"info","session_id":"test-success-1","raw_len":648,"stripped_len":648,"time":"2026-05-28T11:20:45Z","message":"summarize: content stripped"}
+{"level":"info","session_id":"test-success-1","time":"2026-05-28T11:20:45Z","message":"summarize: using single-shot mode"}
+{"level":"info","endpoint":"https://ai-proxy.thnkandgrow.com/v1/chat/completions","model":"nano-brain","prompt_chars":1379,"time":"2026-05-28T11:20:45Z","message":"summarize: sending LLM request"}
+{"level":"info","model":"nano-brain","prompt_tokens":2000,"completion_tokens":238,"latency_ms":5957,"time":"2026-05-28T11:20:51Z","message":"summarize: chat completion succeeded"}
+{"level":"info","session_id":"test-success-1","summary_len":1152,"time":"2026-05-28T11:20:51Z","message":"summarize: pipeline done, persisting"}
+{"level":"info","component":"summary-persister","source_path":"summary://opencode/test-success-1","chunks":1,"time":"2026-05-28T11:20:51Z","message":"summary persisted"}
+{"level":"info","session_id":"test-success-2","source":"opencode","title":"Second test session","content_len":582,"time":"2026-05-28T11:20:51Z","message":"summarize: starting summarization"}
+{"level":"info","session_id":"test-success-2","raw_len":582,"stripped_len":582,"time":"2026-05-28T11:20:51Z","message":"summarize: content stripped"}
+{"level":"info","session_id":"test-success-2","time":"2026-05-28T11:20:51Z","message":"summarize: using single-shot mode"}
+{"level":"info","endpoint":"https://ai-proxy.thnkandgrow.com/v1/chat/completions","model":"nano-brain","prompt_chars":1313,"time":"2026-05-28T11:20:51Z","message":"summarize: sending LLM request"}
+{"level":"info","model":"nano-brain","prompt_tokens":2000,"completion_tokens":300,"latency_ms":7242,"time":"2026-05-28T11:20:58Z","message":"summarize: chat completion succeeded"}
+{"level":"info","session_id":"test-success-2","summary_len":1349,"time":"2026-05-28T11:20:58Z","message":"summarize: pipeline done, persisting"}
+{"level":"info","component":"summary-persister","source_path":"summary://opencode/test-success-2","chunks":1,"time":"2026-05-28T11:20:58Z","message":"summary persisted"}
+{"level":"info","component":"opencode-sqlite-harvester","source":"opencode","summary_success":3,"summary_fallback":0,"skipped":0,"active":0,"errors":0,"time":"2026-05-28T11:20:58Z","message":"harvest cycle complete"}
+{"level":"info","component":"harvest-runner","harvested":3,"skipped":0,"errors":0,"time":"2026-05-28T11:20:58Z","message":"harvest cycle complete"}
+{"level":"info","component":"opencode-sqlite-harvester","count":3,"time":"2026-05-28T11:20:58Z","message":"found opencode sessions"}
+{"level":"info","component":"opencode-sqlite-harvester","source":"opencode","summary_success":0,"summary_fallback":0,"skipped":3,"active":0,"errors":0,"time":"2026-05-28T11:20:58Z","message":"harvest cycle complete"}
+{"level":"info","component":"harvest-runner","harvested":0,"skipped":3,"errors":0,"time":"2026-05-28T11:20:58Z","message":"harvest cycle complete"}
+
+--- Workspace Registration ---
+{"workspace_hash":"22847dd82066d239d13ad8b7cfed2253b1835c75f9f3e8e6b82b1bd22500fb93","root_path":"/tmp/test-workspace"}
+
+--- Manual Harvest Trigger (POST /api/harvest) ---
+{"harvested":0,"skipped":3,"errors":0}
+(All 3 already harvested on startup auto-harvest)
+
+--- Summary ---
+PASS: Server started cleanly, auto-harvest processed 3 sessions.
+All 3 sessions received LLM summaries (summary_success=3, summary_fallback=0, errors=0).
+Second harvest correctly skipped all 3 (content_hash unchanged).

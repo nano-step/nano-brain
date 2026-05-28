@@ -1,0 +1,27 @@
+=== Task 8.11: Disabled Summarization Fallback (B1) ===
+
+Config: summarization.enabled: false
+
+Harvest cycle 1 (auto-harvest):
+  {"component":"opencode-sqlite-harvester","source":"opencode","summary_success":0,"summary_fallback":3,"skipped":0,"active":0,"errors":0}
+
+Harvest cycle 2 (manual POST /api/harvest):
+  {"component":"opencode-sqlite-harvester","source":"opencode","summary_success":0,"summary_fallback":0,"skipped":3,"active":0,"errors":0}
+
+DB state:
+  summary://opencode/test-active    collection=sessions fallback=true workspace_hash=22847dd8...
+  summary://opencode/test-success-1 collection=sessions fallback=true workspace_hash=22847dd8...
+  summary://opencode/test-success-2 collection=sessions fallback=true workspace_hash=22847dd8...
+
+Collections: sessions: 3
+
+Key observations:
+  - summary_fallback=3: all sessions written as raw fallback (no LLM call)
+  - Unified path: summary://opencode/<id> (B1 compliance)
+  - All have fallback=true and collection=sessions
+  - Second harvest: skipped=3 (content_hash match prevents duplicates)
+  - Flipping enabled: true later will NOT create duplicates (skip-check matches)
+
+Expected: All sessions at summary://opencode/<id>, collection=sessions, fallback=true
+Actual: Matches expected exactly.
+VERDICT: PASS

@@ -1,0 +1,18 @@
+=== Task 8.8: Fallback Persistence Test (B2) ===
+
+Pre-condition: LLM still pointing to invalid URL. 3 fallback docs exist in DB from 8.7.
+
+POST /api/harvest response:
+  {"harvested":0,"skipped":3,"errors":0}
+
+Harvest cycle log:
+  {"component":"opencode-sqlite-harvester","source":"opencode","summary_success":0,"summary_fallback":0,"skipped":3,"active":0,"errors":0}
+
+Key observations:
+  - skipped=3: all fallback docs matched by content_hash (session content unchanged)
+  - summary_fallback=0: NO new fallback docs created (no duplicates)
+  - No LLM calls attempted (no summarize: request log entries in this cycle)
+
+Expected: Fallback docs from 8.7 are SKIPPED (content_hash unchanged), no duplicates
+Actual: Matches expected. B2 skip-check works correctly on fallback docs.
+VERDICT: PASS
