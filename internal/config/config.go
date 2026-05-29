@@ -58,9 +58,15 @@ type HarvesterConfig struct {
 }
 
 // OpenCodeHarvesterConfig holds OpenCode harvester configuration.
+//
+// Source resolution priority at daemon startup (first non-empty wins):
+//  1. DBRoot — scan directory for per-project SQLite DBs (new layout)
+//  2. DBPath — single global SQLite DB (legacy single-DB layout)
+//  3. SessionDir — filesystem JSON sessions (legacy storage)
 type OpenCodeHarvesterConfig struct {
 	SessionDir string `koanf:"session_dir"`
 	DBPath     string `koanf:"db_path"`
+	DBRoot     string `koanf:"db_root"`
 }
 
 // ClaudeCodeHarvesterConfig holds ClaudeCode harvester configuration.
@@ -189,6 +195,8 @@ func Load(configPath string) (*Config, error) {
 		"VOYAGE_API_KEY":           "embedding.voyage_api_key",
 		"DATABASE_URL":             "database.url",
 		"OPENCODE_STORAGE_DIR":     "harvester.opencode.session_dir",
+		"OPENCODE_DB_PATH":         "harvester.opencode.db_path",
+		"OPENCODE_DB_ROOT":         "harvester.opencode.db_root",
 		"NANO_BRAIN_SUMMARIZE_API_KEY": "summarization.api_key",
 	}
 	for envVar, key := range specialEnvVars {

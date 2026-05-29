@@ -125,3 +125,31 @@ func platformOpenCodeDBPaths() []string {
 	}
 	return nil
 }
+
+// detectOpenCodeDBRoot returns the first existing OpenCode per-project DB
+// root directory found via env var or platform-specific well-known paths.
+// The path must exist AND be a directory; files at the path are rejected.
+// Returns "" if nothing found. Pure: only reads env/stat, no writes.
+func detectOpenCodeDBRoot() string {
+	if v := os.Getenv("OPENCODE_DB_ROOT"); v != "" {
+		if info, err := os.Stat(v); err == nil && info.IsDir() {
+			return v
+		}
+	}
+	for _, p := range platformOpenCodeDBRootPaths() {
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func platformOpenCodeDBRootPaths() []string {
+	switch runtime.GOOS {
+	case "linux", "darwin":
+		if home := os.Getenv("HOME"); home != "" {
+			return []string{filepath.Join(home, ".ai-sandbox", "opencode-dbs")}
+		}
+	}
+	return nil
+}

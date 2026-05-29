@@ -30,6 +30,8 @@ func getDefaults() *Config {
 		Harvester: HarvesterConfig{
 			OpenCode: OpenCodeHarvesterConfig{
 				SessionDir: "",
+				DBPath:     "",
+				DBRoot:     "",
 			},
 			ClaudeCode: ClaudeCodeHarvesterConfig{
 				Enabled:    false,

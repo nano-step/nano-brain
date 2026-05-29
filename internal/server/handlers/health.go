@@ -25,6 +25,31 @@ type WorkspaceCounter interface {
 	CountWorkspaces(ctx context.Context) (int64, error)
 }
 
+// HarvestStatusSnapshot is captured at startup and injected via SetHarvestStatus.
+type HarvestStatusSnapshot struct {
+	Mode       string
+	DBRoot     string
+	DBPath     string
+	SessionDir string
+	DBCount    int
+}
+
+// deriveOpenCodeMode infers the active harvest mode from config alone — used
+// as a fallback when SetHarvestStatus has not been called (e.g. unit tests
+// that construct Health directly without going through main.go).
+func deriveOpenCodeMode(c config.OpenCodeHarvesterConfig) string {
+	if c.DBRoot != "" {
+		return "db_root"
+	}
+	if c.DBPath != "" {
+		return "db_path"
+	}
+	if c.SessionDir != "" {
+		return "session_dir"
+	}
+	return "disabled"
+}
+
 type Health struct {
 	pool             PoolChecker
 	queue            EmbedQueueInfo
@@ -35,10 +60,15 @@ type Health struct {
 	counter          WorkspaceCounter
 	embedCfg         config.EmbeddingConfig
 	migrationVersion int64
+	harvestStatus    HarvestStatusSnapshot
 }
 
 func NewHealth(pool PoolChecker, logger zerolog.Logger, version string, startTime time.Time, queue EmbedQueueInfo, getCfg func() (config.HarvesterConfig, config.IntervalsConfig), counter WorkspaceCounter, embedCfg config.EmbeddingConfig, migrationVersion int64) *Health {
 	return &Health{pool: pool, queue: queue, logger: logger, version: version, startTime: startTime, getCfg: getCfg, counter: counter, embedCfg: embedCfg, migrationVersion: migrationVersion}
+}
+
+func (h *Health) SetHarvestStatus(s HarvestStatusSnapshot) {
+	h.harvestStatus = s
 }
 
 func (h *Health) workspaceCount(ctx context.Context) int {
@@ -66,7 +96,11 @@ type harvesterStatusResponse struct {
 	PollIntervalSeconds int `json:"poll_interval_seconds"`
 	OpenCode            struct {
 		Enabled    bool   `json:"enabled"`
-		SessionDir string `json:"session_dir"`
+		Mode       string `json:"mode"`
+		DBRoot     string `json:"db_root,omitempty"`
+		DBPath     string `json:"db_path,omitempty"`
+		SessionDir string `json:"session_dir,omitempty"`
+		DBCount    int    `json:"db_count,omitempty"`
 	} `json:"opencode"`
 	ClaudeCode struct {
 		Enabled    bool   `json:"enabled"`
@@ -116,8 +150,25 @@ func (h *Health) Status(c echo.Context) error {
 	harvestStatus := harvesterStatusResponse{
 		PollIntervalSeconds: intervalsCfg.SessionPoll,
 	}
-	harvestStatus.OpenCode.Enabled = harvesterCfg.OpenCode.SessionDir != ""
-	harvestStatus.OpenCode.SessionDir = harvesterCfg.OpenCode.SessionDir
+	mode := h.harvestStatus.Mode
+	if mode == "" {
+		mode = deriveOpenCodeMode(harvesterCfg.OpenCode)
+	}
+	harvestStatus.OpenCode.Mode = mode
+	harvestStatus.OpenCode.Enabled = mode != "disabled"
+	harvestStatus.OpenCode.DBRoot = h.harvestStatus.DBRoot
+	if harvestStatus.OpenCode.DBRoot == "" {
+		harvestStatus.OpenCode.DBRoot = harvesterCfg.OpenCode.DBRoot
+	}
+	harvestStatus.OpenCode.DBPath = h.harvestStatus.DBPath
+	if harvestStatus.OpenCode.DBPath == "" {
+		harvestStatus.OpenCode.DBPath = harvesterCfg.OpenCode.DBPath
+	}
+	harvestStatus.OpenCode.SessionDir = h.harvestStatus.SessionDir
+	if harvestStatus.OpenCode.SessionDir == "" {
+		harvestStatus.OpenCode.SessionDir = harvesterCfg.OpenCode.SessionDir
+	}
+	harvestStatus.OpenCode.DBCount = h.harvestStatus.DBCount
 	harvestStatus.ClaudeCode.Enabled = harvesterCfg.ClaudeCode.Enabled
 	harvestStatus.ClaudeCode.SessionDir = harvesterCfg.ClaudeCode.SessionDir
 
