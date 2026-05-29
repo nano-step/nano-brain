@@ -76,3 +76,26 @@ LIMIT @lim;
 
 -- name: DeleteDocumentsByWorkspace :exec
 DELETE FROM documents WHERE workspace_hash = $1;
+
+-- name: CountStaleRawOpenCodeDocs :one
+SELECT COUNT(*)::int AS n
+FROM documents d_raw
+WHERE d_raw.source_path LIKE 'opencode://session/%'
+  AND d_raw.collection = 'sessions'
+  AND EXISTS (
+    SELECT 1 FROM documents d_summary
+    WHERE d_summary.source_path = 'summary://opencode/' || split_part(d_raw.source_path, '/', 4)
+      AND d_summary.workspace_hash = d_raw.workspace_hash
+      AND d_summary.collection = 'session-summary'
+  );
+
+-- name: DeleteStaleRawOpenCodeDocs :execrows
+DELETE FROM documents d_raw
+WHERE d_raw.source_path LIKE 'opencode://session/%'
+  AND d_raw.collection = 'sessions'
+  AND EXISTS (
+    SELECT 1 FROM documents d_summary
+    WHERE d_summary.source_path = 'summary://opencode/' || split_part(d_raw.source_path, '/', 4)
+      AND d_summary.workspace_hash = d_raw.workspace_hash
+      AND d_summary.collection = 'session-summary'
+  );

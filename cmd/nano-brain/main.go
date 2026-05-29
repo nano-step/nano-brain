@@ -119,6 +119,9 @@ func main() {
 		case "reset-embeddings":
 			runResetEmbeddingsCmd(args[1:])
 			return
+		case "cleanup-stale-raw":
+			runCleanupStaleRawCmd(args[1:])
+			return
 		case "version":
 			runVersionCmd(args[1:])
 			return

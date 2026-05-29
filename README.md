@@ -237,6 +237,7 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | `nano-brain vsearch` | Vector similarity search |
 | `nano-brain collection add\|remove\|list` | Manage collections |
 | `nano-brain harvest` | Trigger session harvesting |
+| `nano-brain cleanup-stale-raw [--dry-run]` | Delete pre-#192 raw OpenCode session docs superseded by summaries |
 | `nano-brain bench generate\|run\|compare\|stress` | Benchmarking suite |
 | `nano-brain db:migrate` | Run pending goose migrations |
 | `nano-brain db:migrate --from-v1 <path>` | Import V1 SQLite data |
