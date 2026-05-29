@@ -67,7 +67,7 @@ func getDefaults() *Config {
 			ProviderURL: "",
 			APIKey:      "",
 			Model:       "nano-brain",
-			MaxTokens:   4096,
+			MaxTokens:   8000,
 			Concurrency: 3,
 		},
 	}

@@ -138,7 +138,7 @@ summarization:
   provider_url: ""              # OpenAI-compatible endpoint, e.g. https://ai-proxy.example.com/v1
   api_key: ""                   # or set NANO_BRAIN_SUMMARIZE_API_KEY env var
   model: "nano-brain"           # model name passed to the provider
-  max_tokens: 4096              # max tokens per LLM completion
+  max_tokens: 8000              # max tokens per LLM completion
   concurrency: 3                # parallel map-phase LLM calls
 ```
 
@@ -159,7 +159,7 @@ summarization:
   provider_url: "https://ai-proxy.example.com/v1"
   api_key: ""           # set NANO_BRAIN_SUMMARIZE_API_KEY instead
   model: "claude-sonnet-4-5"
-  max_tokens: 4096
+  max_tokens: 8000
   concurrency: 3
 ```
 
