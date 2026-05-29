@@ -1,5 +1,8 @@
-## ADDED Requirements
+# opencode-multi-db-discovery Specification
 
+## Purpose
+TBD - created by archiving change 2026-05-29-opencode-multi-db-discovery. Update Purpose after archive.
+## Requirements
 ### Requirement: Discovery of per-project OpenCode SQLite databases under `db_root`
 
 When `harvester.opencode.db_root` is non-empty (set via config, env var, or auto-detection), the daemon SHALL scan that directory at startup for per-project OpenCode SQLite databases matching the glob `<db_root>/*/opencode.db`. For each candidate, the daemon SHALL open the SQLite file read-only (`?mode=ro`), query `SELECT id, worktree FROM project LIMIT 1`, and treat the returned `worktree` value as the project's absolute path.
@@ -139,8 +142,6 @@ The `GET /api/status` response field `harvester_status.opencode` SHALL include t
 - **AND** `harvester_status.opencode.db_count == 0`
 - **AND** `harvester_status.opencode.enabled == false`
 
-## MODIFIED Requirements
-
 ### Requirement: Harvester registration via `Runner.AddHarvester`
 
 The `Runner` SHALL support 1..N OpenCode harvester instances registered via `AddHarvester(h Harvester)`. Per-tick fan-out via `RunOnce` SHALL invoke each registered harvester's `HarvestAll` exactly once and aggregate `harvested`, `skipped`, `errCount` counters across all of them. The summarizer set via `Runner.WithSummarizer` SHALL be propagated to every harvester registered after the summarizer is set, not just the first.
@@ -151,3 +152,4 @@ The `Runner` SHALL support 1..N OpenCode harvester instances registered via `Add
 - **WHEN** `Runner.RunOnce(ctx)` fires
 - **THEN** `HarvestAll` is called on each of the 3 instances
 - **AND** the aggregate counters returned reflect the sum across all 3
+
