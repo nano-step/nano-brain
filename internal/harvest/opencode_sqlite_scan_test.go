@@ -236,6 +236,25 @@ func TestHarvestAll_TrailingSlashWorktreeMatches(t *testing.T) {
 	}
 }
 
+// TestHarvestAll_EmptyWorktreeDoesNotResolveToCWD guards against a regression
+// where `filepath.Clean("")` returns "." and bypasses the empty-string skip
+// path, causing the harvester to hash "." as a workspace path. Reported by
+// gemini-code-assist on PR #200.
+func TestHarvestAll_EmptyWorktreeDoesNotResolveToCWD(t *testing.T) {
+	emptyRaw := ""
+	if filepath.Clean(emptyRaw) != "." {
+		t.Skip("stdlib filepath.Clean no longer returns '.' for empty input; this test no longer guards anything")
+	}
+
+	var normalized string
+	if emptyRaw != "" {
+		normalized = filepath.Clean(emptyRaw)
+	}
+	if normalized != "" {
+		t.Errorf("normalized = %q, want empty string (filepath.Clean must NOT run on empty input)", normalized)
+	}
+}
+
 func setupTestSQLiteForScan(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")

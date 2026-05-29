@@ -127,9 +127,17 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 			continue
 		}
 
-		// Derive workspace hash for this session's project
-		// Normalize for trailing-slash mismatch (Oracle M3, #199)
-		worktree := filepath.Clean(sess.Worktree)
+		// Derive workspace hash for this session's project.
+		// Normalize trailing-slash for cache lookup (Oracle M3, #199), but
+		// preserve empty-string semantics: filepath.Clean("") returns "." so
+		// we must check the raw value BEFORE cleaning, else "." gets hashed
+		// as a path and a spurious workspace is created (gemini-code-assist
+		// review on PR #200).
+		rawWorktree := sess.Worktree
+		var worktree string
+		if rawWorktree != "" {
+			worktree = filepath.Clean(rawWorktree)
+		}
 		wsHash, ok := wsCache[worktree]
 		if !ok {
 			var hashErr error
