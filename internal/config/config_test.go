@@ -346,6 +346,62 @@ func TestOpenCodeSessionDirFromEnv(t *testing.T) {
 	}
 }
 
+func TestOpenCodeDBPathFromEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+	t.Setenv("OPENCODE_DB_PATH", "/tmp/opencode_global.db")
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if cfg.Harvester.OpenCode.DBPath != "/tmp/opencode_global.db" {
+		t.Errorf("unexpected DBPath: %q", cfg.Harvester.OpenCode.DBPath)
+	}
+}
+
+func TestOpenCodeDBRootFromEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+	t.Setenv("OPENCODE_DB_ROOT", "/tmp/opencode-dbs")
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if cfg.Harvester.OpenCode.DBRoot != "/tmp/opencode-dbs" {
+		t.Errorf("unexpected DBRoot: %q", cfg.Harvester.OpenCode.DBRoot)
+	}
+}
+
+func TestOpenCodeDBRootFromYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+	yaml := []byte("harvester:\n  opencode:\n    db_root: /custom/opencode-dbs\n    db_path: /custom/opencode.db\n    session_dir: /custom/sessions\n")
+	if err := os.WriteFile(configPath, yaml, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if cfg.Harvester.OpenCode.DBRoot != "/custom/opencode-dbs" {
+		t.Errorf("unexpected DBRoot: %q", cfg.Harvester.OpenCode.DBRoot)
+	}
+	if cfg.Harvester.OpenCode.DBPath != "/custom/opencode.db" {
+		t.Errorf("unexpected DBPath: %q", cfg.Harvester.OpenCode.DBPath)
+	}
+	if cfg.Harvester.OpenCode.SessionDir != "/custom/sessions" {
+		t.Errorf("unexpected SessionDir: %q", cfg.Harvester.OpenCode.SessionDir)
+	}
+}
+
 func TestDefaultConfigPath(t *testing.T) {
 	path := DefaultConfigPath()
 	if path == "" {
