@@ -80,23 +80,53 @@ curl -s http://host.docker.internal:3100/api/write -d '{"content":"## Summary\n-
 - `Write` tool to create a file with 100+ lines in one shot
 - Regenerating an entire file to change a few lines
 
+## Project Architecture
+
+**Stack:** Go 1.23, PostgreSQL 17 + pgvector 0.8.2, Echo v4, sqlc, goose v3, zerolog, koanf, fsnotify.
+**Binary:** `CGO_ENABLED=0` static build. No DI framework. Constructor injection throughout.
+**Entry:** `cmd/nano-brain/` — CLI dispatcher + server startup. `internal/` — 17 packages.
+**Injection pattern:** config, logger, `*pgxpool.Pool` passed at construction; `sqlc.Queries` wraps the pool.
+
+### Cross-Cutting Conventions
+
+- **Errors:** `fmt.Errorf("<context>: %w", err)` — no custom error types, no bare `errors.New` in callers
+- **Logging:** zerolog structured; scope per component via `.With().Str("component","x").Logger()`
+- **Context:** `ctx context.Context` first param on all I/O functions; `errgroup` for goroutine lifecycle
+- **Interfaces:** small, role-based (Embedder, Querier, Harvester); defined on the consumer side
+- **Config:** koanf YAML + env, dynamic reload via `RWMutex`; hot-reload via `POST /api/reload-config`
+- **DB:** `storage.NewPool()` → `*pgxpool.Pool` → `sqlc.New(pool)` — generated files are DO NOT EDIT
+
+### Testing
+
+- **Unit:** `package <name>_test`, inline struct mocks (no gomock), table-driven with `t.Run`
+- **Integration:** `//go:build integration`, `testutil.SetupTestDB(t)` creates an isolated PG schema per test
+- **Quick:** `go build ./... && go test -race -short ./...`
+- **Full:** `go test -race -tags=integration ./...`
+
+### Key Directories
+
+| Path | Contents | Child docs |
+|------|----------|------------|
+| `cmd/nano-brain/` | CLI dispatcher + server startup | `cmd/nano-brain/AGENTS.md` |
+| `internal/server/handlers/` | 34 HTTP handler files | `internal/server/handlers/AGENTS.md` |
+| `internal/storage/` | sqlc codegen + queries + goose migrations | `internal/storage/AGENTS.md` |
+| `internal/harvest/` | Session harvesting (OpenCode, Claude Code) | `internal/harvest/AGENTS.md` |
+| `internal/search/` | Hybrid search pipeline (BM25 + vector + RRF) | `internal/search/AGENTS.md` |
+| `internal/embed/` | Embedding queue + provider adapters | `internal/embed/AGENTS.md` |
+| `internal/mcp/` | MCP protocol tool implementations | `internal/mcp/AGENTS.md` |
+
 ## Development Workflow
 
 ### OpenSpec-First (MANDATORY)
 
-**Every feature, fix, or refactor MUST go through OpenSpec before implementation.**
+Features, fixes, and refactors touching multiple files go through OpenSpec before coding.
 
-1. **Propose** → `openspec new change "<name>"` → create proposal.md, design.md, specs, tasks.md
+1. **Propose** → `openspec new change "<name>"` → proposal.md, design.md, specs, tasks.md
 2. **Validate** → `openspec validate "<name>" --strict --no-interactive`
 3. **Implement** → `/opsx-apply` or work through tasks.md
 4. **Archive** → `openspec archive "<name>"` after merge
 
-**No exceptions.** Do not skip straight to coding. The proposal captures *why*, the spec captures *what*, the design captures *how*, and tasks capture *the plan*. This applies to:
-- New features (even small ones)
-- Bug fixes that change behavior
-- Refactors that touch multiple files
-
-**Only skip OpenSpec for:** typo fixes, dependency bumps, or single-line config changes.
+Skip only for: typo fixes, dependency bumps, single-line config changes.
 
 <!-- HARNESS:START -->
 <!-- Managed block - do not edit manually. Updated by: harness-init skill -->

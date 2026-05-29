@@ -31,3 +31,6 @@ package-lock.json
 bin/
 npm/nano-brain
 npm/nano-brain.exe
+
+# Sisyphus agent runtime state
+.sisyphus/

@@ -1,6 +1,6 @@
 # nano-brain Roadmap
 
-> Last updated: 2026-05-25
+> Last updated: 2026-05-29
 
 ---
 
@@ -27,80 +27,53 @@ Goal: agent biết context của project, lịch sử decision, và có thể d�
 
 ## Pillar 2: Session Harvesting
 
-**What:** Thu thập + summarize sessions từ AI tools, không lưu raw.
+**What:** Thu thập + summarize sessions từ AI tools, scope per workspace.
 
-### 2a. OpenCode Harvester (SQLite) ✅
+| Feature | Description | Status |
+|---|---|---|
+| OpenCode SQLite harvester | Parse `opencode.db`, extract sessions/messages | ✅ |
+| Claude Code JSONL harvester | Parse `ses_*.jsonl` transcripts | ✅ |
+| Workspace filtering | Only harvest sessions matching registered workspace paths | ✅ |
+| LLM summarization pipeline | Map-reduce chunking, token-bucket rate limiter | ✅ |
+| Incremental harvest | Track last-harvested timestamp, dedup by session ID | ✅ |
+| Summary persistence | `.md` files + vector DB (`session-summary` collection) | ✅ |
+| Embed queue workspace isolation | Queue scan scoped to registered workspaces only | ✅ |
 
-OpenCode đã migrate sang SQLite (`~/.local/share/opencode/opencode.db`).
-SQLite harvester implemented in `internal/harvest/opencode_sqlite.go`. Auto-detects db path.
+### Architecture
 
-| Field | Value |
-|---|---|
-| DB path | `~/.local/share/opencode/opencode.db` |
-| Tables | `session`, `message`, `part`, `project`, `todo` |
-| Data | 6,744 sessions, 249,614 messages (trên máy user) |
-
-**Flow:**
 ```
-opencode.db → query sessions/messages → LLM summary → chunk → embed → index
+opencode.db / ses_*.jsonl
+  → filter by workspace path
+  → extract messages
+  → map-reduce LLM summary (token-bucket rate limited)
+  → chunk → embed → index (session-summary collection)
+  → .md summary file to output_dir
 ```
 
-**Config (proposed):**
+### Config
+
 ```yaml
 harvester:
   opencode:
-    db_path: ~/.local/share/opencode/opencode.db
-    output_dir: ~/.nano-brain/sessions/opencode/   # user-configurable
-    since: 2026-01-01                              # incremental
+    session_dir: ~/.local/share/opencode/storage
+  claudecode:
+    enabled: false
+    session_dir: ~/.claude/transcripts/
+
+summarization:
+  enabled: true
+  provider_url: "https://ai-proxy.example.com/v1"
+  model: "claude-sonnet-4-5"
+  max_tokens: 4096
+  concurrency: 3
+  output_dir: "~/.nano-brain/summaries"
 ```
-
-### 2b. Claude Code Harvester (JSONL) ✅
-
-Claude Code lưu transcripts dưới dạng JSONL.
-
-```
-~/.claude/
-├── transcripts/ses_*.jsonl    # Full conversation history
-├── metrics/costs.jsonl        # Token usage / cost tracking
-├── projects/
-│   └── <project-hash>/
-│       └── memory/            # Per-project auto-memory
-├── history.jsonl              # Command history
-└── sessions/                  # Active session state
-```
-
-**Flow:**
-```
-ses_*.jsonl → parse messages → LLM summary → chunk → embed → index
-```
-
-**Config (proposed):**
-```yaml
-harvester:
-  claude:
-    transcripts_dir: ~/.claude/transcripts/
-    output_dir: ~/.nano-brain/sessions/claude/   # user-configurable
-    include_costs: true                          # harvest costs.jsonl too
-```
-
-### 2c. Shared Harvesting Principles
-
-- **No raw storage** — LLM summarizes session trước khi lưu
-- **User-configurable output folder** — không hardcode path
-- **Incremental** — chỉ harvest sessions mới (track last-harvested timestamp)
-- **Dedup** — skip sessions đã harvested (by session ID)
-- **LLM summary format:**
-  - What was the goal?
-  - What decisions were made?
-  - What files were touched?
-  - What problems were encountered?
-  - Key learnings / patterns
 
 ---
 
-## Pillar 3: Memory
+## Pillar 3: Memory & Developer Experience
 
-**What:** Persistent cross-session memory cho AI agents.
+**What:** Persistent cross-session memory + ergonomic tooling.
 
 | Feature | Description | Status |
 |---|---|---|
@@ -109,6 +82,14 @@ harvester:
 | Tag-based filter | `--tags decision,auth` | ✅ |
 | Supersede | Replace stale memory entries | ✅ |
 | Auto-memory from sessions | Extract decisions từ harvested sessions | ✅ |
+| 9 MCP tools | query, search, vsearch, get, write, tags, status, update, wake_up | ✅ |
+| Hybrid search pipeline | BM25 + pgvector HNSW + RRF fusion + recency decay | ✅ |
+| Benchmarking suite | generate, run, compare, stress | ✅ |
+| Init onboarding wizard | Interactive config setup on first run | ✅ |
+| Doctor command | Check prerequisites (PG, pgvector, Ollama, model) | ✅ |
+| V1 SQLite migration | Import from V1 format (pure Go, no CGO) | ✅ |
+| Config hot-reload | `POST /api/reload-config` | ✅ |
+| Search telemetry | Local-only, 90-day retention, non-blocking | ✅ |
 
 ---
 
@@ -140,38 +121,69 @@ harvester:
 
 ---
 
-## Implementation Order (Proposed)
+## Implementation Order
 
 ```
-Phase 1 — Foundation (Now)
-  ├── Fix watcher directory-read bug (#174)
-  ├── OpenCode SQLite harvester (#175)
-  └── Claude JSONL harvester (#176)
+Phase 1 — Foundation ✅ (shipped 2026-05)
+  ├── File indexing, watcher, chunking, embedding
+  ├── OpenCode SQLite harvester
+  ├── Claude Code JSONL harvester
+  └── Workspace registration + isolation
 
-Phase 2 — Code Intelligence
-  ├── Symbol extraction
-  ├── Knowledge graph
-  └── Impact analytics
+Phase 2 — Code Intelligence ✅ (shipped 2026-05)
+  ├── Symbol extraction (regex-based)
+  ├── Knowledge graph (module → function → dependency)
+  ├── Impact analytics (cross-file change propagation)
+  └── Call chain tracing
 
-Phase 3 — Memory Enhancement
-  └── Auto-memory extraction from harvested sessions
+Phase 3 — Memory & DX ✅ (shipped 2026-05)
+  ├── Hybrid search (BM25 + vector + RRF + recency)
+  ├── MCP tools (9 tools)
+  ├── Session summarization pipeline
+  ├── Workspace filtering for harvest + embed
+  ├── Init onboarding, doctor, benchmarks
+  └── V1 migration, config hot-reload, telemetry
 
-Phase 4 — Self-Learning (Discuss)
-  ├── Pattern learning
+Phase 4 — Hardening (Current)
+  ├── #180 — Ollama context length overflow on large chunks
+  ├── #181 — UTF-8 null byte in harvested sessions
+  ├── #184 — Require explicit --workspace on CLI commands
+  ├── #158 — Incremental reindex (only changed files)
+  └── #190, #191 — Harvest follow-ups (stale doc cleanup, max_tokens bump)
+
+Phase 5 — CLI Completeness (Next)
+  ├── #153 — Code intelligence CLI (context, code-impact, detect-changes)
+  ├── #151 — Wake-up command (compact context briefing)
+  ├── #152 — get, tags, multi-get commands
+  ├── #155 — Workspace remove command
+  ├── #156 — Cross-workspace search (--scope=all)
+  ├── #157 — Cache management (clear, stats)
+  └── #160 — --tags filter for query/search
+
+Phase 6 — Enhanced Code Intelligence
+  ├── #174 — Symbol extraction with go-tree-sitter (replace regex)
+  └── Cross-language support (TypeScript, Python, Rust)
+
+Phase 7 — Self-Learning (Discuss)
+  ├── #154 — Memory consolidation + categorization + Thompson Sampling
+  ├── Pattern learning from prompt history
   ├── Proactive context pre-loading
-  └── Self-lesson learn
-
-Phase 5 — Auto-execution (Stretch, Discuss)
-  └── Confidence-gated auto task execution
+  └── Self-lesson extraction
 ```
 
 ---
 
-## Open Questions (To Discuss)
+## Open Questions
 
-1. **Pillar 4 scope**: Proactive suggestions only, hay auto-execution?
-2. **LLM for summarization**: dùng provider nào? Same embedding provider, hay separate?
-3. **Output dir**: default path cho harvested sessions?
-4. **Incremental harvest**: trigger on schedule (cron), on demand, hay watch DB?
-5. **Claude projects/memory**: có harvest `~/.claude/projects/<hash>/memory/` không?
-6. **costs.jsonl**: có index token cost data không, hay chỉ dùng cho analytics?
+1. **Pillar 4 scope**: Proactive suggestions only, or auto-execution? (Needs design discussion)
+2. **Tree-sitter vs regex**: #174 proposes go-tree-sitter for symbol extraction — worth the binary size increase?
+3. **Cross-workspace search**: #156 — privacy implications of searching across all workspaces?
+4. **Memory consolidation**: #154 — Thompson Sampling for relevance ranking — need benchmarks first?
+
+### Resolved Questions
+
+- ~~LLM for summarization~~ → OpenAI-compatible endpoint via `summarization.provider_url`
+- ~~Output dir~~ → `~/.nano-brain/summaries/` (configurable)
+- ~~Incremental harvest~~ → On-demand via `POST /api/harvest`, tracks last-harvested per session
+- ~~Claude projects/memory~~ → Not harvesting `~/.claude/projects/` — only transcripts
+- ~~costs.jsonl~~ → Not indexed — analytics-only, not searchable
