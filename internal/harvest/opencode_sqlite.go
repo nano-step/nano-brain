@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -127,7 +128,8 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 		}
 
 		// Derive workspace hash for this session's project
-		worktree := sess.Worktree
+		// Normalize for trailing-slash mismatch (Oracle M3, #199)
+		worktree := filepath.Clean(sess.Worktree)
 		wsHash, ok := wsCache[worktree]
 		if !ok {
 			var hashErr error
@@ -476,4 +478,93 @@ func (h *OpenCodeSQLiteHarvester) writeRawFallback(
 
 func marshalJSON(v any) ([]byte, error) {
 	return json.Marshal(v)
+}
+
+// DiscoveredDB describes one matched per-project OpenCode SQLite database.
+type DiscoveredDB struct {
+	DBPath        string // absolute path to the opencode.db file
+	Worktree      string // project.worktree value (cleaned via filepath.Clean)
+	WorkspaceHash string // nano-brain workspace hash this DB belongs to
+}
+
+// scanOpenCodeDBRoot scans a root directory for per-project OpenCode SQLite
+// databases, matches each one's project.worktree against the supplied
+// registered map (path -> hash), and returns the matched set.
+//
+// Skipped silently (Debug log with reason field):
+//   - candidates that fail to open or ping
+//   - candidates whose `project` table query fails (missing table, schema drift)
+//   - candidates whose project.worktree is "" or "/" (OpenCode "global"
+//     sessions outside any project)
+//   - candidates whose project.worktree does not match any registered path
+//
+// root may be empty — returns nil immediately.
+// Each candidate is opened with `?mode=ro` and closed before the next is tried.
+// A 2-second ping timeout is applied per candidate to prevent hangs.
+func scanOpenCodeDBRoot(
+	ctx context.Context,
+	root string,
+	registered map[string]string,
+	logger zerolog.Logger,
+) []DiscoveredDB {
+	if root == "" {
+		return nil
+	}
+
+	candidates, err := filepath.Glob(filepath.Join(root, "*", "opencode.db"))
+	if err != nil || len(candidates) == 0 {
+		logger.Debug().Str("root", root).Msg("zero candidates")
+		return nil
+	}
+
+	var results []DiscoveredDB
+	for _, path := range candidates {
+		db, err := sql.Open("sqlite", path+"?mode=ro")
+		if err != nil {
+			logger.Debug().Str("path", path).Str("reason", "ping_failed").Err(err).Msg("scan skip")
+			continue
+		}
+
+		pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		pingErr := db.PingContext(pingCtx)
+		cancel()
+		if pingErr != nil {
+			db.Close()
+			logger.Debug().Str("path", path).Str("reason", "ping_failed").Err(pingErr).Msg("scan skip")
+			continue
+		}
+
+		var id, worktree string
+		row := db.QueryRowContext(ctx, "SELECT id, worktree FROM project LIMIT 1")
+		if scanErr := row.Scan(&id, &worktree); scanErr != nil {
+			db.Close()
+			logger.Debug().Str("path", path).Str("reason", "query_failed").Err(scanErr).Msg("scan skip")
+			continue
+		}
+		db.Close()
+
+		if worktree == "" {
+			logger.Debug().Str("path", path).Str("reason", "empty_worktree").Msg("scan skip")
+			continue
+		}
+		if worktree == "/" {
+			logger.Debug().Str("path", path).Str("reason", "global_or_empty_worktree").Msg("scan skip")
+			continue
+		}
+
+		worktree = filepath.Clean(worktree)
+
+		wsHash, ok := registered[worktree]
+		if !ok {
+			logger.Debug().Str("path", path).Str("reason", "worktree_not_registered").Str("worktree", worktree).Msg("scan skip")
+			continue
+		}
+
+		results = append(results, DiscoveredDB{
+			DBPath:        path,
+			Worktree:      worktree,
+			WorkspaceHash: wsHash,
+		})
+	}
+	return results
 }
