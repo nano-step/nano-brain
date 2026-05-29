@@ -719,9 +719,6 @@ func TestOpenCodeSQLite_LLMFailure_FallbackUnifiedPath(t *testing.T) {
 		t.Errorf("errCount = %d, want 0", errCount)
 	}
 
-	wsHash := hex.EncodeToString(sha256.New().Sum([]byte("/home/user/test-app")))[:16]
-	_ = wsHash
-
 	q := sqlc.New(pgDB)
 	ctx := context.Background()
 
