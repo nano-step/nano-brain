@@ -37,6 +37,32 @@ When `harvester.opencode.db_root` is non-empty (set via config, env var, or auto
 - **AND** a Debug log is emitted with `reason` and `error` fields
 - **AND** daemon startup continues without aborting
 
+#### Scenario: db_root directory exists but is empty
+
+- **GIVEN** `db_root` resolves to a directory containing zero subdirectories with an `opencode.db` file
+- **WHEN** discovery runs
+- **THEN** `filepath.Glob` returns zero candidates
+- **AND** no harvesters are instantiated from `db_root` mode
+- **AND** the daemon falls through to `db_path` mode (if set) or `session_dir` mode (if set) or disabled
+- **AND** if `db_root` was explicitly configured (config/env), a Warn log is emitted; if auto-detected, an Info log is emitted
+
+#### Scenario: Same worktree appears in multiple DBs under db_root
+
+- **GIVEN** two distinct DB files `<db_root>/foo-aaa/opencode.db` and `<db_root>/foo-bbb/opencode.db` both have `project.worktree = /u/foo`
+- **AND** `/u/foo` is a registered nano-brain workspace
+- **WHEN** discovery runs
+- **THEN** two `OpenCodeSQLiteHarvester` instances are registered, one per DB file
+- **AND** content-hash deduplication at the document upsert layer prevents duplicate session-summary documents in PG
+- **AND** an Info log is emitted noting the duplicate worktree mapping
+
+#### Scenario: Per-project DB contains multiple project rows
+
+- **GIVEN** a per-project SQLite contains more than one row in the `project` table (corruption case — per-project DBs are designed to have exactly one project row)
+- **WHEN** discovery runs `SELECT id, worktree FROM project LIMIT 1`
+- **THEN** one project row is selected arbitrarily (SQLite's natural order)
+- **AND** discovery proceeds with that single worktree; other project rows are ignored
+- **AND** no error is emitted (graceful handling of corruption)
+
 ### Requirement: Three-mode priority chain for OpenCode harvester source
 
 The daemon SHALL select exactly one OpenCode harvest source mode per startup, evaluating in priority order: (1) `db_root` if it produces ≥1 matched harvester; (2) `db_path` if non-empty; (3) `session_dir` if non-empty; (4) disabled. Modes after the selected one SHALL NOT be evaluated or instantiated.

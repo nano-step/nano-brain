@@ -23,7 +23,7 @@ The directory suffix (`<slug>-<hex>`) appears to be OpenCode-internal (hash deri
   3. `session_dir` (legacy filesystem JSON, current behavior — kept for backward compat)
 - **Auto-detection**: when none of the three is configured, probe in order: `OPENCODE_DB_ROOT` env → platform default (`~/.ai-sandbox/opencode-dbs` on macOS/Linux) → `OPENCODE_DB_PATH` env → existing single-DB defaults → `OPENCODE_STORAGE_DIR` env → legacy JSON defaults.
 - **Status endpoint** (`GET /api/status`): replace single `opencode.session_dir` with structured `opencode.{mode, db_root|db_path|session_dir, db_count}` so operators can verify which mode is active and how many per-project DBs were discovered.
-- **Rescan**: on every harvest tick the discovery is re-run when `db_root` mode is active, so newly-created per-project DBs picked up without daemon restart.
+- **Rescan**: discovery runs once at daemon startup. Newly-created per-project DBs require a daemon restart to be picked up (live tick-level rescan deferred to a follow-up — tracked in `docs/HARNESS_BACKLOG.md`).
 
 ## Capabilities
 
