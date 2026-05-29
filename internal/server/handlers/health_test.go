@@ -131,3 +131,69 @@ func TestHealthSoftFailsOnCountError(t *testing.T) {
 		}
 	}
 }
+
+func openCodeStatus(t *testing.T, snap handlers.HarvestStatusSnapshot) map[string]interface{} {
+	t.Helper()
+	h := newTestHealth(nil)
+	h.SetHarvestStatus(snap)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	if err := h.Status(c); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	body := decodeJSON(t, rec.Body)
+	hs, _ := body["harvester_status"].(map[string]interface{})
+	oc, _ := hs["opencode"].(map[string]interface{})
+	return oc
+}
+
+func TestStatusOpenCode_DBRootMode(t *testing.T) {
+	oc := openCodeStatus(t, handlers.HarvestStatusSnapshot{
+		Mode: "db_root", DBRoot: "/home/u/dbs", DBCount: 3,
+	})
+	if oc["mode"] != "db_root" {
+		t.Errorf("mode = %v, want db_root", oc["mode"])
+	}
+	if oc["enabled"] != true {
+		t.Errorf("enabled = %v, want true", oc["enabled"])
+	}
+	if int(oc["db_count"].(float64)) != 3 {
+		t.Errorf("db_count = %v, want 3", oc["db_count"])
+	}
+}
+
+func TestStatusOpenCode_DBPathMode(t *testing.T) {
+	oc := openCodeStatus(t, handlers.HarvestStatusSnapshot{
+		Mode: "db_path", DBPath: "/home/u/opencode.db", DBCount: 1,
+	})
+	if oc["mode"] != "db_path" {
+		t.Errorf("mode = %v, want db_path", oc["mode"])
+	}
+	if oc["enabled"] != true {
+		t.Errorf("enabled = %v, want true", oc["enabled"])
+	}
+}
+
+func TestStatusOpenCode_SessionDirMode(t *testing.T) {
+	oc := openCodeStatus(t, handlers.HarvestStatusSnapshot{
+		Mode: "session_dir", SessionDir: "/home/u/.local/share/opencode/storage", DBCount: 1,
+	})
+	if oc["mode"] != "session_dir" {
+		t.Errorf("mode = %v, want session_dir", oc["mode"])
+	}
+	if oc["enabled"] != true {
+		t.Errorf("enabled = %v, want true", oc["enabled"])
+	}
+}
+
+func TestStatusOpenCode_DisabledMode(t *testing.T) {
+	oc := openCodeStatus(t, handlers.HarvestStatusSnapshot{Mode: "disabled"})
+	if oc["mode"] != "disabled" {
+		t.Errorf("mode = %v, want disabled", oc["mode"])
+	}
+	if oc["enabled"] != false {
+		t.Errorf("enabled = %v, want false", oc["enabled"])
+	}
+}

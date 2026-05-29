@@ -56,6 +56,7 @@ type Server struct {
 	version          string
 	startTime        time.Time
 	migrationVersion int64
+	harvestStatus  handlers.HarvestStatusSnapshot
 }
 
 func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string, migrationVersion int64) *Server {
@@ -154,6 +155,16 @@ func (s *Server) getHarvestRunner() handlers.HarvestRunner {
 	s.harvestMu.RLock()
 	defer s.harvestMu.RUnlock()
 	return s.harvestRunner
+}
+
+func (s *Server) SetHarvestStatus(mode, dbRoot, dbPath, sessionDir string, dbCount int) {
+	s.harvestStatus = handlers.HarvestStatusSnapshot{
+		Mode:       mode,
+		DBRoot:     dbRoot,
+		DBPath:     dbPath,
+		SessionDir: sessionDir,
+		DBCount:    dbCount,
+	}
 }
 
 func (s *Server) SetSummarizer(sum handlers.SummarizeSummarizer) {

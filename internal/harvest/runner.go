@@ -100,3 +100,8 @@ func (r *Runner) RunOnce(ctx context.Context) (harvested, skipped, errCount int)
 func (r *Runner) tick(ctx context.Context) {
 	r.RunOnce(ctx)
 }
+
+// HarvesterCount returns the number of harvesters registered with this runner.
+func (r *Runner) HarvesterCount() int {
+	return len(r.harvesters)
+}
