@@ -17,6 +17,7 @@ func registerRoutes(s *Server) {
 	}
 	h := handlers.NewHealth(s.pool, s.logger, s.version, s.startTime, queueInfo, s.getHealthCfg, counter, s.embedCfg, s.migrationVersion)
 	h.SetHarvestStatus(s.harvestStatus)
+	s.healthHandler = h
 
 	s.echo.GET("/health", h.Health)
 	s.echo.GET("/api/status", h.Status)

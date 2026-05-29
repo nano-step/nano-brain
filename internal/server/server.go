@@ -57,6 +57,7 @@ type Server struct {
 	startTime        time.Time
 	migrationVersion int64
 	harvestStatus  handlers.HarvestStatusSnapshot
+	healthHandler  *handlers.Health
 }
 
 func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string, migrationVersion int64) *Server {
@@ -164,6 +165,9 @@ func (s *Server) SetHarvestStatus(mode, dbRoot, dbPath, sessionDir string, dbCou
 		DBPath:     dbPath,
 		SessionDir: sessionDir,
 		DBCount:    dbCount,
+	}
+	if s.healthHandler != nil {
+		s.healthHandler.SetHarvestStatus(s.harvestStatus)
 	}
 }
 
