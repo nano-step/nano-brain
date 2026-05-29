@@ -111,7 +111,9 @@ search:
 
 harvester:
   opencode:
-    session_dir: ""             # e.g., ~/.local/share/opencode/storage
+    db_root: ""                 # e.g., ~/.ai-sandbox/opencode-dbs (multi-DB, highest priority)
+    db_path: ""                 # e.g., ~/.local/share/opencode/opencode.db (single DB)
+    session_dir: ""             # e.g., ~/.local/share/opencode/storage (legacy JSON)
   claudecode:
     enabled: false
     session_dir: ""
@@ -176,7 +178,9 @@ Large sessions (100K+ tokens) are handled via map-reduce chunking — no session
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `VOYAGE_API_KEY` | Voyage AI API key |
-| `OPENCODE_STORAGE_DIR` | OpenCode session directory |
+| `OPENCODE_DB_ROOT` | OpenCode per-project DB root directory (multi-DB mode) |
+| `OPENCODE_DB_PATH` | OpenCode single SQLite database path |
+| `OPENCODE_STORAGE_DIR` | OpenCode session directory (legacy) |
 | `NANO_BRAIN_SUMMARIZE_API_KEY` | API key for the summarization LLM provider |
 | `NANO_BRAIN_*` | Override any config (e.g., `NANO_BRAIN_SERVER_PORT=3100`) |
 
