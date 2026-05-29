@@ -140,16 +140,16 @@ summarization:
   model: "nano-brain"           # model name passed to the provider
   max_tokens: 4096              # max tokens per LLM completion
   concurrency: 3                # parallel map-phase LLM calls
-  output_dir: "~/.nano-brain/summaries"  # directory for .md summary files
 ```
 
 ### Session Summarization
 
 When `summarization.enabled: true`, nano-brain automatically generates structured markdown summaries of each harvested session using an OpenAI-compatible LLM provider. Summaries are:
 
-- Written as `.md` files to `output_dir` (`{source}_{title-slug}_{YYYY-MM-DD}.md`)
-- Stored in the vector DB under collection `session-summary` for semantic search
+- Stored in PostgreSQL under collection `session-summary` for semantic search via the standard query/vsearch API (PG is the source of truth)
 - Idempotent — unchanged sessions are skipped; re-harvested sessions overwrite old summaries
+
+> **Note**: as of `harvest-summary-only` (May 2026), summaries are no longer written to disk as `.md` files. The legacy `output_dir` YAML key is silently ignored for backward compat. Any pre-existing files under `~/.nano-brain/summaries/` are stale artifacts and can be safely deleted.
 
 **Quick setup with ai-proxy:**
 
@@ -161,7 +161,6 @@ summarization:
   model: "claude-sonnet-4-5"
   max_tokens: 4096
   concurrency: 3
-  output_dir: "~/.nano-brain/summaries"
 ```
 
 Or via environment variable:

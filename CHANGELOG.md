@@ -15,7 +15,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat(summarize): idempotent upsert via `summary://opencode/{id}` source path — unchanged sessions skipped
 - feat(summarize): cross-session relationship links (parent/child/sibling) in summary header
 - feat(harvest): wire summarizer into OpenCode SQLite + Claude Code harvesters — runs after successful harvest
-- feat(config): `summarization` config block — provider_url, api_key, model, max_tokens, concurrency, output_dir
+- feat(config): `summarization` config block — provider_url, api_key, model, max_tokens, concurrency
 
 ### Documentation
 - docs: add `summarization` config section to README with ai-proxy setup example
