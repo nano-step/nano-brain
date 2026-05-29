@@ -31,3 +31,4 @@ package-lock.json
 bin/
 npm/nano-brain
 npm/nano-brain.exe
+.sisyphus/
