@@ -12,7 +12,7 @@ import (
 )
 
 // createScanTestDB creates a temporary SQLite file with the minimal schema
-// needed by scanOpenCodeDBRoot (project table only).
+// needed by ScanOpenCodeDBRoot (project table only).
 func createScanTestDB(t *testing.T, dir, subdir, worktree string) string {
 	t.Helper()
 	dbDir := filepath.Join(dir, subdir)
@@ -46,14 +46,14 @@ func createScanTestDB(t *testing.T, dir, subdir, worktree string) string {
 func nopLogger() zerolog.Logger { return zerolog.Nop() }
 
 func TestScanOpenCodeDBRoot_EmptyRoot(t *testing.T) {
-	got := scanOpenCodeDBRoot(context.Background(), "", map[string]string{}, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), "", map[string]string{}, nopLogger())
 	if got != nil {
 		t.Errorf("expected nil for empty root, got %v", got)
 	}
 }
 
 func TestScanOpenCodeDBRoot_RootMissing(t *testing.T) {
-	got := scanOpenCodeDBRoot(context.Background(), "/no/such/dir", map[string]string{}, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), "/no/such/dir", map[string]string{}, nopLogger())
 	if got != nil {
 		t.Errorf("expected nil for missing root, got %v", got)
 	}
@@ -61,7 +61,7 @@ func TestScanOpenCodeDBRoot_RootMissing(t *testing.T) {
 
 func TestScanOpenCodeDBRoot_RootEmpty(t *testing.T) {
 	dir := t.TempDir()
-	got := scanOpenCodeDBRoot(context.Background(), dir, map[string]string{}, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), dir, map[string]string{}, nopLogger())
 	if got != nil {
 		t.Errorf("expected nil for empty dir, got %v", got)
 	}
@@ -73,7 +73,7 @@ func TestScanOpenCodeDBRoot_RegisteredMatch(t *testing.T) {
 	createScanTestDB(t, dir, "proj-b", "/u/proj-b")
 
 	registered := map[string]string{"/u/proj-a": "hash-a"}
-	got := scanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
 	if len(got) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(got), got)
 	}
@@ -90,7 +90,7 @@ func TestScanOpenCodeDBRoot_GlobalWorktreeSkipped(t *testing.T) {
 	createScanTestDB(t, dir, "global", "/")
 
 	registered := map[string]string{"/": "hash-global"}
-	got := scanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
 	if len(got) != 0 {
 		t.Errorf("expected 0 results for '/' worktree, got %d", len(got))
 	}
@@ -101,7 +101,7 @@ func TestScanOpenCodeDBRoot_EmptyWorktreeSkipped(t *testing.T) {
 	createScanTestDB(t, dir, "empty-wt", "")
 
 	registered := map[string]string{"": "hash-empty", ".": "hash-dot"}
-	got := scanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
 	if len(got) != 0 {
 		t.Errorf("expected 0 results for empty worktree, got %d", len(got))
 	}
@@ -112,7 +112,7 @@ func TestScanOpenCodeDBRoot_TrailingSlashNormalized(t *testing.T) {
 	createScanTestDB(t, dir, "foo", "/u/foo/")
 
 	registered := map[string]string{"/u/foo": "hash-foo"}
-	got := scanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
 	if len(got) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(got))
 	}
@@ -132,7 +132,7 @@ func TestScanOpenCodeDBRoot_CorruptDB(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := scanOpenCodeDBRoot(context.Background(), dir, map[string]string{}, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), dir, map[string]string{}, nopLogger())
 	if len(got) != 0 {
 		t.Errorf("expected 0 results for corrupt DB, got %d", len(got))
 	}
@@ -155,7 +155,7 @@ func TestScanOpenCodeDBRoot_MissingProjectTable(t *testing.T) {
 	}
 	db.Close()
 
-	got := scanOpenCodeDBRoot(context.Background(), dir, map[string]string{}, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), dir, map[string]string{}, nopLogger())
 	if len(got) != 0 {
 		t.Errorf("expected 0 results for missing project table, got %d", len(got))
 	}
@@ -185,7 +185,7 @@ func TestScanOpenCodeDBRoot_MultipleProjectRows(t *testing.T) {
 	db.Close()
 
 	registered := map[string]string{"/u/multi-a": "hash-a", "/u/multi-b": "hash-b"}
-	got := scanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
+	got := ScanOpenCodeDBRoot(context.Background(), dir, registered, nopLogger())
 	if len(got) > 1 {
 		t.Errorf("expected at most 1 result (LIMIT 1), got %d", len(got))
 	}

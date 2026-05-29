@@ -487,7 +487,7 @@ type DiscoveredDB struct {
 	WorkspaceHash string // nano-brain workspace hash this DB belongs to
 }
 
-// scanOpenCodeDBRoot scans a root directory for per-project OpenCode SQLite
+// ScanOpenCodeDBRoot scans a root directory for per-project OpenCode SQLite
 // databases, matches each one's project.worktree against the supplied
 // registered map (path -> hash), and returns the matched set.
 //
@@ -501,7 +501,7 @@ type DiscoveredDB struct {
 // root may be empty — returns nil immediately.
 // Each candidate is opened with `?mode=ro` and closed before the next is tried.
 // A 2-second ping timeout is applied per candidate to prevent hangs.
-func scanOpenCodeDBRoot(
+func ScanOpenCodeDBRoot(
 	ctx context.Context,
 	root string,
 	registered map[string]string,
