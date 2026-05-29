@@ -402,8 +402,6 @@ func startServer(configPath string) {
 	}
 }
 
-
-
 // buildOpenCodeHarvesters constructs OpenCode harvesters in priority order:
 //
 //  1. db_root — scan for per-project SQLite DBs matching registered workspaces
@@ -428,6 +426,10 @@ func buildOpenCodeHarvesters(ctx context.Context, cfg *config.Config, db *sql.DB
 			}
 			discovered := harvest.ScanOpenCodeDBRoot(ctx, cfg.Harvester.OpenCode.DBRoot, registered, logger)
 			if len(discovered) > 0 {
+				worktreeCounts := make(map[string]int, len(discovered))
+				for _, d := range discovered {
+					worktreeCounts[d.Worktree]++
+				}
 				var harvesters []harvest.Harvester
 				for _, d := range discovered {
 					h := harvest.NewOpenCodeSQLiteHarvester(db, logger, d.DBPath)
@@ -437,6 +439,12 @@ func buildOpenCodeHarvesters(ctx context.Context, cfg *config.Config, db *sql.DB
 						Str("worktree", d.Worktree).
 						Str("workspace_hash", d.WorkspaceHash).
 						Msg("opencode per-project db harvester registered")
+				}
+				for worktree, n := range worktreeCounts {
+					if n > 1 {
+						logger.Info().Str("worktree", worktree).Int("db_count", n).
+							Msg("multiple per-project DBs map to the same worktree — content-hash dedup will collapse duplicates")
+					}
 				}
 				return harvesters, "db_root"
 			}
