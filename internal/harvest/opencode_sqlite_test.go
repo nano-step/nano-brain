@@ -95,6 +95,21 @@ func insertTestPart(t *testing.T, db *sql.DB, id, messageID, partType, content s
 	}
 }
 
+func registerTestWorkspace(t *testing.T, pgDB *sql.DB, path string) string {
+	t.Helper()
+	h := sha256.Sum256([]byte(path))
+	hash := hex.EncodeToString(h[:])
+	q := sqlc.New(pgDB)
+	_, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
+		Hash: hash,
+		Path: path,
+	})
+	if err != nil {
+		t.Fatalf("register workspace %q: %v", path, err)
+	}
+	return hash
+}
+
 func TestRenderSQLiteMarkdown_Format(t *testing.T) {
 	sqdb := setupTestSQLiteDB(t)
 	now := time.Now().UnixMilli()
@@ -285,6 +300,7 @@ func TestOpenCodeSQLite_AgeGate_HarvestSkipsActive(t *testing.T) {
 	inactiveMs := now.Add(-15 * time.Minute).UnixMilli()
 
 	insertTestProject(t, sqdb, "proj1", "/home/user/app-age")
+	registerTestWorkspace(t, pgDB, "/home/user/app-age")
 
 	// Active session (updated 5min ago)
 	insertTestSession(t, sqdb, "sess-active", "proj1", "Active", activeMs)
@@ -340,6 +356,7 @@ func TestOpenCodeSQLite_SummarizerHappyPath_OnlySummaryDoc(t *testing.T) {
 	oldMs := now.Add(-15 * time.Minute).UnixMilli()
 
 	insertTestProject(t, sqdb, "proj1", "/home/user/test-happy")
+	registerTestWorkspace(t, pgDB, "/home/user/test-happy")
 	insertTestSession(t, sqdb, "sess-happy1", "proj1", "Happy Session", oldMs)
 	if _, err := sqdb.Exec(`UPDATE session SET time_updated = ? WHERE id = ?`, oldMs, "sess-happy1"); err != nil {
 		t.Fatal(err)
@@ -412,15 +429,13 @@ func TestOpenCodeSQLite_SkipCheck_UnifiedPath(t *testing.T) {
 	worktree := "/home/user/test-skip"
 
 	insertTestProject(t, sqdb, "proj1", worktree)
+	wsHash := registerTestWorkspace(t, pgDB, worktree)
 	insertTestSession(t, sqdb, "sess-skip1", "proj1", "Skip Session", oldMs)
 	if _, err := sqdb.Exec(`UPDATE session SET time_updated = ? WHERE id = ?`, oldMs, "sess-skip1"); err != nil {
 		t.Fatal(err)
 	}
 	insertTestMessage(t, sqdb, "msg1", "sess-skip1", "user", oldMs)
 	insertTestPart(t, sqdb, "p1", "msg1", "text", "Hello from skip test!")
-
-	h := sha256.Sum256([]byte(worktree))
-	wsHash := hex.EncodeToString(h[:])
 
 	// Pre-insert doc at unified path to trigger skip
 	q := sqlc.New(pgDB)
@@ -477,9 +492,7 @@ func TestOpenCodeSQLite_MultiSession_Counters(t *testing.T) {
 	worktree := "/home/user/test-multi"
 
 	insertTestProject(t, sqdb, "proj1", worktree)
-
-	wsH := sha256.Sum256([]byte(worktree))
-	wsHash := hex.EncodeToString(wsH[:])
+	wsHash := registerTestWorkspace(t, pgDB, worktree)
 
 	sessionIDs := []string{"success-1", "success-2", "success-3", "fail-1", "fail-2", "skip-1"}
 	for i, sid := range sessionIDs {
@@ -686,6 +699,7 @@ func TestOpenCodeSQLite_LLMFailure_FallbackUnifiedPath(t *testing.T) {
 	oldMs := now.Add(-15 * time.Minute).UnixMilli()
 
 	insertTestProject(t, sqdb, "proj1", "/home/user/test-app")
+	registerTestWorkspace(t, pgDB, "/home/user/test-app")
 	insertTestSession(t, sqdb, "sess-fb1", "proj1", "Fallback Session", oldMs)
 	if _, err := sqdb.Exec(`UPDATE session SET time_updated = ? WHERE id = ?`, oldMs, "sess-fb1"); err != nil {
 		t.Fatal(err)
@@ -704,9 +718,6 @@ func TestOpenCodeSQLite_LLMFailure_FallbackUnifiedPath(t *testing.T) {
 	if errCount != 0 {
 		t.Errorf("errCount = %d, want 0", errCount)
 	}
-
-	wsHash := hex.EncodeToString(sha256.New().Sum([]byte("/home/user/test-app")))[:16]
-	_ = wsHash
 
 	q := sqlc.New(pgDB)
 	ctx := context.Background()

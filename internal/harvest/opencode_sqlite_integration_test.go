@@ -126,6 +126,16 @@ func TestOpenCodeSQLite_Integration_RealPostgres(t *testing.T) {
 	wsH := sha256.Sum256([]byte(worktree))
 	wsHash := hex.EncodeToString(wsH[:])
 
+	// Register workspace in PG so HarvestAll's filter includes it
+	q := sqlc.New(pgDB)
+	_, regErr := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
+		Hash: wsHash,
+		Path: worktree,
+	})
+	if regErr != nil {
+		t.Fatalf("register workspace: %v", regErr)
+	}
+
 	successFn := func(ctx context.Context, md string, meta harvest.SummaryMeta) error {
 		q := sqlc.New(pgDB)
 		_, uErr := q.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
