@@ -175,7 +175,7 @@ Large sessions (100K+ tokens) are handled via map-reduce chunking — no session
 
 | Variable | Description |
 |----------|-------------|
-| `NANO_BRAIN_CONFIG` | Path to YAML config file (12-factor; useful in Docker/k8s). Precedence: `--config` flag > `NANO_BRAIN_CONFIG` > `~/.nano-brain/config.yml` |
+| `NANO_BRAIN_CONFIG` | Path to YAML config file (12-factor; useful in Docker/k8s). Precedence: `--config` flag > `NANO_BRAIN_CONFIG` > `~/.nano-brain/config.yml`. Leading/trailing whitespace is stripped. If the env-pointed file does not exist, a `WARNING:` is printed to stderr and defaults are used (operator can spot typos). |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `VOYAGE_API_KEY` | Voyage AI API key |
 | `OPENCODE_DB_ROOT` | OpenCode per-project DB root directory (multi-DB mode) |

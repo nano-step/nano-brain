@@ -607,3 +607,55 @@ func TestResolveConfigPath_EmptyEnvFallsBackToDefault(t *testing.T) {
 		t.Errorf("expected default when env is empty string, got %q", got)
 	}
 }
+
+func TestResolveConfigPath_TrimsWhitespace(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "  /from/env.yml  ")
+	got := ResolveConfigPath("")
+	if got != "/from/env.yml" {
+		t.Errorf("expected trimmed env value, got %q", got)
+	}
+}
+
+func TestResolveConfigPathStrict_WarnsOnMissingFile(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "/tmp/nano-brain-test-does-not-exist.yml")
+	_, warn := ResolveConfigPathStrict("")
+	if warn == "" {
+		t.Fatal("expected warning for non-existent env-pointed file")
+	}
+	if !strings.Contains(warn, "NANO_BRAIN_CONFIG") {
+		t.Errorf("warning should mention env var name, got %q", warn)
+	}
+	if !strings.Contains(warn, "does not exist") {
+		t.Errorf("warning should explain why, got %q", warn)
+	}
+}
+
+func TestResolveConfigPathStrict_NoWarnWhenDefault(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "")
+	_, warn := ResolveConfigPathStrict("")
+	if warn != "" {
+		t.Errorf("default path should not warn, got %q", warn)
+	}
+}
+
+func TestResolveConfigPathStrict_NoWarnWhenFlagPathExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "cfg.yml")
+	if err := os.WriteFile(cfgPath, []byte("server: {host: localhost}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, warn := ResolveConfigPathStrict(cfgPath)
+	if warn != "" {
+		t.Errorf("existing flag path should not warn, got %q", warn)
+	}
+}
+
+func TestResolveConfigPathStrict_WarnsOnFlagMissingFile(t *testing.T) {
+	_, warn := ResolveConfigPathStrict("/tmp/no-such-flag-path.yml")
+	if warn == "" {
+		t.Fatal("expected warning for non-existent flag-pointed file")
+	}
+	if !strings.Contains(warn, "--config") {
+		t.Errorf("warning should mention --config, got %q", warn)
+	}
+}

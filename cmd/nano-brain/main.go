@@ -185,7 +185,11 @@ func startServer(configPath string) {
 		os.Exit(1)
 	}
 
-	configPath = config.ResolveConfigPath(configPath)
+	var configWarning string
+	configPath, configWarning = config.ResolveConfigPathStrict(configPath)
+	if configWarning != "" {
+		fmt.Fprintln(os.Stderr, configWarning)
+	}
 
 	cfg, err := config.Load(configPath)
 	if err != nil {

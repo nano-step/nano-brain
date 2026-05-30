@@ -362,18 +362,49 @@ func DefaultConfigPath() string {
 }
 
 // ResolveConfigPath returns the effective config file path with precedence:
-//  1. explicit --config flag value (non-empty)
-//  2. NANO_BRAIN_CONFIG environment variable (non-empty)
+//  1. explicit --config flag value (non-empty, after TrimSpace)
+//  2. NANO_BRAIN_CONFIG environment variable (non-empty, after TrimSpace)
 //  3. DefaultConfigPath() (~/.nano-brain/config.yml)
 //
-// This lets containerized deployments override the host's default config
-// without modifying CLI invocations (12-factor app pattern).
+// Whitespace is trimmed from both sources. Existence is not checked — use
+// ResolveConfigPathStrict when the caller needs a warning on missing files.
 func ResolveConfigPath(flagValue string) string {
-	if flagValue != "" {
-		return flagValue
+	if v := strings.TrimSpace(flagValue); v != "" {
+		return v
 	}
-	if env := os.Getenv("NANO_BRAIN_CONFIG"); env != "" {
-		return env
+	if v := strings.TrimSpace(os.Getenv("NANO_BRAIN_CONFIG")); v != "" {
+		return v
 	}
 	return DefaultConfigPath()
+}
+
+// ResolveConfigPathStrict behaves like ResolveConfigPath but ALSO emits a
+// warning to stderr (and returns the warning) when --config flag or
+// NANO_BRAIN_CONFIG env was set explicitly but the resolved file does not
+// exist. The path is still returned so the caller can fall through to
+// defaults — this is a warning, not a fatal error.
+//
+// Returns (path, warning). warning is "" when no problem detected.
+func ResolveConfigPathStrict(flagValue string) (string, string) {
+	flagTrimmed := strings.TrimSpace(flagValue)
+	envTrimmed := strings.TrimSpace(os.Getenv("NANO_BRAIN_CONFIG"))
+
+	var path string
+	var source string
+	switch {
+	case flagTrimmed != "":
+		path, source = flagTrimmed, "--config flag"
+	case envTrimmed != "":
+		path, source = envTrimmed, "NANO_BRAIN_CONFIG env"
+	default:
+		return DefaultConfigPath(), ""
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return path, fmt.Sprintf("WARNING: %s points to %q but that file does not exist — defaults will be used.", source, path)
+		}
+		return path, fmt.Sprintf("WARNING: %s = %q: %v", source, path, err)
+	}
+	return path, ""
 }
