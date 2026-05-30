@@ -50,6 +50,41 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(handler): wrap `ResetWorkspace` document+workspace deletion in a single transaction with rollback — matches the pattern already shipped in `RemoveWorkspace` (#155). Prevents orphaned documents if the workspace delete fails after docs are already removed (#225)
 
 ### Features
+
+- **feat(summary): restore disk persistence for summaries (#258).** Session summaries are now written to disk as `.md` files in addition to PostgreSQL, enabling integration with Obsidian and other filesystem-based markdown tools. Disk writes are **enabled by default**.
+
+  **File layout:**
+  ```
+  <output_dir>/<workspace_name>/<source>_<slug-title>_<YYYY-MM-DD>.md
+  ```
+  Default `output_dir`: `~/.nano-brain/summaries`. Tilde is expanded at config load time.
+
+  **Opt out** (DB-only persistence, matching previous behavior since #192):
+  ```yaml
+  summarization:
+    write_to_disk: false
+  ```
+
+  **Backfill existing summaries** to disk:
+  ```bash
+  # Preview
+  nano-brain backfill-summaries --dry-run
+
+  # Apply
+  nano-brain backfill-summaries
+
+  # Optional filters
+  nano-brain backfill-summaries --workspace=nano-brain --since=2026-05-01
+  ```
+
+  **Safety properties:**
+  - Disk write is atomic (`.tmp` + `os.Rename` on POSIX) — no partial files on crash
+  - Disk failure (permissions, disk full) logs a WARN but does NOT roll back the DB transaction (DB is source of truth)
+  - Idempotent: re-persisting the same session overwrites the same file
+  - Collision-safe: if two sessions produce the same path with different content, the second gets a `_<sha8-of-session-id>` suffix
+
+  **Note for upgrading operators**: After upgrade, summaries will start appearing in `~/.nano-brain/summaries/` automatically. To preserve the previous DB-only behavior, set `write_to_disk: false`. Pre-existing 167 summaries in the DB are not auto-backfilled — run `backfill-summaries` manually if you want them on disk.
+
 - feat(cli): `get`, `tags`, `multi-get` commands — fetch a single document by source_path or UUID, list all tags with counts, and batch-fetch multiple documents in one round-trip; backed by `POST /api/v1/get`, `GET /api/v1/tags` (existing), and `POST /api/v1/multi-get` REST endpoints (#152)
 - feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
 - feat(cli): `workspaces remove --workspace=<hash>` — destructive workspace deletion with `--dry-run` preview and `--force` safety gate; backed by `DELETE /api/v1/workspaces/:hash` REST endpoint wrapped in a single transaction (#155)
