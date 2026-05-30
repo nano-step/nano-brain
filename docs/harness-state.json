@@ -2,9 +2,10 @@
   "updated": "2026-05-30",
   "position": {
     "epic": 9,
-    "story": "9.3",
-    "branch": "feat/9.3-link-extractor",
-    "base_commit": "2bdd6ef"
+    "story": "9.8",
+    "branch": "b-main",
+    "base_commit": "3c12695",
+    "note": "9.8 merged; 9.6 still in-review (PR #262)"
   },
   "debt": [
     {
@@ -61,6 +62,8 @@
     "8.5": { "status": "done", "pr": 125, "issue": 124, "review": "manual:no_issues", "pr_comments": "gemini_quota_exceeded" },
     "8.6": { "status": "done", "pr": 127, "issue": 126, "review": "skipped:S_complexity", "pr_comments": "gemini_quota_exceeded" },
     "9.1": { "status": "done", "pr": 241, "issue": 240, "epic_issue": 239, "review": "oracle:0C+0M+0m:PASS", "pr_comments": "merged" },
-    "9.3": { "status": "in-review", "pr": 244, "issue": 243, "epic_issue": 239, "review": "oracle:0C+2M+4m:PASS_after_course_correction", "pr_comments": "pending", "notes": "M1 single-tx + M2 most-recent-ambiguous deferred to follow-up" }
+    "9.3": { "status": "done", "pr": 244, "issue": 243, "epic_issue": 239, "review": "oracle:0C+2M+4m:PASS_after_course_correction", "pr_comments": "merged" },
+    "9.6": { "status": "in-review", "pr": 262, "issue": 249, "epic_issue": 239, "review": "oracle:0C+3M+5m:all_fixed", "pr_comments": "gemini:G1(fp)+G2(defer)+G3(fixed)+G4(fixed)+G5(defer)" },
+    "9.8": { "status": "done", "pr": 265, "issue": 251, "epic_issue": 239, "review": "5-agent:security+qa+context=PASS;oracle_fps_documented", "pr_comments": "merged:2026-05-30", "notes": "3.3/3.4 pre-existing b-main failures HARNESS-OVERRIDE'd" }
   }
 }
