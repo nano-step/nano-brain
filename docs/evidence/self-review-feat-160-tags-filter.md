@@ -31,3 +31,15 @@ Reviewer: Sisyphus orchestrator
 ## Summary
 - Critical: 0, Major: 0, Minor: 0
 - E2E proves filter works at SQL level (20 results vs 0 depending on tag overlap)
+
+## Gemini PR #221 Review — Findings Addressed (2026-05-30)
+
+| # | Finding | Severity | Verdict | Fix |
+|---|---------|----------|---------|-----|
+| 1 | Vector search handler did double mapping (rows → intermediate vsearchRow → SearchResult) | Medium | VALID | Removed intermediate struct; map directly from sqlc rows to SearchResult in both branches |
+| 2 | CLI tag parser didn't trim whitespace or filter empty tags (`--tags=a, ,b` produced `["a", " ", "b"]`) | Medium | VALID | Added `parseTagList` helper: TrimSpace each element, drop empties, return nil if all empty (which means "no filter"). 4 new unit tests cover edge cases. |
+
+## Re-verified E2E
+- `query "function" --scope=all "--tags= summary , , opencode "` → 20 results (whitespace + empty handled)
+- `query "function" --scope=all "--tags= , , "` → 20 baseline results (all-empty drops to nil; no filter)
+- All existing tests + 4 new TestParseTagList_* tests pass

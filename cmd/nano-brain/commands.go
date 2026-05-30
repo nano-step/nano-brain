@@ -242,6 +242,23 @@ type stubFlags struct {
 	jsonFlag  bool
 }
 
+func parseTagList(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func parseStubFlags(args []string) (stubFlags, string) {
 	f := stubFlags{scope: "workspace"}
 	for i := 0; i < len(args); i++ {
@@ -268,9 +285,9 @@ func parseStubFlags(args []string) (stubFlags, string) {
 				return f, "--tags requires a value"
 			}
 			i++
-			f.tags = strings.Split(args[i], ",")
+			f.tags = parseTagList(args[i])
 		case strings.HasPrefix(arg, "--tags="):
-			f.tags = strings.Split(strings.TrimPrefix(arg, "--tags="), ",")
+			f.tags = parseTagList(strings.TrimPrefix(arg, "--tags="))
 		case arg == "--json":
 			f.jsonFlag = true
 		case strings.HasPrefix(arg, "--"):

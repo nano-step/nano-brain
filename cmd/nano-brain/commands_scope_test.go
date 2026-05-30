@@ -259,3 +259,38 @@ func TestStubCmd_ScopeAllOverridesWorkspace(t *testing.T) {
 		t.Errorf("workspace in body = %q, want %q (--scope=all should override --workspace)", capturedBody["workspace"], "all")
 	}
 }
+
+func TestParseTagList_TrimsWhitespace(t *testing.T) {
+	got := parseTagList(" decision , architecture ")
+	want := []string{"decision", "architecture"}
+	if len(got) != len(want) {
+		t.Fatalf("len mismatch: got %v, want %v", got, want)
+	}
+	for i, v := range got {
+		if v != want[i] {
+			t.Errorf("[%d] got %q, want %q", i, v, want[i])
+		}
+	}
+}
+
+func TestParseTagList_FiltersEmpty(t *testing.T) {
+	got := parseTagList("a, ,b, , ,c")
+	want := []string{"a", "b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("len mismatch: got %v, want %v", got, want)
+	}
+}
+
+func TestParseTagList_AllEmptyReturnsNil(t *testing.T) {
+	got := parseTagList(" , , ")
+	if got != nil {
+		t.Errorf("expected nil for all-empty, got %v", got)
+	}
+}
+
+func TestParseTagList_EmptyStringReturnsNil(t *testing.T) {
+	got := parseTagList("")
+	if got != nil {
+		t.Errorf("expected nil for empty string, got %v", got)
+	}
+}

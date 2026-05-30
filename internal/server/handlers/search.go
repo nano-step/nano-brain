@@ -104,22 +104,7 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, re
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to embed query")
 		}
 
-		type vsearchRow struct {
-			ID            string
-			ChunkID       string
-			WorkspaceHash string
-			Title         string
-			Content       string
-			SourcePath    string
-			Collection    string
-			Tags          []string
-			CreatedAt     time.Time
-			UpdatedAt     time.Time
-			Score         float64
-			DocumentID    string
-		}
-
-		var matched []vsearchRow
+		var results []SearchResult
 		if len(req.Tags) > 0 {
 			rows, err := q.VectorSearchWithTags(c.Request().Context(), sqlc.VectorSearchWithTagsParams{
 				QueryEmbedding: pgvector_go.NewVector(vec),
@@ -131,14 +116,20 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, re
 				logger.Error().Err(err).Str("workspace", workspace).Msg("vector search failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "vector search failed")
 			}
+			results = make([]SearchResult, 0, len(rows))
 			for _, r := range rows {
-				matched = append(matched, vsearchRow{
-					ID: r.ID.String(), ChunkID: r.ChunkID.String(),
-					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
-					Content: r.Content, SourcePath: r.SourcePath,
-					Collection: r.Collection, Tags: r.Tags,
-					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-					Score: r.Score, DocumentID: r.DocumentID.String(),
+				results = append(results, SearchResult{
+					ID:            r.ID.String(),
+					Title:         r.Title,
+					Snippet:       truncateSnippet(r.Content, maxSnippetLen),
+					Score:         r.Score,
+					Tags:          r.Tags,
+					Collection:    r.Collection,
+					WorkspaceHash: r.WorkspaceHash,
+					SourcePath:    r.SourcePath,
+					DocumentID:    r.DocumentID.String(),
+					CreatedAt:     r.CreatedAt,
+					UpdatedAt:     r.UpdatedAt,
 				})
 			}
 		} else {
@@ -151,33 +142,22 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, re
 				logger.Error().Err(err).Str("workspace", workspace).Msg("vector search failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "vector search failed")
 			}
+			results = make([]SearchResult, 0, len(rows))
 			for _, r := range rows {
-				matched = append(matched, vsearchRow{
-					ID: r.ID.String(), ChunkID: r.ChunkID.String(),
-					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
-					Content: r.Content, SourcePath: r.SourcePath,
-					Collection: r.Collection, Tags: r.Tags,
-					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-					Score: r.Score, DocumentID: r.DocumentID.String(),
+				results = append(results, SearchResult{
+					ID:            r.ID.String(),
+					Title:         r.Title,
+					Snippet:       truncateSnippet(r.Content, maxSnippetLen),
+					Score:         r.Score,
+					Tags:          r.Tags,
+					Collection:    r.Collection,
+					WorkspaceHash: r.WorkspaceHash,
+					SourcePath:    r.SourcePath,
+					DocumentID:    r.DocumentID.String(),
+					CreatedAt:     r.CreatedAt,
+					UpdatedAt:     r.UpdatedAt,
 				})
 			}
-		}
-
-		results := make([]SearchResult, 0, len(matched))
-		for _, r := range matched {
-			results = append(results, SearchResult{
-				ID:            r.ID,
-				Title:         r.Title,
-				Snippet:       truncateSnippet(r.Content, maxSnippetLen),
-				Score:         r.Score,
-				Tags:          r.Tags,
-				Collection:    r.Collection,
-				WorkspaceHash: r.WorkspaceHash,
-				SourcePath:    r.SourcePath,
-				DocumentID:    r.DocumentID,
-				CreatedAt:     r.CreatedAt,
-				UpdatedAt:     r.UpdatedAt,
-			})
 		}
 
 		elapsed := time.Since(start).Milliseconds()
