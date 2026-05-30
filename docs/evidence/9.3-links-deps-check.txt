@@ -1,0 +1,4 @@
+$ grep -E '"github.com/nano-brain/nano-brain/internal/' internal/links/*.go | grep -v _test.go
+(empty — no output)
+
+Verified: zero internal deps in production files of internal/links/.

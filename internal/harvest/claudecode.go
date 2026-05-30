@@ -32,11 +32,11 @@ const (
 
 // ClaudeCodeHarvester ingests Claude Code JSONL session files into the document store.
 type ClaudeCodeHarvester struct {
-	db         *sql.DB
-	logger     zerolog.Logger
-	sessionDir string
-	workspace  string
-	summarizer SessionSummarizer
+	db            *sql.DB
+	logger        zerolog.Logger
+	sessionDir    string
+	workspace     string
+	summarizer    SessionSummarizer
 }
 
 func (h *ClaudeCodeHarvester) setSummarizer(s SessionSummarizer) { h.summarizer = s }

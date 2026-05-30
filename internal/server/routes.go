@@ -36,7 +36,7 @@ func registerRoutes(s *Server) {
 	data := api.Group("", workspaceMiddleware())
 
 	write := data.Group("", workspaceRegisteredMiddleware(s.db))
-	write.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize))
+	write.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize, s.linkResolver, s.linkExtractor))
 	write.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
 	write.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, s.logger))
 	write.POST("/update", handlers.TriggerUpdate(s.logger))

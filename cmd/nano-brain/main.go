@@ -389,6 +389,9 @@ func startServer(configPath string) {
 		if harvestSummarizer != nil {
 			hr.WithSummarizer(harvestSummarizer)
 			srv.SetSummarizer(harvestSummarizer)
+			if res, ext := srv.LinkDeps(); res != nil && ext != nil {
+				harvestSummarizer.SetLinkExtractor(res, ext)
+			}
 		}
 		srv.SetHarvestRunner(hr)
 		g.Go(func() error {

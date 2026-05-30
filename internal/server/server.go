@@ -13,6 +13,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/links"
 	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/search"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
@@ -58,6 +59,10 @@ type Server struct {
 	migrationVersion int64
 	harvestStatus  handlers.HarvestStatusSnapshot
 	healthHandler  *handlers.Health
+	linkResolver       handlers.LinkResolver
+	linkExtractor      handlers.LinkExtractor
+	concreteLinkRes    *links.Resolver
+	concreteLinkExt    *links.Extractor
 }
 
 func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string, migrationVersion int64) *Server {
@@ -84,6 +89,18 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		rec = telemetry.NewRecorder(queries, logger)
 	}
 
+	var linkRes handlers.LinkResolver
+	var linkExt handlers.LinkExtractor
+	var concRes *links.Resolver
+	var concExt *links.Extractor
+	if queries != nil {
+		adapter := &sqlcLinksAdapter{q: queries}
+		concRes = links.NewResolver(adapter)
+		concExt = links.NewExtractor(adapter, concRes, nil)
+		linkRes = concRes
+		linkExt = concExt
+	}
+
 	s := &Server{
 		echo:           e,
 		pool:           pool,
@@ -107,6 +124,10 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		version:          version,
 		startTime:        time.Now(),
 		migrationVersion: migrationVersion,
+		linkResolver:       linkRes,
+		linkExtractor:      linkExt,
+		concreteLinkRes:    concRes,
+		concreteLinkExt:    concExt,
 	}
 
 	registerMiddleware(s)
@@ -181,6 +202,12 @@ func (s *Server) getSummarizer() handlers.SummarizeSummarizer {
 	s.summarizeMu.RLock()
 	defer s.summarizeMu.RUnlock()
 	return s.summarizer
+}
+
+// LinkDeps returns the concrete link resolver and extractor for wiring into
+// external components (e.g. summarize.Persister). Both may be nil.
+func (s *Server) LinkDeps() (*links.Resolver, *links.Extractor) {
+	return s.concreteLinkRes, s.concreteLinkExt
 }
 
 func (s *Server) getHealthCfg() (config.HarvesterConfig, config.IntervalsConfig) {

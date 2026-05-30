@@ -71,7 +71,7 @@ func TestWriteDocument_Success(t *testing.T) {
 	body := `{"content":"hello world","workspace":"ws1"}`
 	c, rec := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize, nil, nil)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestWriteDocument_ChunksCreated(t *testing.T) {
 	body := `{"content":"hello world","workspace":"ws1"}`
 	c, rec := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize, nil, nil)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestWriteDocument_EmptyContent(t *testing.T) {
 	body := `{"content":"","workspace":"ws1"}`
 	c, _ := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize, nil, nil)
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for empty content")
@@ -206,7 +206,7 @@ func TestWriteDocument_ContentTooLarge(t *testing.T) {
 	body := `{"content":"` + large + `","workspace":"ws1"}`
 	c, _ := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize, nil, nil)
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for oversized content")
@@ -238,7 +238,7 @@ func TestWriteDocument_DefaultCollection(t *testing.T) {
 	body := `{"content":"hello","workspace":"ws1"}`
 	c, _ := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize, nil, nil)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -269,7 +269,7 @@ func TestWriteDocument_HashVerification(t *testing.T) {
 	body := `{"content":"` + content + `"}`
 	c, _ := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, nil, zerolog.Nop(), testMaxFileSize, nil, nil)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestWriteDocument_EnqueuesChunks(t *testing.T) {
 	body := `{"content":"hello world","workspace":"ws1"}`
 	c, rec := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, enq, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, enq, zerolog.Nop(), testMaxFileSize, nil, nil)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -364,7 +364,7 @@ func TestWriteDocument_BackpressureWarning(t *testing.T) {
 	body := `{"content":"hello world","workspace":"ws1"}`
 	c, rec := newWriteContext(e, body, "ws1")
 
-	h := handlers.WriteDocument(q, nil, enq, zerolog.Nop(), testMaxFileSize)
+	h := handlers.WriteDocument(q, nil, enq, zerolog.Nop(), testMaxFileSize, nil, nil)
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
