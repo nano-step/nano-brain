@@ -9,6 +9,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/server/middleware"
+	"github.com/nano-brain/nano-brain/internal/server/webui"
 )
 
 func registerRoutes(s *Server) {
@@ -116,6 +117,8 @@ func registerRoutes(s *Server) {
 	s.echo.GET("/mcp", echo.WrapHandler(streamableHandler))
 	s.echo.POST("/mcp", echo.WrapHandler(streamableHandler))
 	s.echo.DELETE("/mcp", echo.WrapHandler(streamableHandler))
+
+	webui.RegisterUIRoutes(s.echo, webui.EmbedFS, middleware.SecurityHeaders())
 }
 
 const defaultMaxFileSize int64 = 307200

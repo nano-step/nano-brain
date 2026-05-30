@@ -202,11 +202,20 @@ func startServer(configPath string) {
 
 	applyVerbose(&cfg.Logging)
 
+	if err := checkBindSafety(cfg.Server.Host); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
 	logger, err := health.NewLogger(cfg.Logging)
 	if err != nil {
 		log.Fatalf("failed to create logger: %v", err)
 	}
 	cliLog = logger
+
+	if unsafeNoAuth && !isLoopback(cfg.Server.Host) {
+		logger.Warn().Str("host", cfg.Server.Host).Msg("bound to non-loopback without auth (--unsafe-no-auth set)")
+	}
 
 	logger.Info().
 		Str("version", Version).
