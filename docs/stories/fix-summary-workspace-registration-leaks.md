@@ -19,7 +19,7 @@ worktree: .opencode/worktrees/fix-summary-workspace-leaks-238/fix-summary-worksp
 
 ## Status
 
-review-pending — 11 of 12 ACs satisfied with evidence. AC11 (Review Gate) pending — to run via `review-work` skill before opening PR.
+ready-for-pr — all 12 ACs satisfied with evidence. Review Gate PASSED (5 sub-agents). Leak #8 discovered + remediated during review (commit 0891930).
 
 ## GitHub Issue
 
@@ -121,11 +121,12 @@ Also touches `index-schema` (migration 00011) — secondary label.
 
 ## Review
 
-- Reviewer agent: `review-work` skill (5 parallel sub-agents)
+- Reviewer agent: `review-work` skill (5 parallel sub-agents: Oracle goal, unspecified-high QA, Oracle code, Oracle security, unspecified-high context-mining)
 - Reviewer ≠ implementer: yes (review-work spawns fresh agents)
-- Verdict: `PENDING`
-- Date: TBD
-- Commit: TBD
+- Verdict: `PASS` (all 5 sub-agents return PASS after Leak #8 remediation)
+- Date: 2026-05-30
+- Commit: 0891930 (Leak #8 fix applied during review)
+- Full report: `docs/evidence/fix-summary-workspace-registration-leaks/review-gate-report.md`
 
 | Acceptance Criterion | Evidence | Status |
 | --- | --- | --- |
@@ -139,7 +140,7 @@ Also touches `index-schema` (migration 00011) — secondary label.
 | AC8 — No regression | `go test -race ./...` all packages PASS (Phase I) | ✓ |
 | AC9 — User-flow test | `docs/evidence/fix-summary-workspace-registration-leaks/` G2-G7 captured | ✓ |
 | AC10 — Validate ladder | validate:quick + integration green (pre-existing internal/search build break out of scope) | ✓ |
-| AC11 — Review Gate | PENDING — to run via review-work skill before PR open | ☐ |
+| AC11 — Review Gate | commit 0891930 + `docs/evidence/.../review-gate-report.md` (5 sub-agents PASS, Leak #8 fixed during review) | ✓ |
 | AC12 — Release notes | commit 39b808e CHANGELOG.md Unreleased section | ✓ |
 
 ## Implementation commits
