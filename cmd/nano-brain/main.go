@@ -122,6 +122,9 @@ func main() {
 		case "cleanup-stale-raw":
 			runCleanupStaleRawCmd(args[1:])
 			return
+		case "cleanup-orphan-workspaces":
+			runCleanupOrphanWorkspacesCmd(args[1:])
+			return
 		case "wake-up":
 			runWakeUpCmd(args[1:])
 			return

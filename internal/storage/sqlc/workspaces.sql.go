@@ -23,6 +23,32 @@ func (q *Queries) CountDocumentsByWorkspace(ctx context.Context, workspaceHash s
 	return count, err
 }
 
+const countOrphanChunks = `-- name: CountOrphanChunks :one
+SELECT COUNT(*) FROM chunks c
+LEFT JOIN workspaces w ON c.workspace_hash = w.hash
+WHERE w.hash IS NULL
+`
+
+func (q *Queries) CountOrphanChunks(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOrphanChunks)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countOrphanDocuments = `-- name: CountOrphanDocuments :one
+SELECT COUNT(*) FROM documents d
+LEFT JOIN workspaces w ON d.workspace_hash = w.hash
+WHERE w.hash IS NULL
+`
+
+func (q *Queries) CountOrphanDocuments(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOrphanDocuments)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countWorkspaces = `-- name: CountWorkspaces :one
 SELECT COUNT(*) FROM workspaces
 `
@@ -32,6 +58,40 @@ func (q *Queries) CountWorkspaces(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const deleteOrphanChunks = `-- name: DeleteOrphanChunks :execrows
+DELETE FROM chunks
+WHERE workspace_hash IN (
+    SELECT c.workspace_hash FROM chunks c
+    LEFT JOIN workspaces w ON c.workspace_hash = w.hash
+    WHERE w.hash IS NULL
+)
+`
+
+func (q *Queries) DeleteOrphanChunks(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteOrphanChunks)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteOrphanDocuments = `-- name: DeleteOrphanDocuments :execrows
+DELETE FROM documents
+WHERE workspace_hash IN (
+    SELECT d.workspace_hash FROM documents d
+    LEFT JOIN workspaces w ON d.workspace_hash = w.hash
+    WHERE w.hash IS NULL
+)
+`
+
+func (q *Queries) DeleteOrphanDocuments(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteOrphanDocuments)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteWorkspace = `-- name: DeleteWorkspace :exec
@@ -59,6 +119,43 @@ func (q *Queries) GetWorkspaceByHash(ctx context.Context, hash string) (Workspac
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listOrphanDocumentWorkspaces = `-- name: ListOrphanDocumentWorkspaces :many
+SELECT d.workspace_hash AS workspace_hash, COUNT(*) AS doc_count
+FROM documents d
+LEFT JOIN workspaces w ON d.workspace_hash = w.hash
+WHERE w.hash IS NULL
+GROUP BY d.workspace_hash
+ORDER BY doc_count DESC
+`
+
+type ListOrphanDocumentWorkspacesRow struct {
+	WorkspaceHash string
+	DocCount      int64
+}
+
+func (q *Queries) ListOrphanDocumentWorkspaces(ctx context.Context) ([]ListOrphanDocumentWorkspacesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOrphanDocumentWorkspaces)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrphanDocumentWorkspacesRow
+	for rows.Next() {
+		var i ListOrphanDocumentWorkspacesRow
+		if err := rows.Scan(&i.WorkspaceHash, &i.DocCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listWorkspaces = `-- name: ListWorkspaces :many

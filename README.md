@@ -259,6 +259,7 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | `nano-brain collection add\|remove\|list` | Manage collections |
 | `nano-brain harvest` | Trigger session harvesting |
 | `nano-brain cleanup-stale-raw [--dry-run]` | Delete pre-#192 raw OpenCode session docs superseded by summaries |
+| `nano-brain cleanup-orphan-workspaces [--dry-run]` | Delete documents/chunks under workspace_hash values not registered in `workspaces`. Run BEFORE migration 00011 (issue #238). |
 | `nano-brain bench generate\|run\|compare\|stress` | Benchmarking suite |
 | `nano-brain db:migrate` | Run pending goose migrations |
 | `nano-brain db:migrate --from-v1 <path>` | Import V1 SQLite data |
