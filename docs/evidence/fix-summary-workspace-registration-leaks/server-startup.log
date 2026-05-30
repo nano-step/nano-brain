@@ -1,0 +1,20 @@
+{"level":"info","component":"watcher","path":"/Users/tamlh/workspaces/self/AI/Tools/nano-brain/openspec/specs/workspace-scoping/spec.md","collection":"code","time":"2026-05-30T10:19:24Z","message":"processing file"}
+{"level":"info","component":"watcher","path":"/Users/tamlh/workspaces/self/AI/Tools/nano-brain/package.json","collection":"code","time":"2026-05-30T10:19:24Z","message":"processing file"}
+{"level":"info","component":"watcher","path":"/Users/tamlh/workspaces/self/AI/Tools/nano-brain/scripts/harness-check.sh","collection":"code","time":"2026-05-30T10:19:24Z","message":"processing file"}
+{"level":"info","component":"watcher","path":"/Users/tamlh/workspaces/self/AI/Tools/nano-brain/sqlc.yaml","collection":"code","time":"2026-05-30T10:19:24Z","message":"processing file"}
+{"level":"info","component":"watcher","path":"/tmp/nb-test/config-flag.yml","collection":"code","time":"2026-05-30T10:19:24Z","message":"processing file"}
+{"level":"info","component":"watcher","path":"/tmp/nb-test/config.yml","collection":"code","time":"2026-05-30T10:19:24Z","message":"processing file"}
+{"level":"info","component":"watcher","path":"/tmp/nb-test/server.log","collection":"code","time":"2026-05-30T10:19:24Z","message":"processing file"}
+{"level":"info","component":"watcher","path":"/tmp/nb-test/server155.log","collection":"code","time":"2026-05-30T10:19:24Z","message":"processing file"}
+{"level":"info","component":"watcher","path":"/tmp/nb-test/server2.log","collection":"code","time":"2026-05-30T10:19:24Z","message":"processing file"}
+{"level":"info","request_id":"d43e7444","method":"POST","path":"/api/v1/write","status":400,"latency_ms":2,"time":"2026-05-30T10:19:33Z","message":"request completed"}
+{"level":"info","request_id":"0428573a","method":"GET","path":"/api/v1/workspaces","status":200,"latency_ms":5,"time":"2026-05-30T10:19:48Z","message":"request completed"}
+{"level":"info","request_id":"00fce037","method":"POST","path":"/api/v1/write","workspace":"7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f","document_id":"459c9b32-1ea2-43ab-bc0f-c46b89c758e3","chunk_count":1,"time":"2026-05-30T10:19:48Z","message":"document written"}
+{"level":"info","request_id":"00fce037","method":"POST","path":"/api/v1/write","status":201,"latency_ms":12,"time":"2026-05-30T10:19:48Z","message":"request completed"}
+{"level":"info","request_id":"507446a9","method":"POST","path":"/api/v1/write","status":400,"latency_ms":0,"time":"2026-05-30T10:19:48Z","message":"request completed"}
+{"level":"info","request_id":"dab7c3a0","method":"POST","path":"/api/v1/summarize","status":400,"latency_ms":0,"time":"2026-05-30T10:19:48Z","message":"request completed"}
+{"level":"info","request_id":"eb6f6159","method":"POST","path":"/api/v1/get","status":400,"latency_ms":0,"time":"2026-05-30T10:19:48Z","message":"request completed"}
+{"level":"error","error":"code=400, message=path or id is required","status":400,"time":"2026-05-30T10:19:48Z","message":"request error"}
+{"level":"info","request_id":"4c9298eb","method":"GET","path":"/api/v1/workspaces","status":200,"latency_ms":6,"time":"2026-05-30T10:20:00Z","message":"request completed"}
+{"level":"info","request_id":"e4113f7a","method":"POST","path":"/api/v1/search","workspace":"7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f","results":7,"latency_ms":5,"time":"2026-05-30T10:20:00Z","message":"bm25 search complete"}
+{"level":"info","request_id":"e4113f7a","method":"POST","path":"/api/v1/search","status":200,"latency_ms":6,"time":"2026-05-30T10:20:00Z","message":"request completed"}

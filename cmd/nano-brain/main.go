@@ -122,6 +122,9 @@ func main() {
 		case "cleanup-stale-raw":
 			runCleanupStaleRawCmd(args[1:])
 			return
+		case "cleanup-orphan-workspaces":
+			runCleanupOrphanWorkspacesCmd(args[1:])
+			return
 		case "wake-up":
 			runWakeUpCmd(args[1:])
 			return
@@ -368,28 +371,18 @@ func startServer(configPath string) {
 	}
 	srv.SetHarvestStatus(ocMode, cfg.Harvester.OpenCode.DBRoot, cfg.Harvester.OpenCode.DBPath, cfg.Harvester.OpenCode.SessionDir, len(ocHarvesters))
 
-	if cfg.Harvester.ClaudeCode.Enabled {
-		if _, err := os.Stat(cfg.Harvester.ClaudeCode.SessionDir); os.IsNotExist(err) {
-			logger.Warn().
-				Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
-				Msg("claude code harvester enabled but session_dir does not exist, skipping")
+	if ch, ccErr := initClaudeCodeHarvester(ctx, cfg.Harvester.ClaudeCode, db, logger); ccErr != nil {
+		logger.Error().Err(ccErr).Msg("claude code harvester init failed")
+	} else if ch != nil {
+		if hr == nil {
+			hr = harvest.NewRunner(ch, eq, interval, logger)
 		} else {
-			wsHash, err := storage.WorkspaceHash(cfg.Harvester.ClaudeCode.SessionDir)
-			if err != nil {
-				logger.Warn().Err(err).Msg("failed to compute workspace hash for claude code harvester")
-			} else {
-				ch := harvest.NewClaudeCodeHarvester(db, logger, cfg.Harvester.ClaudeCode.SessionDir, wsHash)
-				if hr == nil {
-					hr = harvest.NewRunner(ch, eq, interval, logger)
-				} else {
-					hr.AddHarvester(ch)
-				}
-				logger.Info().
-					Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
-					Dur("interval", interval).
-					Msg("claude code session harvester started")
-			}
+			hr.AddHarvester(ch)
 		}
+		logger.Info().
+			Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+			Dur("interval", interval).
+			Msg("claude code session harvester started")
 	}
 
 	if hr != nil {
@@ -481,12 +474,10 @@ func buildOpenCodeHarvesters(ctx context.Context, cfg *config.Config, db *sql.DB
 	}
 
 	if cfg.Harvester.OpenCode.SessionDir != "" {
-		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
-		if err != nil {
-			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode harvester")
+		oh, err := initOpenCodeFileHarvester(ctx, cfg.Harvester.OpenCode, db, logger)
+		if err != nil || oh == nil {
 			return nil, "disabled"
 		}
-		oh := harvest.NewOpenCodeHarvester(db, logger, cfg.Harvester.OpenCode.SessionDir, wsHash)
 		logger.Info().
 			Str("session_dir", cfg.Harvester.OpenCode.SessionDir).
 			Msg("opencode session harvester started")

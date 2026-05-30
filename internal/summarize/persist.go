@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -14,6 +15,11 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
 )
+
+// ErrWorkspaceNotRegistered is returned by Persister.Save when meta.WorkspaceHash
+// does not correspond to a row in the workspaces table. This is defense-in-depth
+// against bypassing HTTP middleware or harvester validation. See issue #238.
+var ErrWorkspaceNotRegistered = errors.New("workspace_not_registered")
 
 // PersisterEnqueuer enqueues chunk IDs for embedding.
 // Defined locally to avoid circular imports with the harvest package.
@@ -39,13 +45,28 @@ func NewPersister(db *sql.DB, enqueuer PersisterEnqueuer, logger zerolog.Logger)
 
 // Save upserts summaryMarkdown into the document store.
 // It is idempotent: if the content hash matches the stored hash, it skips all work.
+//
+// Returns ErrWorkspaceNotRegistered if meta.WorkspaceHash is not in the workspaces
+// table (defense-in-depth — issue #238).
 func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta SessionMetadata) error {
+	q := sqlc.New(p.db)
+
+	if _, err := q.GetWorkspaceByHash(ctx, meta.WorkspaceHash); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			p.logger.Warn().
+				Str("workspace_hash", meta.WorkspaceHash).
+				Str("session_id", meta.SessionID).
+				Msg("persist: refusing to save summary for unregistered workspace")
+			return fmt.Errorf("%w: %s", ErrWorkspaceNotRegistered, meta.WorkspaceHash)
+		}
+		return fmt.Errorf("persist: workspace lookup failed: %w", err)
+	}
+
 	sum := sha256.Sum256([]byte(summaryMarkdown))
 	contentHash := hex.EncodeToString(sum[:])
 
 	sourcePath := buildSourcePath(meta)
 
-	q := sqlc.New(p.db)
 	existing, lookupErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    sourcePath,
 		WorkspaceHash: meta.WorkspaceHash,
