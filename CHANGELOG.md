@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Features
 - feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
+- feat(cli): `workspaces remove --workspace=<hash>` — destructive workspace deletion with `--dry-run` preview and `--force` safety gate; backed by `DELETE /api/v1/workspaces/:hash` REST endpoint wrapped in a single transaction (#155)
 - feat(cli): wake-up command — pretty/JSON workspace briefing at session start (#151, PR #216)
 - feat(cli): `--scope=all` flag on query/search/vsearch for cross-workspace search (#156, PR #217)
 - feat(config): `NANO_BRAIN_CONFIG` env var support — precedence `--config` flag > env var > `~/.nano-brain/config.yml`. Enables Docker/k8s deployments to point at a container-specific config without mounting over the host's default.
