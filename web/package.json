@@ -27,18 +27,15 @@
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "sigma": "^3.0.3",
-    "zustand": "^4.5.5",
-    "@hookform/resolvers": "^5.4.0",
-    "cmdk": "^1.1.1",
-    "fuse.js": "^7.3.0",
-    "react-hook-form": "^7.76.1",
-    "zod": "^3.25.76"
+    "unist-util-visit": "^5.1.0",
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
     "@testing-library/jest-dom": "^6.4.6",
     "@testing-library/react": "^14.3.1",
     "@testing-library/user-event": "^14.5.2",
+    "@types/mdast": "^4.0.4",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

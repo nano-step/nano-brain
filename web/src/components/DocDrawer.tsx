@@ -1,26 +1,19 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useEffect } from 'react'
 import { WikilinkRewriter } from './WikilinkRewriter'
 import { BacklinksList } from './BacklinksList'
 import { apiFetch } from '../api/client'
 import type { Document } from '../api/types'
+import { fmtAge } from '../utils/format'
 
-function fmtAge(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime()
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return s + 's ago'
-  const m = Math.floor(s / 60)
-  if (m < 60) return m + 'm ago'
-  const h = Math.floor(m / 60)
-  if (h < 24) return h + 'h ago'
-  return Math.floor(h / 24) + 'd ago'
-}
-
-const WIKILINK_RE = /(?<!\\)\[\[([^\][\n]{1,200})\]\]/g
+const WIKILINK_RE = /\[\[([^\][\n]{1,200})\]\]/g
 
 function countWikilinks(content: string): number {
   WIKILINK_RE.lastIndex = 0
   let count = 0
-  while (WIKILINK_RE.exec(content) !== null) count++
+  let m: RegExpExecArray | null
+  while ((m = WIKILINK_RE.exec(content)) !== null) {
+    if (m.index === 0 || content[m.index - 1] !== '\\') count++
+  }
   return count
 }
 
@@ -32,7 +25,13 @@ interface DocDrawerProps {
 }
 
 export function DocDrawer({ doc, workspace, onClose, onOpenDoc }: DocDrawerProps) {
-  const ambiguousCount = useMemo(() => countWikilinks(doc.content ?? ''), [doc.content])
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const wikilinkCount = useMemo(() => countWikilinks(doc.content ?? ''), [doc.content])
 
   const handleCopyId = useCallback(() => {
     void navigator.clipboard.writeText(doc.id)
@@ -76,11 +75,11 @@ export function DocDrawer({ doc, workspace, onClose, onOpenDoc }: DocDrawerProps
               <div className="drawer-title">{doc.title}</div>
               <div className="drawer-sub">
                 {doc.collection} · {doc.id}
-                {ambiguousCount > 0 && (
+                {wikilinkCount > 0 && (
                   <>
                     {' '}·{' '}
                     <span style={{ color: 'var(--warn)' }}>
-                      {ambiguousCount} ambiguous wikilink{ambiguousCount === 1 ? '' : 's'}
+                      {wikilinkCount} wikilink{wikilinkCount === 1 ? '' : 's'}
                     </span>
                   </>
                 )}

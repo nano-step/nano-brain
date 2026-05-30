@@ -9,6 +9,16 @@ import { useResolveLinks } from '../hooks/useResolveLinks'
 import type { Document } from '../api/types'
 
 const WIKILINK_RE = /\[\[([^\][\n]{1,200})\]\]/g
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function extractWikilinks(text: string): string[] {
   const found: string[] = []
   WIKILINK_RE.lastIndex = 0
@@ -79,27 +89,28 @@ function makeRemarkWikilinks(resolveMap: ResolveMap) {
 
           const resolved = resolveMap[target]
 
+          const safeTarget = escapeHtml(target)
           if (!resolved || resolved.matched.length === 0) {
             newNodes.push({
               type: 'html',
-              value: `<span class="wikilink-broken" title="No document with that ID or title in this workspace">${target}</span>`,
+              value: `<span class="wikilink-broken" title="No document with that ID or title in this workspace">${safeTarget}</span>`,
             })
           } else if (resolved.matched.length === 1) {
-            const docId = resolved.matched[0]
+            const docId = escapeHtml(resolved.matched[0])
             newNodes.push({
               type: 'html',
-              value: `<a class="wikilink" data-wikilink="${docId}" href="#" rel="noopener">${target}</a>`,
+              value: `<a class="wikilink" data-wikilink="${docId}" href="#" rel="noopener">${safeTarget}</a>`,
             })
           } else if (resolved.ambiguous) {
-            const candidates = resolved.matched.join(', ')
+            const candidates = escapeHtml(resolved.matched.join(', '))
             newNodes.push({
               type: 'html',
-              value: `<span class="wikilink-broken" data-wikilink-ambiguous="true" title="Ambiguous: ${candidates}">${target}</span>`,
+              value: `<span class="wikilink-broken" data-wikilink-ambiguous="true" title="Ambiguous: ${candidates}">${safeTarget}</span>`,
             })
           } else {
             newNodes.push({
               type: 'html',
-              value: `<span class="wikilink-broken" title="No document with that ID or title in this workspace">${target}</span>`,
+              value: `<span class="wikilink-broken" title="No document with that ID or title in this workspace">${safeTarget}</span>`,
             })
           }
 

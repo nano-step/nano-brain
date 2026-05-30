@@ -1,16 +1,6 @@
 import { useBacklinks } from '../hooks/useBacklinks'
 import type { Document } from '../api/types'
-
-function fmtAge(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime()
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return s + 's ago'
-  const m = Math.floor(s / 60)
-  if (m < 60) return m + 'm ago'
-  const h = Math.floor(m / 60)
-  if (h < 24) return h + 'h ago'
-  return Math.floor(h / 24) + 'd ago'
-}
+import { fmtAge } from '../utils/format'
 
 interface BacklinksListProps {
   workspace: string | null
@@ -53,10 +43,10 @@ export function BacklinksList({ workspace, docId, onOpenDoc }: BacklinksListProp
           key={b.id}
           className="mem-row"
           style={{ gridTemplateColumns: '22px 1fr 110px' }}
-          onClick={() => onOpenDoc(b as unknown as Document)}
+          onClick={() => onOpenDoc({ id: b.id, title: b.title, collection: b.collection, tags: b.tags, updated_at: b.updated_at } as unknown as Document)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && onOpenDoc(b as unknown as Document)}
+          onKeyDown={(e) => e.key === 'Enter' && onOpenDoc({ id: b.id, title: b.title, collection: b.collection, tags: b.tags, updated_at: b.updated_at } as unknown as Document)}
         >
           <div className="mem-icon" aria-hidden="true">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square">

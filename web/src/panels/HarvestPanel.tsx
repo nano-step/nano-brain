@@ -1,28 +1,19 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useDocuments } from '../hooks/useDocuments'
 import { useDocDrawer } from '../hooks/useDocDrawer'
 import { DocDrawer } from '../components/DocDrawer'
 import { apiFetch } from '../api/client'
 import { getCurrentWorkspace } from '../api/workspace'
-
-function fmtAge(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime()
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return s + 's ago'
-  const m = Math.floor(s / 60)
-  if (m < 60) return m + 'm ago'
-  const h = Math.floor(m / 60)
-  if (h < 24) return h + 'h ago'
-  return Math.floor(h / 24) + 'd ago'
-}
-
-
+import { fmtAge } from '../utils/format'
 
 export function HarvestPanel() {
   const workspace = getCurrentWorkspace()
   const [running, setRunning] = useState(false)
   const [sessionsSeen, setSessionsSeen] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => { abortRef.current?.abort() }, [])
 
   const { data: sessions, isLoading } = useDocuments({
     workspace,
@@ -45,27 +36,44 @@ export function HarvestPanel() {
         return
       }
 
-      const eventSource = new EventSource('/api/v1/events')
-      eventSource.addEventListener('harvest', (e: MessageEvent) => {
-        try {
-          const payload = JSON.parse(e.data) as { sessions_seen?: number }
-          if (typeof payload.sessions_seen === 'number') {
-            setSessionsSeen(payload.sessions_seen)
-          }
-        } catch {
-          // non-JSON event payload, ignore
-        }
-      })
+      const abort = new AbortController()
+      abortRef.current = abort
 
-      const cleanup = () => {
-        eventSource.close()
+      const sseResp = await apiFetch('/api/v1/events', { signal: abort.signal })
+      if (!sseResp.ok || !sseResp.body) {
         setRunning(false)
+        return
       }
 
-      eventSource.addEventListener('harvest_done', cleanup)
-      eventSource.onerror = cleanup
+      const reader = sseResp.body.getReader()
+      const decoder = new TextDecoder()
+      let done = false
+      const timeout = setTimeout(() => { done = true; abort.abort() }, 60_000)
 
-      setTimeout(cleanup, 60_000)
+      try {
+        while (!done) {
+          const { value, done: streamDone } = await reader.read()
+          if (streamDone) break
+          const chunk = decoder.decode(value, { stream: true })
+          for (const line of chunk.split('\n')) {
+            const trimmed = line.trim()
+            if (trimmed.startsWith('data:')) {
+              try {
+                const payload = JSON.parse(trimmed.slice(5).trim()) as { sessions_seen?: number; event?: string }
+                if (typeof payload.sessions_seen === 'number') {
+                  setSessionsSeen(payload.sessions_seen)
+                }
+                if (payload.event === 'harvest_done') { done = true }
+              } catch { }
+            }
+            if (trimmed === 'event: harvest_done') { done = true }
+          }
+        }
+      } finally {
+        clearTimeout(timeout)
+        reader.cancel()
+        setRunning(false)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
       setRunning(false)
