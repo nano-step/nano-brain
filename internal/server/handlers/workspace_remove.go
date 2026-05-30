@@ -18,13 +18,17 @@ type RemoveWorkspaceQuerier interface {
 	DeleteWorkspace(ctx context.Context, hash string) error
 }
 
-type removeWorkspaceResponse struct {
-	Workspace    string `json:"workspace"`
-	DeletedDocs  int64  `json:"deleted_docs"`
-	WorkspaceRemoved bool `json:"workspace_removed"`
+type removeWorkspaceTxBeginner interface {
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }
 
-func RemoveWorkspace(q RemoveWorkspaceQuerier, logger zerolog.Logger) echo.HandlerFunc {
+type removeWorkspaceResponse struct {
+	Workspace        string `json:"workspace"`
+	DeletedDocs      int64  `json:"deleted_docs"`
+	WorkspaceRemoved bool   `json:"workspace_removed"`
+}
+
+func RemoveWorkspace(q RemoveWorkspaceQuerier, db removeWorkspaceTxBeginner, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		hash := c.Param("hash")
 		if hash == "" {
@@ -47,25 +51,48 @@ func RemoveWorkspace(q RemoveWorkspaceQuerier, logger zerolog.Logger) echo.Handl
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count documents")
 		}
 
-		if err := q.DeleteDocumentsByWorkspace(ctx, hash); err != nil {
-			logger.Error().Err(err).Str("workspace", hash).Msg("delete documents failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
-		}
-
-		if err := q.DeleteWorkspace(ctx, hash); err != nil {
-			logger.Error().Err(err).Str("workspace", hash).Msg("delete workspace failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
+		if db == nil {
+			if err := q.DeleteDocumentsByWorkspace(ctx, hash); err != nil {
+				logger.Error().Err(err).Str("workspace", hash).Msg("delete documents failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
+			}
+			if err := q.DeleteWorkspace(ctx, hash); err != nil {
+				logger.Error().Err(err).Str("workspace", hash).Msg("delete workspace failed (docs already deleted)")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
+			}
+		} else {
+			tx, err := db.BeginTx(ctx, nil)
+			if err != nil {
+				logger.Error().Err(err).Str("workspace", hash).Msg("begin transaction failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to begin transaction")
+			}
+			txq := sqlc.New(tx)
+			if err := txq.DeleteDocumentsByWorkspace(ctx, hash); err != nil {
+				_ = tx.Rollback()
+				logger.Error().Err(err).Str("workspace", hash).Msg("delete documents failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
+			}
+			if err := txq.DeleteWorkspace(ctx, hash); err != nil {
+				_ = tx.Rollback()
+				logger.Error().Err(err).Str("workspace", hash).Msg("delete workspace failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
+			}
+			if err := tx.Commit(); err != nil {
+				logger.Error().Err(err).Str("workspace", hash).Msg("commit transaction failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to commit transaction")
+			}
 		}
 
 		reqLog := LoggerFromCtx(c, logger)
 		reqLog.Info().
 			Str("workspace", hash).
 			Int64("deleted_docs", docCount).
+			Bool("transactional", db != nil).
 			Msg("workspace removed")
 
 		return c.JSON(http.StatusOK, removeWorkspaceResponse{
-			Workspace:    hash,
-			DeletedDocs:  docCount,
+			Workspace:        hash,
+			DeletedDocs:      docCount,
 			WorkspaceRemoved: true,
 		})
 	}

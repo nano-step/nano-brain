@@ -80,6 +80,11 @@ func runWorkspacesRemoveWithIO(args []string, stdout, stderr io.Writer) int {
 		printWorkspaceRemoveUsage(stderr)
 		return 2
 	}
+	if f.workspace != "" && f.workspacePath != "" {
+		fmt.Fprintln(stderr, "--workspace and --workspace-path are mutually exclusive")
+		printWorkspaceRemoveUsage(stderr)
+		return 2
+	}
 
 	hash := f.workspace
 	if f.workspacePath != "" {
@@ -122,7 +127,8 @@ func fetchDocCount(hash string, stderr io.Writer) (int64, bool) {
 		DocumentCount int64  `json:"document_count"`
 	}
 	if err := json.Unmarshal(resp, &items); err != nil {
-		return 0, true
+		fmt.Fprintf(stderr, "Error: could not parse workspaces list: %v\n", err)
+		return 0, false
 	}
 	for _, it := range items {
 		if it.WorkspaceHash == hash {
@@ -175,8 +181,10 @@ func workspaceRemoveExecute(hash string, jsonFlag bool, stdout, stderr io.Writer
 		DeletedDocs  int64  `json:"deleted_docs"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
+		fmt.Fprintf(stderr, "Warning: server returned malformed JSON; printing raw response: %v\n", err)
 		fmt.Fprintln(stdout, string(resp))
-		return 0
+		cliLog.Warn().Err(err).Str("cmd", "workspaces remove").Str("workspace", hash).Msg("response unmarshal failed")
+		return 1
 	}
 	fmt.Fprintf(stdout, "Workspace %s removed. %d document(s) deleted.\n", result.Workspace, result.DeletedDocs)
 	cliLog.Info().Str("cmd", "workspaces remove").Str("workspace", hash).Int64("deleted_docs", result.DeletedDocs).Msg("cli command completed")

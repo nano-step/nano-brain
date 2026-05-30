@@ -33,3 +33,20 @@ All 4 user paths verified working with real PG. INFO logs include workspace + do
 ## Summary
 - Critical: 0, Major: 0, Minor: 0
 - E2E end-to-end destructive flow verified
+
+## Gemini PR #222 Review — Findings Addressed (2026-05-30)
+
+| # | Finding | Severity | Verdict | Fix |
+|---|---------|----------|---------|-----|
+| 1 | Sequential DeleteDocs + DeleteWorkspace not transactional → orphaned state on partial failure | Major | VALID | Wrapped in `db.BeginTx` + `tx.Commit`; rollback on either error. Falls back to non-tx path if `db == nil` (test injection). Server log includes `transactional: true/false` field. |
+| 2 | CLI silently proceeds on JSON unmarshal failure (stats lost) | Major | VALID | Both `fetchDocCount` and `workspaceRemoveExecute` now print a warning + return exit code 1 |
+| 3 | No validation when both `--workspace` and `--workspace-path` provided | Major | VALID | Added explicit `mutually exclusive` check after presence check; returns exit 2 |
+| 4 | CHANGELOG entry duplicated across historical release sections | Medium | VALID | Restored CHANGELOG from clean `origin/b-main` baseline and re-applied a single entry under `[Unreleased] ### Features` |
+
+## Note on ResetWorkspace
+`internal/server/handlers/reset_workspace.go` has the same non-transactional pattern. Out of scope for #155 (separate handler, separate endpoint). Should be filed as follow-up issue.
+
+## Re-verified E2E
+- Conflict flags `--workspace=abc --workspace-path=/tmp/x` → "mutually exclusive" error, exit 2
+- Full delete cycle with disposable workspace → server log shows `"transactional":true`
+- All 4 handler tests + 10 CLI tests still pass

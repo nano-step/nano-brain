@@ -66,7 +66,7 @@ func TestWorkspaceRemove_Success(t *testing.T) {
 	c.SetParamNames("hash")
 	c.SetParamValues("abc123")
 
-	h := handlers.RemoveWorkspace(q, zerolog.Nop())
+	h := handlers.RemoveWorkspace(q, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestWorkspaceRemove_NotFound(t *testing.T) {
 	c.SetParamNames("hash")
 	c.SetParamValues("nonexistent")
 
-	h := handlers.RemoveWorkspace(q, zerolog.Nop())
+	h := handlers.RemoveWorkspace(q, nil, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for missing workspace")
@@ -142,7 +142,7 @@ func TestWorkspaceRemove_CascadeStats(t *testing.T) {
 	c.SetParamNames("hash")
 	c.SetParamValues("ws1")
 
-	h := handlers.RemoveWorkspace(q, zerolog.Nop())
+	h := handlers.RemoveWorkspace(q, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestWorkspaceRemove_MissingHash(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.RemoveWorkspace(q, zerolog.Nop())
+	h := handlers.RemoveWorkspace(q, nil, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for missing hash")
