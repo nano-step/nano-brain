@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/links"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
@@ -72,7 +73,17 @@ func writeChunks(ctx context.Context, q DocumentQuerier, docID uuid.UUID, worksp
 	return ids, nil
 }
 
-func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger zerolog.Logger, maxFileSize int64) echo.HandlerFunc {
+// LinkExtractor is the optional interface for wikilink extraction after writes.
+type LinkExtractor interface {
+	Extract(ctx context.Context, doc links.Document) error
+}
+
+// LinkResolver is the optional interface for flushing workspace title cache.
+type LinkResolver interface {
+	FlushWorkspace(workspace string)
+}
+
+func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger zerolog.Logger, maxFileSize int64, linkResolver LinkResolver, linkExtractor LinkExtractor) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req WriteRequest
 		if err := c.Bind(&req); err != nil {
@@ -177,6 +188,20 @@ func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger
 						}
 					}
 				}
+			}
+		}
+
+		if linkResolver != nil && linkExtractor != nil {
+			linkResolver.FlushWorkspace(workspace)
+			if err := linkExtractor.Extract(c.Request().Context(), links.Document{
+				ID:         row.ID,
+				Workspace:  workspace,
+				SourcePath: req.SourcePath,
+				Title:      req.Title,
+				Content:    req.Content,
+				Collection: collection,
+			}); err != nil {
+				logger.Warn().Err(err).Msg("link extractor failed; write succeeded")
 			}
 		}
 

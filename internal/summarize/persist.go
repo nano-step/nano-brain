@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/links"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
@@ -23,9 +24,11 @@ type PersisterEnqueuer interface {
 
 // Persister saves a summary to the DB.
 type Persister struct {
-	db       *sql.DB
-	enqueuer PersisterEnqueuer
-	logger   zerolog.Logger
+	db            *sql.DB
+	enqueuer      PersisterEnqueuer
+	linkResolver  *links.Resolver
+	linkExtractor *links.Extractor
+	logger        zerolog.Logger
 }
 
 // NewPersister constructs a Persister.
@@ -35,6 +38,12 @@ func NewPersister(db *sql.DB, enqueuer PersisterEnqueuer, logger zerolog.Logger)
 		enqueuer: enqueuer,
 		logger:   logger.With().Str("component", "summary-persister").Logger(),
 	}
+}
+
+// SetLinkExtractor wires optional wikilink extraction after summary persistence.
+func (p *Persister) SetLinkExtractor(resolver *links.Resolver, extractor *links.Extractor) {
+	p.linkResolver = resolver
+	p.linkExtractor = extractor
 }
 
 // Save upserts summaryMarkdown into the document store.
@@ -111,6 +120,20 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("persist: commit tx: %w", err)
+	}
+
+	if p.linkResolver != nil && p.linkExtractor != nil {
+		p.linkResolver.FlushWorkspace(meta.WorkspaceHash)
+		if err := p.linkExtractor.Extract(ctx, links.Document{
+			ID:         docRow.ID,
+			Workspace:  meta.WorkspaceHash,
+			SourcePath: sourcePath,
+			Title:      title,
+			Content:    summaryMarkdown,
+			Collection: "session-summary",
+		}); err != nil {
+			p.logger.Warn().Err(err).Msg("link extractor failed; summary persisted")
+		}
 	}
 
 	if p.enqueuer != nil {

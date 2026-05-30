@@ -1,0 +1,8 @@
+Skipped: TEST_DATABASE_URL not set in this environment.
+Integration test file: internal/links/extract_integration_test.go
+Build tag: //go:build integration
+Compilation verified: go build -tags=integration ./internal/links/... (exit 0)
+Vet verified: go vet -tags=integration ./internal/links/... (exit 0)
+
+To run when PG is available:
+  TEST_DATABASE_URL="postgres://..." go test -race -v -tags=integration ./internal/links/...
