@@ -8,6 +8,7 @@ import {
 import { Layout } from './layout'
 import { DashboardPanel } from '../panels/DashboardPanel'
 import { GraphPanel } from '../panels/GraphPanel'
+import { SettingsPanel } from '../panels/SettingsPanel'
 import { Placeholder } from '../components/Placeholder'
 
 const rootRoute = createRootRoute({
@@ -57,7 +58,7 @@ const harvestRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
-  component: () => <Placeholder story="9.8" />,
+  component: SettingsPanel,
 })
 
 const routeTree = rootRoute.addChildren([

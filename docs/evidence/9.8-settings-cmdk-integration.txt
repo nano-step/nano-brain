@@ -1,0 +1,24 @@
+Integration evidence — Story 9.8
+
+dist/ contents verified:
+total 668K
+-rw-r--r-- 1 agent agent  11K May 30 15:11 SigmaGraph-3H-UkDdl.js
+-rw-r--r-- 1 agent agent  13K May 30 15:11 index-2ielOGBh.css
+-rw-r--r-- 1 agent agent 198K May 30 15:11 index-C6ve19qP.js
+-rw-r--r-- 1 agent agent  41K May 30 15:11 query-D3nJeWas.js
+-rw-r--r-- 1 agent agent   30 May 30 15:11 react-CmrMIzGB.js
+-rw-r--r-- 1 agent agent 225K May 30 15:11 router-Dizn3EID.js
+-rw-r--r-- 1 agent agent 161K May 30 15:11 sigma-pYYYY5lP.js
+
+Routes reachable via SPA fallback:
+  /ui/dashboard      → DashboardPanel (story 9.5)
+  /ui/graph          → GraphPanel (story 9.7)
+  /ui/settings       → SettingsPanel (story 9.8) ✅
+
+Components mounted globally in layout.tsx:
+  NonLoopbackBindBanner — shows red banner when server.host ∉ loopback set ✅
+  CommandPalette — opens on Cmd+K / Ctrl+K ✅
+  useMnemonicNav — g+d/m/g/s/h/, two-keystroke nav ✅
+
+Deferrals:
+  DocDrawer delete wire-up deferred until story 9.6 merges into b-main.
