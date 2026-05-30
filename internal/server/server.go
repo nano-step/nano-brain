@@ -13,6 +13,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/links"
 	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/search"
@@ -63,9 +64,10 @@ type Server struct {
 	linkExtractor      handlers.LinkExtractor
 	concreteLinkRes    *links.Resolver
 	concreteLinkExt    *links.Extractor
+	eventBus           *eventbus.Bus
 }
 
-func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, logger zerolog.Logger, version string, migrationVersion int64) *Server {
+func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, bus *eventbus.Bus, logger zerolog.Logger, version string, migrationVersion int64) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -128,6 +130,7 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		linkExtractor:      linkExt,
 		concreteLinkRes:    concRes,
 		concreteLinkExt:    concExt,
+		eventBus:           bus,
 	}
 
 	registerMiddleware(s)
@@ -202,6 +205,11 @@ func (s *Server) getSummarizer() handlers.SummarizeSummarizer {
 	s.summarizeMu.RLock()
 	defer s.summarizeMu.RUnlock()
 	return s.summarizer
+}
+
+// EventBus returns the server's event bus for producer wiring. May be nil.
+func (s *Server) EventBus() *eventbus.Bus {
+	return s.eventBus
 }
 
 // LinkDeps returns the concrete link resolver and extractor for wiring into

@@ -15,6 +15,7 @@ import (
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/harvest"
 	"github.com/nano-brain/nano-brain/internal/health"
@@ -278,10 +279,18 @@ func startServer(configPath string) {
 			embedder = e
 			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency)
 			fw.WithEmbedQueue(eq)
+			// Publisher is wired after bus creation below.
 		}
 	}
 
-	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, logger, Version, migrationVersion)
+	bus := eventbus.New(ctx)
+
+	if eq != nil {
+		eq.WithPublisher(bus)
+	}
+	fw.WithPublisher(bus)
+
+	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, bus, logger, Version, migrationVersion)
 
 	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
 		for _, ws := range workspaces {
@@ -386,6 +395,7 @@ func startServer(configPath string) {
 	}
 
 	if hr != nil {
+		hr.WithPublisher(bus)
 		if harvestSummarizer != nil {
 			hr.WithSummarizer(harvestSummarizer)
 			srv.SetSummarizer(harvestSummarizer)
@@ -402,6 +412,7 @@ func startServer(configPath string) {
 	g.Go(func() error {
 		<-gctx.Done()
 		logger.Info().Msg("shutdown signal received")
+		bus.Close()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
