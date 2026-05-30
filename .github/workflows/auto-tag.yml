@@ -3,6 +3,8 @@ name: Auto-tag on master
 on:
   push:
     branches: [master]
+  pull_request:
+    paths: ['.github/workflows/auto-tag.yml']
 
 permissions:
   contents: write
@@ -20,6 +22,7 @@ jobs:
     #  - the commit is a version-bump commit (publish-stable historic compat
     #    — should not happen anymore but kept as belt-and-braces)
     if: >-
+      github.event_name == 'push' &&
       github.actor != 'github-actions[bot]' &&
       !contains(github.event.head_commit.message, '[skip-release]') &&
       !contains(github.event.head_commit.message, '[skip ci]') &&
@@ -93,3 +96,75 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "SHA: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "Downstream release pipeline (release.yml on \`v*\` tags) will build binaries + publish npm." >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Regression test: tag computation must produce valid semver ──────────
+  # Reproduces the bug fixed in #212 where the old v{YYYY}.{M}.{D}.{N}
+  # scheme produced 4-segment tags (e.g. v2026.5.30.3) that npm coerced
+  # into invalid prerelease versions, causing publish 404s.
+  test-tag-scheme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Regression: broken tag v2026.5.30.3 must not poison next tag"
+        run: |
+          set -euo pipefail
+
+          # Set up a throw-away repo with the known-broken tag
+          tmp=$(mktemp -d)
+          git init "$tmp/repo"
+          cd "$tmp/repo"
+          git commit --allow-empty -m "seed"
+
+          # The original broken tag (4-segment, invalid semver) — #212
+          git tag v2026.5.30.3
+          # A valid tag produced after the fix
+          git tag v2026.5.3001
+
+          # ── Run the CURRENT computation logic (mirrors the 'ver' step) ──
+          YEAR=2026; MONTH=5; DAY=30
+          PREFIX="v${YEAR}.${MONTH}.${DAY}"
+
+          MAX_NN=$(git tag --list "${PREFIX}??" \
+                  | grep -E "^${PREFIX}[0-9]{2}$" \
+                  | sed -E "s|^${PREFIX}||" \
+                  | sort -n \
+                  | tail -1 || true)
+          NEXT_NN=$(printf '%02d' $(( ${MAX_NN:-0} + 1 )))
+          TAG="${PREFIX}${NEXT_NN}"
+
+          echo "Computed tag: ${TAG}"
+
+          # ── Assertions ──
+
+          # 1) Must be valid 3-segment semver (MAJOR.MINOR.PATCH)
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "FAIL: tag is not valid 3-segment semver: ${TAG}"
+            exit 1
+          fi
+          echo "PASS: valid 3-segment semver"
+
+          # 2) Must NOT reproduce the broken v2026.5.30.X scheme
+          if [[ "$TAG" == v2026.5.30.* ]]; then
+            echo "FAIL: tag uses broken dot-separated day scheme: ${TAG}"
+            exit 1
+          fi
+          echo "PASS: no dot-separated day"
+
+          # 3) Expected value: v2026.5.3002 (next after existing v2026.5.3001)
+          if [[ "$TAG" != "v2026.5.3002" ]]; then
+            echo "FAIL: expected v2026.5.3002, got ${TAG}"
+            exit 1
+          fi
+          echo "PASS: correctly incremented to v2026.5.3002"
+
+          # 4) npm must accept the version string as numeric semver
+          node -e "
+            const v = '${TAG#v}';
+            const parts = v.split('.');
+            if (parts.length !== 3) process.exit(1);
+            if (parts.some(p => !/^\\d+$/.test(p))) process.exit(1);
+            console.log('PASS: npm-compatible semver:', v);
+          "
+
+          rm -rf "$tmp"
