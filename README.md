@@ -247,9 +247,10 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | `nano-brain workspaces list` | List registered workspaces with doc counts |
 | `nano-brain workspaces remove --workspace=<hash> [--dry-run\|--force]` | Permanently delete a workspace + all its documents/chunks/embeddings |
 | `nano-brain write` | Write document via CLI |
-| `nano-brain query` | Hybrid search |
-| `nano-brain search` | BM25 keyword search |
-| `nano-brain vsearch` | Vector similarity search |
+| `nano-brain query [--scope=all] [--tags=t1,t2]` | Hybrid search (BM25 + vector + RRF + recency) |
+| `nano-brain search [--scope=all] [--tags=t1,t2]` | BM25 keyword search |
+| `nano-brain vsearch [--scope=all] [--tags=t1,t2]` | Vector similarity search |
+| `nano-brain wake-up --workspace=<hash>` | Workspace briefing (collections, stats, recent memories) |
 | `nano-brain collection add\|remove\|list` | Manage collections |
 | `nano-brain harvest` | Trigger session harvesting |
 | `nano-brain cleanup-stale-raw [--dry-run]` | Delete pre-#192 raw OpenCode session docs superseded by summaries |
@@ -263,7 +264,7 @@ Workspace is passed in the JSON body for POST, query param for GET.
 
 ## MCP Tools
 
-nano-brain exposes 9 tools via MCP (Model Context Protocol):
+nano-brain exposes 13 tools via MCP (Model Context Protocol):
 
 | Tool | Description |
 |------|-------------|
@@ -276,6 +277,10 @@ nano-brain exposes 9 tools via MCP (Model Context Protocol):
 | `memory_status` | Server and embedding status |
 | `memory_update` | Trigger re-embedding |
 | `memory_wake_up` | Workspace briefing |
+| `memory_graph` | Knowledge graph view (module → function → dep) |
+| `memory_trace` | Call chain trace from entry point |
+| `memory_impact` | Cross-file change impact analysis |
+| `memory_symbols` | Symbol search (functions, types, constants) |
 
 ### MCP Configuration
 

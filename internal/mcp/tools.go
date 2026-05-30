@@ -163,7 +163,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 				return errResult("hybrid search not available (no embedding provider)"), nil
 			}
 			maxResults := argInt(args, "max_results", 10, 100)
-			results, err := a.searchService.HybridSearch(ctx, query, ws, maxResults)
+			results, err := a.searchService.HybridSearch(ctx, query, ws, maxResults, nil)
 			if err != nil {
 				return errResult(fmt.Sprintf("hybrid search failed: %v", err)), nil
 			}
