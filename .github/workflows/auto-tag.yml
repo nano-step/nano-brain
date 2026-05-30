@@ -1,0 +1,84 @@
+name: Auto-tag on master
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+# Avoid concurrent tag races when multiple pushes land in quick succession.
+concurrency:
+  group: auto-tag-master
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    # Skip when:
+    #  - the push was created by this workflow itself (the tag push, github-actions bot)
+    #  - the latest commit message contains [skip-release] (manual opt-out)
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.head_commit.message, '[skip-release]')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Use a PAT so the tag push re-triggers downstream workflows (release.yml on tags).
+          # GITHUB_TOKEN-created tags do NOT trigger other workflows. RELEASE_PAT must have `contents: write` on this repo.
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Compute next tag (v{YYYY}.{M}.{D}{N})
+        id: ver
+        run: |
+          set -euo pipefail
+          YEAR=$(date -u +%Y)
+          MONTH=$(date -u +%-m)
+          DAY=$(date -u +%-d)
+          PREFIX="v${YEAR}.${MONTH}.${DAY}"
+
+          git fetch --tags --quiet
+
+          # Tag scheme inherited from the project: v{YYYY}.{M}.{D}{N} with no separator.
+          # This is unambiguous only for days 10..31, where the day prefix is 2 chars and cannot
+          # collide with another day's prefix. For single-digit days (1..9) the prefix is 1 char
+          # and overlaps with multi-digit days (e.g. prefix "v2026.5.2" also matches v2026.5.26),
+          # so this workflow fails loudly on those days rather than risk producing a colliding tag.
+          # Fix path when that happens: pick a manual tag, or migrate the scheme to use a separator
+          # (v{YYYY}.{M}.{D}.{N}) — see below for the boundary check.
+          if [ "${DAY}" -lt 10 ]; then
+            echo "::error::Single-digit day ${DAY}: tag scheme v{YYYY}.{M}.{D}{N} is ambiguous (prefix would collide with multi-digit-day tags). Tag manually or migrate scheme to use a separator." >&2
+            exit 1
+          fi
+
+          MAX=$(git tag --list "${PREFIX}*" \
+                | sed -E "s|^${PREFIX}||" \
+                | grep -E '^[0-9]{1,3}$' \
+                | sort -n \
+                | tail -1 || true)
+          NEXT=$(( ${MAX:-0} + 1 ))
+          TAG="${PREFIX}${NEXT}"
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Next tag: ${TAG}"
+
+      - name: Create and push tag
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "${TAG}" -m "Auto-tag from master @ ${GITHUB_SHA::7}"
+          git push origin "${TAG}"
+
+      - name: Summary
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          echo "## Tagged \`${TAG}\` :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Downstream release pipeline (release.yml on \`v*\` tags) will build binaries + publish npm." >> "$GITHUB_STEP_SUMMARY"
