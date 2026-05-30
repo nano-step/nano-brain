@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Features
+- feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
 - feat(cli): wake-up command — pretty/JSON workspace briefing at session start (#151, PR #216)
 - feat(cli): `--scope=all` flag on query/search/vsearch for cross-workspace search (#156, PR #217)
 - feat(config): `NANO_BRAIN_CONFIG` env var support — precedence `--config` flag > env var > `~/.nano-brain/config.yml`. Enables Docker/k8s deployments to point at a container-specific config without mounting over the host's default.
@@ -21,6 +22,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026.5.267] — 2026-05-26
 
 ### Features
+- feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
 - feat(summarize): session summarization pipeline — LLM-powered structured summaries for harvested sessions
 - feat(summarize): map-reduce pipeline with strip, parallel map, hierarchical reduce for sessions up to 1M tokens
 - feat(summarize): OpenAI-compatible LLM client with SSE streaming, retry (3x backoff for 429/5xx)
@@ -41,6 +43,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026.8.19] — 2026-05-25
 
 ### Features
+- feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
 - feat: nano-brain v2 — complete greenfield rewrite (Go + PostgreSQL + pgvector)
 - feat: interactive first-run setup wizard (closes #43)
 - feat(graph): auto-zoom to selected node + neighbors on focus mode
@@ -95,6 +98,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026.8.19] — 2026-05-16
 
 ### Features
+- feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
 - feat: interactive first-run setup wizard (closes #43)
 - feat(graph): auto-zoom to selected node + neighbors on focus mode
 - feat(graph): focus mode on node click + fix node overlap (#37)
@@ -147,6 +151,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026.8.19] — 2026-05-16
 
 ### Features
+- feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
 - feat(graph): auto-zoom to selected node + neighbors on focus mode
 - feat(graph): focus mode on node click + fix node overlap (#37)
 - feat(obsidian,db): excludeFolders, frontmatter tags, db:clean --list-only (closes #34)
@@ -197,6 +202,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026.8.19] — 2026-05-16
 
 ### Features
+- feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
 - feat(graph): auto-zoom to selected node + neighbors on focus mode
 - feat(graph): focus mode on node click + fix node overlap (#37)
 - feat(obsidian,db): excludeFolders, frontmatter tags, db:clean --list-only (closes #34)

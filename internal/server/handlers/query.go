@@ -12,13 +12,14 @@ import (
 )
 
 type HybridSearcher interface {
-	HybridSearch(ctx context.Context, query string, workspace string, maxResults int) ([]search.Result, error)
+	HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string) ([]search.Result, error)
 	DefaultLimit() int
 }
 
 type QueryRequest struct {
-	Query      string `json:"query"`
-	MaxResults int    `json:"max_results,omitempty"`
+	Query      string   `json:"query"`
+	MaxResults int      `json:"max_results,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
 }
 
 func Query(searcher HybridSearcher, logger zerolog.Logger, rec ...*telemetry.Recorder) echo.HandlerFunc {
@@ -46,7 +47,7 @@ func Query(searcher HybridSearcher, logger zerolog.Logger, rec ...*telemetry.Rec
 
 		start := time.Now()
 
-		results, err := searcher.HybridSearch(c.Request().Context(), req.Query, workspace, maxResults)
+		results, err := searcher.HybridSearch(c.Request().Context(), req.Query, workspace, maxResults, req.Tags)
 		if err != nil {
 			logger.Error().Err(err).Str("workspace", workspace).Msg("hybrid search failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "search failed")

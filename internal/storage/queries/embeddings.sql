@@ -106,3 +106,30 @@ JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 ORDER BY e.embedding <=> sqlc.arg(query_embedding)::vector
 LIMIT sqlc.arg(max_results);
+
+-- name: VectorSearchWithTags :many
+SELECT e.id, e.chunk_id, e.workspace_hash,
+       c.content, c.metadata, c.document_id,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(1 - (e.embedding <=> sqlc.arg(query_embedding)::vector) AS double precision) AS score
+FROM embeddings e
+JOIN chunks c ON e.chunk_id = c.id
+JOIN documents d ON c.document_id = d.id
+WHERE e.workspace_hash = sqlc.arg(workspace_hash)
+  AND d.tags && sqlc.arg(tags)::text[]
+ORDER BY e.embedding <=> sqlc.arg(query_embedding)::vector
+LIMIT sqlc.arg(max_results);
+
+-- name: VectorSearchAllWithTags :many
+SELECT e.id, e.chunk_id, e.workspace_hash,
+       c.content, c.metadata, c.document_id,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(1 - (e.embedding <=> sqlc.arg(query_embedding)::vector) AS double precision) AS score
+FROM embeddings e
+JOIN chunks c ON e.chunk_id = c.id
+JOIN documents d ON c.document_id = d.id
+WHERE d.tags && sqlc.arg(tags)::text[]
+ORDER BY e.embedding <=> sqlc.arg(query_embedding)::vector
+LIMIT sqlc.arg(max_results);

@@ -18,9 +18,11 @@ type mockSearcher struct {
 	results      []search.Result
 	err          error
 	defaultLimit int
+	capturedTags []string
 }
 
-func (m *mockSearcher) HybridSearch(_ context.Context, _ string, _ string, _ int) ([]search.Result, error) {
+func (m *mockSearcher) HybridSearch(_ context.Context, _ string, _ string, _ int, tags []string) ([]search.Result, error) {
+	m.capturedTags = tags
 	return m.results, m.err
 }
 
@@ -114,5 +116,46 @@ func TestQuery_MaxResultsCapping(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 even with oversized max_results, got %d", rec.Code)
+	}
+}
+
+func TestQuery_WithTags(t *testing.T) {
+	ms := &mockSearcher{results: []search.Result{
+		{ID: "r1", Title: "Tagged Result", Content: "snippet", Score: 0.8},
+	}}
+	h := handlers.Query(ms, zerolog.Nop())
+
+	rec, c := queryRequest(`{"query":"test","tags":["decision","auth"]}`, "ws1")
+	if err := h(c); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	if len(ms.capturedTags) != 2 || ms.capturedTags[0] != "decision" || ms.capturedTags[1] != "auth" {
+		t.Errorf("expected tags=[decision,auth], got %v", ms.capturedTags)
+	}
+
+	var resp handlers.SearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Total != 1 {
+		t.Errorf("expected total=1, got %d", resp.Total)
+	}
+}
+
+func TestQuery_WithoutTags(t *testing.T) {
+	ms := &mockSearcher{}
+	h := handlers.Query(ms, zerolog.Nop())
+
+	_, c := queryRequest(`{"query":"test"}`, "ws1")
+	if err := h(c); err != nil {
+		t.Fatal(err)
+	}
+
+	if ms.capturedTags != nil {
+		t.Errorf("expected nil tags when not provided, got %v", ms.capturedTags)
 	}
 }

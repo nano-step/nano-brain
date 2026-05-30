@@ -141,6 +141,94 @@ func TestStubCmd_ScopeWorkspace(t *testing.T) {
 	}
 }
 
+func TestParseStubFlags_TagsSpaceForm(t *testing.T) {
+	f, errMsg := parseStubFlags([]string{"q", "--workspace", "ws1", "--tags", "decision,auth"})
+	if errMsg != "" {
+		t.Fatalf("unexpected error: %s", errMsg)
+	}
+	if len(f.tags) != 2 || f.tags[0] != "decision" || f.tags[1] != "auth" {
+		t.Errorf("tags = %v, want [decision auth]", f.tags)
+	}
+}
+
+func TestParseStubFlags_TagsEqualsForm(t *testing.T) {
+	f, errMsg := parseStubFlags([]string{"q", "--workspace", "ws1", "--tags=bug,fix"})
+	if errMsg != "" {
+		t.Fatalf("unexpected error: %s", errMsg)
+	}
+	if len(f.tags) != 2 || f.tags[0] != "bug" || f.tags[1] != "fix" {
+		t.Errorf("tags = %v, want [bug fix]", f.tags)
+	}
+}
+
+func TestParseStubFlags_TagsSingleTag(t *testing.T) {
+	f, errMsg := parseStubFlags([]string{"q", "--workspace", "ws1", "--tags=decision"})
+	if errMsg != "" {
+		t.Fatalf("unexpected error: %s", errMsg)
+	}
+	if len(f.tags) != 1 || f.tags[0] != "decision" {
+		t.Errorf("tags = %v, want [decision]", f.tags)
+	}
+}
+
+func TestParseStubFlags_TagsMissingValue(t *testing.T) {
+	_, errMsg := parseStubFlags([]string{"q", "--tags"})
+	if errMsg == "" {
+		t.Fatal("expected error for missing --tags value")
+	}
+}
+
+func TestParseStubFlags_NoTags(t *testing.T) {
+	f, errMsg := parseStubFlags([]string{"q", "--workspace", "ws1"})
+	if errMsg != "" {
+		t.Fatalf("unexpected error: %s", errMsg)
+	}
+	if f.tags != nil {
+		t.Errorf("expected nil tags when not provided, got %v", f.tags)
+	}
+}
+
+func TestStubCmd_TagsSentInBody(t *testing.T) {
+	var capturedBody map[string]interface{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"results":[]}`))
+	}))
+	defer ts.Close()
+	pointHTTPClientAt(t, ts)
+
+	f, errMsg := parseStubFlags([]string{"test query", "--workspace", "ws1", "--tags=decision,auth"})
+	if errMsg != "" {
+		t.Fatalf("parse error: %s", errMsg)
+	}
+
+	bodyMap := map[string]interface{}{"query": f.query, "workspace": f.workspace}
+	if len(f.tags) > 0 {
+		bodyMap["tags"] = f.tags
+	}
+	body, _ := json.Marshal(bodyMap)
+	_, _, err := doRequest("POST", ts.URL+"/api/v1/query", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	tagsRaw, ok := capturedBody["tags"]
+	if !ok {
+		t.Fatal("expected 'tags' key in request body")
+	}
+	tagsSlice, ok := tagsRaw.([]interface{})
+	if !ok {
+		t.Fatalf("expected tags to be array, got %T", tagsRaw)
+	}
+	if len(tagsSlice) != 2 {
+		t.Errorf("expected 2 tags, got %d", len(tagsSlice))
+	}
+	if tagsSlice[0] != "decision" || tagsSlice[1] != "auth" {
+		t.Errorf("expected [decision auth], got %v", tagsSlice)
+	}
+}
+
 func TestStubCmd_ScopeAllOverridesWorkspace(t *testing.T) {
 	var capturedBody map[string]string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

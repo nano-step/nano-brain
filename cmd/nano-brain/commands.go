@@ -238,6 +238,7 @@ type stubFlags struct {
 	query     string
 	workspace string
 	scope     string
+	tags      []string
 	jsonFlag  bool
 }
 
@@ -262,6 +263,14 @@ func parseStubFlags(args []string) (stubFlags, string) {
 			f.scope = args[i]
 		case strings.HasPrefix(arg, "--scope="):
 			f.scope = strings.TrimPrefix(arg, "--scope=")
+		case arg == "--tags":
+			if i+1 >= len(args) {
+				return f, "--tags requires a value"
+			}
+			i++
+			f.tags = strings.Split(args[i], ",")
+		case strings.HasPrefix(arg, "--tags="):
+			f.tags = strings.Split(strings.TrimPrefix(arg, "--tags="), ",")
 		case arg == "--json":
 			f.jsonFlag = true
 		case strings.HasPrefix(arg, "--"):
@@ -302,11 +311,14 @@ func runStubCmd(endpoint string, args []string) {
 		os.Exit(1)
 	}
 
-	body := map[string]string{
+	bodyMap := map[string]interface{}{
 		"query":     f.query,
 		"workspace": workspaceVal,
 	}
-	data, err := json.Marshal(body)
+	if len(f.tags) > 0 {
+		bodyMap["tags"] = f.tags
+	}
+	data, err := json.Marshal(bodyMap)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

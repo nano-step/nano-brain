@@ -9,7 +9,7 @@ import (
 )
 
 type Searcher interface {
-	HybridSearch(ctx context.Context, query string, workspace string, maxResults int) ([]search.Result, error)
+	HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string) ([]search.Result, error)
 }
 
 func Run(ctx context.Context, dataset *BenchmarkDataset, searcher Searcher, version string) (*BenchmarkResults, error) {
@@ -22,7 +22,7 @@ func Run(ctx context.Context, dataset *BenchmarkDataset, searcher Searcher, vers
 
 	for _, entry := range dataset.Entries {
 		start := time.Now()
-		results, err := searcher.HybridSearch(ctx, entry.Query, dataset.WorkspaceHash, 10)
+		results, err := searcher.HybridSearch(ctx, entry.Query, dataset.WorkspaceHash, 10, nil)
 		elapsed := time.Since(start).Seconds() * 1000
 
 		if err != nil {
