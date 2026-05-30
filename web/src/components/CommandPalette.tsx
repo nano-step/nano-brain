@@ -194,7 +194,7 @@ export function CommandPalette() {
       window.location.reload()
     } else if (item.type === 'recent') {
       addRecent(item.label)
-      void router.navigate({ to: '/memory', search: { q: item.label } as Record<string, string> })
+      void router.navigate({ to: '/memory', search: { tags: undefined, doc: undefined } })
     } else if (item.type === 'symbol') {
       void router.navigate({ to: '/graph', search: { focus: item.symbolId, mode: 'symbol' } as Record<string, string> })
     }

@@ -91,7 +91,7 @@ describe('DocDrawer', () => {
     fireEvent.click(screen.getByText('Delete…'))
     await waitFor(() => {
       expect(screen.getByText('Delete document')).toBeTruthy()
-      expect(screen.getByRole('textbox', { name: /confirm document id/i })).toBeTruthy()
+      expect(screen.getByRole('textbox', { name: /d-1042/i })).toBeTruthy()
     })
   })
 
@@ -99,7 +99,7 @@ describe('DocDrawer', () => {
     wrap(<DocDrawer doc={mockDoc} workspace="ws-abc" onClose={vi.fn()} onOpenDoc={vi.fn()} />)
     fireEvent.click(screen.getByText('Delete…'))
     await waitFor(() => screen.getByText('Delete document'))
-    const input = screen.getByRole('textbox', { name: /confirm document id/i })
+    const input = screen.getByRole('textbox', { name: /d-1042/i })
     fireEvent.change(input, { target: { value: 'wrong-id' } })
     const confirmBtn = screen.getByRole('button', { name: /confirm delete/i })
     expect(confirmBtn).toBeDisabled()
@@ -111,7 +111,7 @@ describe('DocDrawer', () => {
     wrap(<DocDrawer doc={mockDoc} workspace="ws-abc" onClose={onClose} onOpenDoc={vi.fn()} />)
     fireEvent.click(screen.getByText('Delete…'))
     await waitFor(() => screen.getByText('Delete document'))
-    const input = screen.getByRole('textbox', { name: /confirm document id/i })
+    const input = screen.getByRole('textbox', { name: /d-1042/i })
     fireEvent.change(input, { target: { value: 'd-1042' } })
     const confirmBtn = screen.getByRole('button', { name: /confirm delete/i })
     expect(confirmBtn).not.toBeDisabled()

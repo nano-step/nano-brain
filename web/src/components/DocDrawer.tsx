@@ -1,6 +1,7 @@
 import { useMemo, useCallback, useEffect, useState } from 'react'
 import { WikilinkRewriter } from './WikilinkRewriter'
 import { BacklinksList } from './BacklinksList'
+import { ConfirmDialog } from './ConfirmDialog'
 import { apiFetch } from '../api/client'
 import type { Document } from '../api/types'
 import { fmtAge } from '../utils/format'
@@ -26,12 +27,11 @@ interface DocDrawerProps {
 
 export function DocDrawer({ doc, workspace, onClose, onOpenDoc }: DocDrawerProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [confirmText, setConfirmText] = useState('')
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (showDeleteModal) { setShowDeleteModal(false); setConfirmText('') }
+        if (showDeleteModal) { setShowDeleteModal(false) }
         else onClose()
       }
     }
@@ -149,43 +149,21 @@ export function DocDrawer({ doc, workspace, onClose, onOpenDoc }: DocDrawerProps
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-primary" onClick={handleEdit}>Edit (creates supersedes)</button>
             <button className="btn" onClick={handleCopyId}>Copy ID</button>
-            <button className="btn btn-danger" onClick={() => { setShowDeleteModal(true); setConfirmText('') }}>Delete…</button>
+            <button className="btn btn-danger" onClick={() => setShowDeleteModal(true)}>Delete…</button>
           </div>
         </div>
       </div>
 
-      {showDeleteModal && (
-        <>
-          <div className="drawer-backdrop" onClick={() => { setShowDeleteModal(false); setConfirmText('') }} role="presentation" style={{ zIndex: 201 }} />
-          <div className="confirm-dialog" role="dialog" aria-modal="true" aria-label="Delete document">
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Delete document</div>
-            <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>
-              Type the document ID <code className="mono">{doc.id}</code> to confirm. This action cannot be undone.
-            </p>
-            <input
-              className="confirm-dialog-input"
-              type="text"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder={doc.id}
-              aria-label="Confirm document ID"
-              autoFocus
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-              <button
-                className="btn btn-danger"
-                disabled={confirmText !== doc.id}
-                onClick={() => { void handleDeleteConfirm() }}
-              >
-                Confirm delete
-              </button>
-              <button className="btn" onClick={() => { setShowDeleteModal(false); setConfirmText('') }}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      <ConfirmDialog
+        open={showDeleteModal}
+        title="Delete document"
+        description={`Type the document ID ${doc.id} to confirm. This action cannot be undone.`}
+        confirmText={doc.id}
+        confirmLabel="Confirm delete"
+        onConfirm={() => { void handleDeleteConfirm() }}
+        onCancel={() => setShowDeleteModal(false)}
+        danger
+      />
     </>
   )
 }
