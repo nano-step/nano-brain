@@ -114,6 +114,8 @@ jobs:
           tmp=$(mktemp -d)
           git init "$tmp/repo"
           cd "$tmp/repo"
+          git config user.name "test"
+          git config user.email "test@test"
           git commit --allow-empty -m "seed"
 
           # The original broken tag (4-segment, invalid semver) — #212
