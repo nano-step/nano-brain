@@ -27,3 +27,8 @@ Reviewer: Sisyphus orchestrator
 - Major: 0  
 - Minor: 0
 - E2E verified against real PG
+
+## Gemini PR Review (post-merge fix)
+| Finding | Severity | Verdict | Action |
+|---|---|---|---|
+| Byte-slice snippet truncation may cut multi-byte UTF-8 | Medium | VALID | FIXED: convert to []rune before slicing |

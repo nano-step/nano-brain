@@ -176,8 +176,8 @@ func printWakeUpResponse(r wakeUpResponse) {
 			fmt.Printf("  [%s] %s\n", m.Date, m.Title)
 			if m.Snippet != "" {
 				snippet := m.Snippet
-				if len(snippet) > 120 {
-					snippet = snippet[:117] + "..."
+				if r := []rune(snippet); len(r) > 120 {
+					snippet = string(r[:117]) + "..."
 				}
 				fmt.Printf("    %s\n", strings.ReplaceAll(snippet, "\n", " "))
 			}
