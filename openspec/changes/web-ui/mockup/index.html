@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>nano-brain — Operator UI prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+:root[data-theme="dark"] {
+  --bg-0: #0d0d0d;
+  --bg-1: #141414;
+  --bg-2: #1a1a1a;
+  --bg-hover: rgba(255,255,255,0.04);
+  --bg-active: rgba(255,255,255,0.08);
+  --text-1: rgba(255,255,255,0.95);
+  --text-2: rgba(255,255,255,0.65);
+  --text-3: rgba(255,255,255,0.45);
+  --text-4: rgba(255,255,255,0.28);
+  --border: rgba(255,255,255,0.08);
+  --border-strong: rgba(255,255,255,0.14);
+  --accent: #0070F3;
+  --ok: #10B981;
+  --warn: #F59E0B;
+  --err: #EF4444;
+  --shadow-elev: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px rgba(0,0,0,0.5);
+}
+:root[data-theme="light"] {
+  --bg-0: #ffffff;
+  --bg-1: #f8f8f8;
+  --bg-2: #f0f0f0;
+  --bg-hover: rgba(0,0,0,0.04);
+  --bg-active: rgba(0,0,0,0.08);
+  --text-1: rgba(0,0,0,0.92);
+  --text-2: rgba(0,0,0,0.62);
+  --text-3: rgba(0,0,0,0.42);
+  --text-4: rgba(0,0,0,0.28);
+  --border: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.14);
+  --accent: #0066d4;
+  --ok: #059669;
+  --warn: #d97706;
+  --err: #dc2626;
+  --shadow-elev: 0 1px 0 rgba(0,0,0,0.04) inset, 0 8px 24px rgba(0,0,0,0.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg-0);
+  color: var(--text-1);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+code, pre, .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; }
+a { color: var(--accent); text-decoration: none; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-4); }
+
+/* layout */
+.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.sidebar { border-right: 1px solid var(--border); padding: 16px 0; display: flex; flex-direction: column; gap: 4px; background: var(--bg-0); position: sticky; top: 0; height: 100vh; }
+.brand { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.brand-name { font-weight: 700; letter-spacing: -0.03em; font-size: 15px; }
+.brand-sub { color: var(--text-3); font-size: 11px; margin-top: 2px; font-family: "JetBrains Mono", monospace; }
+.ws-picker { padding: 12px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.ws-picker-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.ws-picker-value { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border: 1px solid var(--border); transition: border-color 150ms; cursor: pointer; }
+.ws-picker-value:hover { border-color: var(--border-strong); }
+.ws-picker-name { font-weight: 500; }
+.ws-picker-hash { color: var(--text-3); font-family: "JetBrains Mono", monospace; font-size: 11px; }
+
+.nav { padding: 0 8px; display: flex; flex-direction: column; gap: 2px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; color: var(--text-2); transition: background 100ms, color 100ms; cursor: pointer; user-select: none; }
+.nav-item:hover { background: var(--bg-hover); color: var(--text-1); }
+.nav-item[data-active="true"] { background: var(--bg-active); color: var(--text-1); }
+.nav-item-icon { width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; }
+.nav-item-key { margin-left: auto; color: var(--text-4); font-size: 10px; font-family: "JetBrains Mono", monospace; }
+
+.sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.theme-toggle { color: var(--text-3); padding: 4px 8px; border: 1px solid var(--border); font-size: 11px; transition: border-color 150ms; }
+.theme-toggle:hover { border-color: var(--border-strong); color: var(--text-1); }
+.cmdk-hint { color: var(--text-3); font-size: 11px; display: flex; align-items: center; gap: 4px; }
+.kbd { display: inline-block; padding: 1px 5px; border: 1px solid var(--border-strong); font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--text-2); }
+
+/* main */
+.main { display: flex; flex-direction: column; min-width: 0; }
+.banner-warn { background: rgba(239,68,68,0.08); border-bottom: 1px solid rgba(239,68,68,0.32); color: var(--err); padding: 8px 24px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.topbar { display: flex; align-items: center; gap: 16px; padding: 12px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-0); z-index: 10; }
+.topbar-title { font-weight: 600; font-size: 14px; letter-spacing: -0.02em; }
+.topbar-crumbs { color: var(--text-3); font-size: 12px; font-family: "JetBrains Mono", monospace; }
+.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.panel { padding: 24px; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.section-title { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+
+/* status pills */
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; font-size: 11px; font-family: "JetBrains Mono", monospace; border: 1px solid var(--border); color: var(--text-2); }
+.pill-ok { color: var(--ok); border-color: rgba(16,185,129,0.32); }
+.pill-warn { color: var(--warn); border-color: rgba(245,158,11,0.32); }
+.pill-err { color: var(--err); border-color: rgba(239,68,68,0.32); }
+.pill-accent { color: var(--accent); border-color: rgba(0,112,243,0.32); }
+
+/* tables */
+.table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.table th { text-align: left; font-weight: 500; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-0); }
+.table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.table tr { cursor: pointer; }
+.table tr:hover td { background: var(--bg-hover); }
+.table .num { text-align: right; font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+
+/* stat cards */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); }
+.stat-card { background: var(--bg-0); padding: 14px 16px; }
+.stat-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.stat-value { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; font-size: 22px; letter-spacing: -0.02em; font-weight: 500; }
+.stat-sub { color: var(--text-3); font-size: 11px; margin-top: 4px; font-family: "JetBrains Mono", monospace; }
+
+/* progress */
+.progress { height: 4px; background: var(--bg-2); position: relative; overflow: hidden; }
+.progress-bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); transition: width 300ms; }
+.progress-bar.ok { background: var(--ok); }
+.progress-bar.warn { background: var(--warn); }
+.progress-bar.err { background: var(--err); }
+
+/* card / surface */
+.surface { border: 1px solid var(--border); background: var(--bg-0); }
+.surface-pad { padding: 16px; }
+.surface-head { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-2); font-weight: 500; }
+
+/* filters bar */
+.filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filter-input { background: var(--bg-1); border: 1px solid var(--border); padding: 6px 10px; outline: none; min-width: 220px; transition: border-color 150ms; }
+.filter-input:focus-visible { border-color: var(--accent); }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--border); background: var(--bg-1); font-size: 11px; color: var(--text-2); transition: border-color 150ms, color 150ms; cursor: pointer; }
+.chip:hover { border-color: var(--border-strong); color: var(--text-1); }
+.chip[data-active="true"] { border-color: var(--accent); color: var(--accent); background: rgba(0,112,243,0.06); }
+.chip-x { color: var(--text-4); padding-left: 4px; }
+.chip-x:hover { color: var(--err); }
+
+/* buttons */
+.btn { padding: 6px 12px; border: 1px solid var(--border-strong); color: var(--text-1); font-size: 12px; transition: background 100ms, border-color 100ms; }
+.btn:hover:not(:disabled) { background: var(--bg-hover); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn:disabled { color: var(--text-4); cursor: not-allowed; border-color: var(--border); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+.btn-primary:hover:not(:disabled) { background: #0058c4; }
+.btn-danger { color: var(--err); border-color: rgba(239,68,68,0.4); }
+.btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.08); }
+
+/* cmd palette */
+.cmdk-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; z-index: 100; }
+.cmdk { width: 600px; max-width: 90vw; background: var(--bg-1); border: 1px solid var(--border-strong); box-shadow: var(--shadow-elev); border-radius: 4px; overflow: hidden; }
+.cmdk-input { width: 100%; padding: 14px 16px; background: transparent; border: 0; outline: none; border-bottom: 1px solid var(--border); font-size: 14px; }
+.cmdk-list { max-height: 50vh; overflow-y: auto; padding: 6px; }
+.cmdk-group-label { font-size: 10px; color: var(--text-3); padding: 8px 10px 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+.cmdk-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; cursor: pointer; }
+.cmdk-item[data-active="true"] { background: var(--bg-active); }
+.cmdk-item-text { flex: 1; min-width: 0; }
+.cmdk-item-title { font-size: 13px; }
+.cmdk-item-sub { font-size: 11px; color: var(--text-3); font-family: "JetBrains Mono", monospace; }
+.cmdk-item-key { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--text-4); }
+
+/* drawer */
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 90; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 640px; max-width: 90vw; background: var(--bg-0); border-left: 1px solid var(--border); z-index: 91; overflow-y: auto; box-shadow: var(--shadow-elev); }
+.drawer-head { padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-0); }
+.drawer-title { font-size: 14px; font-weight: 600; }
+.drawer-sub { font-size: 11px; color: var(--text-3); font-family: "JetBrains Mono", monospace; margin-top: 4px; }
+.drawer-body { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+.kv { display: grid; grid-template-columns: 120px 1fr; gap: 4px 16px; font-size: 12px; }
+.kv-k { color: var(--text-3); }
+.kv-v { color: var(--text-1); font-family: "JetBrains Mono", monospace; word-break: break-all; }
+
+/* graph svg */
+.graph-wrap { position: relative; background: var(--bg-1); border: 1px solid var(--border); height: 480px; overflow: hidden; }
+.graph-controls { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 2; }
+.graph-legend { position: absolute; bottom: 12px; left: 12px; background: rgba(13,13,13,0.86); border: 1px solid var(--border); padding: 8px 10px; font-size: 11px; color: var(--text-2); display: flex; flex-direction: column; gap: 4px; }
+.legend-row { display: flex; align-items: center; gap: 6px; }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* memory list */
+.mem-row { display: grid; grid-template-columns: 22px 1fr 200px 110px 60px; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 100ms; }
+.mem-row:hover { background: var(--bg-hover); }
+.mem-icon { color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; }
+.mem-title { font-weight: 500; }
+.mem-meta { color: var(--text-3); font-size: 11px; margin-top: 2px; }
+.mem-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.mem-tag { font-size: 10px; color: var(--text-2); border: 1px solid var(--border); padding: 0px 5px; font-family: "JetBrains Mono", monospace; }
+.mem-time { color: var(--text-3); font-family: "JetBrains Mono", monospace; font-size: 11px; text-align: right; }
+.mem-chain { color: var(--text-3); font-size: 11px; text-align: right; font-family: "JetBrains Mono", monospace; }
+
+/* settings form */
+.form-row { display: grid; grid-template-columns: 220px 1fr; gap: 12px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.form-label { color: var(--text-2); font-size: 12px; }
+.form-hint { color: var(--text-3); font-size: 11px; margin-top: 2px; }
+.form-input { background: var(--bg-1); border: 1px solid var(--border); padding: 6px 10px; font-family: "JetBrains Mono", monospace; font-size: 12px; outline: none; transition: border-color 150ms; min-width: 200px; }
+.form-input:focus-visible { border-color: var(--accent); }
+.form-input[disabled] { color: var(--text-3); }
+.form-redacted { color: var(--text-3); font-family: "JetBrains Mono", monospace; font-size: 12px; }
+
+/* a11y focus */
+button:focus-visible, .nav-item:focus-visible, .ws-picker-value:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* wikilinks */
+.wikilink { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(0,112,243,0.4); padding-bottom: 0; cursor: pointer; transition: background 100ms; padding: 0 2px; }
+.wikilink:hover { background: rgba(0,112,243,0.1); border-bottom-color: var(--accent); }
+.wikilink-broken { color: var(--text-3); border-bottom: 1px dotted var(--text-4); padding: 0 2px; cursor: help; }
+
+/* skeleton */
+.skel { background: linear-gradient(90deg, var(--bg-1), var(--bg-2), var(--bg-1)); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+</style>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<noscript>This prototype requires JavaScript. The production UI will too.</noscript>
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+/* ----------------- mock data ----------------- */
+const WORKSPACES = [
+  { hash: "a3f9c2", name: "nano-brain",   path: "~/workspaces/self/AI/Tools/nano-brain", docs: 4218, chunks: 41277 },
+  { hash: "b71e08", name: "frontier-api", path: "~/projects/frontier-api",               docs: 1042, chunks: 11820 },
+  { hash: "c509ff", name: "scratch",      path: "~/scratch",                              docs: 23,   chunks: 188 },
+];
+
+const STATS = {
+  server_version: "0.42.0",
+  uptime_sec: 32418,
+  embedding: { provider: "ollama", model: "nomic-embed-text", dim: 768 },
+  migration_version: 9,
+  docs_total: 4218,
+  chunks_total: 41277,
+  chunks_by_embed_status: { pending: 134, embedded: 40923, embed_failed: 220 },
+  embeddings_total: 40923,
+  graph_edges_by_type: { contains: 8214, imports: 1907, calls: 24411 },
+  collections: [
+    { name: "code:go", doc_count: 1820 },
+    { name: "symbol:go", doc_count: 1240 },
+    { name: "session-summary:opencode", doc_count: 142 },
+    { name: "session-raw:opencode", doc_count: 142 },
+    { name: "memory", doc_count: 874 },
+  ],
+  tags_top_20: [
+    {tag:"decision",count:142},{tag:"opencode",count:142},{tag:"session",count:284},
+    {tag:"performance",count:38},{tag:"refactor",count:21},{tag:"bug",count:17},
+    {tag:"sse",count:9},{tag:"web-ui",count:12},{tag:"oracle",count:8},{tag:"go",count:1820},
+  ],
+  harvest: { mode: "db_root", last_at: "2026-05-30T11:42:18Z", sessions_seen: 142 },
+  watcher: { collections_watched: 5, debounce_ms: 2000, poll_interval_sec: 300, dirty: 0 },
+};
+
+const RECENT_DOCS = [
+  { id: "d-1042", title: "decision: use eventbus pkg to avoid import cycle",
+    collection: "memory", tags: ["decision","web-ui","oracle"],
+    updated_at: "2026-05-30T12:18:02Z", supersedes: null, superseded_by: null,
+    content: "Use a standalone `internal/eventbus/` package. Producers (embed, watcher, harvest) depend on the `Publisher` interface. Wired at server startup. Same DI pattern as `embed.Queue` + `QueueQuerier`. Related: [[d-1041]] and [[decision: dropped Shiki for v1]]. See also [[d-0987]] which we superseded with [[d-1041]]."  },
+  { id: "d-1041", title: "decision: drop-newest backpressure for SSE bus",
+    collection: "memory", tags: ["decision","sse","web-ui"],
+    updated_at: "2026-05-30T12:16:51Z", supersedes: "d-0987", superseded_by: null,
+    content: "Go channels can't atomically drain-and-send. Drop-newest (non-blocking) is race-free. Periodic ticker emits `lag` event with dropped counter. Clients re-query. Decision was promoted from [[d-0987]] after Oracle review. Tracked in [[d-1042]] which scopes the broader eventbus design." },
+  { id: "d-1040", title: "decision: dropped Shiki for v1",
+    collection: "memory", tags: ["decision","web-ui","bundle-size"],
+    updated_at: "2026-05-30T12:09:12Z", supersedes: null, superseded_by: null,
+    content: "Shiki is ~500KB WASM + grammars; blows the 600KB initial bundle budget. Use Prism with lazy import for code blocks (~15KB gzipped). Revisit in v2." },
+  { id: "d-1039", title: "session: tamlh worked on web-ui plan",
+    collection: "session-summary:opencode", tags: ["session","opencode","web-ui"],
+    updated_at: "2026-05-30T12:00:00Z", supersedes: "d-1038-raw", superseded_by: null,
+    content: "User asked for a Web UI plan. Agent ran 5-agent discovery, wrote OpenSpec proposal + design + 3 spec deltas + tasks. Oracle review revised design (eventbus pkg, drop-newest, XSS, CSP, fallback). Cancelled stuck Metis + huashu-design agents." },
+  { id: "d-0987", title: "decision: SSE over WebSocket",
+    collection: "memory", tags: ["decision","sse"],
+    updated_at: "2026-05-29T22:18:00Z", supersedes: null, superseded_by: "d-1041",
+    content: "EventSource is universal, auto-reconnects, native browser. Server→client only is enough; UI doesn't push state outside REST POSTs." },
+  { id: "d-0930", title: "decision: pgvector HNSW (m=16, ef=64)",
+    collection: "memory", tags: ["decision","performance","vector"],
+    updated_at: "2026-05-22T08:14:33Z", supersedes: null, superseded_by: null,
+    content: "Benchmarked HNSW vs IVFFlat on 1M nomic 768-d vectors. HNSW: 12ms p99 recall@10=0.94. IVFFlat: 38ms p99 recall@10=0.91. Win on both axes for our scale." },
+];
+
+const SYMBOLS = [
+  { name:"processQuery", kind:"function", language:"go", file:"internal/server/handlers/query.go", line:42, impact:18, signature:"func processQuery(ctx, req QueryRequest) (*QueryResponse, error)" },
+  { name:"Handler",      kind:"interface",language:"go", file:"internal/server/handlers/types.go", line:11, impact:32, signature:"type Handler interface { Handle(c echo.Context) error }" },
+  { name:"Bus",          kind:"struct",   language:"go", file:"internal/eventbus/bus.go",         line:18, impact:0,  signature:"type Bus struct { ... }" },
+  { name:"Publisher",    kind:"interface",language:"go", file:"internal/eventbus/bus.go",         line:14, impact:4,  signature:"type Publisher interface { Publish(Event) }" },
+  { name:"VectorSearch", kind:"function", language:"go", file:"internal/storage/sqlc/embeddings.sql.go", line:120, impact:7, signature:"func VectorSearch(ctx, q Querier, p VectorSearchParams) ([]VectorSearchRow, error)" },
+  { name:"WriteDocument",kind:"function", language:"go", file:"internal/server/handlers/write.go", line:55, impact:11, signature:"func WriteDocument(...) echo.HandlerFunc" },
+  { name:"runFanout",    kind:"method",   language:"go", file:"internal/eventbus/bus.go",         line:62, impact:0,  signature:"func (b *Bus) runFanout(ctx context.Context)" },
+  { name:"Queue",        kind:"struct",   language:"go", file:"internal/embed/queue.go",          line:24, impact:14, signature:"type Queue struct { ... }" },
+  { name:"summarize",    kind:"function", language:"python", file:"internal/harvest/summarize.py", line:88, impact:3, signature:"def summarize(messages: list[Message]) -> str" },
+  { name:"useEvents",    kind:"function", language:"typescript", file:"web/src/hooks/useEvents.ts", line:12, impact:5, signature:"export function useEvents(workspace: string): EventStore" },
+];
+
+const GRAPH = {
+  nodes: [
+    { id:"processQuery", x:300, y:160, kind:"function", file:"handlers/query.go:42" },
+    { id:"WriteDocument", x:140, y:240, kind:"function", file:"handlers/write.go:55" },
+    { id:"VectorSearch", x:460, y:100, kind:"function", file:"sqlc/embeddings.sql.go:120" },
+    { id:"BM25Search", x:480, y:200, kind:"function", file:"handlers/bm25.go:18" },
+    { id:"Queue", x:200, y:340, kind:"struct", file:"embed/queue.go:24" },
+    { id:"Bus", x:340, y:340, kind:"struct", file:"eventbus/bus.go:18" },
+    { id:"Publisher", x:340, y:420, kind:"interface", file:"eventbus/bus.go:14" },
+    { id:"runFanout", x:480, y:380, kind:"method", file:"eventbus/bus.go:62" },
+    { id:"Handler", x:300, y:80, kind:"interface", file:"handlers/types.go:11" },
+    { id:"reload-config", x:140, y:340, kind:"function", file:"handlers/reload.go:9" },
+    { id:"ResetWorkspace", x:100, y:160, kind:"function", file:"handlers/reset_workspace.go:22" },
+  ],
+  edges: [
+    { source:"processQuery", target:"VectorSearch", type:"calls" },
+    { source:"processQuery", target:"BM25Search",   type:"calls" },
+    { source:"WriteDocument", target:"Queue",       type:"calls" },
+    { source:"Queue", target:"Publisher",            type:"calls" },
+    { source:"Bus", target:"Publisher",              type:"contains" },
+    { source:"Bus", target:"runFanout",              type:"contains" },
+    { source:"Handler", target:"processQuery",      type:"contains" },
+    { source:"Handler", target:"WriteDocument",     type:"contains" },
+    { source:"Handler", target:"ResetWorkspace",    type:"contains" },
+  ],
+};
+
+const SESSIONS = [
+  { id:"s-1042", title:"web-ui plan",                                source:"opencode", agent:"Sisyphus", project:"nano-brain", duration_sec:2340, created_at:"2026-05-30T11:00:00Z",
+    preview:"User asked for a Web UI plan. Discovery → OpenSpec → Oracle review → must-fixes applied." },
+  { id:"s-1041", title:"incremental reindex investigation",          source:"opencode", agent:"Sisyphus", project:"nano-brain", duration_sec:780,  created_at:"2026-05-30T08:14:00Z",
+    preview:"Confirmed `documents.content_hash` is populated for every row. Refactor plan: replace full-wipe in reindex.go with diff loop." },
+  { id:"s-1039", title:"embedding bench: HNSW vs IVFFlat",           source:"claudecode", agent:"Claude", project:"nano-brain", duration_sec:1620, created_at:"2026-05-29T22:00:00Z",
+    preview:"Generated 1M nomic 768-d vectors, ran 10k query workload. HNSW won on p99 latency and recall@10. Locking choice." },
+];
+
+const CONFIG = {
+  server: { host:"localhost", port:3100 },
+  database: { url: "<redacted>" },
+  embedding: { provider:"ollama", url:"http://localhost:11434", model:"nomic-embed-text", dimension:768, concurrency:3, voyage_api_key:"<redacted>" },
+  search: { rrf_k:60, recency_weight:0.3, recency_half_life_days:180, limit:20 },
+  watcher: { debounce_ms:2000, reindex_interval:300 },
+  summarization: { enabled:true, provider_url:"https://ai-proxy.example.com/v1", api_key:"<redacted>", model:"claude-sonnet-4-5", max_tokens:8000, concurrency:3 },
+  logging: { level:"info", file:"~/.nano-brain/logs/server.log" },
+};
+
+const DOCTOR = [
+  { name:"Postgres reachable", status:"ok",   detail:"localhost:5432, version 17.2", hint:"" },
+  { name:"pgvector extension", status:"ok",   detail:"0.8.2",                          hint:"" },
+  { name:"Embedding provider", status:"ok",   detail:"ollama at localhost:11434",      hint:"" },
+  { name:"Embedding model",    status:"ok",   detail:"nomic-embed-text (768 dim)",     hint:"" },
+  { name:"Migrations",         status:"ok",   detail:"at version 9 (latest)",          hint:"" },
+  { name:"Watcher",            status:"warn", detail:"1 collection has 134 pending chunks waiting >2 min", hint:"Run `nano-brain reindex` or check ollama capacity." },
+  { name:"Summarization LLM",  status:"warn", detail:"requests_per_second not configured", hint:"Set `summarization.requests_per_second` in config.yml." },
+];
+
+/* ----------------- icons (inline SVG, monochrome) ----------------- */
+const Icon = ({ name, size = 14 }) => {
+  const paths = {
+    dashboard: "M3 3h7v7H3V3zm0 11h7v7H3v-7zm11-11h7v7h-7V3zm0 11h7v7h-7v-7z",
+    memory:    "M21 3H3v6h18V3zm0 8H3v10h18V11zM7 15h6v2H7v-2z",
+    graph:     "M5 9a3 3 0 116 0 3 3 0 01-6 0zm8 6a3 3 0 116 0 3 3 0 01-6 0zM9 9l4 6",
+    symbols:   "M4 6h16M4 12h10M4 18h16",
+    harvest:   "M4 4l8 16 4-8 4-4-4-4z",
+    settings:  "M12 8a4 4 0 100 8 4 4 0 000-8zM3 12l2 .8M19 12l2 .8M12 3v2M12 19v2",
+    search:    "M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3",
+    function:  "M5 4h6M5 12h10M5 20h6",
+    interface: "M4 8h16M4 16h16",
+    struct:    "M4 4h6v6H4V4zm10 0h6v6h-6V4zm-10 10h6v6H4v-6zm10 0h6v6h-6v-6z",
+    method:    "M3 6h6M3 12h6M3 18h6M11 6h10M11 12h10M11 18h10",
+    file:      "M14 3H5v18h14V8l-5-5z",
+    arrow:     "M9 5l7 7-7 7",
+    chevron:   "M6 9l6 6 6-6",
+    close:     "M6 6l12 12M18 6L6 18",
+    sun:       "M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6L4.2 4.2M19.8 19.8l-1.4-1.4M5.6 18.4l-1.4 1.4M19.8 4.2l-1.4 1.4M12 17a5 5 0 100-10 5 5 0 000 10z",
+    moon:      "M21 13A9 9 0 0111 3a9 9 0 1010 10z",
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" strokeLinejoin="miter">
+      <path d={paths[name] || ""} />
+    </svg>
+  );
+};
+
+/* ----------------- utilities ----------------- */
+const fmtNum = (n) => n.toLocaleString();
+const fmtAge = (iso) => {
+  const ms = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + "s ago";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + "m ago";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + "h ago";
+  const d = Math.floor(h / 24);
+  return d + "d ago";
+};
+const fmtDuration = (s) => {
+  const m = Math.floor(s / 60), r = s % 60;
+  return m + "m " + r + "s";
+};
+
+/* ----------------- wikilink + backlinks indices ----------------- */
+const DOC_BY_ID = Object.fromEntries(RECENT_DOCS.map(d => [d.id, d]));
+const DOC_BY_TITLE = (() => {
+  const m = {};
+  for (const d of RECENT_DOCS) {
+    const k = d.title.toLowerCase();
+    (m[k] = m[k] || []).push(d);
+  }
+  return m;
+})();
+const WIKILINK_RE = /\[\[([^\[\]\n]{1,200})\]\]/g;
+const resolveWikilink = (target) => {
+  const t = target.trim();
+  if (DOC_BY_ID[t]) return { matched: [DOC_BY_ID[t]], ambiguous: false, kind: "id" };
+  const hits = DOC_BY_TITLE[t.toLowerCase()] || [];
+  return { matched: hits, ambiguous: hits.length > 1, kind: "title" };
+};
+const renderWithWikilinks = (text, onOpenDoc) => {
+  // returns React nodes — naive but correct: split on regex, alternate text + link
+  const out = [];
+  let lastIndex = 0;
+  let m;
+  WIKILINK_RE.lastIndex = 0;
+  while ((m = WIKILINK_RE.exec(text)) !== null) {
+    if (m.index > lastIndex) out.push(text.slice(lastIndex, m.index));
+    const res = resolveWikilink(m[1]);
+    if (res.matched.length === 1) {
+      const target = res.matched[0];
+      out.push(
+        <a key={m.index} href="#" className="wikilink"
+           onClick={e => { e.preventDefault(); onOpenDoc(target); }}
+           title={target.title}>{m[1]}</a>
+      );
+    } else if (res.ambiguous) {
+      out.push(<span key={m.index} className="wikilink-broken" title={"Ambiguous: " + res.matched.map(d=>d.id).join(", ")}>{m[1]}</span>);
+    } else {
+      out.push(<span key={m.index} className="wikilink-broken" title="No document with that ID or title in this workspace">{m[1]}</span>);
+    }
+    lastIndex = m.index + m[0].length;
+  }
+  if (lastIndex < text.length) out.push(text.slice(lastIndex));
+  return out;
+};
+const getBacklinks = (docId) => {
+  const out = [];
+  for (const d of RECENT_DOCS) {
+    if (d.id === docId) continue;
+    let m;
+    WIKILINK_RE.lastIndex = 0;
+    while ((m = WIKILINK_RE.exec(d.content)) !== null) {
+      const res = resolveWikilink(m[1]);
+      if (res.matched.some(t => t.id === docId)) {
+        // snippet
+        const start = Math.max(0, m.index - 60);
+        const end = Math.min(d.content.length, m.index + m[0].length + 60);
+        const snippet = (start > 0 ? "…" : "") + d.content.slice(start, end) + (end < d.content.length ? "…" : "");
+        out.push({ ...d, snippet });
+        break; // one row per referencing doc
+      }
+    }
+  }
+  return out.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
+};
+
+/* ----------------- knowledge-mode graph data (synthesized from RECENT_DOCS) ----------------- */
+const KGRAPH_NODES = RECENT_DOCS.map((d, i) => ({
+  id: d.id,
+  kind: "doc",
+  collection: d.collection,
+  title: d.title,
+  updated_at: d.updated_at,
+  x: 120 + (i % 3) * 200,
+  y: 120 + Math.floor(i / 3) * 140,
+}));
+const KGRAPH_EDGES = (() => {
+  const edges = [];
+  for (const d of RECENT_DOCS) {
+    let m;
+    WIKILINK_RE.lastIndex = 0;
+    while ((m = WIKILINK_RE.exec(d.content)) !== null) {
+      const res = resolveWikilink(m[1]);
+      if (res.matched.length === 1) {
+        edges.push({ source: d.id, target: res.matched[0].id, type: "references" });
+      }
+    }
+  }
+  return edges;
+})();
+const KGRAPH_COLLECTION_COLOR = {
+  "memory": "var(--accent)",
+  "session-summary:opencode": "var(--ok)",
+  "session-summary:claudecode": "var(--warn)",
+};
+
+/* ----------------- shared UI ----------------- */
+const Pill = ({ children, variant }) => <span className={"pill " + (variant ? "pill-" + variant : "")}>{children}</span>;
+const Kbd = ({ children }) => <span className="kbd">{children}</span>;
+const StatCard = ({ label, value, sub }) => (
+  <div className="stat-card">
+    <div className="stat-label">{label}</div>
+    <div className="stat-value">{value}</div>
+    {sub ? <div className="stat-sub">{sub}</div> : null}
+  </div>
+);
+
+/* ----------------- Dashboard panel ----------------- */
+const DashboardPanel = ({ workspace, liveQueue, onOpenDoc }) => {
+  const embedTotal = STATS.chunks_by_embed_status.embedded + STATS.chunks_by_embed_status.pending + STATS.chunks_by_embed_status.embed_failed;
+  const pct = Math.round((STATS.chunks_by_embed_status.embedded / embedTotal) * 100);
+  return (
+    <div className="panel">
+      <div className="stat-grid">
+        <StatCard label="Server" value={"v" + STATS.server_version} sub={"up " + Math.floor(STATS.uptime_sec / 3600) + "h " + Math.floor((STATS.uptime_sec % 3600)/60) + "m"} />
+        <StatCard label="Embeddings" value={fmtNum(STATS.embeddings_total)} sub={STATS.embedding.provider + " · " + STATS.embedding.model} />
+        <StatCard label="Documents" value={fmtNum(STATS.docs_total)} sub={workspace.path} />
+        <StatCard label="Chunks" value={fmtNum(STATS.chunks_total)} sub={pct + "% embedded"} />
+        <StatCard label="Graph edges" value={fmtNum(Object.values(STATS.graph_edges_by_type).reduce((a,b)=>a+b,0))} sub="contains · imports · calls" />
+        <StatCard label="Embed queue" value={fmtNum(liveQueue)} sub={liveQueue > 0 ? "live · streaming" : "idle"} />
+      </div>
+
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:24}}>
+        <div className="surface">
+          <div className="surface-head">
+            <span>Embed status</span>
+            <Pill variant={STATS.chunks_by_embed_status.embed_failed > 0 ? "warn" : "ok"}>{STATS.chunks_by_embed_status.embed_failed} failed</Pill>
+          </div>
+          <div className="surface-pad" style={{display:"flex", flexDirection:"column", gap:12}}>
+            <div style={{display:"flex", justifyContent:"space-between", fontSize:12}}>
+              <span style={{color:"var(--text-2)"}}>Embedded</span>
+              <span className="mono">{fmtNum(STATS.chunks_by_embed_status.embedded)}</span>
+            </div>
+            <div className="progress"><div className="progress-bar ok" style={{width: pct + "%"}}/></div>
+            <div style={{display:"flex", justifyContent:"space-between", fontSize:12}}>
+              <span style={{color:"var(--text-2)"}}>Pending</span>
+              <span className="mono">{fmtNum(STATS.chunks_by_embed_status.pending)}</span>
+            </div>
+            <div style={{display:"flex", justifyContent:"space-between", fontSize:12}}>
+              <span style={{color:"var(--text-2)"}}>Failed</span>
+              <span className="mono" style={{color:"var(--err)"}}>{fmtNum(STATS.chunks_by_embed_status.embed_failed)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="surface">
+          <div className="surface-head"><span>Graph cardinality</span><Pill>by edge type</Pill></div>
+          <div className="surface-pad">
+            <table className="table" style={{fontSize:12}}>
+              <tbody>
+                {Object.entries(STATS.graph_edges_by_type).map(([k,v]) => (
+                  <tr key={k} style={{cursor:"default"}}>
+                    <td><Pill variant={k==="calls"?"accent":k==="imports"?"warn":"ok"}>{k}</Pill></td>
+                    <td className="num">{fmtNum(v)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="surface">
+        <div className="surface-head">
+          <span>Recent documents</span>
+          <span style={{color:"var(--text-3)", fontSize:11}}>10 most recently updated</span>
+        </div>
+        <div>
+          {RECENT_DOCS.map(d => (
+            <div key={d.id} className="mem-row" onClick={() => onOpenDoc(d)}>
+              <div className="mem-icon"><Icon name="memory" size={13} /></div>
+              <div>
+                <div className="mem-title">{d.title}</div>
+                <div className="mem-meta mono">{d.collection} · {d.id}</div>
+              </div>
+              <div className="mem-tags">
+                {d.tags.map(t => <span key={t} className="mem-tag">{t}</span>)}
+              </div>
+              <div className="mem-time">{fmtAge(d.updated_at)}</div>
+              <div className="mem-chain">{d.supersedes ? "↑ " + d.supersedes : (d.superseded_by ? "↓ " + d.superseded_by : "—")}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ----------------- Memory panel ----------------- */
+const MemoryPanel = ({ onOpenDoc }) => {
+  const [q, setQ] = useState("");
+  const [activeTags, setActiveTags] = useState([]);
+  const allTags = useMemo(() => Array.from(new Set(RECENT_DOCS.flatMap(d => d.tags))).sort(), []);
+  const filtered = useMemo(() => RECENT_DOCS.filter(d => {
+    if (q && !(d.title.toLowerCase().includes(q.toLowerCase()) || d.content.toLowerCase().includes(q.toLowerCase()))) return false;
+    if (activeTags.length && !activeTags.every(t => d.tags.includes(t))) return false;
+    return true;
+  }), [q, activeTags]);
+
+  const toggleTag = (t) => setActiveTags(curr => curr.includes(t) ? curr.filter(x => x !== t) : [...curr, t]);
+
+  return (
+    <div className="panel">
+      <div className="filter-bar">
+        <input className="filter-input" placeholder="Filter memories (BM25)…" value={q} onChange={e => setQ(e.target.value)} />
+        {allTags.map(t => (
+          <button key={t} className="chip" data-active={activeTags.includes(t)} onClick={() => toggleTag(t)}>{t}</button>
+        ))}
+        {activeTags.length > 0 && (
+          <button className="chip" onClick={() => setActiveTags([])}>clear ✕</button>
+        )}
+        <span style={{marginLeft:"auto", color:"var(--text-3)", fontSize:12}}>
+          {filtered.length} of {RECENT_DOCS.length}
+        </span>
+      </div>
+
+      <div className="surface">
+        {filtered.length === 0 ? (
+          <div style={{padding:48, textAlign:"center", color:"var(--text-3)"}}>
+            <div style={{fontSize:14, marginBottom:6}}>No memories match these filters.</div>
+            <div style={{fontSize:12}}>Clear filters or press <Kbd>Cmd+K</Kbd> to start a new query.</div>
+          </div>
+        ) : filtered.map(d => (
+          <div key={d.id} className="mem-row" onClick={() => onOpenDoc(d)}>
+            <div className="mem-icon"><Icon name="memory" size={13} /></div>
+            <div>
+              <div className="mem-title">{d.title}</div>
+              <div className="mem-meta mono">{d.collection} · {d.id}</div>
+            </div>
+            <div className="mem-tags">
+              {d.tags.map(t => <span key={t} className="mem-tag">{t}</span>)}
+            </div>
+            <div className="mem-time">{fmtAge(d.updated_at)}</div>
+            <div className="mem-chain">{d.supersedes ? "↑ " + d.supersedes : (d.superseded_by ? "↓ " + d.superseded_by : "—")}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ----------------- Graph panel (dual-mode) ----------------- */
+const GraphPanel = ({ onOpenDoc }) => {
+  const [mode, setMode] = useState("code"); // "code" | "knowledge"
+  const [focus, setFocus] = useState("processQuery");
+  const [knowledgeFocus, setKnowledgeFocus] = useState("");
+  const [depth, setDepth] = useState(2);
+  const [direction, setDirection] = useState("both");
+  const [codeEdgeTypes, setCodeEdgeTypes] = useState(["calls","contains","imports"]);
+  const [hoverNode, setHoverNode] = useState(null);
+  const [selected, setSelected] = useState(null);
+
+  const switchMode = (next) => {
+    if (next === mode) return;
+    setMode(next);
+    setSelected(null);
+    setHoverNode(null);
+  };
+
+  const isCode = mode === "code";
+  const nodes = isCode ? GRAPH.nodes : KGRAPH_NODES;
+  const edges = isCode ? GRAPH.edges.filter(e => codeEdgeTypes.includes(e.type)) : KGRAPH_EDGES;
+  const activeFocus = isCode ? focus : knowledgeFocus;
+  const colorForCode = (type) => type === "calls" ? "var(--accent)" : type === "imports" ? "var(--warn)" : "var(--ok)";
+  const colorForKnowledge = (n) => KGRAPH_COLLECTION_COLOR[n.collection] || "var(--text-3)";
+
+  return (
+    <div className="panel">
+      <div className="filter-bar">
+        <div style={{display:"inline-flex", border:"1px solid var(--border-strong)"}}>
+          <button className="chip" data-active={mode==="code"} onClick={() => switchMode("code")} style={{border:0}}>Code</button>
+          <button className="chip" data-active={mode==="knowledge"} onClick={() => switchMode("knowledge")} style={{border:0, borderLeft:"1px solid var(--border-strong)"}}>Knowledge</button>
+        </div>
+        <input className="filter-input"
+          placeholder={isCode ? "Focus node (function or type)…" : "Enter a memory doc title or ID, or Cmd+K to find one"}
+          value={activeFocus}
+          onChange={e => isCode ? setFocus(e.target.value) : setKnowledgeFocus(e.target.value)} />
+        <span style={{color:"var(--text-3)", fontSize:11}}>depth</span>
+        {[1,2,3,4,5].map(d => (
+          <button key={d} className="chip" data-active={depth===d} onClick={() => setDepth(d)}>{d}</button>
+        ))}
+        <span style={{color:"var(--text-3)", fontSize:11, marginLeft:8}}>direction</span>
+        {["in","out","both"].map(d => (
+          <button key={d} className="chip" data-active={direction===d} onClick={() => setDirection(d)}>{d}</button>
+        ))}
+        <span style={{color:"var(--text-3)", fontSize:11, marginLeft:8}}>edges</span>
+        {isCode ? ["calls","imports","contains"].map(t => (
+          <button key={t} className="chip" data-active={codeEdgeTypes.includes(t)} onClick={() => setCodeEdgeTypes(curr => curr.includes(t) ? curr.filter(x=>x!==t):[...curr,t])}>{t}</button>
+        )) : (
+          <button className="chip" data-active>references</button>
+        )}
+      </div>
+
+      <div className="graph-wrap">
+        <svg viewBox="0 0 640 480" style={{width:"100%", height:"100%"}}>
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+            </marker>
+          </defs>
+          {edges.map((e,i) => {
+            const s = nodes.find(n=>n.id===e.source);
+            const t = nodes.find(n=>n.id===e.target);
+            if (!s || !t) return null;
+            const color = isCode ? colorForCode(e.type) : "var(--accent)";
+            return (
+              <g key={i} style={{color}}>
+                <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="currentColor" strokeWidth="1.2" opacity="0.6" markerEnd="url(#arrow)" />
+              </g>
+            );
+          })}
+          {nodes.map(n => {
+            const isFocus = n.id === activeFocus;
+            const fill = isFocus ? "var(--accent)" : isCode ? "var(--bg-0)" : colorForKnowledge(n);
+            const stroke = isFocus ? "var(--accent)" : isCode ? "var(--text-2)" : colorForKnowledge(n);
+            const label = isCode ? n.id : (DOC_BY_ID[n.id]?.title?.slice(0, 36) || n.id);
+            return (
+              <g key={n.id}
+                onMouseEnter={() => setHoverNode(n)}
+                onMouseLeave={() => setHoverNode(null)}
+                onClick={() => setSelected(n)}
+                onDoubleClick={() => !isCode && onOpenDoc && DOC_BY_ID[n.id] && onOpenDoc(DOC_BY_ID[n.id])}
+                style={{cursor:"pointer"}}>
+                <circle cx={n.x} cy={n.y} r={isFocus ? 9 : 6} fill={fill} stroke={stroke} strokeWidth="1.6" fillOpacity={isCode ? 1 : 0.3} />
+                <text x={n.x + 12} y={n.y + 4} fontSize="11" fontFamily="JetBrains Mono, monospace" fill="var(--text-1)">{label}</text>
+              </g>
+            );
+          })}
+        </svg>
+        <div className="graph-controls">
+          <Pill>{nodes.length} nodes</Pill>
+          <Pill>{edges.length} edges</Pill>
+          <Pill variant="ok">truncated: false</Pill>
+          {!isCode && <Pill variant="accent">mode: knowledge</Pill>}
+        </div>
+        <div className="graph-legend">
+          {isCode ? (
+            <>
+              <div className="legend-row"><span className="legend-dot" style={{background:"var(--accent)"}}/>calls</div>
+              <div className="legend-row"><span className="legend-dot" style={{background:"var(--warn)"}}/>imports</div>
+              <div className="legend-row"><span className="legend-dot" style={{background:"var(--ok)"}}/>contains</div>
+              <div className="legend-row" style={{marginTop:6, color:"var(--text-3)"}}>Click node → details · Double-click → expand</div>
+            </>
+          ) : (
+            <>
+              <div className="legend-row"><span className="legend-dot" style={{background:"var(--accent)"}}/>memory</div>
+              <div className="legend-row"><span className="legend-dot" style={{background:"var(--ok)"}}/>session-summary:opencode</div>
+              <div className="legend-row"><span className="legend-dot" style={{background:"var(--warn)"}}/>session-summary:claudecode</div>
+              <div className="legend-row" style={{marginTop:6, color:"var(--text-3)"}}>Double-click → open drawer · Edges = [[wikilinks]]</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {(hoverNode || selected) && (
+        <div className="surface surface-pad" style={{fontSize:12}}>
+          {isCode ? (
+            <div className="kv">
+              <div className="kv-k">node</div><div className="kv-v">{(selected||hoverNode).id}</div>
+              <div className="kv-k">kind</div><div className="kv-v">{(selected||hoverNode).kind}</div>
+              <div className="kv-k">source</div><div className="kv-v">{(selected||hoverNode).file}</div>
+            </div>
+          ) : (
+            <div className="kv">
+              <div className="kv-k">doc</div><div className="kv-v">{(selected||hoverNode).id}</div>
+              <div className="kv-k">title</div><div className="kv-v" style={{fontFamily:"inherit"}}>{DOC_BY_ID[(selected||hoverNode).id]?.title || "—"}</div>
+              <div className="kv-k">collection</div><div className="kv-v">{(selected||hoverNode).collection}</div>
+              <div className="kv-k">updated</div><div className="kv-v">{(selected||hoverNode).updated_at}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ----------------- Symbols panel ----------------- */
+const SymbolsPanel = () => {
+  const [q, setQ] = useState("");
+  const [kind, setKind] = useState("all");
+  const [lang, setLang] = useState("all");
+  const allKinds = ["all","function","method","type","interface","struct","const","var"];
+  const allLangs = ["all","go","python","typescript","javascript"];
+  const filtered = SYMBOLS.filter(s => {
+    if (q && !s.name.toLowerCase().includes(q.toLowerCase())) return false;
+    if (kind !== "all" && s.kind !== kind) return false;
+    if (lang !== "all" && s.language !== lang) return false;
+    return true;
+  }).sort((a,b) => b.impact - a.impact);
+  return (
+    <div className="panel">
+      <div className="filter-bar">
+        <input className="filter-input" placeholder="Symbol name (type-ahead)…" value={q} onChange={e => setQ(e.target.value)} autoFocus />
+        <span style={{color:"var(--text-3)", fontSize:11}}>kind</span>
+        {allKinds.map(k => <button key={k} className="chip" data-active={kind===k} onClick={()=>setKind(k)}>{k}</button>)}
+        <span style={{color:"var(--text-3)", fontSize:11}}>lang</span>
+        {allLangs.map(l => <button key={l} className="chip" data-active={lang===l} onClick={()=>setLang(l)}>{l}</button>)}
+      </div>
+
+      <div className="surface">
+        <table className="table">
+          <thead><tr><th>Symbol</th><th>Kind</th><th>Lang</th><th>Location</th><th className="num">Impact</th></tr></thead>
+          <tbody>
+            {filtered.map(s => (
+              <tr key={s.file + ":" + s.name}>
+                <td>
+                  <div style={{display:"flex", flexDirection:"column", gap:2}}>
+                    <span className="mono" style={{fontSize:12}}>{s.name}</span>
+                    <span style={{color:"var(--text-3)", fontSize:11}}>{s.signature}</span>
+                  </div>
+                </td>
+                <td><Pill>{s.kind}</Pill></td>
+                <td className="mono" style={{color:"var(--text-3)"}}>{s.language}</td>
+                <td className="mono" style={{fontSize:11, color:"var(--text-2)"}}>{s.file}<span style={{color:"var(--text-3)"}}>:{s.line}</span></td>
+                <td className="num">{s.impact || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <div style={{padding:32, textAlign:"center", color:"var(--text-3)", fontSize:12}}>
+            No symbols match. Adjust filters or press <Kbd>g</Kbd>+<Kbd>g</Kbd> to inspect graph.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ----------------- Harvest panel ----------------- */
+const HarvestPanel = ({ onOpenDoc }) => {
+  const [running, setRunning] = useState(false);
+  const [seen, setSeen] = useState(STATS.harvest.sessions_seen);
+  const [summarized, setSummarized] = useState(STATS.harvest.sessions_seen);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      setSeen(s => s + 1);
+      setSummarized(s => s + (Math.random() > 0.4 ? 1 : 0));
+    }, 800);
+    const stop = setTimeout(() => setRunning(false), 8000);
+    return () => { clearInterval(id); clearTimeout(stop); };
+  }, [running]);
+
+  return (
+    <div className="panel">
+      <div className="surface">
+        <div className="surface-head">
+          <span>Harvest pipeline · mode <Pill>{STATS.harvest.mode}</Pill></span>
+          <button className="btn btn-primary" disabled={running} onClick={() => setRunning(true)}>
+            {running ? "Harvesting…" : "Trigger harvest"}
+          </button>
+        </div>
+        <div className="surface-pad" style={{display:"flex", flexDirection:"column", gap:12}}>
+          <div style={{display:"flex", gap:32, fontSize:12}}>
+            <div><span style={{color:"var(--text-3)"}}>Sessions seen</span><div className="stat-value" style={{fontSize:20}}>{seen}</div></div>
+            <div><span style={{color:"var(--text-3)"}}>Summarized</span><div className="stat-value" style={{fontSize:20}}>{summarized}</div></div>
+            <div><span style={{color:"var(--text-3)"}}>Last run</span><div className="stat-value" style={{fontSize:20}}>{fmtAge(STATS.harvest.last_at)}</div></div>
+          </div>
+          {running && <div className="progress"><div className="progress-bar" style={{width: ((summarized / Math.max(seen,1)) * 100) + "%"}}/></div>}
+        </div>
+      </div>
+
+      <div className="surface">
+        <div className="surface-head"><span>Recent sessions</span><span style={{color:"var(--text-3)", fontSize:11}}>collection: session-summary:*</span></div>
+        <table className="table">
+          <thead><tr><th>Session</th><th>Source</th><th>Agent</th><th>Project</th><th>Duration</th><th>When</th></tr></thead>
+          <tbody>
+            {SESSIONS.map(s => {
+              // Build a synthetic "doc" view of the session for the drawer
+              const sessionDoc = {
+                id: s.id,
+                title: s.title,
+                collection: "session-summary:" + s.source,
+                tags: ["session", s.source, "agent:" + s.agent.toLowerCase()],
+                updated_at: s.created_at,
+                supersedes: null,
+                superseded_by: null,
+                content: s.preview + "\n\nThis session referenced [[d-1042]] when discussing the eventbus design, and built on prior context from [[d-0987]]."
+              };
+              return (
+                <tr key={s.id} onClick={() => onOpenDoc && onOpenDoc(sessionDoc)}>
+                  <td>
+                    <div className="mem-title">{s.title}</div>
+                    <div style={{color:"var(--text-3)", fontSize:11, marginTop:2, fontFamily:"JetBrains Mono, monospace"}}>{s.preview.slice(0, 110)}…</div>
+                  </td>
+                  <td className="mono" style={{color:"var(--text-2)"}}>{s.source}</td>
+                  <td className="mono" style={{color:"var(--text-2)"}}>{s.agent}</td>
+                  <td className="mono" style={{color:"var(--text-2)"}}>{s.project}</td>
+                  <td className="num">{fmtDuration(s.duration_sec)}</td>
+                  <td className="mem-time">{fmtAge(s.created_at)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+/* ----------------- Settings panel ----------------- */
+const SettingsPanel = () => {
+  const [config, setConfig] = useState(CONFIG);
+  const [dirty, setDirty] = useState(false);
+  const setField = (path, val) => {
+    const next = JSON.parse(JSON.stringify(config));
+    const keys = path.split(".");
+    let cur = next;
+    for (let i=0; i<keys.length-1; i++) cur = cur[keys[i]];
+    cur[keys[keys.length-1]] = val;
+    setConfig(next);
+    setDirty(true);
+  };
+
+  return (
+    <div className="panel">
+      <div className="surface">
+        <div className="surface-head">
+          <span>Configuration · safe fields only</span>
+          <div style={{display:"flex", gap:8}}>
+            <button className="btn" onClick={() => { setConfig(CONFIG); setDirty(false); }} disabled={!dirty}>Revert</button>
+            <button className="btn btn-primary" disabled={!dirty} onClick={() => setDirty(false)}>Save &amp; reload</button>
+          </div>
+        </div>
+        <div className="surface-pad">
+          <div className="form-row">
+            <div><div className="form-label">search.rrf_k</div><div className="form-hint">RRF fusion parameter</div></div>
+            <input className="form-input" type="number" value={config.search.rrf_k} onChange={e => setField("search.rrf_k", parseInt(e.target.value)||0)} />
+          </div>
+          <div className="form-row">
+            <div><div className="form-label">search.recency_weight</div><div className="form-hint">0..1 — weight of recency in RRF</div></div>
+            <input className="form-input" type="number" step="0.05" value={config.search.recency_weight} onChange={e => setField("search.recency_weight", parseFloat(e.target.value)||0)} />
+          </div>
+          <div className="form-row">
+            <div><div className="form-label">watcher.debounce_ms</div><div className="form-hint">File watcher debounce</div></div>
+            <input className="form-input" type="number" value={config.watcher.debounce_ms} onChange={e => setField("watcher.debounce_ms", parseInt(e.target.value)||0)} />
+          </div>
+          <div className="form-row">
+            <div><div className="form-label">summarization.enabled</div><div className="form-hint">Enable LLM summarization of sessions</div></div>
+            <select className="form-input" value={String(config.summarization.enabled)} onChange={e => setField("summarization.enabled", e.target.value === "true")}>
+              <option value="true">true</option><option value="false">false</option>
+            </select>
+          </div>
+          <div className="form-row">
+            <div><div className="form-label">summarization.api_key</div><div className="form-hint">Secret — edit in config.yml directly</div></div>
+            <div className="form-redacted">&lt;redacted&gt;</div>
+          </div>
+          <div className="form-row" style={{borderBottom:0}}>
+            <div><div className="form-label">database.url</div><div className="form-hint">Secret — edit in config.yml directly</div></div>
+            <div className="form-redacted">&lt;redacted&gt;</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="surface">
+        <div className="surface-head"><span>Doctor</span><span style={{color:"var(--text-3)", fontSize:11}}>GET /api/v1/doctor</span></div>
+        <table className="table">
+          <tbody>
+            {DOCTOR.map(d => (
+              <tr key={d.name} style={{cursor:"default"}}>
+                <td style={{width:32}}><Pill variant={d.status}>{d.status === "ok" ? "✓" : d.status === "warn" ? "!" : "✕"}</Pill></td>
+                <td>
+                  <div style={{fontSize:13}}>{d.name}</div>
+                  <div className="mono" style={{color:"var(--text-3)", fontSize:11, marginTop:2}}>{d.detail}</div>
+                  {d.hint && <div style={{color:"var(--warn)", fontSize:11, marginTop:4}}>↳ {d.hint}</div>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+/* ----------------- Document drawer ----------------- */
+const DocDrawer = ({ doc, onClose, onOpenDoc }) => {
+  if (!doc) return null;
+  const backlinks = useMemo(() => getBacklinks(doc.id), [doc.id]);
+  // count ambiguous wikilinks for header warning chip
+  const ambiguousCount = useMemo(() => {
+    let n = 0;
+    let m;
+    WIKILINK_RE.lastIndex = 0;
+    while ((m = WIKILINK_RE.exec(doc.content)) !== null) {
+      if (resolveWikilink(m[1]).ambiguous) n++;
+    }
+    return n;
+  }, [doc.id, doc.content]);
+
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose}/>
+      <div className="drawer" role="dialog" aria-modal="true">
+        <div className="drawer-head">
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:16}}>
+            <div>
+              <div className="drawer-title">{doc.title}</div>
+              <div className="drawer-sub">{doc.collection} · {doc.id}{ambiguousCount > 0 && <> · <span style={{color:"var(--warn)"}}>{ambiguousCount} ambiguous wikilink{ambiguousCount===1?"":"s"}</span></>}</div>
+            </div>
+            <button className="btn" onClick={onClose} aria-label="Close"><Icon name="close" size={12} /></button>
+          </div>
+        </div>
+        <div className="drawer-body">
+          <div className="kv">
+            <div className="kv-k">id</div><div className="kv-v">{doc.id}</div>
+            <div className="kv-k">collection</div><div className="kv-v">{doc.collection}</div>
+            <div className="kv-k">updated</div><div className="kv-v">{doc.updated_at}</div>
+            <div className="kv-k">tags</div><div className="kv-v">[{doc.tags.join(", ")}]</div>
+            <div className="kv-k">supersedes</div><div className="kv-v">{doc.supersedes || "—"}</div>
+            <div className="kv-k">superseded_by</div><div className="kv-v">{doc.superseded_by || "—"}</div>
+          </div>
+
+          <div>
+            <div className="section-title">Content · sanitized markdown · inline [[wikilinks]] resolved</div>
+            <div className="surface surface-pad" style={{whiteSpace:"pre-wrap", fontSize:13, lineHeight:1.7}}>
+              {renderWithWikilinks(doc.content, onOpenDoc)}
+            </div>
+          </div>
+
+          {(doc.supersedes || doc.superseded_by) && (
+            <div>
+              <div className="section-title">Supersession chain</div>
+              <div className="surface surface-pad mono" style={{fontSize:12, color:"var(--text-2)"}}>
+                {doc.superseded_by && <div>↓ {doc.superseded_by} <span style={{color:"var(--text-4)"}}>(newer)</span></div>}
+                <div style={{color:"var(--accent)"}}>● {doc.id} <span style={{color:"var(--text-4)"}}>(this)</span></div>
+                {doc.supersedes && <div>↑ {doc.supersedes} <span style={{color:"var(--text-4)"}}>(older)</span></div>}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="section-title">Referenced by · {backlinks.length} document{backlinks.length===1?"":"s"}</div>
+            <div className="surface">
+              {backlinks.length === 0 ? (
+                <div style={{padding:24, color:"var(--text-3)", fontSize:12, textAlign:"center"}}>
+                  No other documents reference this yet. Other notes can link here via <code className="mono">[[{doc.id}]]</code> or <code className="mono">[[{doc.title}]]</code>.
+                </div>
+              ) : backlinks.map(b => (
+                <div key={b.id} className="mem-row" onClick={() => onOpenDoc && onOpenDoc(b)} style={{gridTemplateColumns:"22px 1fr 110px"}}>
+                  <div className="mem-icon"><Icon name="memory" size={13} /></div>
+                  <div>
+                    <div className="mem-title">{b.title}</div>
+                    <div className="mem-meta mono" style={{whiteSpace:"normal", color:"var(--text-3)"}}>{b.snippet}</div>
+                  </div>
+                  <div className="mem-time">{fmtAge(b.updated_at)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{display:"flex", gap:8}}>
+            <button className="btn btn-primary">Edit (creates supersedes)</button>
+            <button className="btn">Copy ID</button>
+            <button className="btn btn-danger">Delete…</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+/* ----------------- Command palette ----------------- */
+const COMMANDS = [
+  { group: "Navigation", items: [
+    { id:"nav-dashboard", title:"Go to Dashboard",  sub:"/ui/dashboard",  key:"g d", panel:"dashboard" },
+    { id:"nav-memory",    title:"Go to Memory",     sub:"/ui/memory",     key:"g m", panel:"memory" },
+    { id:"nav-graph",     title:"Go to Graph",      sub:"/ui/graph",      key:"g g", panel:"graph" },
+    { id:"nav-symbols",   title:"Go to Symbols",    sub:"/ui/symbols",    key:"g s", panel:"symbols" },
+    { id:"nav-harvest",   title:"Go to Harvest",    sub:"/ui/harvest",    key:"g h", panel:"harvest" },
+    { id:"nav-settings",  title:"Go to Settings",   sub:"/ui/settings",   key:"g ,", panel:"settings" },
+  ]},
+  { group: "Actions", items: [
+    { id:"act-reindex",  title:"Trigger reindex",       sub:"POST /api/v1/reindex" },
+    { id:"act-harvest",  title:"Trigger harvest",       sub:"POST /api/harvest" },
+    { id:"act-reload",   title:"Reload config",         sub:"POST /api/reload-config" },
+    { id:"act-reset-wks",title:"Reset workspace",       sub:"requires double-confirm" },
+  ]},
+  { group: "Symbols", items: SYMBOLS.slice(0, 6).map(s => ({ id:"sym-"+s.name, title:s.name, sub:s.file+":"+s.line, isSymbol:true })) },
+];
+const CommandPalette = ({ open, onClose, onNavigate }) => {
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState(0);
+  const inputRef = useRef(null);
+  const filtered = useMemo(() => {
+    if (!q) return COMMANDS;
+    const lower = q.toLowerCase();
+    return COMMANDS.map(g => ({ ...g, items: g.items.filter(i => i.title.toLowerCase().includes(lower) || i.sub.toLowerCase().includes(lower)) }))
+                   .filter(g => g.items.length > 0);
+  }, [q]);
+  const flat = filtered.flatMap(g => g.items);
+
+  useEffect(() => {
+    if (open) { inputRef.current?.focus(); setActive(0); setQ(""); }
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); setActive(a => Math.min(a + 1, flat.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setActive(a => Math.max(a - 1, 0)); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        const it = flat[active];
+        if (it?.panel) onNavigate(it.panel);
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, flat, active]);
+
+  if (!open) return null;
+  let idx = -1;
+  return (
+    <div className="cmdk-backdrop" onClick={onClose}>
+      <div className="cmdk" onClick={e => e.stopPropagation()}>
+        <input ref={inputRef} className="cmdk-input" placeholder="Search memories, symbols, commands…" value={q} onChange={e => { setQ(e.target.value); setActive(0); }} />
+        <div className="cmdk-list">
+          {filtered.length === 0 ? (
+            <div style={{padding:24, textAlign:"center", color:"var(--text-3)", fontSize:12}}>No matches for "{q}".</div>
+          ) : filtered.map(g => (
+            <div key={g.group}>
+              <div className="cmdk-group-label">{g.group}</div>
+              {g.items.map(it => {
+                idx++;
+                const i = idx;
+                return (
+                  <div key={it.id} className="cmdk-item" data-active={i===active} onMouseEnter={() => setActive(i)} onClick={() => { if (it.panel) onNavigate(it.panel); onClose(); }}>
+                    <Icon name={it.isSymbol ? "function" : it.panel ? "arrow" : "search"} size={13} />
+                    <div className="cmdk-item-text">
+                      <div className="cmdk-item-title">{it.title}</div>
+                      <div className="cmdk-item-sub">{it.sub}</div>
+                    </div>
+                    {it.key && <span className="cmdk-item-key">{it.key}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ----------------- App shell ----------------- */
+const App = () => {
+  const [theme, setTheme] = useState("dark");
+  const [panel, setPanel] = useState("dashboard");
+  const [workspace, setWorkspace] = useState(WORKSPACES[0]);
+  const [wsOpen, setWsOpen] = useState(false);
+  const [drawer, setDrawer] = useState(null);
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [liveQueue, setLiveQueue] = useState(STATS.chunks_by_embed_status.pending);
+  const [unsafeBind, setUnsafeBind] = useState(false);
+
+  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
+
+  // simulated SSE live tick on embed queue
+  useEffect(() => {
+    const id = setInterval(() => setLiveQueue(q => Math.max(0, q + (Math.random() > 0.55 ? -1 : 1))), 1800);
+    return () => clearInterval(id);
+  }, []);
+
+  // global hotkeys
+  useEffect(() => {
+    let lastG = 0;
+    const onKey = (e) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key.toLowerCase() === "k") { e.preventDefault(); setCmdOpen(true); return; }
+      if (e.key === "Escape" && drawer) { setDrawer(null); return; }
+      const tag = e.target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const t = Date.now();
+      if (e.key === "g") { lastG = t; return; }
+      if (t - lastG < 800) {
+        const k = e.key.toLowerCase();
+        if (k === "d") setPanel("dashboard");
+        else if (k === "m") setPanel("memory");
+        else if (k === "g") setPanel("graph");
+        else if (k === "s") setPanel("symbols");
+        else if (k === "h") setPanel("harvest");
+        else if (k === ",") setPanel("settings");
+        lastG = 0;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawer]);
+
+  const navItems = [
+    { id:"dashboard", label:"Dashboard", icon:"dashboard", key:"g d" },
+    { id:"memory",    label:"Memory",    icon:"memory",    key:"g m" },
+    { id:"graph",     label:"Graph",     icon:"graph",     key:"g g" },
+    { id:"symbols",   label:"Symbols",   icon:"symbols",   key:"g s" },
+    { id:"harvest",   label:"Harvest",   icon:"harvest",   key:"g h" },
+    { id:"settings",  label:"Settings",  icon:"settings",  key:"g ," },
+  ];
+
+  const titleFor = (p) => {
+    const labels = { dashboard:"Dashboard", memory:"Memory", graph:"Knowledge graph", symbols:"Symbols", harvest:"Session harvest", settings:"Settings" };
+    return labels[p];
+  };
+
+  return (
+    <div className="app">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-name">nano-brain</div>
+          <div className="brand-sub">operator · v{STATS.server_version}</div>
+        </div>
+
+        <div className="ws-picker">
+          <div className="ws-picker-label">Workspace</div>
+          <button className="ws-picker-value" onClick={() => setWsOpen(o=>!o)}>
+            <span>
+              <div className="ws-picker-name">{workspace.name}</div>
+              <div className="ws-picker-hash">{workspace.hash} · {fmtNum(workspace.docs)} docs</div>
+            </span>
+            <Icon name="chevron" size={12} />
+          </button>
+          {wsOpen && (
+            <div style={{marginTop:6, border:"1px solid var(--border-strong)", background:"var(--bg-1)"}}>
+              {WORKSPACES.map(w => (
+                <div key={w.hash} className="cmdk-item" onClick={() => { setWorkspace(w); setWsOpen(false); }} style={{padding:"6px 8px"}}>
+                  <div className="cmdk-item-text">
+                    <div className="cmdk-item-title">{w.name}</div>
+                    <div className="cmdk-item-sub">{w.hash} · {fmtNum(w.docs)} docs</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <nav className="nav" role="navigation">
+          {navItems.map(it => (
+            <button key={it.id} className="nav-item" data-active={panel===it.id} onClick={() => setPanel(it.id)}>
+              <span className="nav-item-icon"><Icon name={it.icon} size={14} /></span>
+              <span>{it.label}</span>
+              <span className="nav-item-key">{it.key}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <button className="theme-toggle" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")} aria-label="Toggle theme">
+            <Icon name={theme === "dark" ? "sun" : "moon"} size={12} />
+          </button>
+          <div className="cmdk-hint"><Kbd>{navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}</Kbd><Kbd>K</Kbd></div>
+        </div>
+      </aside>
+
+      <main className="main">
+        {unsafeBind && (
+          <div className="banner-warn">
+            <span>⚠</span>
+            <span><strong>Server bound to 0.0.0.0:3100 without authentication.</strong> Anyone on the network can read and modify your memory. Bind to loopback or configure auth.</span>
+          </div>
+        )}
+        <div className="topbar">
+          <div>
+            <div className="topbar-title">{titleFor(panel)}</div>
+            <div className="topbar-crumbs">/ui/{panel} · workspace={workspace.hash}</div>
+          </div>
+          <div className="topbar-actions">
+            <button className="btn" onClick={() => setUnsafeBind(b => !b)}>Toggle bind banner</button>
+            <button className="btn" onClick={() => setCmdOpen(true)}>Search… <Kbd>⌘K</Kbd></button>
+          </div>
+        </div>
+
+        {panel === "dashboard" && <DashboardPanel workspace={workspace} liveQueue={liveQueue} onOpenDoc={setDrawer} />}
+        {panel === "memory"    && <MemoryPanel onOpenDoc={setDrawer} />}
+        {panel === "graph"     && <GraphPanel onOpenDoc={setDrawer} />}
+        {panel === "symbols"   && <SymbolsPanel />}
+        {panel === "harvest"   && <HarvestPanel onOpenDoc={setDrawer} />}
+        {panel === "settings"  && <SettingsPanel />}
+      </main>
+
+      <DocDrawer doc={drawer} onClose={() => setDrawer(null)} onOpenDoc={setDrawer} />
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} onNavigate={setPanel} />
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+/* speaker notes injection */
+const notes = `
+<p><strong>Design philosophy.</strong> "Tool a senior engineer would respect" — not a generic Tailwind admin template. Inspired by Linear (keyboard-first, dense), Vercel (sharp edges, single accent), Stripe (microstates, tabular alignment), Sourcegraph (code-page density), Logseq (graph performance), Datasette (column-action UX). Anti-patterns explicitly avoided: rounded everything, rainbow gradients, decorative color, generic spinners, modal-for-everything.</p>
+<p><strong>Tokens.</strong> Dark default (#0D0D0D bg). Single accent (#0070F3). Status colors only for meaning. Border opacity 8%. Inter body + JetBrains Mono code. 8px base grid, sharp 0–4px radii.</p>
+<p><strong>Dashboard.</strong> Stat-card grid with 1px border-grid (no shadows). Live embed queue counter updates every ~2s via simulated SSE. Recent docs preview the same row layout used in Memory panel for visual consistency. Pills (ok/warn/err) are the only colored elements.</p>
+<p><strong>Memory.</strong> Tag chips toggle as multi-select AND filters. Meaningful empty state ("No memories match — clear filters or press Cmd+K"). Row layout is dense: icon · title+meta · tags · time · supersedes-indicator. Click → side drawer with full content, supersession chain, action buttons (Edit creates new doc that supersedes — never mutates content).</p>
+<p><strong>Graph (dual-mode).</strong> Static SVG mockup of what Sigma.js will render in production. Two modes: <strong>Code</strong> (default — symbols + contains/imports/calls; edges color by type) and <strong>Knowledge</strong> (memory docs + session summaries + <code>references</code> edges extracted from <code>[[wikilinks]]</code>; nodes color by collection). Depth/direction/edge-type controls map 1:1 to /api/v1/graph/neighborhood request body with a new <code>node_kind</code> discriminator. Mode toggle persists focus per mode. Double-click a doc node in Knowledge mode → opens DocDrawer in place. Hard-cap badge visible at all times.</p>
+<p><strong>Wikilinks + backlinks (Obsidian-style).</strong> Every document drawer renders content via the wikilink rewriter: <code>[[d-1042]]</code> or <code>[[exact title]]</code> become clickable inline links that open the target's drawer in place. Ambiguous titles → dotted underline with tooltip listing candidates. Unresolved → broken-link style. Every drawer has a "Referenced by" section listing inbound backlinks with title + collection + age + 200-char snippet around the link occurrence. Click a backlink to swap the drawer to that doc. Session-summary rows in Harvest panel open the same drawer, so harvested sessions become navigable nodes in the knowledge graph (the user can read the full summary with all wikilinks resolved, jump to referenced decisions, then jump back via backlinks).</p>
+<p><strong>Symbols.</strong> Type-ahead with kind/lang filter chips. Sorted by impact (incoming edges) descending. Two-line cell: monospace name + dim signature. Location uses file:line format with line number dimmed (Sourcegraph pattern).</p>
+<p><strong>Harvest.</strong> One button (Trigger harvest) + live counters (seen/summarized) driven by simulated SSE. Recent sessions table with preview snippet, source+agent+project+duration columns. Tabular numeric alignment.</p>
+<p><strong>Settings.</strong> Form grid: label+hint on left (220px), input on right. Secrets shown as &lt;redacted&gt; (not editable in UI). Save button disabled until dirty. Doctor section uses ok/warn/err pills with inline hint text for warns/fails.</p>
+<p><strong>Command palette (Cmd+K).</strong> Hand-rolled cmdk-equivalent. Three groups: Navigation, Actions, Symbols. Arrow keys move, Enter activates, Esc closes. Keyboard shortcuts visible on right of each item. Auto-focus on open.</p>
+<p><strong>Keyboard nav.</strong> g+d, g+m, g+g, g+s, g+h, g+, (Linear pattern, two-keystroke sequence within 800ms). Esc closes drawer. Tab cycles within drawer (production: focus trap via aria-modal).</p>
+<p><strong>Banner.</strong> Toggleable in top-bar for the prototype; in production, automatic based on /api/v1/config server.host. Persistent, non-dismissible, semantic red.</p>
+<p><strong>Performance.</strong> Skeleton screens (not implemented in this static prototype but CSS class included) for any cell that streams. CSS uses no animations beyond 150ms transitions and a single shimmer keyframe.</p>
+<p><strong>What this prototype intentionally omits.</strong> Real API calls (all data static). Full XSS sanitization (production uses react-markdown + rehype-sanitize before the wikilink rewriter; the prototype's renderer skips that step since mock data is trusted). Sigma.js (static SVG stand-in here). Authentication (v2). Mobile layout (desktop-first). The prototype's wikilink rewriter is a naive regex split that does NOT compose with Markdown formatting; production uses a remark/rehype plugin that operates on the AST after sanitization. All these production details are spec'd in OpenSpec design.md + tasks.md.</p>
+<p><strong>Open questions for the user.</strong> (1) Should the Graph panel default to Code mode or Knowledge mode? Current: Code (matches v1 — symbol-first). (2) Should "Trigger reindex" require double-confirm like reset-workspace? (3) Should the wikilink rewriter also handle <code>[[doc-id|alias text]]</code> (Obsidian-style alias syntax)? Current spec: not in v1, deferred. (4) Should the bind-warning banner be allowed to be temporarily collapsed (not dismissed)? (5) For backlinks: should the snippet show all wikilink occurrences in the source doc, or just the first one? Current spec: just the first.</p>
+`;
+document.getElementById("notes-body").innerHTML = notes;
+</script>
+<details id="speaker-notes" style="margin:64px 24px;color:rgba(255,255,255,0.65);font-family:Inter,system-ui,sans-serif;font-size:13px;line-height:1.7;max-width:800px">
+<summary style="cursor:pointer;font-weight:600;color:rgba(255,255,255,0.95)">Speaker Notes — design decisions</summary>
+<div id="notes-body" style="padding-top:16px"></div>
+</details>
+</body>
+</html>

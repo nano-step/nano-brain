@@ -1,3 +1,27 @@
+---
+story_id: US-XXX
+title: Story Title
+status: planned          # planned | in-progress | blocked | complete
+lane: tiny               # tiny | normal | high-risk
+change_type: user-feature # user-feature | bug-fix | infrastructure | refactor | docs | dependency-bump
+github_issue: ""         # e.g. nano-step/nano-brain#42 (REQUIRED unless tiny + no file changes)
+openspec_change: ""      # e.g. openspec/changes/<name>/  (REQUIRED for normal + high-risk)
+validation:
+  unit: ""               # path to evidence file or "n/a"
+  integration: ""        # path to evidence file or "n/a"
+  e2e: ""                # path to evidence file (e.g. docs/evidence/smoke-e2e-<slug>.txt) or "n/a"
+  platform: ""           # path or "n/a"
+  release: ""            # path or "n/a" or "deferred"
+review:
+  verdict: pending       # pending | PASS | FAIL
+  reviewer: ""           # agent name (must ≠ implementer)
+  commit: ""             # sha of reviewed commit
+pr:
+  url: ""
+  bot_rounds: 0          # max 3 (R29)
+  overridden: false      # set true if [HARNESS-OVERRIDE] applied
+---
+
 # US-XXX Story Title
 
 <!-- generated-by: harness-init v0.1.0 -->

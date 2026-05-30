@@ -110,11 +110,29 @@ review gate before any work is archived.
 └─────────────────────┘
 ```
 
-Every task has two possible outputs:
+## Two-Output Model (MANDATORY)
 
-1. **Product delta**: app code, tests, API shape, data model, or product docs.
-2. **Harness delta**: docs, templates, validation expectations, backlog items, or
-   decision records that make the next task easier.
+Every task produces ONE or BOTH of these outputs. Both are first-class.
+
+1. **Product delta** — app code, tests, API shape, data model, or product docs.
+2. **Harness delta** — changes to HARNESS.md, gates, templates, validation
+   expectations, backlog items, ADRs (`docs/decisions/`), GLOSSARY, CONTEXT_RULES,
+   TRACE_SPEC, or scripts that make the next task easier.
+
+A task that produces ONLY a Harness Delta (no product change) is legitimate work
+— record it the same way.
+
+**Decision protocol when friction is discovered mid-task:**
+- Fix is < 30 min AND in current PR scope → fix inline as Harness Delta (combined PR)
+- Else → add entry to `docs/HARNESS_BACKLOG.md`
+
+The story template's "Harness Delta" section is REQUIRED filled-in
+(may be "None" but must be present).
+
+See `docs/GLOSSARY.md` for closed-set definitions of all terms used in this doc.
+See `docs/CONTEXT_RULES.md` for what to read per phase × lane (token budget).
+See `docs/TRACE_SPEC.md` for evidence file formats per tier.
+See `docs/decisions/README.md` for when to write ADRs.
 
 ## Source Hierarchy
 
@@ -405,17 +423,49 @@ After the local Review Gate passes, push branch and open a PR. The PR triggers y
 3. Bot approves → merge → openspec archive "<name>"
 ```
 
-**Rules for handling PR comments:**
+**R31: Agent-triaged comment verdicts (do NOT trust Gemini's severity labels).**
 
-- **Read every comment.** Do not collapse / dismiss without action or reasoned reply.
-- **Substantive comment** (correctness, security, missing case): MUST fix.
-  After fix, re-run validate + user-flow + Review Gate before pushing.
-- **Stylistic comment** (naming, ordering, preference): fix if cheap, or reply
-  with reasoning and tag for human review.
-- **Disagreement**: do NOT silently dismiss. Reply with rationale; tag human.
-- **Loop limit**: max 3 push cycles per PR. After 3, escalate to human review.
-- **Never**: force-push to bypass bot, dismiss without reading, or merge
-  without bot approval (unless human override documented in PR).
+Every Gemini PR comment MUST be triaged by the agent. Gemini lacks context
+(codebase patterns, story intent, prior decisions); the agent has that context
+and is the source of truth. Triage is recorded in the self-review evidence file
+at `docs/evidence/self-review-<story-slug>.md` under section
+`## Gemini Verification Triage`.
+
+**Triage table format (exact columns required):**
+
+```markdown
+## Gemini Verification Triage
+
+| Comment ref       | Agent verdict       | Reasoning                          | Action                |
+| ----------------- | ------------------- | ---------------------------------- | --------------------- |
+| PR#42 line 15     | VALID:critical      | actual nil panic risk              | fixed in commit abc12 |
+| PR#42 line 23     | FALSE_POSITIVE      | intentional per ADR-003            | acknowledged in reply |
+| PR#42 line 31     | DEFER               | out of scope; tracked in #99       | added to backlog      |
+```
+
+**Verdict vocabulary (closed set — use these literal strings only):**
+
+| Verdict           | Meaning                                                        | Blocks merge? |
+| ----------------- | -------------------------------------------------------------- | :-----------: |
+| `VALID:critical`  | Agent confirms; correctness/security/data loss                 | YES           |
+| `VALID:high`      | Agent confirms; significant bug or design issue                | YES           |
+| `VALID:medium`    | Agent confirms; fix optional but must acknowledge in PR reply  | no            |
+| `VALID:low`       | Agent confirms; cosmetic/nit; acknowledge in PR reply          | no            |
+| `FALSE_POSITIVE`  | Agent has context Gemini lacks; explain in Reasoning column    | no            |
+| `DEFER`           | Valid but out of current PR scope; link to backlog/follow-up   | no            |
+| `ACKNOWLEDGED`    | Informational comment, no action needed                        | no            |
+
+**Resolution rules:**
+
+- Every `VALID:critical` and `VALID:high` row MUST contain `fixed in commit <sha>`
+  in the Action column, OR the PR must have a `[HARNESS-OVERRIDE]` comment (see R7).
+- The number of triage table rows MUST equal the number of Gemini bot comments on
+  the PR (no comment left untriaged).
+- **Loop limit:** max 3 push cycles per PR. After 3, escalate to human review.
+
+**Enforced by:** gate 3.6 (PRE-MERGE) — parses triage table, counts Gemini comments
+vs triage rows, blocks merge on unresolved `VALID:critical`/`VALID:high` without
+fix commit or override.
 
 The PR review loop is not optional. It is the final correctness gate before
 the change becomes part of the trunk.
@@ -431,10 +481,13 @@ All development transitions are governed by the gate specification in
 
 **Core enforcement rules:**
 
-1. **1 feature = 1 PR = 1 GitHub issue.** No bundling multiple features.
-2. **All gates must PASS** before proceeding to the next phase.
-3. **FAIL = BLOCK.** Agent must fix failures before continuing.
-4. **Agent MUST NOT start the next feature** until ⑤ NEXT-READY passes.
+1. **R1: 1 feature = 1 PR = 1 GitHub issue.** No bundling multiple features.
+   - PR body MUST contain exactly ONE `Closes #<N>` reference.
+   - If a PR closes 2+ issues, split into separate PRs.
+   - **Enforced by:** gate 3.8 (PRE-MERGE) — counts `Closes #` occurrences in PR body. FAIL if count ≠ 1.
+2. **R3: All gates must PASS** before proceeding to the next phase.
+3. **R4: FAIL = BLOCK.** Agent must fix failures before continuing.
+4. **R5: Agent MUST NOT start the next feature** until ⑤ NEXT-READY passes.
 
 Run gates via: `./scripts/harness-check.sh <phase> [options]`
 
@@ -472,8 +525,15 @@ and retro output template.
    the story shows Review Verdict = PASS with per-criterion evidence.
 6. **Backdating evidence.** Evidence must reference the current implementation
    commit, not a previous passing run.
-7. **Force-pushing to bypass PR bot review.** PR bot must approve or be
-   overridden by documented human decision.
+7. **R7: Force-pushing to bypass PR bot review.** PR bot must approve OR the user
+   must post an explicit override comment.
+   - **Override mechanism:** User account posts PR comment containing exact literal
+     string `[HARNESS-OVERRIDE]: <reason>` where `<reason>` is ≥ 20 characters.
+   - The override applies ONLY to the PR head commit at time of posting.
+     Any subsequent push invalidates the override.
+   - **Enforced by:** gate 3.6 (PRE-MERGE) — if `[HARNESS-OVERRIDE]: ...` matched in
+     PR comments and length ≥ 20, gate 3.6 returns PASS regardless of unresolved
+     Gemini findings.
 8. **Dismissing PR comments without action or reasoned reply.** Every
    substantive comment requires a fix or a documented disagreement.
 9. **Starting work without a GitHub issue.** Every new user request (except
@@ -499,6 +559,25 @@ and retro output template.
     }
     // Pass only non-nil values to registry
     ```
+
+## HUMAN-ONLY Rules (not enforced by harness-check.sh)
+
+These rules apply but cannot be automated by gate checks. They are caught at PR
+review time by a human or by another agent acting as reviewer — NOT by
+`scripts/harness-check.sh`. Violations are real violations; they just don't
+trip an automatic gate FAIL.
+
+| Rule | Statement | Why human-only |
+|---|---|---|
+| **R14** | No `_ = err` on constructor calls in `main.go` or startup paths. | Requires Go AST parsing; not in shell-script scope. Caught by `golangci-lint` errcheck rule + code review. |
+| **R26** | Reviewer ≠ implementer for the Review Gate. | No system tracks "who is acting as agent N now"; relies on agent honesty + PR author/reviewer separation. |
+| **R30** | Never force-push to bypass bot review. | `git push --force` is detectable but legitimate rebases look similar; false positives would block legit work. Caught by PR audit. |
+| **R84** | High-risk stories need explicit human approval before writing specs. | "Human approval" is free-text intent in issue comments; not reliably parseable. Caught at gate 1 user review. |
+| **R87** | Update `docs/decisions/` when architecture changes (high-risk). | "Architecture changed" requires domain judgment, not automation. Caught by reviewer at gate 3.5. |
+
+These rules are reviewer responsibility, not script responsibility. The
+distinction is made explicit so agents do not assume harness-check.sh covers
+everything.
 
 ## GitHub Issue Tracking
 
