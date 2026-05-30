@@ -64,7 +64,9 @@ export function HarvestPanel() {
                   setSessionsSeen(payload.sessions_seen)
                 }
                 if (payload.event === 'harvest_done') { done = true }
-              } catch { }
+              } catch {
+                // non-JSON SSE payload, safe to skip
+              }
             }
             if (trimmed === 'event: harvest_done') { done = true }
           }

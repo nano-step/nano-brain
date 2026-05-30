@@ -1,15 +1,22 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useSymbols } from '../hooks/useSymbols'
 import { getCurrentWorkspace } from '../api/workspace'
+import type { Symbol } from '../api/types'
 
 const ALL_KINDS = ['all', 'function', 'method', 'type', 'interface', 'struct', 'const', 'var'] as const
 const ALL_LANGS = ['all', 'go', 'python', 'typescript', 'javascript'] as const
 
 export function SymbolsPanel() {
   const workspace = getCurrentWorkspace()
+  const navigate = useNavigate()
   const [q, setQ] = useState('')
   const [kind, setKind] = useState('all')
   const [lang, setLang] = useState('all')
+
+  const handleShowInGraph = useCallback((s: Symbol) => {
+    void navigate({ to: '/graph', search: { focus: s.name, mode: 'symbol' } })
+  }, [navigate])
 
   const { data: symbols, isLoading, error } = useSymbols({
     workspace,
@@ -85,6 +92,7 @@ export function SymbolsPanel() {
               <th>Lang</th>
               <th>Location</th>
               <th className="num">Impact</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -104,6 +112,16 @@ export function SymbolsPanel() {
                   {s.source_path}<span style={{ color: 'var(--text-3)' }}>:{s.line}</span>
                 </td>
                 <td className="num">{s.impact || '—'}</td>
+                <td>
+                  <button
+                    className="btn"
+                    style={{ fontSize: 11, padding: '2px 8px' }}
+                    onClick={(e) => { e.stopPropagation(); handleShowInGraph(s) }}
+                    aria-label={`Show ${s.name} in graph`}
+                  >
+                    Show in graph
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

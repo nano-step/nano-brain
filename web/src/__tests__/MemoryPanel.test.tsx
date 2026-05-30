@@ -4,6 +4,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryPanel } from '../panels/MemoryPanel'
 import type { Document } from '../api/types'
 
+let mockSearchParams: { tags?: string; doc?: string } = {}
+const mockNavigate = vi.fn((opts: { search?: ((p: typeof mockSearchParams) => typeof mockSearchParams) | typeof mockSearchParams }) => {
+  if (typeof opts?.search === 'function') {
+    mockSearchParams = opts.search(mockSearchParams)
+  } else if (opts?.search) {
+    mockSearchParams = { ...mockSearchParams, ...opts.search }
+  }
+})
+
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => mockNavigate,
+  useSearch: () => mockSearchParams,
+}))
+
 const mockDocs: Document[] = [
   {
     id: 'd-001',
@@ -63,6 +77,8 @@ function wrap(ui: React.ReactElement) {
 describe('MemoryPanel', () => {
   beforeEach(() => {
     localStorage.setItem('nano-brain.workspace', 'ws-abc')
+    mockNavigate.mockReset()
+    mockSearchParams = {}
   })
 
   it('renders document rows', () => {
@@ -77,21 +93,23 @@ describe('MemoryPanel', () => {
     expect(screen.getByRole('button', { name: 'db' })).toBeTruthy()
   })
 
-  it('tag chip toggles active state on click', async () => {
+  it('tag chip click calls navigate with tags param', async () => {
     wrap(<MemoryPanel />)
-    const authChip = screen.getByRole('button', { name: 'auth' })
-    fireEvent.click(authChip)
+    fireEvent.click(screen.getByRole('button', { name: 'auth' }))
     await waitFor(() => {
-      expect(authChip.getAttribute('aria-pressed')).toBe('true')
+      expect(mockNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({ to: '/memory' }),
+      )
     })
+    const callArg = mockNavigate.mock.calls[0][0] as { search: (p: typeof mockSearchParams) => typeof mockSearchParams }
+    const result = callArg.search({})
+    expect(result.tags).toContain('auth')
   })
 
-  it('shows clear button when tags are active', async () => {
+  it('shows clear button when tags URL param is pre-set', () => {
+    mockSearchParams = { tags: 'db' }
     wrap(<MemoryPanel />)
-    fireEvent.click(screen.getByRole('button', { name: 'db' }))
-    await waitFor(() => {
-      expect(screen.getByText('clear ✕')).toBeTruthy()
-    })
+    expect(screen.getByRole('button', { name: 'Clear tag filters' })).toBeTruthy()
   })
 
   it('row click calls open', async () => {
@@ -104,5 +122,23 @@ describe('MemoryPanel', () => {
   it('shows count of documents', () => {
     wrap(<MemoryPanel />)
     expect(screen.getByText('2 documents')).toBeTruthy()
+  })
+
+  it('tags from URL search param are pre-selected as active chips', () => {
+    mockSearchParams = { tags: 'decision,db' }
+    wrap(<MemoryPanel />)
+    const dbChip = screen.getByRole('button', { name: 'db' })
+    expect(dbChip.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('clicking a tag chip navigates with updated tags param', async () => {
+    mockSearchParams = {}
+    wrap(<MemoryPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'auth' }))
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({ to: '/memory' }),
+      )
+    })
   })
 })

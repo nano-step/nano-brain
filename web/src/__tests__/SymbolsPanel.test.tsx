@@ -4,6 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SymbolsPanel } from '../panels/SymbolsPanel'
 import type { Symbol } from '../api/types'
 
+const mockNavigate = vi.fn()
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => mockNavigate,
+}))
+
 const mockSymbols: Symbol[] = [
   { name: 'processQuery', kind: 'function', language: 'go', source_path: 'internal/handlers/query.go', line: 42, signature: 'func processQuery(...)', impact: 18 },
   { name: 'Handler', kind: 'interface', language: 'go', source_path: 'internal/handlers/types.go', line: 11, signature: 'type Handler interface{}', impact: 32 },
@@ -61,5 +66,20 @@ describe('SymbolsPanel', () => {
     const rows = screen.getAllByRole('row')
     const firstDataRow = rows[1]
     expect(firstDataRow.textContent).toContain('Handler')
+  })
+
+  it('clicking Show in graph navigates to /graph with focus and mode params', async () => {
+    mockNavigate.mockClear()
+    wrap(<SymbolsPanel />)
+    const btn = screen.getAllByRole('button', { name: /show.*in graph/i })[0]
+    fireEvent.click(btn)
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: '/graph',
+          search: expect.objectContaining({ mode: 'symbol' }),
+        }),
+      )
+    })
   })
 })

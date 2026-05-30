@@ -577,3 +577,35 @@ button:focus-visible,
   padding: 0 2px;
   cursor: help;
 }
+
+.confirm-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 202;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.24);
+}
+
+.confirm-dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-family: JetBrains Mono, monospace;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-1);
+  outline: none;
+}
+
+.confirm-dialog-input:focus {
+  border-color: var(--accent);
+}

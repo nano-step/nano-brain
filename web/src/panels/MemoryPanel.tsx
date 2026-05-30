@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useDocuments } from '../hooks/useDocuments'
 import { useDocDrawer } from '../hooks/useDocDrawer'
 import { DocDrawer } from '../components/DocDrawer'
@@ -8,9 +9,15 @@ import { fmtAge } from '../utils/format'
 
 export function MemoryPanel() {
   const workspace = getCurrentWorkspace()
+  const navigate = useNavigate()
+  const search = useSearch({ from: '/memory' })
   const [textFilter, setTextFilter] = useState('')
-  const [activeTags, setActiveTags] = useState<string[]>([])
   const [collection] = useState('')
+
+  const activeTags = useMemo(
+    () => (search.tags ? search.tags.split(',').filter(Boolean) : []),
+    [search.tags],
+  )
 
   const { data: docs, isLoading, error } = useDocuments({
     workspace,
@@ -29,14 +36,16 @@ export function MemoryPanel() {
   }, [docs])
 
   const toggleTag = useCallback((tag: string) => {
-    setActiveTags((curr) =>
-      curr.includes(tag) ? curr.filter((t) => t !== tag) : [...curr, tag],
-    )
-  }, [])
+    const next = activeTags.includes(tag)
+      ? activeTags.filter((t) => t !== tag)
+      : [...activeTags, tag]
+    void navigate({ to: '/memory', search: (prev) => ({ tags: next.length > 0 ? next.join(',') : undefined, doc: prev.doc }) })
+  }, [activeTags, navigate])
 
   const handleRowClick = useCallback((doc: Document) => {
     open(doc)
-  }, [open])
+    void navigate({ to: '/memory', search: (prev) => ({ tags: prev.tags, doc: doc.id }) })
+  }, [open, navigate])
 
   if (!workspace) {
     return (
@@ -83,7 +92,11 @@ export function MemoryPanel() {
             </button>
           ))}
           {activeTags.length > 0 && (
-            <button className="chip" onClick={() => setActiveTags([])} aria-label="Clear tag filters">
+            <button
+              className="chip"
+              onClick={() => void navigate({ to: '/memory', search: (prev) => ({ tags: undefined, doc: prev.doc }) })}
+              aria-label="Clear tag filters"
+            >
               clear ✕
             </button>
           )}
@@ -140,8 +153,14 @@ export function MemoryPanel() {
         <DocDrawer
           doc={openDoc}
           workspace={workspace}
-          onClose={close}
-          onOpenDoc={open}
+          onClose={() => {
+            close()
+            void navigate({ to: '/memory', search: (prev) => ({ tags: prev.tags, doc: undefined }) })
+          }}
+          onOpenDoc={(doc) => {
+            open(doc)
+            void navigate({ to: '/memory', search: (prev) => ({ tags: prev.tags, doc: doc.id }) })
+          }}
         />
       )}
     </>

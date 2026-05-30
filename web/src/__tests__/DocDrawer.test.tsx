@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { DocDrawer } from '../components/DocDrawer'
 import type { Document, Backlink } from '../api/types'
@@ -36,8 +36,9 @@ vi.mock('../hooks/useResolveLinks', () => ({
   useResolveLinks: () => [],
 }))
 
+const mockApiFetch = vi.fn()
 vi.mock('../api/client', () => ({
-  apiFetch: vi.fn(),
+  apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }))
 
 function wrap(ui: React.ReactElement) {
@@ -46,6 +47,8 @@ function wrap(ui: React.ReactElement) {
 }
 
 describe('DocDrawer', () => {
+  beforeEach(() => { mockApiFetch.mockReset() })
+
   it('renders document title', () => {
     wrap(<DocDrawer doc={mockDoc} workspace="ws-abc" onClose={vi.fn()} onOpenDoc={vi.fn()} />)
     expect(screen.getByText('decision: use eventbus pkg')).toBeTruthy()
@@ -81,5 +84,43 @@ describe('DocDrawer', () => {
   it('renders backlinks section', () => {
     wrap(<DocDrawer doc={mockDoc} workspace="ws-abc" onClose={vi.fn()} onOpenDoc={vi.fn()} />)
     expect(screen.getByText('related decision')).toBeTruthy()
+  })
+
+  it('clicking Delete opens typed-confirmation modal', async () => {
+    wrap(<DocDrawer doc={mockDoc} workspace="ws-abc" onClose={vi.fn()} onOpenDoc={vi.fn()} />)
+    fireEvent.click(screen.getByText('Delete…'))
+    await waitFor(() => {
+      expect(screen.getByText('Delete document')).toBeTruthy()
+      expect(screen.getByRole('textbox', { name: /confirm document id/i })).toBeTruthy()
+    })
+  })
+
+  it('Confirm delete button disabled when input does not match doc id', async () => {
+    wrap(<DocDrawer doc={mockDoc} workspace="ws-abc" onClose={vi.fn()} onOpenDoc={vi.fn()} />)
+    fireEvent.click(screen.getByText('Delete…'))
+    await waitFor(() => screen.getByText('Delete document'))
+    const input = screen.getByRole('textbox', { name: /confirm document id/i })
+    fireEvent.change(input, { target: { value: 'wrong-id' } })
+    const confirmBtn = screen.getByRole('button', { name: /confirm delete/i })
+    expect(confirmBtn).toBeDisabled()
+  })
+
+  it('Confirm delete button enabled when input matches doc id and calls DELETE', async () => {
+    mockApiFetch.mockResolvedValue({ ok: true })
+    const onClose = vi.fn()
+    wrap(<DocDrawer doc={mockDoc} workspace="ws-abc" onClose={onClose} onOpenDoc={vi.fn()} />)
+    fireEvent.click(screen.getByText('Delete…'))
+    await waitFor(() => screen.getByText('Delete document'))
+    const input = screen.getByRole('textbox', { name: /confirm document id/i })
+    fireEvent.change(input, { target: { value: 'd-1042' } })
+    const confirmBtn = screen.getByRole('button', { name: /confirm delete/i })
+    expect(confirmBtn).not.toBeDisabled()
+    fireEvent.click(confirmBtn)
+    await waitFor(() => {
+      expect(mockApiFetch).toHaveBeenCalledWith(
+        expect.stringContaining('d-1042'),
+        expect.objectContaining({ method: 'DELETE' }),
+      )
+    })
   })
 })

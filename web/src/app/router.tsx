@@ -36,6 +36,10 @@ const dashboardRoute = createRoute({
 const memoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/memory',
+  validateSearch: (search: Record<string, unknown>) => ({
+    tags: typeof search.tags === 'string' ? search.tags : undefined,
+    doc: typeof search.doc === 'string' ? search.doc : undefined,
+  }),
   component: MemoryPanel,
 })
 
