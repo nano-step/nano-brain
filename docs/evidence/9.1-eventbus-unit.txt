@@ -1,0 +1,16 @@
+=== RUN   TestPublishWithoutSubscribersIsNonBlocking
+--- PASS: TestPublishWithoutSubscribersIsNonBlocking (0.00s)
+=== RUN   TestSubscribeReceivesFilteredEvents
+--- PASS: TestSubscribeReceivesFilteredEvents (0.05s)
+=== RUN   TestUnsubscribeStopsEvents
+--- PASS: TestUnsubscribeStopsEvents (0.00s)
+=== RUN   TestDropNewestBackpressure
+--- PASS: TestDropNewestBackpressure (0.10s)
+=== RUN   TestLagEventEmittedWithin5s
+--- PASS: TestLagEventEmittedWithin5s (0.05s)
+=== RUN   TestCloseGracefulShutdown
+--- PASS: TestCloseGracefulShutdown (0.05s)
+=== RUN   TestConcurrentPublishersRaceFree
+--- PASS: TestConcurrentPublishersRaceFree (0.00s)
+PASS
+ok  	github.com/nano-brain/nano-brain/internal/eventbus	1.269s
