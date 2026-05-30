@@ -438,312 +438,142 @@ button:focus-visible,
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* ---- Focus ring (a11y) ---- */
-*:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.focus-ring:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* ---- Non-loopback warning banner ---- */
-.banner-danger {
-  background: #7f1d1d;
-  color: #fef2f2;
-  padding: 10px 20px;
-  font-size: 12px;
-  font-weight: 500;
-  width: 100%;
-  z-index: 100;
-  border-bottom: 1px solid #991b1b;
-}
-
-/* ---- Command palette ---- */
-.cmdk-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 1000;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 80px;
-}
-
-.cmdk-modal {
-  background: var(--bg-1);
-  border: 1px solid var(--border-strong);
-  width: 100%;
-  max-width: 560px;
-  box-shadow: var(--shadow-elev);
-  display: flex;
-  flex-direction: column;
-  max-height: 60vh;
-  overflow: hidden;
-}
-
-.cmdk-input {
-  width: 100%;
-  padding: 14px 16px;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  font-size: 14px;
-  color: var(--text-1);
-  outline: none;
-}
-
-.cmdk-input::placeholder {
-  color: var(--text-4);
-}
-
-[cmdk-list] {
-  overflow-y: auto;
-  max-height: calc(60vh - 52px);
-}
-
-.cmdk-group [cmdk-group-heading] {
-  padding: 8px 12px 4px;
-  font-size: 10px;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 500;
-}
-
-.cmdk-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-1);
-  transition: background 80ms;
-}
-
-.cmdk-item:hover,
-[cmdk-item][data-selected='true'] {
-  background: var(--bg-hover);
-}
-
-.cmdk-item-meta {
-  margin-left: auto;
-  color: var(--text-3);
-  font-size: 11px;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.cmdk-empty {
-  padding: 24px 16px;
-  text-align: center;
-  color: var(--text-3);
-  font-size: 13px;
-}
-
-/* ---- Confirm dialog ---- */
-.confirm-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 2000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.confirm-dialog {
-  background: var(--bg-1);
-  border: 1px solid var(--border-strong);
-  width: 100%;
-  max-width: 460px;
-  padding: 24px;
-  box-shadow: var(--shadow-elev);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.confirm-dialog--danger {
-  border-color: rgba(239, 68, 68, 0.4);
-}
-
-.confirm-dialog-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-
-.confirm-dialog-desc {
-  font-size: 13px;
-  color: var(--text-2);
-  line-height: 1.6;
-}
-
-.confirm-dialog-label {
-  font-size: 12px;
-  color: var(--text-2);
-}
-
-.confirm-dialog-input {
-  margin-top: 4px;
-}
-
-.confirm-dialog-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 4px;
-}
-
-/* ---- Settings form ---- */
-.form-section {
-  padding: 16px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.form-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  align-items: center;
-  gap: 12px;
-}
-
-.form-label {
-  font-size: 12px;
-  color: var(--text-2);
-}
-
-.form-input {
-  padding: 6px 10px;
-  background: var(--bg-2);
-  border: 1px solid var(--border-strong);
-  color: var(--text-1);
-  font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
-  width: 100%;
-  transition: border-color 120ms;
-}
-
-.form-input:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.form-input:disabled {
-  color: var(--text-4);
-  cursor: not-allowed;
-}
-
-.form-error {
-  grid-column: 2;
-  color: var(--err);
-  font-size: 11px;
-  margin-top: -8px;
-}
-
-.form-help {
-  grid-column: 2;
-  color: var(--text-3);
-  font-size: 11px;
-  margin-top: -8px;
-}
-
-/* ---- Doctor checks ---- */
-.doctor-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 0;
-  flex-wrap: wrap;
-  font-size: 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.doctor-badge {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.doctor-name {
-  font-weight: 500;
-  color: var(--text-1);
-}
-
-.doctor-detail {
-  color: var(--text-3);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-}
-
-.doctor-expand {
-  margin-left: auto;
-  color: var(--accent);
-  font-size: 11px;
-  cursor: pointer;
-  background: none;
-  border: none;
-  padding: 2px 4px;
-}
-
-.doctor-hint {
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--bg-2);
-  color: var(--text-2);
-  font-size: 11px;
-  margin-top: 4px;
-  border-left: 2px solid var(--warn);
-}
-
-/* ---- Danger variants ---- */
 .btn-danger {
-  background: var(--err);
-  border-color: var(--err);
-  color: white;
+  color: var(--err);
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
 }
 
-.btn-danger-outline {
-  border-color: rgba(239, 68, 68, 0.4);
-  color: var(--err);
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-input {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  outline: none;
+  min-width: 220px;
+  transition: border-color 150ms;
+  color: var(--text-1);
+}
+
+.filter-input:focus-visible {
+  border-color: var(--accent);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  font-size: 11px;
+  color: var(--text-2);
+  transition: border-color 150ms, color 150ms;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
+.chip[data-active='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 112, 243, 0.06);
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 90;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 640px;
+  max-width: 90vw;
+  background: var(--bg-0);
+  border-left: 1px solid var(--border);
+  z-index: 91;
+  overflow-y: auto;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.drawer-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-0);
+}
+
+.drawer-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.drawer-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 4px;
+}
+
+.drawer-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 4px 16px;
   font-size: 12px;
-  padding: 7px 12px;
-  text-align: left;
-  transition: border-color 120ms, background 120ms;
 }
 
-.btn-danger-outline:hover:not(:disabled) {
-  border-color: var(--err);
-  background: rgba(239, 68, 68, 0.06);
+.kv-k {
+  color: var(--text-3);
 }
 
-/* ---- Settings toast ---- */
-.settings-toast {
-  padding: 10px 14px;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: var(--ok);
-  font-size: 12px;
-  margin-bottom: 12px;
+.kv-v {
+  color: var(--text-1);
+  font-family: 'JetBrains Mono', monospace;
+  word-break: break-all;
 }
 
-.settings-toast--warn {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: var(--err);
+.wikilink {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 112, 243, 0.4);
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background 100ms;
+}
+
+.wikilink:hover {
+  background: rgba(0, 112, 243, 0.1);
+  border-bottom-color: var(--accent);
+}
+
+.wikilink-broken {
+  color: var(--text-3);
+  border-bottom: 1px dotted var(--text-4);
+  padding: 0 2px;
+  cursor: help;
 }

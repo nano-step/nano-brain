@@ -1,0 +1,23 @@
+
+> @nano-step/nano-brain-web@0.0.1 test
+> vitest run
+
+
+ RUN  v1.6.1 /Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/story-9.6-memory-symbols-harvest/story-9.6-memory-symbols-harvest/web
+
+ ✓ src/__tests__/useEvents.test.ts  (6 tests) 90ms
+ ✓ src/__tests__/DashboardPanel.test.tsx  (5 tests) 339ms
+ ✓ src/__tests__/WorkspaceSelector.test.tsx  (4 tests) 555ms
+ ✓ src/__tests__/SymbolsPanel.test.tsx  (5 tests) 641ms
+ ✓ src/__tests__/WikilinkRewriter.test.tsx  (6 tests) 94ms
+ ✓ src/__tests__/DocDrawer.test.tsx  (6 tests) 184ms
+ ✓ src/__tests__/MemoryPanel.test.tsx  (6 tests) 536ms
+ ✓ src/__tests__/theme.test.ts  (5 tests) 25ms
+ ✓ src/__tests__/BacklinksList.test.tsx  (3 tests) 134ms
+ ✓ src/__tests__/HarvestPanel.test.tsx  (4 tests) 95ms
+
+ Test Files  10 passed (10)
+      Tests  50 passed (50)
+   Start at  14:26:48
+   Duration  23.75s (transform 1.53s, setup 6.04s, collect 42.43s, tests 2.69s, environment 70.67s, prepare 6.95s)
+

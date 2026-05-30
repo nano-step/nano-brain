@@ -8,7 +8,9 @@ import {
 import { Layout } from './layout'
 import { DashboardPanel } from '../panels/DashboardPanel'
 import { GraphPanel } from '../panels/GraphPanel'
-import { SettingsPanel } from '../panels/SettingsPanel'
+import { MemoryPanel } from '../panels/MemoryPanel'
+import { SymbolsPanel } from '../panels/SymbolsPanel'
+import { HarvestPanel } from '../panels/HarvestPanel'
 import { Placeholder } from '../components/Placeholder'
 
 const rootRoute = createRootRoute({
@@ -34,7 +36,7 @@ const dashboardRoute = createRoute({
 const memoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/memory',
-  component: () => <Placeholder story="9.6" />,
+  component: MemoryPanel,
 })
 
 const graphRoute = createRoute({
@@ -46,19 +48,19 @@ const graphRoute = createRoute({
 const symbolsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/symbols',
-  component: () => <Placeholder story="9.6" />,
+  component: SymbolsPanel,
 })
 
 const harvestRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/harvest',
-  component: () => <Placeholder story="9.6" />,
+  component: HarvestPanel,
 })
 
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
-  component: SettingsPanel,
+  component: () => <Placeholder story="9.8" />,
 })
 
 const routeTree = rootRoute.addChildren([
