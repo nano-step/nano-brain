@@ -323,6 +323,11 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 }
 
 func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePath string) {
+	if isBinaryExtension(filePath) {
+		w.logger.Debug().Str("file", filePath).Msg("skipping binary file (extension)")
+		return
+	}
+
 	info, err := os.Stat(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("stat failed, skipping")
@@ -350,6 +355,11 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("read failed, skipping")
+		return
+	}
+
+	if isBinaryContent(content) {
+		w.logger.Warn().Str("file", filePath).Msg("skipping binary file (non-UTF8 content)")
 		return
 	}
 
