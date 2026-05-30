@@ -147,9 +147,34 @@ summarization:
 When `summarization.enabled: true`, nano-brain automatically generates structured markdown summaries of each harvested session using an OpenAI-compatible LLM provider. Summaries are:
 
 - Stored in PostgreSQL under collection `session-summary` for semantic search via the standard query/vsearch API (PG is the source of truth)
+- Optionally written to disk as Markdown files for Obsidian-compatible access (see [Disk persistence](#disk-persistence-obsidian-compatible) below)
 - Idempotent — unchanged sessions are skipped; re-harvested sessions overwrite old summaries
 
-> **Note**: as of `harvest-summary-only` (May 2026), summaries are no longer written to disk as `.md` files. The legacy `output_dir` YAML key is silently ignored for backward compat. Any pre-existing files under `~/.nano-brain/summaries/` are stale artifacts and can be safely deleted.
+#### Disk persistence (Obsidian-compatible)
+
+By default, summaries are written to disk as Markdown files at the path configured in
+`summarization.output_dir` (default: `~/.nano-brain/summaries`). The file layout is:
+
+```
+<output_dir>/<workspace_name>/<source>_<slugified-title>_<YYYY-MM-DD>.md
+```
+
+Files are byte-identical to the `documents.content` field in PostgreSQL — disk is a
+derivative view, DB is source of truth. Disk write failures (permission denied, disk
+full) log a WARN but do not roll back the DB transaction.
+
+To opt out (DB-only persistence):
+
+```yaml
+summarization:
+  write_to_disk: false
+```
+
+To backfill historical summaries already in the DB:
+
+```
+nano-brain backfill-summaries
+```
 
 **Quick setup with ai-proxy:**
 
