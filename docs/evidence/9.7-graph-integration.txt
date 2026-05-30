@@ -1,0 +1,51 @@
+Story 9.7 — Graph Panel Dual-Mode Integration Evidence
+======================================================
+
+## Build output (internal/server/webui/dist/assets/)
+
+Separate sigma chunk confirmed:
+
+  sigma-BtceSOoQ.js     164.62 kB  gzip: 39.59 kB  ← Sigma+Graphology+FA2 lazy chunk
+  SigmaGraph-B3M1JAmE.js  10.89 kB  gzip:  4.04 kB  ← SigmaGraph component (lazy entry)
+  index-DQAreFZL.js      23.40 kB  gzip:  7.84 kB  ← main app bundle (GraphPanel controls)
+  query-CurRWB8H.js      41.31 kB  gzip: 12.29 kB
+  router-BPbRpJo-.js    229.39 kB  gzip: 73.69 kB
+  react-BKymXd1b.js       0.03 kB  gzip:  0.05 kB
+  index-BHIw7DKS.css      8.95 kB  gzip:  2.31 kB
+
+## Bundle budget verification
+
+  Initial bundle total (gzip): 0.05 + 7.84 + 12.29 + 73.69 = 93.87 kB  ✅ < 600 kB
+  Sigma chunk (gzip):                                          39.59 kB  ✅ < 200 kB
+  Total on /graph load:                                        133.46 kB ✅ < 800 kB
+
+## SigmaGraph is NOT in the initial bundle
+
+  sigma chunk is loaded only when user navigates to /graph AND types a focus node
+  (React.lazy + Suspense in GraphPanel.tsx)
+
+## Go binary embeds the built dist
+
+  go build ./... — exit 0 (no errors)
+  go test -race -short ./... — all packages pass including internal/server/webui
+
+## React SPA renders at /ui
+
+  The embedded webui handler serves index.html for /ui/* routes.
+  Client-side TanStack Router resolves /ui/graph → GraphPanel component.
+  GraphPanel controls (mode toggle, depth, direction, edges) render immediately.
+  SigmaGraph is lazy-loaded only when focus node is entered.
+
+## Files created / modified
+
+  NEW: web/src/panels/GraphPanel.tsx          — main panel, lazy-loads SigmaGraph
+  NEW: web/src/panels/graph/SigmaGraph.tsx    — Sigma.js + Graphology wrapper (heavy chunk)
+  NEW: web/src/panels/graph/GraphLegend.tsx   — mode-aware legend
+  NEW: web/src/panels/graph/useGraphNeighborhood.ts — TanStack Query mutation hook
+  NEW: web/src/panels/graph/usePositionCache.ts     — localStorage persistence
+  MOD: web/src/app/router.tsx                 — /graph → GraphPanel (was Placeholder)
+  MOD: web/src/api/types.ts                   — GraphNeighborhoodRequest/Response types
+  MOD: web/vite.config.ts                     — sigma manual chunk
+
+  TEST: web/src/__tests__/GraphPanel.test.tsx  — 12 tests
+  TEST: web/src/__tests__/usePositionCache.test.ts — 5 tests

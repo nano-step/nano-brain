@@ -88,6 +88,77 @@ export interface SSEEvent {
   ts: string
 }
 
+// ---- Graph types ----
+
+/** Which kind of node to return from /api/v1/graph/neighborhood */
+export type NodeKind = 'symbol' | 'doc'
+
+/** Direction filter for neighborhood traversal */
+export type GraphDirection = 'in' | 'out' | 'both'
+
+/** Valid edge types */
+export type EdgeType = 'contains' | 'imports' | 'calls' | 'references'
+
+/** Request body for POST /api/v1/graph/neighborhood */
+export interface GraphNeighborhoodRequest {
+  /** Focus node identifier (symbol name or doc UUID) */
+  focus: string
+  /** Traversal depth (1–5) */
+  depth: number
+  /** Edge traversal direction */
+  direction: GraphDirection
+  /** Edge types to include */
+  edge_types: EdgeType[]
+  /** Workspace hash */
+  workspace: string
+  /** Determines which collection of nodes to return */
+  node_kind: NodeKind
+}
+
+/** A single node in the neighborhood graph */
+export interface GraphNode {
+  /** Unique identifier: symbol name (Code) or doc UUID (Knowledge) */
+  id: string
+  /** Node kind discriminator */
+  kind: NodeKind
+  /** Source location — Code mode: "file:line", Knowledge mode: empty */
+  source_file?: string
+  /** Symbol kind (function/method/type/etc.) — Code mode only */
+  symbol_kind?: string
+  /** Document title — Knowledge mode only */
+  title?: string
+  /** Document collection — Knowledge mode only */
+  collection?: string
+  /** ISO timestamp — Knowledge mode only */
+  updated_at?: string
+  /** True when this is a hull node (at the boundary of the depth limit) */
+  is_frontier?: boolean
+}
+
+/** A single directed edge in the neighborhood graph */
+export interface GraphEdge {
+  /** Source node ID */
+  source: string
+  /** Target node ID */
+  target: string
+  /** Edge type */
+  edge_type: EdgeType
+}
+
+/** Response from POST /api/v1/graph/neighborhood */
+export interface GraphNeighborhoodResponse {
+  /** node_kind echo'd back */
+  node_kind: NodeKind
+  /** Nodes in the neighborhood (max 500) */
+  nodes: GraphNode[]
+  /** Edges between the returned nodes */
+  edges: GraphEdge[]
+  /** True when the result was truncated at the 500-node cap */
+  truncated: boolean
+  /** Node IDs sitting on the hull (visible when truncated=true) */
+  frontier_nodes: string[]
+}
+
 export interface EmbedQueuePayload {
   depth: number
   processing: number
