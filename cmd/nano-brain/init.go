@@ -25,7 +25,7 @@ func detectOllama(url string) bool {
 
 func runInteractiveInit(configPath string) {
 	if configPath == "" {
-		configPath = config.DefaultConfigPath()
+		configPath = config.ResolveConfigPath("")
 	}
 
 	dbURL := "postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev"

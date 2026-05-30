@@ -360,3 +360,20 @@ func DefaultConfigPath() string {
 	}
 	return filepath.Join(home, ".nano-brain", "config.yml")
 }
+
+// ResolveConfigPath returns the effective config file path with precedence:
+//  1. explicit --config flag value (non-empty)
+//  2. NANO_BRAIN_CONFIG environment variable (non-empty)
+//  3. DefaultConfigPath() (~/.nano-brain/config.yml)
+//
+// This lets containerized deployments override the host's default config
+// without modifying CLI invocations (12-factor app pattern).
+func ResolveConfigPath(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if env := os.Getenv("NANO_BRAIN_CONFIG"); env != "" {
+		return env
+	}
+	return DefaultConfigPath()
+}

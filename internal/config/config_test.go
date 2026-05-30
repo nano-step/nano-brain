@@ -575,3 +575,35 @@ func TestResolveFilterForPath_NoMatch(t *testing.T) {
 		t.Errorf("expected no extensions for unmatched path, got %v", exts)
 	}
 }
+
+func TestResolveConfigPath_FlagWins(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "/from/env.yml")
+	got := ResolveConfigPath("/from/flag.yml")
+	if got != "/from/flag.yml" {
+		t.Errorf("expected flag value to win, got %q", got)
+	}
+}
+
+func TestResolveConfigPath_EnvWhenNoFlag(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "/from/env.yml")
+	got := ResolveConfigPath("")
+	if got != "/from/env.yml" {
+		t.Errorf("expected env var when no flag, got %q", got)
+	}
+}
+
+func TestResolveConfigPath_DefaultWhenNeitherSet(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "")
+	got := ResolveConfigPath("")
+	if got != DefaultConfigPath() {
+		t.Errorf("expected default path when neither flag nor env set, got %q", got)
+	}
+}
+
+func TestResolveConfigPath_EmptyEnvFallsBackToDefault(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "")
+	got := ResolveConfigPath("")
+	if got != DefaultConfigPath() {
+		t.Errorf("expected default when env is empty string, got %q", got)
+	}
+}

@@ -98,7 +98,7 @@ func runLogsCmd(args []string) {
 
 // resolveLogPath determines the log file path from config or defaults.
 func resolveLogPath() string {
-	cfg, err := config.Load(config.DefaultConfigPath())
+	cfg, err := config.Load(config.ResolveConfigPath(""))
 	if err == nil && cfg.Logging.File != "" {
 		p := cfg.Logging.File
 		if strings.HasPrefix(p, "~") {
@@ -468,7 +468,7 @@ func runStatusCmd(args []string) {
 
 // runGooseMigrateCmd runs pending goose migrations from embedded SQL files.
 func runGooseMigrateCmd(jsonFlag bool) {
-	cfg, err := config.Load(config.DefaultConfigPath())
+	cfg, err := config.Load(config.ResolveConfigPath(""))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)

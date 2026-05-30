@@ -175,13 +175,25 @@ Large sessions (100K+ tokens) are handled via map-reduce chunking — no session
 
 | Variable | Description |
 |----------|-------------|
+| `NANO_BRAIN_CONFIG` | Path to YAML config file (12-factor; useful in Docker/k8s). Precedence: `--config` flag > `NANO_BRAIN_CONFIG` > `~/.nano-brain/config.yml` |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `VOYAGE_API_KEY` | Voyage AI API key |
 | `OPENCODE_DB_ROOT` | OpenCode per-project DB root directory (multi-DB mode) |
 | `OPENCODE_DB_PATH` | OpenCode single SQLite database path |
 | `OPENCODE_STORAGE_DIR` | OpenCode session directory (legacy) |
 | `NANO_BRAIN_SUMMARIZE_API_KEY` | API key for the summarization LLM provider |
-| `NANO_BRAIN_*` | Override any config (e.g., `NANO_BRAIN_SERVER_PORT=3100`) |
+| `NANO_BRAIN_*` | Override any config field (e.g., `NANO_BRAIN_SERVER_PORT=3100`) |
+
+**Docker example** — run the server in a container against a host PostgreSQL:
+
+```bash
+# /path/to/container-config.yml uses host.docker.internal for DB/Ollama
+docker run -d \
+  -e NANO_BRAIN_CONFIG=/etc/nano-brain/config.yml \
+  -v /path/to/container-config.yml:/etc/nano-brain/config.yml:ro \
+  -p 3100:3100 \
+  nano-brain:latest
+```
 
 ## REST API
 

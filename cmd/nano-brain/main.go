@@ -145,10 +145,7 @@ func main() {
 // initCLILog builds a best-effort logger for CLI commands before they dispatch.
 // Failures are non-fatal: cliLog falls back to zerolog.Nop().
 func initCLILog(configPath string) {
-	path := configPath
-	if path == "" {
-		path = config.DefaultConfigPath()
-	}
+	path := config.ResolveConfigPath(configPath)
 	cfg, err := config.Load(path)
 	if err != nil {
 		return
@@ -179,9 +176,7 @@ func startServer(configPath string) {
 		os.Exit(1)
 	}
 
-	if configPath == "" {
-		configPath = config.DefaultConfigPath()
-	}
+	configPath = config.ResolveConfigPath(configPath)
 
 	cfg, err := config.Load(configPath)
 	if err != nil {

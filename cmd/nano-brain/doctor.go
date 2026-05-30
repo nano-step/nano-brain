@@ -32,7 +32,7 @@ func runDoctorCmd(args []string, configPath string) {
 	}
 
 	if configPath == "" {
-		configPath = config.DefaultConfigPath()
+		configPath = config.ResolveConfigPath("")
 	}
 
 	var results []checkResult
