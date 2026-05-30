@@ -1,0 +1,3 @@
+{"error":"workspace_not_registered","message":"workspace_hash \"fake_unregistered_xyz\" is not registered; use POST /api/v1/init to register it first"}
+
+HTTP:400
