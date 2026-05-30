@@ -30,18 +30,18 @@ func TestExpandTilde(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := expandTilde(c.input)
+			got, err := ExpandTilde(c.input)
 			if err != nil {
-				t.Fatalf("expandTilde(%q) error: %v", c.input, err)
+				t.Fatalf("ExpandTilde(%q) error: %v", c.input, err)
 			}
 			if c.name == "tilde slash" {
 				if !strings.HasPrefix(got, home) {
-					t.Errorf("expandTilde(%q) = %q, expected to start with %q", c.input, got, home)
+					t.Errorf("ExpandTilde(%q) = %q, expected to start with %q", c.input, got, home)
 				}
 				return
 			}
 			if got != c.want {
-				t.Errorf("expandTilde(%q) = %q, want %q", c.input, got, c.want)
+				t.Errorf("ExpandTilde(%q) = %q, want %q", c.input, got, c.want)
 			}
 		})
 	}
@@ -65,9 +65,9 @@ func TestWorkspaceFolderName(t *testing.T) {
 			subName = c.name + "|" + c.hash[:6]
 		}
 		t.Run(subName, func(t *testing.T) {
-			got := workspaceFolderName(c.name, c.hash)
+			got := WorkspaceFolderName(c.name, c.hash)
 			if got != c.want {
-				t.Errorf("workspaceFolderName(%q, %q) = %q, want %q", c.name, c.hash, got, c.want)
+				t.Errorf("WorkspaceFolderName(%q, %q) = %q, want %q", c.name, c.hash, got, c.want)
 			}
 		})
 	}
@@ -116,9 +116,9 @@ func TestBuildDiskPath(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := buildDiskPath(outputDir, c.wsName, c.wsHash, c.source, c.title, date)
+			got := BuildDiskPath(outputDir, c.wsName, c.wsHash, c.source, c.title, date)
 			if got != c.want {
-				t.Errorf("buildDiskPath() = %q\n                want %q", got, c.want)
+				t.Errorf("BuildDiskPath() = %q\n                want %q", got, c.want)
 			}
 		})
 	}
@@ -128,13 +128,13 @@ func TestBuildDiskPath_UsesUTCDate(t *testing.T) {
 	loc, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
 	dateLocal := time.Date(2026, 5, 30, 23, 30, 0, 0, loc)
 
-	got := buildDiskPath("/tmp", "ws", "hash", "opencode", "foo", dateLocal)
+	got := BuildDiskPath("/tmp", "ws", "hash", "opencode", "foo", dateLocal)
 	if !strings.Contains(got, "2026-05-30") {
 		t.Errorf("path %q should contain UTC date 2026-05-30 (Hanoi 23:30 + 7 = UTC 16:30 same day)", got)
 	}
 
 	dateLocalCrossesUTC := time.Date(2026, 5, 31, 2, 30, 0, 0, loc)
-	got2 := buildDiskPath("/tmp", "ws", "hash", "opencode", "foo", dateLocalCrossesUTC)
+	got2 := BuildDiskPath("/tmp", "ws", "hash", "opencode", "foo", dateLocalCrossesUTC)
 	if !strings.Contains(got2, "2026-05-30") {
 		t.Errorf("path %q should contain UTC date 2026-05-30 (Hanoi May 31 02:30 = UTC May 30 19:30)", got2)
 	}

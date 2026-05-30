@@ -283,6 +283,7 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | `nano-brain multi-get --workspace=<hash> --paths=p1,p2` | Fetch multiple documents in one round-trip |
 | `nano-brain collection add\|remove\|list` | Manage collections |
 | `nano-brain harvest` | Trigger session harvesting |
+| `nano-brain backfill-summaries [--dry-run] [--workspace=] [--since=]` | Export existing DB summaries to disk (.md files for Obsidian etc.) |
 | `nano-brain cleanup-stale-raw [--dry-run]` | Delete pre-#192 raw OpenCode session docs superseded by summaries |
 | `nano-brain cleanup-orphan-workspaces [--dry-run]` | Delete documents/chunks under workspace_hash values not registered in `workspaces`. Run BEFORE migration 00011 (issue #238). |
 | `nano-brain bench generate\|run\|compare\|stress` | Benchmarking suite |

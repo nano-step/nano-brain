@@ -11,8 +11,8 @@ func TestEnsureDir_CreatesNested(t *testing.T) {
 	dir := t.TempDir()
 	nestedPath := filepath.Join(dir, "a", "b", "c", "file.md")
 
-	if err := ensureDir(nestedPath); err != nil {
-		t.Fatalf("ensureDir(%q) error: %v", nestedPath, err)
+	if err := EnsureDir(nestedPath); err != nil {
+		t.Fatalf("EnsureDir(%q) error: %v", nestedPath, err)
 	}
 
 	parentDir := filepath.Dir(nestedPath)
@@ -25,13 +25,13 @@ func TestEnsureDir_IdempotentExisting(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "subdir", "file.md")
 
-	if err := ensureDir(filePath); err != nil {
-		t.Fatalf("first ensureDir(%q) error: %v", filePath, err)
+	if err := EnsureDir(filePath); err != nil {
+		t.Fatalf("first EnsureDir(%q) error: %v", filePath, err)
 	}
 
 	// Call again — should not error
-	if err := ensureDir(filePath); err != nil {
-		t.Fatalf("second ensureDir(%q) error: %v", filePath, err)
+	if err := EnsureDir(filePath); err != nil {
+		t.Fatalf("second EnsureDir(%q) error: %v", filePath, err)
 	}
 }
 
@@ -40,12 +40,12 @@ func TestWriteFileAtomic_HappyPath(t *testing.T) {
 	filePath := filepath.Join(dir, "test.md")
 	content := []byte("hello\n")
 
-	if err := ensureDir(filePath); err != nil {
-		t.Fatalf("ensureDir error: %v", err)
+	if err := EnsureDir(filePath); err != nil {
+		t.Fatalf("EnsureDir error: %v", err)
 	}
 
-	if err := writeFileAtomic(filePath, content); err != nil {
-		t.Fatalf("writeFileAtomic error: %v", err)
+	if err := WriteFileAtomic(filePath, content); err != nil {
+		t.Fatalf("WriteFileAtomic error: %v", err)
 	}
 
 	// Verify file content
@@ -76,12 +76,12 @@ func TestWriteFileAtomic_LargeContent(t *testing.T) {
 		content[i] = byte('a' + (i % 26))
 	}
 
-	if err := ensureDir(filePath); err != nil {
-		t.Fatalf("ensureDir error: %v", err)
+	if err := EnsureDir(filePath); err != nil {
+		t.Fatalf("EnsureDir error: %v", err)
 	}
 
-	if err := writeFileAtomic(filePath, content); err != nil {
-		t.Fatalf("writeFileAtomic error: %v", err)
+	if err := WriteFileAtomic(filePath, content); err != nil {
+		t.Fatalf("WriteFileAtomic error: %v", err)
 	}
 
 	got, err := os.ReadFile(filePath)
@@ -105,13 +105,13 @@ func TestResolveCollision_NoExisting(t *testing.T) {
 	content := []byte("test")
 	sessionID := "ses_abc123"
 
-	got, err := resolveCollision(filePath, content, sessionID)
+	got, err := ResolveCollision(filePath, content, sessionID)
 	if err != nil {
-		t.Fatalf("resolveCollision error: %v", err)
+		t.Fatalf("ResolveCollision error: %v", err)
 	}
 
 	if got != filePath {
-		t.Errorf("resolveCollision returned %q, want %q (no collision)", got, filePath)
+		t.Errorf("ResolveCollision returned %q, want %q (no collision)", got, filePath)
 	}
 }
 
@@ -122,21 +122,21 @@ func TestResolveCollision_IdenticalContent(t *testing.T) {
 	sessionID := "ses_xyz"
 
 	// Write original file
-	if err := ensureDir(filePath); err != nil {
-		t.Fatalf("ensureDir error: %v", err)
+	if err := EnsureDir(filePath); err != nil {
+		t.Fatalf("EnsureDir error: %v", err)
 	}
 	if err := os.WriteFile(filePath, content, 0o644); err != nil {
 		t.Fatalf("WriteFile error: %v", err)
 	}
 
-	// Call resolveCollision with same content
-	got, err := resolveCollision(filePath, content, sessionID)
+	// Call ResolveCollision with same content
+	got, err := ResolveCollision(filePath, content, sessionID)
 	if err != nil {
-		t.Fatalf("resolveCollision error: %v", err)
+		t.Fatalf("ResolveCollision error: %v", err)
 	}
 
 	if got != filePath {
-		t.Errorf("resolveCollision returned %q, want %q (idempotent)", got, filePath)
+		t.Errorf("ResolveCollision returned %q, want %q (idempotent)", got, filePath)
 	}
 }
 
@@ -148,37 +148,37 @@ func TestResolveCollision_DifferentContent(t *testing.T) {
 	sessionID := "ses_XYZ"
 
 	// Write original file with content A
-	if err := ensureDir(filePath); err != nil {
-		t.Fatalf("ensureDir error: %v", err)
+	if err := EnsureDir(filePath); err != nil {
+		t.Fatalf("EnsureDir error: %v", err)
 	}
 	if err := os.WriteFile(filePath, contentA, 0o644); err != nil {
 		t.Fatalf("WriteFile error: %v", err)
 	}
 
-	// Call resolveCollision with different content B
-	got, err := resolveCollision(filePath, contentB, sessionID)
+	// Call ResolveCollision with different content B
+	got, err := ResolveCollision(filePath, contentB, sessionID)
 	if err != nil {
-		t.Fatalf("resolveCollision error: %v", err)
+		t.Fatalf("ResolveCollision error: %v", err)
 	}
 
 	if got == filePath {
-		t.Errorf("resolveCollision returned original path, expected suffix")
+		t.Errorf("ResolveCollision returned original path, expected suffix")
 	}
 
 	// Verify suffix format: base_<8hex>.md
 	expectedBase := filePath[:len(filePath)-3] // strip ".md"
 	if !strings.HasPrefix(got, expectedBase) {
-		t.Errorf("resolveCollision result %q does not start with base %q", got, expectedBase)
+		t.Errorf("ResolveCollision result %q does not start with base %q", got, expectedBase)
 	}
 
 	if !strings.HasSuffix(got, ".md") {
-		t.Errorf("resolveCollision result %q does not end with .md", got)
+		t.Errorf("ResolveCollision result %q does not end with .md", got)
 	}
 
 	// Extract suffix
 	baseName := filepath.Base(got)
 	if len(baseName) < 13 { // "base_12345678.md" minimum
-		t.Errorf("resolveCollision result %q has unexpected format", baseName)
+		t.Errorf("ResolveCollision result %q has unexpected format", baseName)
 	}
 }
 
@@ -188,31 +188,31 @@ func TestResolveCollision_DifferentSessionIDsProduceDifferentSuffixes(t *testing
 	content := []byte("some content")
 
 	// Write original file
-	if err := ensureDir(filePath); err != nil {
-		t.Fatalf("ensureDir error: %v", err)
+	if err := EnsureDir(filePath); err != nil {
+		t.Fatalf("EnsureDir error: %v", err)
 	}
 	if err := os.WriteFile(filePath, content, 0o644); err != nil {
 		t.Fatalf("WriteFile error: %v", err)
 	}
 
 	// Call with sessionID "ses_a"
-	got1, err := resolveCollision(filePath, []byte("different"), "ses_a")
+	got1, err := ResolveCollision(filePath, []byte("different"), "ses_a")
 	if err != nil {
-		t.Fatalf("resolveCollision(ses_a) error: %v", err)
+		t.Fatalf("ResolveCollision(ses_a) error: %v", err)
 	}
 
 	// Call with sessionID "ses_b"
-	got2, err := resolveCollision(filePath, []byte("different"), "ses_b")
+	got2, err := ResolveCollision(filePath, []byte("different"), "ses_b")
 	if err != nil {
-		t.Fatalf("resolveCollision(ses_b) error: %v", err)
+		t.Fatalf("ResolveCollision(ses_b) error: %v", err)
 	}
 
 	if got1 == got2 {
-		t.Errorf("resolveCollision with different sessionIDs returned same path: %q", got1)
+		t.Errorf("ResolveCollision with different sessionIDs returned same path: %q", got1)
 	}
 
 	// Both should be different from original
 	if got1 == filePath || got2 == filePath {
-		t.Errorf("resolveCollision returned original path")
+		t.Errorf("ResolveCollision returned original path")
 	}
 }

@@ -31,9 +31,9 @@ func TestSlugify(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := slugify(c.input)
+			got := Slugify(c.input)
 			if got != c.want {
-				t.Errorf("slugify(%q) = %q, want %q", c.input, got, c.want)
+				t.Errorf("Slugify(%q) = %q, want %q", c.input, got, c.want)
 			}
 		})
 	}
@@ -41,9 +41,9 @@ func TestSlugify(t *testing.T) {
 
 func TestSlugify_LengthLimit(t *testing.T) {
 	long := strings.Repeat("a", 200)
-	got := slugify(long)
+	got := Slugify(long)
 	if len(got) > maxSlugLen {
-		t.Errorf("slugify produced %d chars, max is %d", len(got), maxSlugLen)
+		t.Errorf("Slugify produced %d chars, max is %d", len(got), maxSlugLen)
 	}
 	if got != strings.Repeat("a", maxSlugLen) {
 		t.Errorf("expected 80 'a's, got %q", got)
@@ -52,27 +52,27 @@ func TestSlugify_LengthLimit(t *testing.T) {
 
 func TestSlugify_TrimsTrailingDashAfterTruncation(t *testing.T) {
 	input := strings.Repeat("a", 79) + "----extra"
-	got := slugify(input)
+	got := Slugify(input)
 	if strings.HasSuffix(got, "-") {
-		t.Errorf("slugify result %q ends with dash after truncation", got)
+		t.Errorf("Slugify result %q ends with dash after truncation", got)
 	}
 	if len(got) > maxSlugLen {
-		t.Errorf("slugify result length %d > %d", len(got), maxSlugLen)
+		t.Errorf("Slugify result length %d > %d", len(got), maxSlugLen)
 	}
 }
 
 func TestSlugify_NonASCIIOnly(t *testing.T) {
-	got := slugify("日本語のみ")
+	got := Slugify("日本語のみ")
 	if got != defaultSlugStub {
-		t.Errorf("slugify(%q) = %q, want %q (all-non-alphanum should fallback)", "日本語のみ", got, defaultSlugStub)
+		t.Errorf("Slugify(%q) = %q, want %q (all-non-alphanum should fallback)", "日本語のみ", got, defaultSlugStub)
 	}
 }
 
 func TestSlugify_Idempotent(t *testing.T) {
-	once := slugify("Oracle Verify Epic 9")
-	twice := slugify(once)
+	once := Slugify("Oracle Verify Epic 9")
+	twice := Slugify(once)
 	if once != twice {
-		t.Errorf("slugify not idempotent: once=%q, twice=%q", once, twice)
+		t.Errorf("Slugify not idempotent: once=%q, twice=%q", once, twice)
 	}
 }
 
