@@ -575,3 +575,34 @@ func TestResolveFilterForPath_NoMatch(t *testing.T) {
 		t.Errorf("expected no extensions for unmatched path, got %v", exts)
 	}
 }
+
+func TestLoadExplicitErrorsOnMissingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+	_, err := LoadExplicit(configPath)
+	if err == nil {
+		t.Fatal("LoadExplicit() should fail when config file does not exist")
+	}
+	if !strings.Contains(err.Error(), "config file not found") {
+		t.Errorf("expected 'config file not found' error, got: %v", err)
+	}
+}
+
+func TestLoadExplicitSucceedsWithExistingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yaml := "server:\n  host: 0.0.0.0\n  port: 8080\n"
+	if err := os.WriteFile(configPath, []byte(yaml), 0o644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	cfg, err := LoadExplicit(configPath)
+	if err != nil {
+		t.Fatalf("LoadExplicit() failed: %v", err)
+	}
+	if cfg.Server.Host != "0.0.0.0" {
+		t.Errorf("expected Server.Host=0.0.0.0, got %q", cfg.Server.Host)
+	}
+}

@@ -139,6 +139,18 @@ type SummarizationConfig struct {
 // Config file path can be overridden via NANO_BRAIN_CONFIG env var.
 // If no file is provided, defaults are used and merged with env vars.
 func Load(configPath string) (*Config, error) {
+	return loadInternal(configPath, false)
+}
+
+// LoadExplicit loads configuration and returns an error if the config file
+// does not exist. Use this when the caller knows the path was explicitly set
+// (e.g., via --config flag or NANO_BRAIN_CONFIG env var) so that typos and
+// misconfigurations are never silent.
+func LoadExplicit(configPath string) (*Config, error) {
+	return loadInternal(configPath, true)
+}
+
+func loadInternal(configPath string, errorOnMissing bool) (*Config, error) {
 	k := koanf.New(".")
 
 	// Load defaults first
@@ -158,11 +170,14 @@ func Load(configPath string) (*Config, error) {
 			configPath = filepath.Join(home, configPath[1:])
 		}
 
-		// Only try to load if file exists
 		if _, err := os.Stat(configPath); err == nil {
 			if err := k.Load(file.Provider(configPath), yaml.Parser()); err != nil {
 				return nil, fmt.Errorf("failed to load config file %s: %w", configPath, err)
 			}
+		} else if errorOnMissing {
+			return nil, fmt.Errorf("config file not found: %s", configPath)
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: config file %s not found, using defaults\n", configPath)
 		}
 	}
 

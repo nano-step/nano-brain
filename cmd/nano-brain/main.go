@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"os/signal"
 	"syscall"
 	"time"
@@ -47,6 +48,13 @@ func main() {
 	flag.IntVar(&verbose, "v", 0, "verbosity: 0=info, 1=debug, 2=trace")
 	flag.IntVar(&verbose, "verbose", 0, "")
 	flag.Parse()
+	// Support NANO_BRAIN_CONFIG env var when --config flag is not set.
+	// Trim whitespace to avoid silent path mismatches.
+	if configPath == "" {
+		if envPath := os.Getenv("NANO_BRAIN_CONFIG"); envPath != "" {
+			configPath = strings.TrimSpace(envPath)
+		}
+	}
 
 	initCLILog(configPath)
 
@@ -185,11 +193,18 @@ func startServer(configPath string) {
 		os.Exit(1)
 	}
 
+	explicit := configPath != ""
 	if configPath == "" {
 		configPath = config.DefaultConfigPath()
 	}
 
-	cfg, err := config.Load(configPath)
+	var cfg *config.Config
+	var err error
+	if explicit {
+		cfg, err = config.LoadExplicit(configPath)
+	} else {
+		cfg, err = config.Load(configPath)
+	}
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
