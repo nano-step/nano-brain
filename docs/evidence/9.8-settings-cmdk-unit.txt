@@ -1,0 +1,66 @@
+
+> @nano-step/nano-brain-web@0.0.1 test
+> vitest run --run
+
+
+ RUN  v1.6.1 /Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/story-9.8-settings-cmdk/web
+
+ ✓ src/__tests__/useEvents.test.ts  (6 tests) 38ms
+ ✓ src/__tests__/DashboardPanel.test.tsx  (5 tests) 194ms
+ ✓ src/__tests__/ConfirmDialog.test.tsx  (8 tests) 277ms
+stderr | src/__tests__/NonLoopbackBindBanner.test.tsx > NonLoopbackBindBanner > hides banner for localhost
+Warning: An update to NonLoopbackBindBanner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at NonLoopbackBindBanner (/Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/story-9.8-settings-cmdk/web/src/components/NonLoopbackBindBanner.tsx:12:42)
+    at QueryClientProvider (file:///Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/story-9.8-settings-cmdk/web/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+
+stderr | src/__tests__/NonLoopbackBindBanner.test.tsx > NonLoopbackBindBanner > hides banner for 127.0.0.1
+Warning: An update to NonLoopbackBindBanner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at NonLoopbackBindBanner (/Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/story-9.8-settings-cmdk/web/src/components/NonLoopbackBindBanner.tsx:12:42)
+    at QueryClientProvider (file:///Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/story-9.8-settings-cmdk/web/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+
+stderr | src/__tests__/NonLoopbackBindBanner.test.tsx > NonLoopbackBindBanner > hides banner for ::1
+Warning: An update to NonLoopbackBindBanner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at NonLoopbackBindBanner (/Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/story-9.8-settings-cmdk/web/src/components/NonLoopbackBindBanner.tsx:12:42)
+    at QueryClientProvider (file:///Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/story-9.8-settings-cmdk/web/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+
+ ✓ src/__tests__/GraphPanel.test.tsx  (12 tests) 441ms
+ ✓ src/__tests__/NonLoopbackBindBanner.test.tsx  (5 tests) 463ms
+ ✓ src/__tests__/CommandPalette.test.tsx  (7 tests) 341ms
+ ✓ src/__tests__/SettingsPanel.test.tsx  (10 tests) 828ms
+ ✓ src/__tests__/usePositionCache.test.ts  (5 tests) 24ms
+ ✓ src/__tests__/useMnemonicNav.test.tsx  (7 tests) 36ms
+ ✓ src/__tests__/theme.test.ts  (5 tests) 39ms
+ ✓ src/__tests__/WorkspaceSelector.test.tsx  (4 tests) 185ms
+
+ Test Files  11 passed (11)
+      Tests  74 passed (74)
+   Start at  15:12:20
+   Duration  13.79s (transform 1.11s, setup 7.71s, collect 17.79s, tests 2.87s, environment 39.17s, prepare 7.55s)
+

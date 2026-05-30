@@ -12,14 +12,19 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.56.2",
     "@tanstack/react-router": "^1.51.7",
+    "cmdk": "^1.1.1",
+    "fuse.js": "^7.3.0",
     "graphology": "^0.25.4",
     "graphology-layout-forceatlas2": "^0.10.1",
     "lucide-react": "^0.436.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hook-form": "^7.76.1",
     "sigma": "^3.0.3",
+    "zod": "^3.25.76",
     "zustand": "^4.5.5"
   },
   "devDependencies": {

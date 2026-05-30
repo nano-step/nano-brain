@@ -163,3 +163,88 @@ export interface EmbedQueuePayload {
   depth: number
   processing: number
 }
+
+// ---- Config types ----
+
+/** Resolved config returned by GET /api/v1/config (secrets redacted). */
+export interface Config {
+  server: {
+    host: string
+    port: number
+  }
+  database: {
+    url: string
+  }
+  embedding: {
+    provider: string
+    url: string
+    model: string
+    dimension: number
+    concurrency: number
+    voyage_api_key: string
+  }
+  harvester: {
+    opencode: {
+      session_dir: string
+      db_path: string
+      db_root: string
+    }
+    claudecode: {
+      enabled: boolean
+      session_dir: string
+    }
+  }
+  watcher: {
+    debounce_ms: number
+    reindex_interval: number
+  }
+  search: {
+    rrf_k: number
+    recency_weight: number
+    recency_half_life_days: number
+    limit: number
+  }
+  storage: {
+    max_file_size: number
+    max_size: number
+  }
+  telemetry: {
+    retention_days: number
+  }
+  logging: {
+    level: string
+    file: string
+  }
+  summarization: {
+    enabled: boolean
+    provider_url: string
+    api_key: string
+    model: string
+    max_tokens: number
+    concurrency: number
+    requests_per_second: number
+  }
+}
+
+/** Response from GET /api/v1/config. */
+export interface ConfigResponse {
+  config: Config
+  source?: string
+}
+
+// ---- Doctor types ----
+
+/** A single prerequisite check result from GET /api/v1/doctor. */
+export interface DoctorCheck {
+  name: string
+  /** "ok" | "fail" | "warn" | "skip" */
+  status: string
+  detail: string
+  hint?: string
+}
+
+/** Response from GET /api/v1/doctor. */
+export interface DoctorResponse {
+  checks: DoctorCheck[]
+  all_passed: boolean
+}

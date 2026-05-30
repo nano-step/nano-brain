@@ -2,6 +2,9 @@ import React from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useTheme } from './theme'
 import { WorkspaceSelector } from '../components/WorkspaceSelector'
+import { CommandPalette } from '../components/CommandPalette'
+import { NonLoopbackBindBanner } from '../components/NonLoopbackBindBanner'
+import { useMnemonicNav } from '../hooks/useMnemonicNav'
 import '../styles/tokens.css'
 import '../styles/layout.css'
 import '../styles/workspace.css'
@@ -58,9 +61,13 @@ function NavIcon({ name }: { name: string }) {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { theme, toggleTheme } = useTheme()
+  useMnemonicNav()
 
   return (
-    <div className="app">
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <NonLoopbackBindBanner />
+      <CommandPalette />
+      <div className="app" style={{ flex: 1 }}>
       <aside className="sidebar" role="navigation" aria-label="Main navigation">
         <div className="brand">
           <div className="brand-name">nano-brain</div>
@@ -92,6 +99,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="main" role="main">
         {children}
       </main>
+      </div>
     </div>
   )
 }
