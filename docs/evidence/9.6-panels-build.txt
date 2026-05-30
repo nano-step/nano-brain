@@ -1,0 +1,16 @@
+
+> @nano-step/nano-brain-web@0.0.1 build
+> tsc --noEmit && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 487 modules transformed.
+rendering chunks...
+computing gzip size...
+../internal/server/webui/dist/index.html                   0.58 kB │ gzip:   0.33 kB
+../internal/server/webui/dist/assets/index-DLf8rDtU.css   10.85 kB │ gzip:   2.67 kB
+../internal/server/webui/dist/assets/react-xrOoaI6T.js     0.03 kB │ gzip:   0.05 kB
+../internal/server/webui/dist/assets/query--6I8PZzk.js    42.75 kB │ gzip:  12.92 kB
+../internal/server/webui/dist/assets/router-CHPr7H_j.js  229.51 kB │ gzip:  73.74 kB
+../internal/server/webui/dist/assets/index-CxPcg3Bx.js   357.07 kB │ gzip: 112.92 kB
+✓ built in 2.79s

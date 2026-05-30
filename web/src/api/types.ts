@@ -159,6 +159,50 @@ export interface GraphNeighborhoodResponse {
   frontier_nodes: string[]
 }
 
+// ---- Memory/Symbols types ----
+
+/** A memory document stored in nano-brain. */
+export interface Document {
+  id: string
+  title: string
+  collection: string
+  tags: string[]
+  updated_at: string
+  created_at: string
+  supersedes_id: string | null
+  superseded_by_id: string | null
+  content: string
+  metadata: Record<string, unknown>
+}
+
+/** A code symbol indexed by nano-brain. */
+export interface Symbol {
+  name: string
+  kind: 'function' | 'method' | 'type' | 'interface' | 'struct' | 'const' | 'var'
+  language: string
+  source_path: string
+  line: number
+  signature: string
+  impact: number
+}
+
+/** A document that references another document via a wikilink. */
+export interface Backlink {
+  id: string
+  title: string
+  collection: string
+  updated_at: string
+  tags: string[]
+  snippet: string
+}
+
+/** Response from the wikilink resolve endpoint. */
+export interface ResolveResponse {
+  matched: string[]
+  ambiguous: boolean
+  kind: 'id' | 'title'
+}
+
 export interface EmbedQueuePayload {
   depth: number
   processing: number

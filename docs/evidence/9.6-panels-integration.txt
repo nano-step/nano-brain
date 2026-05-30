@@ -1,0 +1,47 @@
+Story 9.6 — Memory + Symbols + Harvest panels + DocDrawer integration evidence
+Generated: Sat May 30 2026
+
+## Go build
+$ go build ./...
+Exit: 0 (no errors)
+
+## Go test -race -short
+All packages PASS (see build evidence for full list)
+
+## Routes wired
+GET /ui/memory  → MemoryPanel (real, replaces Placeholder story="9.6")
+GET /ui/symbols → SymbolsPanel (real, replaces Placeholder story="9.6")
+GET /ui/harvest → HarvestPanel (real, replaces Placeholder story="9.6")
+GET /ui/graph   → Placeholder story="9.7" (unchanged, 9.7 scope)
+GET /ui/settings → Placeholder story="9.8" (unchanged, 9.8 scope)
+
+## API endpoints consumed
+MemoryPanel:   GET /api/v1/query?workspace=...&text=...&tags=...&collection=...
+SymbolsPanel:  GET /api/v1/symbols?workspace=...&q=...&kind=...&language=...
+HarvestPanel:  POST /api/harvest + GET /api/v1/events (SSE) + GET /api/v1/query?collection=session-summary
+DocDrawer:     GET /api/v1/links/:id/backlinks?workspace=...
+DocDrawer:     GET /api/v1/links/resolve?workspace=...&query=...
+DocDrawer:     POST /api/v1/write (Edit action)
+DocDrawer:     DELETE /api/v1/documents/:id (Delete action)
+
+## Bundle size
+index.html:    0.33 KB gzipped
+index.css:     2.67 KB gzipped
+react chunk:   0.05 KB gzipped
+query chunk:  12.92 KB gzipped
+router chunk: 73.74 KB gzipped
+index chunk: 112.92 KB gzipped
+TOTAL:        202.63 KB gzipped (budget: 600 KB ✓)
+
+## dist/ contents
+dist/index.html
+dist/assets/*.js (react, query, router, index chunks)
+dist/assets/*.css
+
+## Wikilink states verified (WikilinkRewriter.test.tsx)
+1. resolved ID → anchor element with data-wikilink attribute
+2. broken → .wikilink-broken span with tooltip
+3. ambiguous → .wikilink-broken span with data-wikilink-ambiguous attribute + candidates tooltip
+4. normal text → rendered as plain markdown
+5. XSS attempt → script tag stripped by rehype-sanitize
+6. escaped → literal text passthrough
