@@ -20,6 +20,7 @@ export default defineConfig({
           react: ['react', 'react-dom'],
           router: ['@tanstack/react-router'],
           query: ['@tanstack/react-query'],
+          sigma: ['sigma', 'graphology', 'graphology-layout-forceatlas2'],
         },
       },
     },

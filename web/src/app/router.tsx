@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router'
 import { Layout } from './layout'
 import { DashboardPanel } from '../panels/DashboardPanel'
+import { GraphPanel } from '../panels/GraphPanel'
 import { Placeholder } from '../components/Placeholder'
 
 const rootRoute = createRootRoute({
@@ -38,7 +39,7 @@ const memoryRoute = createRoute({
 const graphRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/graph',
-  component: () => <Placeholder story="9.7" />,
+  component: GraphPanel,
 })
 
 const symbolsRoute = createRoute({
