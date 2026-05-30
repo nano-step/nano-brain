@@ -111,13 +111,20 @@ func runBackfillSummariesCmd(args []string) {
 		return
 	}
 
+	wsList, err := q.ListWorkspaces(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing workspaces: %v\n", err)
+		os.Exit(1)
+	}
+	wsNames := make(map[string]string, len(wsList))
+	for _, ws := range wsList {
+		wsNames[ws.Hash] = ws.Name
+	}
+
 	var written, skipped, overwritten, failed int
 
 	for _, doc := range docs {
-		wsName := ""
-		if ws, err := q.GetWorkspaceByHash(ctx, doc.WorkspaceHash); err == nil {
-			wsName = ws.Name
-		}
+		wsName := wsNames[doc.WorkspaceHash]
 
 		sessionID := extractBackfillSessionID(doc.Metadata.RawMessage, doc.SourcePath)
 		source := extractBackfillSource(doc.Tags)
