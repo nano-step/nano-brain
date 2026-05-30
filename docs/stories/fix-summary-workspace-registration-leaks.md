@@ -19,7 +19,7 @@ worktree: .opencode/worktrees/fix-summary-workspace-leaks-238/fix-summary-worksp
 
 ## Status
 
-in-progress
+review-pending — 11 of 12 ACs satisfied with evidence. AC11 (Review Gate) pending — to run via `review-work` skill before opening PR.
 
 ## GitHub Issue
 
@@ -129,18 +129,35 @@ Also touches `index-schema` (migration 00011) — secondary label.
 
 | Acceptance Criterion | Evidence | Status |
 | --- | --- | --- |
-| AC1 — Persister rejects unregistered | TBD (Phase B) | ☐ |
-| AC2 — OpenCode skip + remove UpsertWorkspace | TBD (Phase C) | ☐ |
-| AC3 — Claude Code refuses unregistered | TBD (Phase C) | ☐ |
-| AC4 — HTTP middleware rejects | TBD (Phase D) | ☐ |
-| AC5 — MCP tool handlers reject | TBD (Phase D') | ☐ |
-| AC6 — FK constraint enforced | TBD (Phase F) | ☐ |
-| AC7 — Cleanup command | TBD (Phase E) | ☐ |
-| AC8 — No regression | TBD (Phase I) | ☐ |
-| AC9 — User-flow test | TBD (Phase G) | ☐ |
-| AC10 — Validate ladder | TBD (Phase I) | ☐ |
-| AC11 — Review Gate | TBD (post-impl) | ☐ |
-| AC12 — Release notes | TBD (Phase K) | ☐ |
+| AC1 — Persister rejects unregistered | commit 721b99d + `TestPersister_Save_RejectsUnregisteredWorkspace` PASS | ✓ |
+| AC2 — OpenCode skip + remove UpsertWorkspace | commit 3667194 + `TestOpenCodeSQLite_{Orphan,Unregistered}*` PASS | ✓ |
+| AC3 — Claude Code refuses unregistered | commit 3667194 + `TestInitClaudeCodeHarvester_*` (4 cases) PASS | ✓ |
+| AC4 — HTTP middleware rejects | commit fcd5310 + `TestWorkspaceRegisteredMiddleware_*` (4 cases) PASS + G2/G4/G5 evidence | ✓ |
+| AC5 — MCP tool handlers reject | commit f3eef05 + `TestMemoryWrite_*` + `TestMemoryUpdate_*` PASS | ✓ |
+| AC6 — FK constraint enforced | commit 464fac9 + `TestMigration00011_*` (4 cases) PASS | ✓ |
+| AC7 — Cleanup command | commit 4bae324 + `TestCleanupOrphanWorkspaces_*` (4 cases) PASS | ✓ |
+| AC8 — No regression | `go test -race ./...` all packages PASS (Phase I) | ✓ |
+| AC9 — User-flow test | `docs/evidence/fix-summary-workspace-registration-leaks/` G2-G7 captured | ✓ |
+| AC10 — Validate ladder | validate:quick + integration green (pre-existing internal/search build break out of scope) | ✓ |
+| AC11 — Review Gate | PENDING — to run via review-work skill before PR open | ☐ |
+| AC12 — Release notes | commit 39b808e CHANGELOG.md Unreleased section | ✓ |
+
+## Implementation commits
+
+| Phase | Commit | Description |
+| --- | --- | --- |
+| Setup | afb8f43 | OpenSpec proposal + design + tasks + 2 spec deltas |
+| Setup | e349a38 | Deep-design feedback (Metis + Oracle + MCP explore) |
+| Story | 391d54e | High-risk story packet |
+| B | 721b99d | Persister.Save validation (closes #3 + #4) |
+| C | 3667194 | OpenCode harvester + Claude Code init extraction (closes #2 + #5) |
+| D | fcd5310 | HTTP workspaceRegisteredMiddleware (closes #1) |
+| D' | f3eef05 | MCP memory_write + memory_update guards (closes #7) |
+| E | 4bae324 | cleanup-orphan-workspaces CLI |
+| F | 464fac9 | Migration 00011 FK constraints (closes #6) |
+| Test fix | bdfc007 | Seed workspace in OpenCode integration test |
+| Evidence | (phase G commit) | Phase G evidence files |
+| Release | 39b808e | CHANGELOG entry |
 
 ## PR Bot Review
 
