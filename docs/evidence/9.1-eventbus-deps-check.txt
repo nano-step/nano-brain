@@ -1,0 +1,3 @@
+$ grep -E '"github.com/nano-brain/nano-brain/internal/' internal/eventbus/*.go | grep -v _test.go
+
+RESULT: Empty — zero internal dependencies. AC #1 PASS.
