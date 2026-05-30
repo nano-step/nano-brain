@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixes
+- fix(config): `NANO_BRAIN_CONFIG` (and `--config`) now strip leading/trailing whitespace, and a `WARNING:` is printed to stderr when the explicitly-set path does not exist (previously silently fell back to defaults — a production footgun for typos in container env values) (#224)
 - fix(handler): wrap `ResetWorkspace` document+workspace deletion in a single transaction with rollback — matches the pattern already shipped in `RemoveWorkspace` (#155). Prevents orphaned documents if the workspace delete fails after docs are already removed (#225)
 
 ### Features
