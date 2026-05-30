@@ -747,3 +747,136 @@ button:focus-visible,
   border-color: rgba(239, 68, 68, 0.3);
   color: var(--err);
 }
+
+/* ---- Story 9.6: panels, drawer, wikilinks ---- */
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-input {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  outline: none;
+  min-width: 220px;
+  transition: border-color 150ms;
+  color: var(--text-1);
+}
+
+.filter-input:focus-visible {
+  border-color: var(--accent);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  font-size: 11px;
+  color: var(--text-2);
+  transition: border-color 150ms, color 150ms;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
+.chip[data-active='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 112, 243, 0.06);
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 90;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 640px;
+  max-width: 90vw;
+  background: var(--bg-0);
+  border-left: 1px solid var(--border);
+  z-index: 91;
+  overflow-y: auto;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.drawer-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-0);
+}
+
+.drawer-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.drawer-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 4px;
+}
+
+.drawer-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 4px 16px;
+  font-size: 12px;
+}
+
+.kv-k {
+  color: var(--text-3);
+}
+
+.kv-v {
+  color: var(--text-1);
+  font-family: 'JetBrains Mono', monospace;
+  word-break: break-all;
+}
+
+.wikilink {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 112, 243, 0.4);
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background 100ms;
+}
+
+.wikilink:hover {
+  background: rgba(0, 112, 243, 0.1);
+  border-bottom-color: var(--accent);
+}
+
+.wikilink-broken {
+  color: var(--text-3);
+  border-bottom: 1px dotted var(--text-4);
+  padding: 0 2px;
+  cursor: help;
+}
