@@ -17,11 +17,19 @@ const KNOWLEDGE_COLLECTION_COLORS: Record<string, string> = {
   'session-summary:claudecode': '#F59E0B',
 }
 
-function nodeColor(node: GraphNode, mode: NodeKind): string {
-  if (mode === 'symbol') {
-    return '#4B5563'
+function computeNodeColors(edges: GraphEdge[], mode: NodeKind): Map<string, string> {
+  if (mode !== 'symbol') return new Map()
+  const counts: Record<string, Record<string, number>> = {}
+  for (const e of edges) {
+    counts[e.source] ??= {}
+    counts[e.source][e.edge_type] = (counts[e.source][e.edge_type] ?? 0) + 1
   }
-  return KNOWLEDGE_COLLECTION_COLORS[node.collection ?? ''] ?? '#6B7280'
+  const out = new Map<string, string>()
+  for (const [src, c] of Object.entries(counts)) {
+    const dominant = (Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0]) as string | undefined
+    if (dominant && CODE_EDGE_COLORS[dominant]) out.set(src, CODE_EDGE_COLORS[dominant])
+  }
+  return out
 }
 
 function edgeColor(edge: GraphEdge, mode: NodeKind): string {
@@ -75,6 +83,7 @@ export function SigmaGraph({
     const g = new Graph({ multi: false, type: 'directed' })
 
     const useCached = !!cachedPositions
+    const nodeColors = computeNodeColors(edges, mode)
 
     nodes.forEach((n) => {
       const cached = cachedPositions?.[n.id]
@@ -82,13 +91,19 @@ export function SigmaGraph({
       const y = cached ? cached[1] : Math.random() * 10
       const isFocus = n.id === focusId
       const isFrontier = frontierNodes.includes(n.id)
-      const color = isFocus ? '#0070F3' : nodeColor(n, mode)
+      const color = isFocus
+        ? '#0070F3'
+        : mode === 'symbol'
+          ? (nodeColors.get(n.id) ?? '#4B5563')
+          : (KNOWLEDGE_COLLECTION_COLORS[n.collection ?? ''] ?? '#6B7280')
+      const baseLabel = mode === 'symbol' ? n.id : (n.title?.slice(0, 40) ?? n.id)
+      const label = isFrontier ? `+ ${baseLabel}` : baseLabel
       g.addNode(n.id, {
         x,
         y,
         size: isFocus ? 12 : isFrontier ? 9 : 6,
         color,
-        label: mode === 'symbol' ? n.id : (n.title?.slice(0, 40) ?? n.id),
+        label,
         borderColor: isFrontier ? '#F59E0B' : undefined,
         type: isFrontier ? 'border' : 'circle',
       })
