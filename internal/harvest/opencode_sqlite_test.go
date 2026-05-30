@@ -432,6 +432,7 @@ func TestOpenCodeSQLite_SkipCheck_UnifiedPath(t *testing.T) {
 	worktree := "/home/user/test-skip"
 
 	insertTestProject(t, sqdb, "proj1", worktree)
+	seedRegisteredWorkspace(t, pgDB, worktree)
 	insertTestSession(t, sqdb, "sess-skip1", "proj1", "Skip Session", oldMs)
 	if _, err := sqdb.Exec(`UPDATE session SET time_updated = ? WHERE id = ?`, oldMs, "sess-skip1"); err != nil {
 		t.Fatal(err)

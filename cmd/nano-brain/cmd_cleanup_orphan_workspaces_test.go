@@ -21,6 +21,11 @@ import (
 
 const cleanupTestDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
 
+// preMigration00011Version pins the schema to before FK enforcement so cleanup
+// tests can insert orphan rows directly. Matches the production sequence
+// (cleanup -> migrate -> start binary).
+const preMigration00011Version int64 = 10
+
 func setupCleanupTestPG(t *testing.T) *sql.DB {
 	t.Helper()
 	if testing.Short() {
@@ -57,7 +62,7 @@ func setupCleanupTestPG(t *testing.T) *sql.DB {
 	}
 	goose.SetTableName(schema + "_goose_version")
 	migrateDB := stdlib.OpenDBFromPool(pool)
-	if err := goose.UpContext(ctx, migrateDB, "."); err != nil {
+	if err := goose.UpToContext(ctx, migrateDB, ".", preMigration00011Version); err != nil {
 		migrateDB.Close()
 		pool.Close()
 		t.Fatal(err)
