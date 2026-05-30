@@ -202,6 +202,9 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 - **No starting work without a GitHub issue.**
 - **No archiving without Review Verdict = PASS.**
 - **No modifying harness rules without user approval.**
+- **No direct commits to `master` or `b-main`.** Always work on a feature branch (`feat/`, `fix/`, `chore/`, `docs/`) and open a PR. The only exception is a merge commit produced by resolving an existing PR's conflicts — and even then the resolution should normally happen on the PR's head branch, not on the target.
+- **No `git push origin <branch>` without first verifying you are ON `<branch>`.** Always run `git branch --show-current` (or check `git status` header) before pushing. Pushing while on the wrong branch silently returns "Everything up-to-date" without error. Use `git push` (no args, relies on upstream tracking) when in doubt.
+- **No merging trunk-into-trunk locally.** If a PR's base needs to absorb its head (e.g. `b-main → master`), let the GitHub merge button handle it after conflicts are resolved on the PR head. Local `git merge origin/<other-trunk>` followed by `push origin <this-trunk>` bypasses CI gates and PR review history.
 
 ### Git push workflow (container environment)
 
