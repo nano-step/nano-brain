@@ -323,6 +323,11 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 }
 
 func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePath string) {
+	if isBinaryExtension(filePath) {
+		w.logger.Debug().Str("file", filePath).Msg("skipping binary file (extension)")
+		return
+	}
+
 	info, err := os.Stat(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("stat failed, skipping")
@@ -344,11 +349,6 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 			Int64("size", info.Size()).
 			Int64("max", w.maxFileSize).
 			Msg("file exceeds max size, skipping")
-		return
-	}
-
-	if isBinaryExtension(filePath) {
-		w.logger.Info().Str("file", filePath).Msg("skipping binary file (extension)")
 		return
 	}
 

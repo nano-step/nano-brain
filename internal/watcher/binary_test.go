@@ -66,6 +66,10 @@ func TestIsBinaryContent(t *testing.T) {
 		{"gif header", []byte("GIF89a\xff\xff\x00\x00"), true},
 
 		{"mixed valid then invalid", append([]byte("Hello "), 0x89, 0x50, 0x4e, 0x47), true},
+
+		{"null byte alone", []byte{0x00}, true},
+		{"null byte in middle of utf8 text", []byte("Hello\x00World"), true},
+		{"null byte at end", []byte("trailing\x00"), true},
 	}
 
 	for _, c := range cases {

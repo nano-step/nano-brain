@@ -349,6 +349,30 @@ func TestProcessFile_SkipsBinaryContentDespiteExtension(t *testing.T) {
 	}
 }
 
+func TestProcessFile_SkipsNullByteContent(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "data.log")
+	if err := os.WriteFile(fp, []byte("entry one\x00entry two"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+
+	col := watchedCollection{
+		name:          "testcol",
+		dirPath:       dir,
+		workspaceHash: "ws123",
+		globPattern:   "*.log",
+	}
+
+	w.processFile(context.Background(), col, fp)
+
+	if mq.upsertDocCalls.Load() != 0 {
+		t.Fatalf("expected null-byte content to be skipped (PG TEXT rejects 0x00), got %d upserts", mq.upsertDocCalls.Load())
+	}
+}
+
 func TestProcessFile_AcceptsValidUTF8(t *testing.T) {
 	dir := t.TempDir()
 	fp := filepath.Join(dir, "notes.md")

@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"bytes"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -31,9 +32,10 @@ func isBinaryExtension(filePath string) bool {
 	return binaryExtensions[strings.ToLower(filepath.Ext(filePath))]
 }
 
-// isBinaryContent reports whether the byte slice contains a sequence that is
-// not valid UTF-8. PostgreSQL TEXT columns reject such sequences with
-// SQLSTATE 22021; this check prevents reaching that error.
+// isBinaryContent reports whether the byte slice would be rejected by a
+// PostgreSQL TEXT column. PostgreSQL TEXT rejects both invalid UTF-8 sequences
+// AND null bytes (0x00) with SQLSTATE 22021, even though Go's utf8.Valid
+// considers 0x00 a valid 1-byte UTF-8 codepoint. Both checks are needed.
 func isBinaryContent(content []byte) bool {
-	return !utf8.Valid(content)
+	return !utf8.Valid(content) || bytes.IndexByte(content, 0x00) != -1
 }
