@@ -34,8 +34,13 @@ func registerRoutes(s *Server) {
 	}
 
 	data := api.Group("", workspaceMiddleware())
-	data.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize))
-	data.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
+
+	write := data.Group("", workspaceRegisteredMiddleware(s.db))
+	write.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize))
+	write.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
+	write.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, s.logger))
+	write.POST("/update", handlers.TriggerUpdate(s.logger))
+	write.POST("/summarize", handlers.TriggerSummarize(s.getSummarizer, s.queries, s.logger))
 
 	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.currentConfig().Watcher, s.logger))
 	data.GET("/collections", handlers.ListCollectionsHandler(s.queries, s.logger))
@@ -49,9 +54,6 @@ func registerRoutes(s *Server) {
 	data.POST("/graph/query", handlers.GraphQuery(s.queries, s.logger))
 	data.POST("/graph/impact", handlers.GraphImpact(s.queries, s.logger))
 	data.POST("/graph/trace", handlers.GraphTrace(s.queries, s.logger))
-	data.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, s.logger))
-	data.POST("/update", handlers.TriggerUpdate(s.logger))
-	data.POST("/summarize", handlers.TriggerSummarize(s.getSummarizer, s.queries, s.logger))
 
 	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger, s.recorder))
 	data.POST("/search", handlers.BM25Search(s.queries, s.logger, s.recorder))
