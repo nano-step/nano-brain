@@ -13,7 +13,6 @@ src/web/node_modules/
 .npmrc
 .npmrc2
 _bmad/config.user.yaml
-/skills/
 
 # OpenCode internal metadata
 .opencode/worktrees/
