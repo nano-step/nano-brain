@@ -8,114 +8,114 @@ Tasks are ordered to minimize risk. Each task is independently committable; runn
 
 - [x] **A1** — `GetWorkspaceByHash` already exists at `internal/storage/queries/workspaces.sql:10-11` (verified via deep-design exploration). NO ACTION NEEDED. If `sqlc generate` is re-run, confirm the method signature is unchanged.
 
-- [ ] **A2** — DECIDED: NO shared `WorkspaceQuerier` interface. Each consumer (middleware, persister, harvester, mcp tools, cleanup command) uses on-demand `q := sqlc.New(db)` matching the existing codebase pattern (see `internal/harvest/opencode_sqlite.go:115`). This task is a documentation note only.
+- [x] **A2** — DECIDED: NO shared `WorkspaceQuerier` interface. Each consumer (middleware, persister, harvester, mcp tools, cleanup command) uses on-demand `q := sqlc.New(db)` matching the existing codebase pattern (see `internal/harvest/opencode_sqlite.go:115`). This task is a documentation note only.
 
 ## Phase B — Persister defense (closes Leak #3 + #4)
 
-- [ ] **B1** — Modify `internal/summarize/persist.go`: add `q := sqlc.New(p.db)` + `GetWorkspaceByHash` check at top of `Save()`. Return error containing `workspace_not_registered` if hash absent. Use `errors.Is(err, sql.ErrNoRows)` to distinguish "not found" from "DB error".
+- [x] **B1** — Modify `internal/summarize/persist.go`: add `q := sqlc.New(p.db)` + `GetWorkspaceByHash` check at top of `Save()`. Return error containing `workspace_not_registered` if hash absent. Use `errors.Is(err, sql.ErrNoRows)` to distinguish "not found" from "DB error".
 
-- [ ] **B2** — Write `internal/summarize/persist_security_test.go` (unit-level, sqlmock):
+- [x] **B2** — Write `internal/summarize/persist_security_test.go` (unit-level, sqlmock):
   - Test: Save with unregistered hash → returns error matching `workspace_not_registered`
   - Test: Save with registered hash → proceeds to existing logic (smoke check)
   - Test: Save with DB error during lookup → propagates wrapped error
 
-- [ ] **B2.5** — Write integration test (real PostgreSQL) in `internal/summarize/persist_integration_test.go`:
+- [x] **B2.5** — Write integration test (real PostgreSQL) in `internal/summarize/persist_integration_test.go`:
   - Setup: real DB, insert a workspace row, call Save with that hash → success + document persisted
   - Setup: real DB, no matching workspace row, call Save → returns `workspace_not_registered`, no document persisted
 
-- [ ] **B3** — Run `go test ./internal/summarize -race -short` → all green. Commit: `fix(summary): validate workspace registration in Persister.Save (#238)`
+- [x] **B3** — Run `go test ./internal/summarize -race -short` → all green. Commit: `fix(summary): validate workspace registration in Persister.Save (#238)`
 
 ## Phase C — Harvester defenses (closes Leak #2 + #5)
 
-- [ ] **C1** — Modify `internal/harvest/opencode_sqlite.go` (THREE changes — all required):
+- [x] **C1** — Modify `internal/harvest/opencode_sqlite.go` (THREE changes — all required):
   1. **Remove fallback workspace logic** — no `WorkspaceHash(dbPath)` fallback. Empty `session.Worktree` → WARN log + skip (return nil, continue to next session).
   2. **Remove auto-registration** — DELETE the `UpsertWorkspace` call at lines 155-163. This is a breaking change; the harvester no longer silently creates workspace entries.
   3. **Add registration check** — `q := sqlc.New(h.pgDB)` + `GetWorkspaceByHash(ctx, workspaceHash)` per session. On `sql.ErrNoRows` → WARN log + skip. On other DB error → return err.
 
-- [ ] **C2** — Extend `internal/harvest/opencode_sqlite_integration_test.go` (fixtures: create temp SQLite DB with OpenCode schema — see existing `opencode_sqlite_integration_test.go` for pattern; seed with 3 session variants):
+- [x] **C2** — Extend `internal/harvest/opencode_sqlite_integration_test.go` (fixtures: create temp SQLite DB with OpenCode schema — see existing `opencode_sqlite_integration_test.go` for pattern; seed with 3 session variants):
   - Test: session with empty worktree → 0 documents created, NO workspace auto-registered, WARN logged
   - Test: session with worktree pointing to `/tmp/unregistered-path` → 0 documents created, NO workspace auto-registered, WARN logged
   - Test: session with worktree matching a pre-registered workspace → harvested as before, no extra UpsertWorkspace call observed
 
-- [ ] **C3** — Extract Claude Code init from `cmd/nano-brain/main.go` to new file `cmd/nano-brain/claudecode_init.go`. Function signature: `func initClaudeCodeHarvester(ctx context.Context, cfg ClaudeCodeConfig, db *sql.DB, logger zerolog.Logger) (*harvest.ClaudeCodeHarvester, error)`. Returns `(nil, nil)` if harvester should not be started (disabled, dir missing, or workspace unregistered).
+- [x] **C3** — Extract Claude Code init from `cmd/nano-brain/main.go` to new file `cmd/nano-brain/claudecode_init.go`. Function signature: `func initClaudeCodeHarvester(ctx context.Context, cfg ClaudeCodeConfig, db *sql.DB, logger zerolog.Logger) (*harvest.ClaudeCodeHarvester, error)`. Returns `(nil, nil)` if harvester should not be started (disabled, dir missing, or workspace unregistered).
 
-- [ ] **C4** — Write `cmd/nano-brain/claudecode_init_test.go`:
+- [x] **C4** — Write `cmd/nano-brain/claudecode_init_test.go`:
   - Test: enabled=false → returns (nil, nil)
   - Test: enabled=true + session_dir absent → returns (nil, nil), WARN logged
   - Test: enabled=true + session_dir present + unregistered hash → returns (nil, nil), WARN logged with "run nano-brain init" guidance
   - Test: enabled=true + session_dir present + registered hash → returns valid harvester
   - Test: DB error during lookup → returns (nil, nil), ERROR logged
 
-- [ ] **C5** — Run `go test ./internal/harvest ./cmd/nano-brain -race -short` → all green. Commit: `fix(harvest): skip unregistered workspaces in OpenCode + Claude Code harvesters; remove auto-registration (#238)`
+- [x] **C5** — Run `go test ./internal/harvest ./cmd/nano-brain -race -short` → all green. Commit: `fix(harvest): skip unregistered workspaces in OpenCode + Claude Code harvesters; remove auto-registration (#238)`
 
 ## Phase D — HTTP Middleware enforcement (closes Leak #1)
 
-- [ ] **D1** — Add `workspaceRegisteredMiddleware(db *sql.DB)` to `internal/server/middleware.go`. Implementation per `design.md` §3.4. Uses on-demand `q := sqlc.New(db)` per request — no shared interface.
+- [x] **D1** — Add `workspaceRegisteredMiddleware(db *sql.DB)` to `internal/server/middleware.go`. Implementation per `design.md` §3.4. Uses on-demand `q := sqlc.New(db)` per request — no shared interface.
 
-- [ ] **D2** — Extend `internal/server/middleware_test.go`:
+- [x] **D2** — Extend `internal/server/middleware_test.go`:
   - Test: registered hash → next handler invoked, captured workspace matches
   - Test: unregistered hash → HTTP 400 + error="workspace_not_registered"
   - Test: workspace="all" → HTTP 400 + error="workspace_all_not_supported"
   - Test: DB error during lookup → HTTP 500
   - Test: empty workspace string (should not happen post-workspaceMiddleware) → HTTP 400 + error="workspace_required"
 
-- [ ] **D3** — Modify `internal/server/routes.go`: apply `workspaceRegisteredMiddleware` to write group:
+- [x] **D3** — Modify `internal/server/routes.go`: apply `workspaceRegisteredMiddleware` to write group:
   - `POST /api/v1/summarize`
   - `POST /api/v1/write`
   - `POST /api/v1/embed`
   - `POST /api/v1/reindex`
   - `POST /api/v1/update`
 
-- [ ] **D4** — Extend handler tests (`summarize_test.go`, `document_test.go`, etc.) to verify:
+- [x] **D4** — Extend handler tests (`summarize_test.go`, `document_test.go`, etc.) to verify:
   - Unregistered workspace hash to write endpoints returns HTTP 400 (not 503 or 200 with empty result)
   - Registered workspace hash continues to work
 
-- [ ] **D5** — Run `go test ./internal/server/... -race -short` → all green. Commit: `fix(server): reject unregistered workspace in write endpoint middleware (#238)`
+- [x] **D5** — Run `go test ./internal/server/... -race -short` → all green. Commit: `fix(server): reject unregistered workspace in write endpoint middleware (#238)`
 
 ## Phase D' — MCP tool enforcement (closes new leak #7 — MCP bypass)
 
-- [ ] **D'1** — Modify `internal/mcp/tools.go`:
+- [x] **D'1** — Modify `internal/mcp/tools.go`:
   - In `registerMemoryWrite` (around line 505): after non-empty workspace check, reject `workspace == "all"` and add `GetWorkspaceByHash` lookup before any UpsertDocument call at lines 590/623. Return `mcp.NewToolResultError("workspace_not_registered: ...")` if not found.
   - In `registerMemoryUpdate` (around line 745): same pattern (even though current implementation only queues reindex, validate workspace before queuing).
 
-- [ ] **D'2** — Write `internal/mcp/tools_security_test.go`:
+- [x] **D'2** — Write `internal/mcp/tools_security_test.go`:
   - Test: memory_write with registered workspace → succeeds, UpsertDocument called
   - Test: memory_write with unregistered workspace → returns error containing `workspace_not_registered`, UpsertDocument NOT called
   - Test: memory_write with `workspace: "all"` → returns error containing `workspace_all_not_supported`
   - Test: memory_update with unregistered workspace → returns error
   - Test: memory_write with DB lookup failure → returns error containing `workspace_lookup_failed`
 
-- [ ] **D'3** — Run `go test ./internal/mcp -race -short` → all green. Commit: `fix(mcp): reject unregistered workspace in memory_write and memory_update tool handlers (#238)`
+- [x] **D'3** — Run `go test ./internal/mcp -race -short` → all green. Commit: `fix(mcp): reject unregistered workspace in memory_write and memory_update tool handlers (#238)`
 
 ## Phase E — Cleanup command (data hygiene before migration)
 
-- [ ] **E1** — Add cleanup query to `internal/storage/queries/workspaces.sql`:
+- [x] **E1** — Add cleanup query to `internal/storage/queries/workspaces.sql`:
   - `CountOrphanDocumentsByWorkspace` — returns hash + count per orphan
   - `DeleteOrphanDocuments` — deletes documents where workspace_hash NOT IN workspaces
   - `DeleteOrphanChunks` — same for chunks
 
-- [ ] **E2** — Implement `cmd/nano-brain/cmd_cleanup_orphan_workspaces.go` per `design.md` §3.6. Function signature: `func runCleanupOrphanWorkspacesCmd(args []string) error` (NO Cobra — use stdlib `flag.NewFlagSet`). Include pre-flight `GET /health` check on `:3100` and `:8899` with WARN if server is running. Output reports documents + chunks + transitively-deleted embeddings count.
+- [x] **E2** — Implement `cmd/nano-brain/cmd_cleanup_orphan_workspaces.go` per `design.md` §3.6. Function signature: `func runCleanupOrphanWorkspacesCmd(args []string) error` (NO Cobra — use stdlib `flag.NewFlagSet`). Include pre-flight `GET /health` check on `:3100` and `:8899` with WARN if server is running. Output reports documents + chunks + transitively-deleted embeddings count.
 
-- [ ] **E3** — Register command in `cmd/nano-brain/commands.go` switch dispatcher (match `cleanup-stale-raw` pattern at the same location).
+- [x] **E3** — Register command in `cmd/nano-brain/commands.go` switch dispatcher (match `cleanup-stale-raw` pattern at the same location).
 
-- [ ] **E4** — Write `cmd/nano-brain/cmd_cleanup_orphan_workspaces_test.go`:
+- [x] **E4** — Write `cmd/nano-brain/cmd_cleanup_orphan_workspaces_test.go`:
   - Test: empty DB → "No orphan documents found", exit 0
   - Test: DB with orphans + --dry-run → reports counts (docs, chunks, embeddings), no changes, exit 0
   - Test: DB with orphans + apply → orphans deleted, registered untouched, embeddings cascade-deleted via existing chunks(id)→embeddings FK
   - Test: DB connection failure → exit 1, clear error message
   - Test: pre-flight server detection logs WARN but does NOT abort (deletion still proceeds — warning is advisory)
 
-- [ ] **E5** — Update README with cleanup command usage. Add to CLI commands table. Include operator-facing upgrade sequence (STOP → CLEANUP → MIGRATE → START NEW).
+- [x] **E5** — Update README with cleanup command usage. Add to CLI commands table. Include operator-facing upgrade sequence (STOP → CLEANUP → MIGRATE → START NEW).
 
-- [ ] **E6** — Run `go test ./cmd/nano-brain/... -race -short` → all green. Commit: `feat(cli): add cleanup-orphan-workspaces command (#238)`
+- [x] **E6** — Run `go test ./cmd/nano-brain/... -race -short` → all green. Commit: `feat(cli): add cleanup-orphan-workspaces command (#238)`
 
 ## Phase F — DB constraint (closes Leak #6)
 
-- [ ] **F1** — Create `migrations/00011_add_fk_documents_workspace.sql` per `design.md` §3.5. Include operator-facing comment at top warning that orphans cause migration failure + reference cleanup command. Single `+goose StatementBegin/End` block containing both ALTER TABLE statements (atomic transaction).
+- [x] **F1** — Create `migrations/00011_add_fk_documents_workspace.sql` per `design.md` §3.5. Include operator-facing comment at top warning that orphans cause migration failure + reference cleanup command. Single `+goose StatementBegin/End` block containing both ALTER TABLE statements (atomic transaction).
 
-- [ ] **F2** — Run `nano-brain db:migrate` against local PostgreSQL (clean schema first, no orphans) → migration applies cleanly.
+- [x] **F2** — Run `nano-brain db:migrate` against local PostgreSQL (clean schema first, no orphans) → migration applies cleanly.
 
-- [ ] **F3** — Verify FK enforcement via direct SQL (both INSERT and UPDATE paths):
+- [x] **F3** — Verify FK enforcement via direct SQL (both INSERT and UPDATE paths):
   ```sql
   -- INSERT path
   INSERT INTO documents (id, workspace_hash, source_path, content, content_hash, collection, title, tags, created_at, updated_at)
@@ -131,26 +131,26 @@ Tasks are ordered to minimize risk. Each task is independently committable; runn
   -- Expected: ERROR: violates foreign key constraint "fk_chunks_workspace"
   ```
 
-- [ ] **F4** — Test migration on a DB with intentional orphans → migration fails with PostgreSQL error 23503 identifying constraint `fk_documents_workspace` and at least one violating key. Confirms cleanup must run first.
+- [x] **F4** — Test migration on a DB with intentional orphans → migration fails with PostgreSQL error 23503 identifying constraint `fk_documents_workspace` and at least one violating key. Confirms cleanup must run first.
 
-- [ ] **F5** — Run `nano-brain cleanup-orphan-workspaces` on that DB → orphans removed → re-run migration → succeeds.
+- [x] **F5** — Run `nano-brain cleanup-orphan-workspaces` on that DB → orphans removed → re-run migration → succeeds.
 
-- [ ] **F6** — Verify down migration cleanly removes both FK constraints AND does NOT delete any data. Add test case: documents/chunks/embeddings counts before and after `goose down` should be identical.
+- [x] **F6** — Verify down migration cleanly removes both FK constraints AND does NOT delete any data. Add test case: documents/chunks/embeddings counts before and after `goose down` should be identical.
 
-- [ ] **F7** — Verify cascade: insert workspace W with documents + chunks, DELETE workspace row from `workspaces`, verify documents AND chunks AND embeddings (via transitive chunks→embeddings cascade) are all deleted.
+- [x] **F7** — Verify cascade: insert workspace W with documents + chunks, DELETE workspace row from `workspaces`, verify documents AND chunks AND embeddings (via transitive chunks→embeddings cascade) are all deleted.
 
-- [ ] **F8** — Commit: `feat(migration): add FK constraints documents/chunks → workspaces (#238)`
+- [x] **F8** — Commit: `feat(migration): add FK constraints documents/chunks → workspaces (#238)`
 
 ## Phase G — User-flow tests + evidence (non-LLM where possible)
 
-- [ ] **G1** — On port 8899 isolated instance:
+- [x] **G1** — On port 8899 isolated instance:
   - Stop existing server: `kill $(cat /tmp/nano-brain-custom/server.pid)`
   - Build branch binary: `CGO_ENABLED=0 go build -o /tmp/nano-brain-fix238 ./cmd/nano-brain`
   - Run `/tmp/nano-brain-fix238 cleanup-orphan-workspaces --dry-run` → expect "No orphan documents found" (instance is currently clean per RRI-T Tier 0)
   - Run `NANO_BRAIN_CONFIG=/tmp/nano-brain-custom/config.yml /tmp/nano-brain-fix238 db:migrate` → migration 00011 succeeds
   - Start the new binary
 
-- [ ] **G2** — TEST: HTTP write to unregistered workspace returns 400 (does NOT require summarization):
+- [x] **G2** — TEST: HTTP write to unregistered workspace returns 400 (does NOT require summarization):
   ```bash
   curl -s -w "\nHTTP:%{http_code}\n" -X POST http://localhost:8899/api/v1/write \
     -H "Content-Type: application/json" \
@@ -158,7 +158,7 @@ Tasks are ordered to minimize risk. Each task is independently committable; runn
   ```
   → Expect HTTP 400, error="workspace_not_registered". Capture to evidence.
 
-- [ ] **G3** — TEST: HTTP write to registered workspace succeeds:
+- [x] **G3** — TEST: HTTP write to registered workspace succeeds:
   ```bash
   WS=$(curl -s http://localhost:8899/api/v1/workspaces | jq -r '.[0].workspace_hash')
   curl -s -w "\nHTTP:%{http_code}\n" -X POST http://localhost:8899/api/v1/write \
@@ -167,24 +167,24 @@ Tasks are ordered to minimize risk. Each task is independently committable; runn
   ```
   → Expect HTTP 200 + doc ID. Capture.
 
-- [ ] **G4** — TEST: HTTP write with `workspace: "all"` returns 400:
+- [x] **G4** — TEST: HTTP write with `workspace: "all"` returns 400:
   ```bash
   curl -s -w "\nHTTP:%{http_code}\n" -X POST http://localhost:8899/api/v1/write \
     -d '{"workspace":"all","source_path":"/test","content":"x","tags":[]}'
   ```
   → Expect HTTP 400, error="workspace_all_not_supported".
 
-- [ ] **G5** — TEST: MCP memory_write to unregistered workspace returns error:
+- [x] **G5** — TEST: MCP memory_write to unregistered workspace returns error:
   Use MCP client or `curl /mcp` JSON-RPC call invoking `memory_write` tool with `{"workspace":"fake_unregistered_xyz", ...}`.
   → Expect tool result error containing `workspace_not_registered`. Capture stdout+log.
 
-- [ ] **G6** — TEST: Claude Code harvester with unregistered session_dir:
+- [x] **G6** — TEST: Claude Code harvester with unregistered session_dir:
   - Edit `/tmp/nano-brain-custom/config.yml`: `harvester.claudecode.enabled: true`, `session_dir: /tmp/rrit-unregistered-cc`
   - `mkdir -p /tmp/rrit-unregistered-cc/projects/x && echo '{"type":"summary"}' > /tmp/rrit-unregistered-cc/projects/x/1.jsonl`
   - Restart binary → expect WARN log: "claude code session_dir is not a registered workspace; harvester disabled"
   - Verify no documents under computed hash via search API.
 
-- [ ] **G7** — TEST: Direct SQL orphan INSERT and UPDATE rejected (FK):
+- [x] **G7** — TEST: Direct SQL orphan INSERT and UPDATE rejected (FK):
   ```sql
   INSERT INTO documents (id, workspace_hash, ...) VALUES (gen_random_uuid(), 'orphan-attempt-xyz', ...);
   -- Expected: PG error 23503
@@ -192,43 +192,43 @@ Tasks are ordered to minimize risk. Each task is independently committable; runn
   -- Expected: PG error 23503
   ```
 
-- [ ] **G8** — Capture all 6 evidence outputs (curl outputs, log lines, SQL errors, MCP tool result errors) to `docs/evidence/fix-summary-workspace-registration-leaks/`. Reference in story.md.
+- [x] **G8** — Capture all 6 evidence outputs (curl outputs, log lines, SQL errors, MCP tool result errors) to `docs/evidence/fix-summary-workspace-registration-leaks/`. Reference in story.md.
 
 > **Note:** Phase H (RRI-T Tier 3 regression with full LLM) is split into a SEPARATE follow-up task per Metis finding 4.1. It runs post-merge as a release-readiness gate, not as a PR gate. This keeps PR scope bounded.
 
 ## Phase I — Validate ladder
 
-- [ ] **I1** — `validate:quick`: `go build ./... && go test -race -short ./...` → green. Paste output to story Evidence.
+- [x] **I1** — `validate:quick`: `go build ./... && go test -race -short ./...` → green. Paste output to story Evidence.
 
-- [ ] **I2** — `test:integration`: `go test -race -tags=integration ./...` → green. Paste output.
+- [x] **I2** — `test:integration`: `go test -race -tags=integration ./...` → green. Paste output.
 
-- [ ] **I3** — `smoke:e2e`: Build binary → start server on port 8899 → curl write/embed/reindex/summarize endpoints with both registered and unregistered hashes → verify expected outcomes (200 vs 400). Also test MCP memory_write via JSON-RPC.
+- [x] **I3** — `smoke:e2e`: Build binary → start server on port 8899 → curl write/embed/reindex/summarize endpoints with both registered and unregistered hashes → verify expected outcomes (200 vs 400). Also test MCP memory_write via JSON-RPC.
 
-- [ ] **I4** — `self-review:staged-files`: Run `git status` before each commit; confirm no `.opencode/`, `node_modules/`, or unrelated files staged.
+- [x] **I4** — `self-review:staged-files`: Run `git status` before each commit; confirm no `.opencode/`, `node_modules/`, or unrelated files staged.
 
-- [ ] **I5** — `self-review:response-shape`: For each new handler error path (HTTP middleware + MCP tools), verify the JSON error envelope matches existing nano-brain conventions: HTTP=`{"error":"...","message":"..."}`, MCP=`mcp.NewToolResultError("<code>: <message>")`.
+- [x] **I5** — `self-review:response-shape`: For each new handler error path (HTTP middleware + MCP tools), verify the JSON error envelope matches existing nano-brain conventions: HTTP=`{"error":"...","message":"..."}`, MCP=`mcp.NewToolResultError("<code>: <message>")`.
 
 ## Phase J — Review gate + PR
 
-- [ ] **J1** — Trigger `review-work` skill (5 parallel sub-agents). Reviewer ≠ implementer. Paste verdict in story Evidence.
+- [x] **J1** — Trigger `review-work` skill (5 parallel sub-agents). Reviewer ≠ implementer. Paste verdict in story Evidence.
 
-- [ ] **J2** — Address any review findings; rerun Phases I + H if implementation changed.
+- [x] **J2** — Address any review findings; rerun Phases I + H if implementation changed.
 
-- [ ] **J3** — Push branch: `git push -u origin feat/238-fix-summary-workspace-leaks`
+- [x] **J3** — Push branch: `git push -u origin feat/238-fix-summary-workspace-leaks`
 
-- [ ] **J4** — Open PR with title `fix(summary): close 6 workspace-registration leak points (#238)` and body containing `Closes #238`. Link RRI-T artifacts + evidence dir.
+- [x] **J4** — Open PR with title `fix(summary): close 6 workspace-registration leak points (#238)` and body containing `Closes #238`. Link RRI-T artifacts + evidence dir.
 
-- [ ] **J5** — Bot review loop: address feedback, push again, repeat. Max 3 cycles → escalate to human.
+- [x] **J5** — Bot review loop: address feedback, push again, repeat. Max 3 cycles → escalate to human.
 
-- [ ] **J6** — On merge: verify issue #238 auto-closes via `Closes #238` keyword.
+- [x] **J6** — On merge: verify issue #238 auto-closes via `Closes #238` keyword.
 
-- [ ] **J7** — `openspec archive fix-summary-workspace-registration-leaks` → updates main specs.
+- [x] **J7** — `openspec archive fix-summary-workspace-registration-leaks` → updates main specs.
 
-- [ ] **J8** — Update `docs/TEST_MATRIX.md` with new test coverage from this change.
+- [x] **J8** — Update `docs/TEST_MATRIX.md` with new test coverage from this change.
 
 ## Phase K — Release notes
 
-- [ ] **K1** — Add release note entry:
+- [x] **K1** — Add release note entry:
   ```markdown
   ### Breaking (operator action required)
 
