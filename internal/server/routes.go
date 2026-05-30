@@ -1,10 +1,14 @@
 package server
 
 import (
+	"fmt"
+
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
+	"github.com/nano-brain/nano-brain/internal/server/middleware"
 )
 
 func registerRoutes(s *Server) {
@@ -29,10 +33,28 @@ func registerRoutes(s *Server) {
 	api.DELETE("/workspaces/:hash", handlers.RemoveWorkspace(s.queries, s.db, s.logger))
 	api.POST("/reset-workspace", handlers.ResetWorkspace(s.queries, s.db, s.logger))
 
+	api.GET("/config", handlers.GetConfig(s.configPath, s.currentConfig, s.logger))
+	api.POST("/config", handlers.PatchConfig(s.configPath, s.currentConfig, func() {
+		newCfg, err := config.Load(s.configPath)
+		if err != nil {
+			s.logger.Warn().Err(err).Msg("config reload after patch failed")
+			return
+		}
+		s.applyReloadedConfig(newCfg, nil)
+	}, s.logger))
+
+	api.GET("/doctor", handlers.Doctor(handlers.DoctorDeps{
+		ConfigPath: s.configPath,
+		LoadConfig: func() (*config.Config, error) { return config.Load(s.configPath) },
+	}, s.logger))
+
 	var enqueuer handlers.ChunkEnqueuer
 	if s.embedQueue != nil {
 		enqueuer = s.embedQueue
 	}
+
+	boundAddr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
+	csrfMW := middleware.CSRF(boundAddr)
 
 	data := api.Group("", workspaceMiddleware())
 
@@ -40,7 +62,7 @@ func registerRoutes(s *Server) {
 		data.GET("/events", handlers.EventsHandler(s.eventBus, s.logger))
 	}
 
-	write := data.Group("", workspaceRegisteredMiddleware(s.db))
+	write := data.Group("", workspaceRegisteredMiddleware(s.db), csrfMW)
 	write.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize, s.linkResolver, s.linkExtractor))
 	write.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
 	var reindexPub eventbus.Publisher
@@ -69,6 +91,13 @@ func registerRoutes(s *Server) {
 
 	if s.searchService != nil {
 		data.POST("/query", handlers.Query(s.searchService, s.logger, s.recorder))
+	}
+
+	data.GET("/stats", handlers.Stats(s.queries, s.logger))
+	write.POST("/graph/neighborhood", handlers.GraphNeighborhood(s.queries, s.logger))
+	data.GET("/links/:doc_id/backlinks", handlers.Backlinks(s.queries, s.logger))
+	if s.concreteLinkRes != nil {
+		data.GET("/links/resolve", handlers.ResolveLink(s.concreteLinkRes, s.logger))
 	}
 
 	wakeUp := handlers.WakeUpHandler(s.queries, s.logger)

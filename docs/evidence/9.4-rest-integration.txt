@@ -1,0 +1,25 @@
+ok  	github.com/nano-brain/nano-brain/cmd/nano-brain	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/bench	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/chunk	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/config	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/embed	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/eventbus	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/graph	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/harvest	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/health	(cached)
+?   	github.com/nano-brain/nano-brain/internal/health/doctor	[no test files]
+ok  	github.com/nano-brain/nano-brain/internal/links	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/mcp	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/migrate	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/search	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/server	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/server/handlers	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/server/middleware	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/storage	(cached)
+?   	github.com/nano-brain/nano-brain/internal/storage/sqlc	[no test files]
+ok  	github.com/nano-brain/nano-brain/internal/summarize	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/symbol	(cached)
+ok  	github.com/nano-brain/nano-brain/internal/telemetry	(cached)
+?   	github.com/nano-brain/nano-brain/internal/testutil	[no test files]
+?   	github.com/nano-brain/nano-brain/migrations	[no test files]
+ok  	github.com/nano-brain/nano-brain/internal/watcher	(cached)

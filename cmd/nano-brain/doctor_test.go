@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/nano-brain/nano-brain/internal/health/doctor"
 )
 
 func TestPadRight(t *testing.T) {
@@ -19,13 +21,13 @@ func TestPadRight(t *testing.T) {
 }
 
 func TestCheckResultJSONFormat(t *testing.T) {
-	results := []checkResult{
+	results := []doctor.Check{
 		{Name: "Config", Status: "ok", Detail: "/home/user/.nano-brain/config.yml"},
 		{Name: "PostgreSQL", Status: "fail", Detail: "localhost:5432", Hint: "Is PostgreSQL running?"},
 	}
 	out := struct {
-		Checks    []checkResult `json:"checks"`
-		AllPassed bool          `json:"all_passed"`
+		Checks    []doctor.Check `json:"checks"`
+		AllPassed bool           `json:"all_passed"`
 	}{results, false}
 
 	b, err := json.Marshal(out)
@@ -34,8 +36,8 @@ func TestCheckResultJSONFormat(t *testing.T) {
 	}
 
 	var decoded struct {
-		Checks    []checkResult `json:"checks"`
-		AllPassed bool          `json:"all_passed"`
+		Checks    []doctor.Check `json:"checks"`
+		AllPassed bool           `json:"all_passed"`
 	}
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("json.Unmarshal failed: %v", err)
@@ -85,7 +87,7 @@ func TestCheckEmbeddingModelOllamaMatch(t *testing.T) {
 }
 
 func TestCheckConfigMissingPath(t *testing.T) {
-	r := checkConfig("/nonexistent/path/config.yml", &json.SyntaxError{})
+	r := doctor.CheckConfig("/nonexistent/path/config.yml", &json.SyntaxError{})
 	if r.Status != "fail" {
 		t.Errorf("expected fail for missing config, got %q", r.Status)
 	}
@@ -95,7 +97,7 @@ func TestCheckConfigMissingPath(t *testing.T) {
 }
 
 func TestCheckConfigSuccess(t *testing.T) {
-	r := checkConfig("/home/user/.nano-brain/config.yml", nil)
+	r := doctor.CheckConfig("/home/user/.nano-brain/config.yml", nil)
 	if r.Status != "ok" {
 		t.Errorf("expected ok for valid config, got %q", r.Status)
 	}
