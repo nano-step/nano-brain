@@ -226,6 +226,8 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | PUT | `/api/v1/collections/:name` | Rename collection |
 | DELETE | `/api/v1/collections/:name` | Remove collection |
 | GET | `/api/v1/tags` | List tags with counts |
+| POST | `/api/v1/get` | Get single document by source_path or id |
+| POST | `/api/v1/multi-get` | Batch fetch documents by paths or ids |
 | POST | `/api/v1/reindex` | Queue reindex (202) |
 | POST | `/api/v1/update` | Queue update (202) |
 | POST | `/api/v1/summarize` | Trigger LLM summarization of harvested sessions |
@@ -251,6 +253,9 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | `nano-brain search [--scope=all] [--tags=t1,t2]` | BM25 keyword search |
 | `nano-brain vsearch [--scope=all] [--tags=t1,t2]` | Vector similarity search |
 | `nano-brain wake-up --workspace=<hash>` | Workspace briefing (collections, stats, recent memories) |
+| `nano-brain get <source_path\|uuid> --workspace=<hash>` | Fetch a single document by source_path or UUID |
+| `nano-brain tags --workspace=<hash>` | List all tags with document counts |
+| `nano-brain multi-get --workspace=<hash> --paths=p1,p2` | Fetch multiple documents in one round-trip |
 | `nano-brain collection add\|remove\|list` | Manage collections |
 | `nano-brain harvest` | Trigger session harvesting |
 | `nano-brain cleanup-stale-raw [--dry-run]` | Delete pre-#192 raw OpenCode session docs superseded by summaries |

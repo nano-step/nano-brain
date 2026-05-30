@@ -567,6 +567,9 @@ Commands:
    harvest            Trigger session harvesting
    reindex            Queue collection reindex
    wake-up            Workspace briefing (recent memories, collections, stats)
+   get                Fetch a single document by source_path or ID
+   tags               List all tags with counts
+   multi-get          Fetch multiple documents in one round-trip
    logs               View log file (-f to follow, -n <count>)
   docker             Manage Docker Compose (start/stop/status)
   db:migrate         Run database migrations

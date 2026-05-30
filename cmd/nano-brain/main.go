@@ -125,6 +125,15 @@ func main() {
 		case "wake-up":
 			runWakeUpCmd(args[1:])
 			return
+		case "get":
+			runGetCmd(args[1:])
+			return
+		case "tags":
+			runTagsCmd(args[1:])
+			return
+		case "multi-get":
+			runMultiGetCmd(args[1:])
+			return
 		case "version":
 			runVersionCmd(args[1:])
 			return

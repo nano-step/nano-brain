@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Features
+- feat(cli): `get`, `tags`, `multi-get` commands — fetch a single document by source_path or UUID, list all tags with counts, and batch-fetch multiple documents in one round-trip; backed by `POST /api/v1/get`, `GET /api/v1/tags` (existing), and `POST /api/v1/multi-get` REST endpoints (#152)
 - feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
 - feat(cli): `workspaces remove --workspace=<hash>` — destructive workspace deletion with `--dry-run` preview and `--force` safety gate; backed by `DELETE /api/v1/workspaces/:hash` REST endpoint wrapped in a single transaction (#155)
 - feat(cli): wake-up command — pretty/JSON workspace briefing at session start (#151, PR #216)
