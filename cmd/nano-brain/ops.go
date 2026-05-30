@@ -558,9 +558,9 @@ Commands:
   version            Show version
   config show        Show current configuration
   config check       Validate configuration
-  query              Hybrid search (BM25 + vector)
-  search             BM25 keyword search
-  vsearch            Vector similarity search
+  query              Hybrid search (BM25 + vector)    [--scope all|workspace] [--workspace <hash>]
+  search             BM25 keyword search               [--scope all|workspace] [--workspace <hash>]
+  vsearch            Vector similarity search          [--scope all|workspace] [--workspace <hash>]
   workspaces         List registered workspaces (alias: ls)
   write              Write a document
    collection         Manage collections (add/remove/list)
