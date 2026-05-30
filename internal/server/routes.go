@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 )
@@ -35,10 +36,18 @@ func registerRoutes(s *Server) {
 
 	data := api.Group("", workspaceMiddleware())
 
+	if s.eventBus != nil {
+		data.GET("/events", handlers.EventsHandler(s.eventBus, s.logger))
+	}
+
 	write := data.Group("", workspaceRegisteredMiddleware(s.db))
 	write.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize, s.linkResolver, s.linkExtractor))
 	write.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
-	write.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, s.logger))
+	var reindexPub eventbus.Publisher
+	if s.eventBus != nil {
+		reindexPub = s.eventBus
+	}
+	write.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, reindexPub, s.logger))
 	write.POST("/update", handlers.TriggerUpdate(s.logger))
 	write.POST("/summarize", handlers.TriggerSummarize(s.getSummarizer, s.queries, s.logger))
 

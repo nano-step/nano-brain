@@ -2,7 +2,9 @@ package embed
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -14,6 +16,7 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 	"github.com/rs/zerolog"
 
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 )
 
@@ -57,6 +60,8 @@ type Queue struct {
 	retries        map[uuid.UUID]int
 	retriesMu      sync.Mutex
 	lastCapacityLog time.Time
+	pub             eventbus.Publisher
+	lastPubTime     time.Time
 }
 
 type backoffState struct {
@@ -80,6 +85,12 @@ func NewQueue(embedder Embedder, queries QueueQuerier, logger zerolog.Logger, pr
 	}
 }
 
+// WithPublisher sets the event bus publisher for embed_queue status events.
+func (q *Queue) WithPublisher(pub eventbus.Publisher) *Queue {
+	q.pub = pub
+	return q
+}
+
 func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
 	if q.pending.Load() >= rejectionThreshold {
 		q.logger.Warn().Str("chunk_id", chunkID.String()).
@@ -91,6 +102,7 @@ func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
 	case q.ch <- chunkID:
 		q.pending.Add(1)
 		q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("chunk enqueued")
+		q.publishStatus()
 		return true
 	default:
 		q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("queue full, chunk dropped")
@@ -280,6 +292,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 	q.pending.Add(-1)
 	q.clearRetries(chunkID)
 	q.resetBackoff()
+	q.publishStatus()
 	q.logger.Info().
 		Str("chunk_id", chunkID.String()).
 		Str("file", chunk.SourcePath).
@@ -349,6 +362,28 @@ func truncateToMaxChars(s string, max int) string {
 		truncated = truncated[:len(truncated)-1]
 	}
 	return truncated
+}
+
+const embedPubDebounce = 500 * time.Millisecond
+
+func (q *Queue) publishStatus() {
+	if q.pub == nil {
+		return
+	}
+	q.mu.Lock()
+	if time.Since(q.lastPubTime) < embedPubDebounce {
+		q.mu.Unlock()
+		return
+	}
+	q.lastPubTime = time.Now()
+	q.mu.Unlock()
+
+	payload := fmt.Sprintf(`{"pending":%d,"status":%q}`, q.pending.Load(), q.Status())
+	q.pub.Publish(eventbus.Event{
+		Type:    "embed_queue",
+		Payload: json.RawMessage(payload),
+		TS:      time.Now(),
+	})
 }
 
 func (q *Queue) checkCapacity() {

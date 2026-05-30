@@ -1,0 +1,5 @@
+Integration test requires running PostgreSQL instance.
+Skipped in this pass (no PG available in CI/worktree environment).
+Test file: internal/server/handlers/events_integration_test.go
+Build tag: //go:build integration
+Run via: go test -race -tags=integration -v ./internal/server/handlers/... -run TestEventsIntegration
