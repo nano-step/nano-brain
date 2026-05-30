@@ -1,0 +1,12 @@
+=== RUN   TestEventsHandler_HelloDelivered
+--- PASS: TestEventsHandler_HelloDelivered (0.10s)
+=== RUN   TestEventsHandler_PerIPCap
+--- PASS: TestEventsHandler_PerIPCap (0.05s)
+=== RUN   TestEventsHandler_WorkspaceFilter
+--- PASS: TestEventsHandler_WorkspaceFilter (0.10s)
+=== RUN   TestEventsHandler_HeartbeatComment
+--- PASS: TestEventsHandler_HeartbeatComment (0.30s)
+=== RUN   TestEventsHandler_IdleTimeout
+--- PASS: TestEventsHandler_IdleTimeout (0.10s)
+PASS
+ok  	github.com/nano-brain/nano-brain/internal/server/handlers	1.720s

@@ -2,13 +2,16 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
@@ -32,7 +35,7 @@ type reindexResponse struct {
 	Message          string `json:"message"`
 }
 
-func TriggerReindex(queries ReindexQuerier, w *watcher.Watcher, eq *embed.Queue, logger zerolog.Logger) echo.HandlerFunc {
+func TriggerReindex(queries ReindexQuerier, w *watcher.Watcher, eq *embed.Queue, pub eventbus.Publisher, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req reindexRequest
 		if err := c.Bind(&req); err != nil {
@@ -40,6 +43,8 @@ func TriggerReindex(queries ReindexQuerier, w *watcher.Watcher, eq *embed.Queue,
 		}
 
 		workspace := c.Get("workspace").(string)
+
+		publishReindex(pub, workspace, "started", 0, 0, 0, 0, "")
 
 		collections, err := queries.ListCollections(c.Request().Context(), workspace)
 		if err != nil {
@@ -85,6 +90,8 @@ func TriggerReindex(queries ReindexQuerier, w *watcher.Watcher, eq *embed.Queue,
 			}
 		}
 
+		publishReindex(pub, workspace, "completed", int(totalChunks), 0, 0, 0, "")
+
 		reqLog := LoggerFromCtx(c, logger)
 		reqLog.Info().
 			Str("workspace", workspace).
@@ -127,6 +134,29 @@ func collectionsToReindex(collections []sqlc.Collection, root string) []sqlc.Col
 		return collections
 	}
 	return matched
+}
+
+func publishReindex(pub eventbus.Publisher, workspace, state string, enqueued, embedded, deleted, skipped int, errMsg string) {
+	if pub == nil {
+		return
+	}
+	m := map[string]any{
+		"state":    state,
+		"enqueued": enqueued,
+		"embedded": embedded,
+		"deleted":  deleted,
+		"skipped":  skipped,
+	}
+	if errMsg != "" {
+		m["error"] = errMsg
+	}
+	payload, _ := json.Marshal(m)
+	pub.Publish(eventbus.Event{
+		Type:      "reindex",
+		Workspace: workspace,
+		Payload:   payload,
+		TS:        time.Now(),
+	})
 }
 
 func TriggerUpdate(logger zerolog.Logger) echo.HandlerFunc {

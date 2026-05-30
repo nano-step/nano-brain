@@ -20,11 +20,13 @@ import (
 	"github.com/nano-brain/nano-brain/internal/chunk"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
+	"golang.org/x/time/rate"
 )
 
 type GraphQuerier interface {
@@ -65,6 +67,8 @@ type Watcher struct {
 	mu          sync.Mutex
 	collections map[string]watchedCollection
 	dirty       map[string]bool
+	pub         eventbus.Publisher
+	rateLimiters map[string]*rate.Limiter
 }
 
 func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.Config) *Watcher {
@@ -78,6 +82,13 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 		collections:  make(map[string]watchedCollection),
 		dirty:        make(map[string]bool),
 	}
+}
+
+// WithPublisher sets the event bus publisher for watcher file-change events.
+func (w *Watcher) WithPublisher(pub eventbus.Publisher) *Watcher {
+	w.pub = pub
+	w.rateLimiters = make(map[string]*rate.Limiter)
+	return w
 }
 
 func (w *Watcher) WithSymbolRegistry(r *symbol.Registry) *Watcher {
@@ -323,6 +334,11 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 }
 
 func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePath string) {
+	if isBinaryExtension(filePath) {
+		w.logger.Debug().Str("file", filePath).Msg("skipping binary file (extension)")
+		return
+	}
+
 	info, err := os.Stat(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("stat failed, skipping")
@@ -350,6 +366,11 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("read failed, skipping")
+		return
+	}
+
+	if isBinaryContent(content) {
+		w.logger.Warn().Str("file", filePath).Msg("skipping binary file (non-UTF8 content)")
 		return
 	}
 
@@ -395,6 +416,8 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		}
 		chunkIDs = ids
 	}
+
+	w.publishFileEvent(col.workspaceHash, filePath, "modified")
 
 	w.logger.Info().
 		Str("file", filePath).
@@ -503,6 +526,34 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		Str("file", filePath).
 		Int("edges", len(edges)).
 		Msg("graph edges extracted")
+}
+
+func (w *Watcher) publishFileEvent(workspace, filePath, action string) {
+	if w.pub == nil {
+		return
+	}
+	w.mu.Lock()
+	lim, ok := w.rateLimiters[workspace]
+	if !ok {
+		lim = rate.NewLimiter(rate.Limit(10), 10)
+		w.rateLimiters[workspace] = lim
+	}
+	w.mu.Unlock()
+
+	if !lim.Allow() {
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]string{
+		"path":   filePath,
+		"action": action,
+	})
+	w.pub.Publish(eventbus.Event{
+		Type:      "watcher",
+		Workspace: workspace,
+		Payload:   payload,
+		TS:        time.Now(),
+	})
 }
 
 func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {

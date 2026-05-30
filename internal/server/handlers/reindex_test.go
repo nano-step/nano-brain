@@ -69,7 +69,7 @@ func TestTriggerReindex(t *testing.T) {
 	}
 	w := newTestWatcherForHandler()
 
-	h := handlers.TriggerReindex(mq, w, nil, zerolog.Nop())
+	h := handlers.TriggerReindex(mq, w, nil, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestTriggerReindexByPath(t *testing.T) {
 	}
 	w := newTestWatcherForHandler()
 
-	h := handlers.TriggerReindex(mq, w, nil, zerolog.Nop())
+	h := handlers.TriggerReindex(mq, w, nil, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestTriggerReindexNoRoot(t *testing.T) {
 	}
 	w := newTestWatcherForHandler()
 
-	h := handlers.TriggerReindex(mq, w, nil, zerolog.Nop())
+	h := handlers.TriggerReindex(mq, w, nil, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
