@@ -13,21 +13,24 @@ The fix must close the leak at **all entry points** because any unfixed path is 
 
 ## 2. Architecture Decision Records
 
-### ADR-1: Defense-in-depth at 4 layers, not 1
+### ADR-1: Defense-in-depth at 5 layers, not 1
 
-**Decision:** Validate workspace registration at HTTP middleware, harvester init, Persister.Save, AND PostgreSQL FK constraint.
+**Decision:** Validate workspace registration at HTTP middleware, MCP tool handlers, harvester init, Persister.Save, AND PostgreSQL FK constraint.
 
 **Rationale:** A single validation point is fragile. Future code paths added by other developers will likely skip a centralized check. Layering ensures:
 - HTTP layer catches external API abuse early (cheap rejection, no DB hit beyond the registration lookup)
+- MCP tool handlers catch MCP-transport writes (MCP bypasses HTTP middleware — `/mcp` and `/sse` routes register the streamable handler directly without going through `workspaceMiddleware`, verified at `routes.go:73-78` and `internal/mcp/tools.go:485-659`)
 - Harvester layer catches configuration errors at startup (operator sees warning immediately)
 - Persister layer catches internal API misuse (defense against future code paths)
 - DB layer catches everything else (last line of defense; cannot be bypassed by application code)
 
 **Alternative considered:** Centralize all validation in middleware only.
-- Rejected because: bypasses harvester paths (harvester does not go through HTTP); creates a "single point of failure" anti-pattern.
+- Rejected because: bypasses harvester paths (harvester does not go through HTTP); bypasses MCP transport (MCP tools execute in their own handler chain); creates a "single point of failure" anti-pattern.
 
 **Alternative considered:** FK constraint only.
 - Rejected because: produces opaque database errors at the worst possible time (mid-transaction during summary persist). Application-level errors at the entry point are much better UX.
+
+**Implementation pattern:** No shared `WorkspaceQuerier` interface. Each consumer uses on-demand `q := sqlc.New(db)` to match the existing codebase pattern (e.g., `internal/harvest/opencode_sqlite.go:115`). Sharing an interface across `internal/server/` and `internal/summarize/` would risk circular imports and add abstraction without benefit. Inline usage is simple and consistent.
 
 ### ADR-2: Per-route opt-in for middleware enforcement, not global
 
@@ -49,13 +52,22 @@ The fix must close the leak at **all entry points** because any unfixed path is 
 - `DELETE /api/v1/workspaces/:hash` — operates on workspaces table itself
 - `POST /api/v1/init` — creates the workspace
 
-### ADR-3: OpenCode orphan sessions are SKIPPED, not auto-registered
+### ADR-3: OpenCode orphan sessions are SKIPPED, and auto-registration is REMOVED
 
-**Decision:** When an OpenCode session has empty `worktree` OR its `WorkspaceHash(worktree)` is not registered, the harvester logs WARN and skips the session entirely. No fallback workspace is created.
+**Decision:** Two changes to `internal/harvest/opencode_sqlite.go:141-164`:
 
-**Rationale:** Auto-registering would silently extend the trust boundary. Skipping is conservative and visible to operators via logs. Operators who actually want a workspace registered must use `POST /api/v1/init` explicitly.
+1. **Skip orphan sessions** — When an OpenCode session has empty `worktree` OR its `WorkspaceHash(worktree)` is not registered, the harvester logs WARN and skips the session entirely. No fallback workspace is created.
+2. **Remove auto-registration** — The existing call to `UpsertWorkspace` (currently at lines 155-163) is REMOVED. The harvester no longer silently creates workspace entries for arbitrary worktree paths it discovers in the OpenCode SQLite DB.
 
-**Migration implication:** Production deployments may have orphan sessions in OpenCode SQLite DBs that previously got harvested under the fallback hash. After this change, those sessions will be skipped. The cleanup command will remove the orphan summaries already in the nano-brain DB.
+**Rationale:** Auto-registering would silently extend the trust boundary AND silently re-introduce orphan-equivalent state (a workspace exists but the operator never approved it). Skipping is conservative and visible to operators via logs. Operators who want a workspace harvested MUST use `POST /api/v1/init` or `nano-brain init --root=<path>` explicitly.
+
+**Migration implication (breaking change for some operators):**
+- Operators who never explicitly ran `nano-brain init` for their OpenCode worktrees have been relying on implicit auto-registration. After this change, their sessions will be skipped until they manually register the workspace(s).
+- This is called out in release notes with a clear command sequence to register each worktree found in OpenCode.
+- The `harvester.opencode.db_root` mode already filters by registered workspaces at discovery time (see `main.go:441` `ScanOpenCodeDBRoot`), so multi-DB deployments are unaffected. Only `db_path` mode (single DB) deployments need to register manually.
+
+**Alternative considered:** Keep `UpsertWorkspace` for `db_path` mode but not for `db_root` mode.
+- Rejected: split behavior is confusing and surface-area-expanding. Same enforcement everywhere is simpler.
 
 **Alternative considered:** Keep fallback workspace but auto-register it.
 - Rejected: extends trust boundary silently, defeats purpose of registration.
@@ -139,9 +151,13 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 
 ### 3.2 `internal/harvest/opencode_sqlite.go`
 
-**Change:** Skip orphan sessions instead of falling back to `WorkspaceHash(dbPath)`.
+**Change:** Two changes in lines 141-164 region:
+1. Skip orphan sessions (no fallback to `WorkspaceHash(dbPath)`)
+2. Remove auto-registration via `UpsertWorkspace`
 
-Current (lines 141-164):
+**Pattern:** Use on-demand `q := sqlc.New(h.pgDB)` to match existing codebase pattern (see line 115 of the same file). The `OpenCodeSQLiteHarvester` struct has NO `queries` field — do NOT add one.
+
+Current (lines 141-164, simplified):
 ```go
 worktree := session.Worktree
 if worktree == "" {
@@ -152,7 +168,17 @@ workspaceHash, err := storage.WorkspaceHash(worktree)
 if err != nil {
     return err
 }
-// ... proceeds to upsert under workspaceHash
+
+// Existing auto-registration block (lines ~155-163) — REMOVE THIS:
+// q := sqlc.New(h.pgDB)
+// _, err = q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+//     Hash:     workspaceHash,
+//     RootPath: worktree,
+//     ...
+// })
+// if err != nil { return err }
+
+// ... proceeds to upsert document under workspaceHash
 ```
 
 After:
@@ -161,100 +187,151 @@ if session.Worktree == "" {
     h.logger.Warn().
         Str("session_id", session.ID).
         Msg("opencode harvest: skipping orphan session (no worktree)")
-    return nil  // skip, do not error
+    return nil  // skip, do not error — continue to next session
 }
 workspaceHash, err := storage.WorkspaceHash(session.Worktree)
 if err != nil {
     return err
 }
 
-// Verify registered before proceeding
-if _, err := h.queries.GetWorkspaceByHash(ctx, workspaceHash); err != nil {
+// Verify registered before proceeding (no auto-registration)
+q := sqlc.New(h.pgDB)
+if _, err := q.GetWorkspaceByHash(ctx, workspaceHash); err != nil {
     if errors.Is(err, sql.ErrNoRows) {
         h.logger.Warn().
             Str("session_id", session.ID).
             Str("worktree", session.Worktree).
             Str("workspace_hash", workspaceHash).
-            Msg("opencode harvest: skipping session for unregistered workspace")
+            Msg("opencode harvest: skipping session for unregistered workspace; run nano-brain init --root=<worktree> to register")
         return nil
     }
     return err
 }
-// ... proceeds to upsert
+
+// REMOVED: UpsertWorkspace call. Workspaces must be pre-registered.
+// ... proceeds to upsert document
 ```
+
+**Cache optimization (nice-to-have):** The harvester has a `wsCache` (line 116) caching worktree→hash. Combine the registration check with this cache: if worktree is in wsCache, it was already verified registered for this harvest cycle.
 
 **Test:** Modify `internal/harvest/opencode_sqlite_integration_test.go` to add cases for:
-- Session with empty worktree → skipped, no docs created
-- Session with worktree pointing to unregistered path → skipped, no docs created
+- Session with empty worktree → skipped, no docs created, no workspace auto-registered
+- Session with worktree pointing to unregistered path → skipped, no docs created, no workspace auto-registered
 - Session with worktree matching registered workspace → harvested as before
+- Test fixtures: create temporary SQLite DB matching OpenCode schema (`sessions`, `session_projects` tables) with the three session variants above. Reference existing fixtures in `internal/harvest/opencode_sqlite_integration_test.go` for the schema.
 
-**LoC added:** ~20 lines + ~40 lines test
+**LoC added:** ~25 lines + ~60 lines test
 
-### 3.3 `cmd/nano-brain/main.go`
+### 3.3 `cmd/nano-brain/main.go` + new `cmd/nano-brain/claudecode_init.go`
 
-**Change:** Add workspace registration lookup before initializing Claude Code harvester.
+**Change:** Extract Claude Code harvester init into a testable function, then add workspace registration lookup. The current monolithic `main.go` is untestable without process-level integration tests; extracting the init logic enables unit testing.
 
-Current (lines 371-393):
+**New file** `cmd/nano-brain/claudecode_init.go` exposes:
 ```go
-if cfg.Harvester.ClaudeCode.Enabled {
-    if _, err := os.Stat(cfg.Harvester.ClaudeCode.SessionDir); os.IsNotExist(err) {
-        logger.Warn().Msg("session_dir does not exist, skipping")
-    } else {
-        wsHash, err := storage.WorkspaceHash(cfg.Harvester.ClaudeCode.SessionDir)
-        if err != nil {
-            logger.Warn().Err(err).Msg("failed to compute workspace hash")
-        } else {
-            ch := harvest.NewClaudeCodeHarvester(...)
-            // ... add to runner
-        }
+// initClaudeCodeHarvester returns a configured Claude Code harvester, or nil if
+// it should not be started (e.g., disabled, session_dir missing, or workspace not registered).
+// Returning (nil, nil) means "don't start, no error".
+func initClaudeCodeHarvester(ctx context.Context, cfg ClaudeCodeConfig, db *sql.DB, logger zerolog.Logger) (*harvest.ClaudeCodeHarvester, error) {
+    if !cfg.Enabled { return nil, nil }
+    if _, err := os.Stat(cfg.SessionDir); os.IsNotExist(err) {
+        logger.Warn().Str("session_dir", cfg.SessionDir).
+            Msg("claude code session_dir does not exist; harvester disabled")
+        return nil, nil
     }
+    wsHash, err := storage.WorkspaceHash(cfg.SessionDir)
+    if err != nil { return nil, fmt.Errorf("compute workspace hash: %w", err) }
+
+    q := sqlc.New(db)
+    if _, err := q.GetWorkspaceByHash(ctx, wsHash); err != nil {
+        if errors.Is(err, sql.ErrNoRows) {
+            logger.Warn().
+                Str("session_dir", cfg.SessionDir).
+                Str("computed_workspace_hash", wsHash).
+                Msg("claude code session_dir is not a registered workspace; harvester disabled. Run nano-brain init --root=<path> to register.")
+            return nil, nil
+        }
+        logger.Error().Err(err).Msg("claude code workspace lookup failed (DB error); harvester disabled")
+        return nil, nil
+    }
+
+    return harvest.NewClaudeCodeHarvester(db, logger, cfg.SessionDir, wsHash), nil
 }
 ```
 
-After:
+**Then in `main.go`**, replace lines 371-393 with:
 ```go
-if cfg.Harvester.ClaudeCode.Enabled {
-    if _, err := os.Stat(cfg.Harvester.ClaudeCode.SessionDir); os.IsNotExist(err) {
-        logger.Warn().Msg("session_dir does not exist, skipping")
+if ch, err := initClaudeCodeHarvester(ctx, cfg.Harvester.ClaudeCode, db, logger); err != nil {
+    return fmt.Errorf("claude code harvester init: %w", err)
+} else if ch != nil {
+    if hr == nil {
+        hr = harvest.NewRunner(ch, eq, interval, logger)
     } else {
-        wsHash, err := storage.WorkspaceHash(cfg.Harvester.ClaudeCode.SessionDir)
-        if err != nil {
-            logger.Warn().Err(err).Msg("failed to compute workspace hash")
-        } else {
-            // Verify registered before harvesting
-            q := sqlc.New(db)
-            if _, err := q.GetWorkspaceByHash(ctx, wsHash); err != nil {
-                if errors.Is(err, sql.ErrNoRows) {
-                    logger.Warn().
-                        Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
-                        Str("computed_workspace_hash", wsHash).
-                        Msg("claude code session_dir is not a registered workspace; harvester disabled. Run nano-brain init --root=<path> to register.")
-                } else {
-                    logger.Warn().Err(err).Msg("claude code workspace lookup failed; harvester disabled")
-                }
-            } else {
-                ch := harvest.NewClaudeCodeHarvester(...)
-                // ... add to runner
-            }
-        }
+        hr.AddHarvester(ch)
     }
+    logger.Info().Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+        Dur("interval", interval).Msg("claude code session harvester started")
 }
 ```
 
-**Test:** Add to `cmd/nano-brain/main_test.go` (or wherever main init is tested) — assert that unregistered session_dir results in no harvester added to runner.
+**Note:** This was previously inline at lines 371-393. The extraction is the key change for testability.
 
-**LoC added:** ~15 lines + ~30 lines test
+**Test:** New `cmd/nano-brain/claudecode_init_test.go` covers:
+- enabled=false → returns (nil, nil), no error
+- enabled=true + session_dir absent → returns (nil, nil), WARN logged
+- enabled=true + session_dir present + computed hash unregistered → returns (nil, nil), WARN logged with workspace_hash + "run nano-brain init" guidance
+- enabled=true + session_dir present + computed hash registered → returns valid harvester
+- DB lookup error → returns (nil, nil), ERROR logged
+
+**LoC added:** ~40 lines (extracted func) + ~80 lines test
+
+### 3.3b `internal/mcp/tools.go` — MCP write path enforcement (new layer)
+
+**Why:** MCP `memory_write` and `memory_update` execute outside the Echo HTTP middleware chain. The `/mcp` and `/sse` transports register the streamable handler directly in `routes.go:73-78` without `workspaceMiddleware` or `workspaceRegisteredMiddleware`. Therefore the HTTP middleware does NOT protect MCP writes — verified by exploration of `internal/mcp/tools.go:485-659` (memory_write calls `UpsertDocument` at line 590 and 623, with only a non-empty workspace check).
+
+**Change:** Inside `registerMemoryWrite` (around line 505), after extracting the `workspace` argument and validating it is non-empty, add a registration lookup BEFORE calling `UpsertDocument`:
+
+```go
+// Inside registerMemoryWrite handler, after extracting `workspace` arg:
+if workspace == "" {
+    return mcp.NewToolResultError("workspace_required: workspace argument is required"), nil
+}
+if workspace == "all" {
+    return mcp.NewToolResultError("workspace_all_not_supported: memory_write does not accept the 'all' workspace"), nil
+}
+
+q := sqlc.New(db)
+if _, err := q.GetWorkspaceByHash(ctx, workspace); err != nil {
+    if errors.Is(err, sql.ErrNoRows) {
+        return mcp.NewToolResultError(
+            fmt.Sprintf("workspace_not_registered: workspace_hash %q is not registered; use POST /api/v1/init or memory_init to register first", workspace),
+        ), nil
+    }
+    return mcp.NewToolResultError(fmt.Sprintf("workspace_lookup_failed: %v", err)), nil
+}
+
+// ... existing UpsertDocument logic
+```
+
+The same guard applies to `registerMemoryUpdate` (around line 745), even though it currently only queues reindex requests (it accepts workspace and could be misused to trigger work for an unregistered workspace).
+
+**Test:** New `internal/mcp/tools_security_test.go`:
+- memory_write with registered workspace → succeeds, UpsertDocument called
+- memory_write with unregistered workspace → returns error with `workspace_not_registered`, UpsertDocument NOT called
+- memory_write with `workspace: "all"` → returns error with `workspace_all_not_supported`
+- memory_update with unregistered workspace → returns error
+
+**LoC added:** ~30 lines (per tool) × 2 tools = ~60 lines + ~100 lines test
 
 ### 3.4 `internal/server/middleware.go`
 
-**Change:** New middleware `workspaceRegisteredMiddleware(queries)` that performs `GetWorkspaceByHash` lookup after extracting workspace string. Existing `workspaceMiddleware()` is unchanged.
+**Change:** New middleware `workspaceRegisteredMiddleware(db *sql.DB)` that performs `GetWorkspaceByHash` lookup after extracting workspace string. Existing `workspaceMiddleware()` is unchanged. Uses on-demand `sqlc.New(db)` per request — no shared `WorkspaceQuerier` interface (matches existing codebase pattern).
 
 ```go
 // workspaceRegisteredMiddleware extends workspaceMiddleware with a registration check.
 // Use on write endpoints that should reject unregistered workspaces.
 // Returns HTTP 400 with error="workspace_not_registered" if the hash is not in workspaces table.
 // The special string "all" is rejected (write endpoints do not support cross-workspace writes).
-func workspaceRegisteredMiddleware(q WorkspaceQuerier) echo.MiddlewareFunc {
+func workspaceRegisteredMiddleware(db *sql.DB) echo.MiddlewareFunc {
     return func(next echo.HandlerFunc) echo.HandlerFunc {
         return func(c echo.Context) error {
             workspace, ok := c.Get("workspace").(string)
@@ -270,6 +347,7 @@ func workspaceRegisteredMiddleware(q WorkspaceQuerier) echo.MiddlewareFunc {
                     "message": "this endpoint does not support the 'all' workspace scope; provide a specific registered workspace hash",
                 })
             }
+            q := sqlc.New(db)
             if _, err := q.GetWorkspaceByHash(c.Request().Context(), workspace); err != nil {
                 if errors.Is(err, sql.ErrNoRows) {
                     return c.JSON(http.StatusBadRequest, map[string]string{
@@ -286,15 +364,13 @@ func workspaceRegisteredMiddleware(q WorkspaceQuerier) echo.MiddlewareFunc {
         }
     }
 }
-
-type WorkspaceQuerier interface {
-    GetWorkspaceByHash(ctx context.Context, hash string) (sqlc.Workspace, error)
-}
 ```
+
+No `WorkspaceQuerier` interface needed — middleware constructs `sqlc.New(db)` on demand per request (consistent with `internal/harvest/opencode_sqlite.go:115`). Cost: one PG round-trip per write request (~1-2ms on localhost). No caching layer for v1.
 
 **Applied in `routes.go`** to write endpoints:
 ```go
-write := data.Group("", workspaceRegisteredMiddleware(queries))
+write := data.Group("", workspaceRegisteredMiddleware(db))
 write.POST("/summarize", handlers.TriggerSummarize(...))
 write.POST("/write", handlers.WriteDocument(...))
 write.POST("/embed", handlers.TriggerEmbed(...))
@@ -344,7 +420,9 @@ ALTER TABLE chunks DROP CONSTRAINT IF EXISTS fk_chunks_workspace;
 
 **LoC added:** ~25 lines migration + ~50 lines test
 
-### 3.6 `cmd/nano-brain/cleanup_orphan_workspaces.go` (new file)
+### 3.6 `cmd/nano-brain/cmd_cleanup_orphan_workspaces.go` (new file)
+
+**Pattern reference:** Follow `cmd/nano-brain/cmd_cleanup_stale_raw.go` for command structure (the codebase uses a custom switch-based dispatcher, NOT Cobra).
 
 **New command:**
 ```go
@@ -362,12 +440,23 @@ ALTER TABLE chunks DROP CONSTRAINT IF EXISTS fk_chunks_workspace;
 //
 // Output (apply):
 //   Deleted N documents + N chunks across M unregistered workspaces.
+//   (Embeddings cascade-deleted via existing chunks(id) → embeddings FK.)
 ```
 
-Implementation outline:
+Implementation outline (matches existing codebase pattern — plain `args []string`, no Cobra):
 ```go
-func runCleanupOrphanWorkspacesCmd(cmd *cobra.Command, args []string) error {
-    dryRun, _ := cmd.Flags().GetBool("dry-run")
+func runCleanupOrphanWorkspacesCmd(args []string) error {
+    var dryRun bool
+    fs := flag.NewFlagSet("cleanup-orphan-workspaces", flag.ExitOnError)
+    fs.BoolVar(&dryRun, "dry-run", false, "list orphans without deleting")
+    if err := fs.Parse(args); err != nil { return err }
+
+    // Pre-flight: warn if server is running (race safety)
+    if resp, err := http.Get("http://localhost:3100/health"); err == nil && resp.StatusCode == 200 {
+        fmt.Fprintln(os.Stderr, "WARNING: nano-brain server appears to be running on :3100. Concurrent harvests could re-create orphans. Stop the server before cleanup.")
+        resp.Body.Close()
+    }
+
     cfg := loadConfig()
     db := openDB(cfg)
     defer db.Close()
@@ -518,18 +607,31 @@ If the change breaks production:
 2. **Migration rollback** — `goose down` to revert migration 00011. FK constraints dropped. App resumes pre-fix behavior.
 3. **Data rollback** — orphans deleted by cleanup command CANNOT be restored (deletions are permanent). Mitigation: dry-run output should be saved to a file before applying, so operators know what was lost.
 
-## 8. Open Questions
+## 8. Resolved Decisions (from Metis + Oracle deep-design)
 
-1. **Should we add a metric/counter for rejected-unregistered-workspace events?**
-   - Lean YES — useful for spotting misconfigured harvesters or attack attempts.
-   - Deferred to follow-up if telemetry package needs extension.
+1. **Telemetry metric for rejected-workspace events** — DEFERRED. WARN logs are sufficient for v1 (localhost-only single-operator system). Follow-up if log volume warrants it.
 
-2. **Should the cleanup command be invoked automatically by `nano-brain db:migrate`?**
-   - Lean NO — deleting data should be explicit operator action.
-   - Document in release notes that migration order is: cleanup → migrate.
+2. **Auto-cleanup in `db:migrate`** — REJECTED. Deleting data must be explicit operator action. Migration order documented: STOP → CLEANUP → MIGRATE → START NEW.
 
-3. **Should the `"all"` rejection in `workspaceRegisteredMiddleware` apply to all write endpoints, or only summarize?**
-   - Lean ALL — write semantics with `"all"` are ambiguous and likely buggy.
-   - Could be split into a follow-up if any existing endpoint relies on it.
+3. **`"all"` rejection on write endpoints** — DECIDED YES. All 5 write endpoints reject `"all"`. Verification done: grepped codebase for `workspace: "all"` usage on write paths — no existing client/tool sends this. The MCP `memory_write` also rejects it (per §3.3b).
 
-These are flagged for Metis + Oracle deep-design to confirm.
+4. **`WorkspaceQuerier` interface** — REJECTED. Each consumer uses on-demand `sqlc.New(db)` to match existing codebase pattern (`internal/harvest/opencode_sqlite.go:115`). Avoids circular import risk and unnecessary abstraction.
+
+5. **Cobra command framework** — REJECTED. Cleanup command uses plain `func runCleanupOrphanWorkspacesCmd(args []string) error` to match existing dispatcher (`cmd_cleanup_stale_raw.go`).
+
+6. **MCP write path coverage** — ADDED. New §3.3b validates workspace registration inside MCP tool handlers. MCP bypasses HTTP middleware (verified at `routes.go:73-78`).
+
+7. **Auto-registration removal in OpenCode harvester** — DECIDED YES. The existing `UpsertWorkspace` call in `opencode_sqlite.go:155-163` is removed (per ADR-3). Breaking change documented in release notes.
+
+8. **Cleanup `--output-json` flag** — DEFERRED. Operators MUST run `--dry-run` and redirect output as backup. First-class JSON export deferred to follow-up.
+
+## 9. Follow-ups (Not in This PR)
+
+- **MCP `memory_write` shared `init` tool** — currently MCP cannot register workspaces; operators must use HTTP/CLI. Consider adding `memory_init` tool in follow-up.
+- **Error code shared constants** — extract to `internal/server/errors.go` in style cleanup PR.
+- **WARN vs ERROR log level distinction** — refine per Oracle finding 7.2 in style cleanup PR.
+- **Cache registration check in wsCache** — minor perf optimization per Oracle finding 3.1.
+- **Simplify `DELETE /api/v1/workspaces/:hash` handler** — remove redundant explicit document delete now that FK CASCADE handles it (Oracle finding 5.1).
+- **Auto-cleanup `--output-json`** — first-class backup flag for cleanup command.
+- **Telemetry counter** — track rejected-workspace events (Oracle finding 11.1).
+- **RRI-T Tier 3 regression** — 30 deferred test cases, runs post-merge.

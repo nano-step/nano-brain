@@ -42,6 +42,20 @@ When `cfg.Summarization.Enabled = true` and the summarizer client is available, 
 - **AND** the Claude Code harvester is NOT added to the harvest runner
 - **AND** NO documents are created under that hash
 
+#### Scenario: OpenCode harvester no longer auto-registers workspaces
+
+- **WHEN** the OpenCode SQLite harvester (`internal/harvest/opencode_sqlite.go`) discovers a session whose `worktree` points to a directory that has never been registered via `POST /api/v1/init`
+- **THEN** the harvester SHALL skip the session and log at WARN
+- **AND** the harvester SHALL NOT call `UpsertWorkspace` to create a new entry in the `workspaces` table (this auto-registration behavior is REMOVED)
+- **AND** no document is created for that session
+
+#### Scenario: OpenCode db_root mode unaffected (existing filter)
+
+- **WHEN** server starts with `harvester.opencode.db_root` configured (e.g., `~/.ai-sandbox/opencode-dbs`)
+- **AND** the multi-DB discovery routine `ScanOpenCodeDBRoot` walks the directory
+- **THEN** only DBs whose worktree matches a row in the registered `workspaces` table are returned as active harvesters
+- **AND** this filtering behavior is preserved unchanged by this proposal (it already exists in `cmd/nano-brain/main.go:441`)
+
 ### Requirement: Skip-check uses summary source path
 
 The harvest skip-check SHALL identify already-processed sessions by looking up the summary `source_path` (`summary://<source>/<id>`) when summarizer is active, instead of the raw `<source>://session/<id>` path. Sessions whose summary already exists with matching content hash SHALL be skipped without LLM calls and without DB writes. **Skip-check lookups SHALL use the registered workspace_hash; sessions targeting unregistered workspaces are skipped before reaching this check.**

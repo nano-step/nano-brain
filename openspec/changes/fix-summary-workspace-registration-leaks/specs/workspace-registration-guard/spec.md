@@ -62,6 +62,41 @@ Read endpoints (`/query`, `/search`, `/vsearch`, `/get`, `/multi-get`, `/wake-up
 - **THEN** the request proceeds (the read endpoint's middleware does NOT include `workspaceRegisteredMiddleware`)
 - **AND** the query runs across all workspaces as documented
 
+### Requirement: MCP tool handlers enforce workspace registration
+
+The MCP tool handlers `memory_write` and `memory_update` in `internal/mcp/tools.go` SHALL verify that the `workspace` argument corresponds to a row in the `workspaces` table before invoking `UpsertDocument`, `UpsertChunk`, or any reindex queuing logic. The MCP transport (`/mcp`, `/sse` endpoints) does NOT pass through Echo HTTP middleware, so the `workspaceRegisteredMiddleware` does not protect MCP writes. This requirement closes that gap.
+
+The handlers SHALL:
+1. Reject `workspace == ""` with `mcp.NewToolResultError` containing `workspace_required`.
+2. Reject `workspace == "all"` with `mcp.NewToolResultError` containing `workspace_all_not_supported`.
+3. Reject workspaces not in the `workspaces` table with `mcp.NewToolResultError` containing `workspace_not_registered`.
+4. Return `workspace_lookup_failed` on DB lookup errors.
+
+#### Scenario: memory_write accepts registered workspace
+
+- **WHEN** an MCP client invokes `memory_write` with `{"workspace": "<registered-hash>", "source_path": "x", "content": "y"}`
+- **THEN** the handler proceeds to call `UpsertDocument`
+- **AND** the document is persisted
+
+#### Scenario: memory_write rejects unregistered workspace
+
+- **WHEN** an MCP client invokes `memory_write` with `{"workspace": "unregistered-xyz", "source_path": "x", "content": "y"}`
+- **THEN** the handler returns a tool result error containing the string `workspace_not_registered`
+- **AND** `UpsertDocument` is NOT called
+- **AND** no document row is created
+
+#### Scenario: memory_write rejects "all" workspace
+
+- **WHEN** an MCP client invokes `memory_write` with `{"workspace": "all", ...}`
+- **THEN** the handler returns a tool result error containing the string `workspace_all_not_supported`
+- **AND** `UpsertDocument` is NOT called
+
+#### Scenario: memory_update rejects unregistered workspace
+
+- **WHEN** an MCP client invokes `memory_update` with `{"workspace": "unregistered-xyz", ...}`
+- **THEN** the handler returns a tool result error containing the string `workspace_not_registered`
+- **AND** no reindex job is queued
+
 ### Requirement: DB enforces FK constraint on documents and chunks workspace_hash
 
 The `documents` and `chunks` tables SHALL have foreign key constraints on `workspace_hash` referencing `workspaces(hash)` with `ON DELETE CASCADE`. The constraint SHALL be added via migration `00011_add_fk_documents_workspace.sql`. Attempts to insert a row into `documents` or `chunks` with a `workspace_hash` not present in `workspaces` SHALL be rejected by PostgreSQL with a foreign-key-violation error (SQLSTATE 23503).
@@ -85,9 +120,17 @@ The `documents` and `chunks` tables SHALL have foreign key constraints on `works
 
 - **GIVEN** the database has at least one row in `documents` or `chunks` whose `workspace_hash` is not in `workspaces`
 - **WHEN** the operator runs `nano-brain db:migrate` without first running cleanup
-- **THEN** migration 00011 fails with a PostgreSQL FK violation error
-- **AND** the error message identifies the violating workspace_hash value(s)
-- **AND** the migration is rolled back; no constraint is partially applied
+- **THEN** migration 00011 fails with a PostgreSQL foreign-key-violation error (SQLSTATE 23503)
+- **AND** the error identifies the violating constraint name (`fk_documents_workspace` or `fk_chunks_workspace`) and at least one violating key
+- **AND** the migration is rolled back; no constraint is partially applied (both ALTER TABLE statements run in a single transaction)
+
+#### Scenario: FK constraint rejects orphan UPDATE
+
+- **GIVEN** migration 00011 has been applied
+- **AND** a document row exists for registered workspace W1
+- **WHEN** application code OR direct SQL attempts `UPDATE documents SET workspace_hash = 'not-registered-xyz' WHERE id = '<existing-id>'`
+- **THEN** the UPDATE fails with PostgreSQL error 23503 (foreign_key_violation)
+- **AND** the document row remains unchanged with workspace_hash = W1
 
 ### Requirement: Cleanup command removes orphan documents and chunks
 
