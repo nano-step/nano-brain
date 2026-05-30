@@ -66,11 +66,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v5
+      # Pinned to v4 — v5 breaks classic NPM_TOKEN publish with misleading 404
+      # via npm 11.x OIDC auto-detection (actions/setup-node#1551, npm/cli#8730).
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          always-auth: false
 
       - name: Determine npm tag
         id: npm-tag
