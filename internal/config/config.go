@@ -15,6 +15,22 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// expandTildeForConfig resolves "~/..." to absolute path. Local copy to avoid
+// internal/config → internal/summarize import cycle.
+func expandTildeForConfig(p string) (string, error) {
+	if !strings.HasPrefix(p, "~/") && p != "~" {
+		return p, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if p == "~" {
+		return home, nil
+	}
+	return filepath.Join(home, p[2:]), nil
+}
+
 // Config holds all application configuration.
 type Config struct {
 	Server         ServerConfig         `koanf:"server"`
@@ -126,6 +142,17 @@ type SummarizationConfig struct {
 	MaxTokens         int     `koanf:"max_tokens"`
 	Concurrency       int     `koanf:"concurrency"`
 	RequestsPerSecond float64 `koanf:"requests_per_second"`
+	WriteToDisk       *bool   `koanf:"write_to_disk"`
+	OutputDir         string  `koanf:"output_dir"`
+}
+
+// IsWriteToDiskEnabled returns true unless the operator explicitly set write_to_disk: false.
+// Default is true (Obsidian-compatible disk persistence; see issue #258).
+func (s SummarizationConfig) IsWriteToDiskEnabled() bool {
+	if s.WriteToDisk == nil {
+		return true
+	}
+	return *s.WriteToDisk
 }
 
 // Load loads configuration from file and environment variables.
@@ -215,6 +242,15 @@ func Load(configPath string) (*Config, error) {
 
 	if err := expandPaths(cfg); err != nil {
 		return nil, err
+	}
+
+	// Tilde-expand summary output dir (issue #258).
+	if cfg.Summarization.OutputDir != "" {
+		expanded, err := expandTildeForConfig(cfg.Summarization.OutputDir)
+		if err != nil {
+			return nil, fmt.Errorf("expand output_dir: %w", err)
+		}
+		cfg.Summarization.OutputDir = expanded
 	}
 
 	// Validate configuration

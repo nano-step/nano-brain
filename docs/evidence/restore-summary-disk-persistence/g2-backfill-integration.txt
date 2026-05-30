@@ -1,0 +1,80 @@
+=== RUN   TestBackfill_EmptyDB
+2026/05/30 15:10:56 OK   00001_initial_schema.sql (87.72ms)
+2026/05/30 15:10:56 OK   00002_fix_chunk_unique_constraint.sql (30.83ms)
+2026/05/30 15:10:56 OK   00003_add_source_path_unique.sql (13.61ms)
+2026/05/30 15:10:56 OK   00004_hnsw_embedding_schema.sql (16.94ms)
+2026/05/30 15:10:56 OK   00005_bm25_search_vector.sql (22.5ms)
+2026/05/30 15:10:56 OK   00006_add_supersedes.sql (6.72ms)
+2026/05/30 15:10:56 OK   00007_search_telemetry.sql (10.72ms)
+2026/05/30 15:10:56 OK   00008_knowledge_graph.sql (12.45ms)
+2026/05/30 15:10:56 OK   00009_collection_extensions.sql (9.49ms)
+2026/05/30 15:10:56 OK   00010_drop_content_hash_unique.sql (3.96ms)
+2026/05/30 15:10:56 OK   00011_add_fk_documents_workspace.sql (10.3ms)
+2026/05/30 15:10:56 OK   00012_graph_edge_references.sql (5.97ms)
+2026/05/30 15:10:56 goose: successfully migrated database to version: 12
+--- PASS: TestBackfill_EmptyDB (0.47s)
+=== RUN   TestBackfill_DryRun
+2026/05/30 15:10:56 OK   00001_initial_schema.sql (41.47ms)
+2026/05/30 15:10:56 OK   00002_fix_chunk_unique_constraint.sql (12.16ms)
+2026/05/30 15:10:56 OK   00003_add_source_path_unique.sql (7.87ms)
+2026/05/30 15:10:56 OK   00004_hnsw_embedding_schema.sql (22.07ms)
+2026/05/30 15:10:57 OK   00005_bm25_search_vector.sql (17.82ms)
+2026/05/30 15:10:57 OK   00006_add_supersedes.sql (7.88ms)
+2026/05/30 15:10:57 OK   00007_search_telemetry.sql (10.34ms)
+2026/05/30 15:10:57 OK   00008_knowledge_graph.sql (10.45ms)
+2026/05/30 15:10:57 OK   00009_collection_extensions.sql (5.81ms)
+2026/05/30 15:10:57 OK   00010_drop_content_hash_unique.sql (5.42ms)
+2026/05/30 15:10:57 OK   00011_add_fk_documents_workspace.sql (7.65ms)
+2026/05/30 15:10:57 OK   00012_graph_edge_references.sql (6.13ms)
+2026/05/30 15:10:57 goose: successfully migrated database to version: 12
+    cmd_backfill_summaries_test.go:213: [dry-run] would write: /tmp/TestBackfill_DryRun3374871144/001/dryrun-workspace/opencode_session-alpha_2026-05-30.md
+    cmd_backfill_summaries_test.go:213: [dry-run] would write: /tmp/TestBackfill_DryRun3374871144/001/dryrun-workspace/opencode_session-beta_2026-05-30.md
+    cmd_backfill_summaries_test.go:213: [dry-run] would write: /tmp/TestBackfill_DryRun3374871144/001/dryrun-workspace/opencode_session-gamma_2026-05-30.md
+--- PASS: TestBackfill_DryRun (0.32s)
+=== RUN   TestBackfill_ExportsToFilesystem
+2026/05/30 15:10:57 OK   00001_initial_schema.sql (32.31ms)
+2026/05/30 15:10:57 OK   00002_fix_chunk_unique_constraint.sql (7.28ms)
+2026/05/30 15:10:57 OK   00003_add_source_path_unique.sql (4.86ms)
+2026/05/30 15:10:57 OK   00004_hnsw_embedding_schema.sql (7.5ms)
+2026/05/30 15:10:57 OK   00005_bm25_search_vector.sql (9.05ms)
+2026/05/30 15:10:57 OK   00006_add_supersedes.sql (5.4ms)
+2026/05/30 15:10:57 OK   00007_search_telemetry.sql (11.68ms)
+2026/05/30 15:10:57 OK   00008_knowledge_graph.sql (10.12ms)
+2026/05/30 15:10:57 OK   00009_collection_extensions.sql (6.2ms)
+2026/05/30 15:10:57 OK   00010_drop_content_hash_unique.sql (8.89ms)
+2026/05/30 15:10:57 OK   00011_add_fk_documents_workspace.sql (11.44ms)
+2026/05/30 15:10:57 OK   00012_graph_edge_references.sql (15.81ms)
+2026/05/30 15:10:57 goose: successfully migrated database to version: 12
+--- PASS: TestBackfill_ExportsToFilesystem (0.30s)
+=== RUN   TestBackfill_Idempotent
+2026/05/30 15:10:57 OK   00001_initial_schema.sql (37.69ms)
+2026/05/30 15:10:57 OK   00002_fix_chunk_unique_constraint.sql (6.9ms)
+2026/05/30 15:10:57 OK   00003_add_source_path_unique.sql (5.22ms)
+2026/05/30 15:10:57 OK   00004_hnsw_embedding_schema.sql (11.57ms)
+2026/05/30 15:10:57 OK   00005_bm25_search_vector.sql (12.09ms)
+2026/05/30 15:10:57 OK   00006_add_supersedes.sql (6.46ms)
+2026/05/30 15:10:57 OK   00007_search_telemetry.sql (11.37ms)
+2026/05/30 15:10:57 OK   00008_knowledge_graph.sql (27.24ms)
+2026/05/30 15:10:57 OK   00009_collection_extensions.sql (12.83ms)
+2026/05/30 15:10:57 OK   00010_drop_content_hash_unique.sql (16.52ms)
+2026/05/30 15:10:57 OK   00011_add_fk_documents_workspace.sql (33.31ms)
+2026/05/30 15:10:57 OK   00012_graph_edge_references.sql (39.95ms)
+2026/05/30 15:10:57 goose: successfully migrated database to version: 12
+--- PASS: TestBackfill_Idempotent (0.51s)
+=== RUN   TestBackfill_WorkspaceFilter
+2026/05/30 15:10:58 OK   00001_initial_schema.sql (46.96ms)
+2026/05/30 15:10:58 OK   00002_fix_chunk_unique_constraint.sql (9.51ms)
+2026/05/30 15:10:58 OK   00003_add_source_path_unique.sql (5.87ms)
+2026/05/30 15:10:58 OK   00004_hnsw_embedding_schema.sql (9.8ms)
+2026/05/30 15:10:58 OK   00005_bm25_search_vector.sql (14.88ms)
+2026/05/30 15:10:58 OK   00006_add_supersedes.sql (6.42ms)
+2026/05/30 15:10:58 OK   00007_search_telemetry.sql (13.12ms)
+2026/05/30 15:10:58 OK   00008_knowledge_graph.sql (12.45ms)
+2026/05/30 15:10:58 OK   00009_collection_extensions.sql (8.49ms)
+2026/05/30 15:10:58 OK   00010_drop_content_hash_unique.sql (5.65ms)
+2026/05/30 15:10:58 OK   00011_add_fk_documents_workspace.sql (11.19ms)
+2026/05/30 15:10:58 OK   00012_graph_edge_references.sql (7.33ms)
+2026/05/30 15:10:58 goose: successfully migrated database to version: 12
+--- PASS: TestBackfill_WorkspaceFilter (0.37s)
+PASS
+ok  	github.com/nano-brain/nano-brain/cmd/nano-brain	3.040s

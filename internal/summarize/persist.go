@@ -35,14 +35,18 @@ type Persister struct {
 	linkResolver  *links.Resolver
 	linkExtractor *links.Extractor
 	logger        zerolog.Logger
+	writeToDisk   bool   // write summary markdown to outputDir after DB commit
+	outputDir     string // absolute path (already tilde-expanded by config Load)
 }
 
 // NewPersister constructs a Persister.
-func NewPersister(db *sql.DB, enqueuer PersisterEnqueuer, logger zerolog.Logger) *Persister {
+func NewPersister(db *sql.DB, enqueuer PersisterEnqueuer, writeToDisk bool, outputDir string, logger zerolog.Logger) *Persister {
 	return &Persister{
-		db:       db,
-		enqueuer: enqueuer,
-		logger:   logger.With().Str("component", "summary-persister").Logger(),
+		db:          db,
+		enqueuer:    enqueuer,
+		writeToDisk: writeToDisk,
+		outputDir:   outputDir,
+		logger:      logger.With().Str("component", "summary-persister").Logger(),
 	}
 }
 
@@ -143,6 +147,10 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 		return fmt.Errorf("persist: commit tx: %w", err)
 	}
 
+	if p.writeToDisk && p.outputDir != "" {
+		p.persistToDisk(ctx, summaryMarkdown, meta, docRow.ID, q)
+	}
+
 	if p.linkResolver != nil && p.linkExtractor != nil {
 		p.linkResolver.FlushWorkspace(meta.WorkspaceHash)
 		if err := p.linkExtractor.Extract(ctx, links.Document{
@@ -169,6 +177,32 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 		Msg("summary persisted")
 
 	return nil
+}
+
+// persistToDisk writes the summary markdown to a file under outputDir. Errors
+// are logged but never propagated — DB persist already succeeded; disk is a
+// derivative view. See issue #258.
+func (p *Persister) persistToDisk(ctx context.Context, summaryMarkdown string, meta SessionMetadata, _ uuid.UUID, q *sqlc.Queries) {
+	ws, err := q.GetWorkspaceByHash(ctx, meta.WorkspaceHash)
+	var wsName string
+	if err == nil {
+		wsName = ws.Name
+	}
+	targetPath := BuildDiskPath(p.outputDir, wsName, meta.WorkspaceHash, string(meta.Source), meta.Title, meta.CreatedAt)
+	if err := EnsureDir(targetPath); err != nil {
+		p.logger.Warn().Err(err).Str("path", targetPath).Msg("disk persist: ensureDir failed")
+		return
+	}
+	finalPath, err := ResolveCollision(targetPath, []byte(summaryMarkdown), meta.SessionID)
+	if err != nil {
+		p.logger.Warn().Err(err).Str("path", targetPath).Msg("disk persist: resolveCollision failed")
+		return
+	}
+	if err := WriteFileAtomic(finalPath, []byte(summaryMarkdown)); err != nil {
+		p.logger.Warn().Err(err).Str("path", finalPath).Msg("disk persist: writeFileAtomic failed")
+		return
+	}
+	p.logger.Info().Str("path", finalPath).Str("session_id", meta.SessionID).Msg("summary written to disk")
 }
 
 // buildSourcePath returns the canonical source path for summary documents.

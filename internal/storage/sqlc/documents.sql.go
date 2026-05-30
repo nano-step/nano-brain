@@ -280,6 +280,65 @@ func (q *Queries) ListSessionDocumentsByWorkspace(ctx context.Context, arg ListS
 	return items, nil
 }
 
+const listSummaryDocumentsForBackfill = `-- name: ListSummaryDocumentsForBackfill :many
+SELECT id, workspace_hash, content_hash, title, content, source_path, tags, metadata, created_at
+FROM documents
+WHERE collection = 'session-summary'
+  AND ($1::text = '' OR workspace_hash = $1)
+  AND ($2::timestamptz IS NULL OR created_at >= $2)
+ORDER BY created_at ASC
+`
+
+type ListSummaryDocumentsForBackfillParams struct {
+	Column1 string
+	Column2 time.Time
+}
+
+type ListSummaryDocumentsForBackfillRow struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+	ContentHash   string
+	Title         string
+	Content       string
+	SourcePath    string
+	Tags          []string
+	Metadata      pqtype.NullRawMessage
+	CreatedAt     time.Time
+}
+
+func (q *Queries) ListSummaryDocumentsForBackfill(ctx context.Context, arg ListSummaryDocumentsForBackfillParams) ([]ListSummaryDocumentsForBackfillRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSummaryDocumentsForBackfill, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSummaryDocumentsForBackfillRow
+	for rows.Next() {
+		var i ListSummaryDocumentsForBackfillRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.ContentHash,
+			&i.Title,
+			&i.Content,
+			&i.SourcePath,
+			pq.Array(&i.Tags),
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSymbolsByWorkspace = `-- name: ListSymbolsByWorkspace :many
 SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, metadata, created_at, updated_at
 FROM documents

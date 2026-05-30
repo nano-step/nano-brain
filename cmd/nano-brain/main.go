@@ -120,6 +120,9 @@ func main() {
 		case "reset-embeddings":
 			runResetEmbeddingsCmd(args[1:])
 			return
+		case "backfill-summaries":
+			runBackfillSummariesCmd(args[1:])
+			return
 		case "cleanup-stale-raw":
 			runCleanupStaleRawCmd(args[1:])
 			return
@@ -538,7 +541,13 @@ func buildHarvestSummarizer(cfg *config.Config, db *sql.DB, eq *embed.Queue, log
 	if eq != nil {
 		enqueuer = eq
 	}
-	persister := summarize.NewPersister(db, enqueuer, logger)
+	persister := summarize.NewPersister(
+		db,
+		enqueuer,
+		cfg.Summarization.IsWriteToDiskEnabled(),
+		cfg.Summarization.OutputDir,
+		logger,
+	)
 	if persister == nil {
 		logger.Warn().Msg("persister init returned nil, disabling summarization")
 		return nil

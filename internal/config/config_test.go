@@ -478,7 +478,7 @@ func contains(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
 
-func TestSummarizationConfig_OutputDirIgnored(t *testing.T) {
+func TestSummarizationConfig_OutputDirHonored(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yml")
 
@@ -505,6 +505,106 @@ func TestSummarizationConfig_OutputDirIgnored(t *testing.T) {
 	}
 	if cfg.Summarization.Model != "test-model" {
 		t.Errorf("expected Model=%q, got %q", "test-model", cfg.Summarization.Model)
+	}
+	if cfg.Summarization.OutputDir != "/tmp/foo" {
+		t.Errorf("expected OutputDir=%q, got %q", "/tmp/foo", cfg.Summarization.OutputDir)
+	}
+}
+
+func TestSummarizationConfig_WriteToDiskDefaultsTrue(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yamlContent := `summarization:
+  enabled: true
+  provider_url: "https://test/v1"
+  model: "test-model"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if !cfg.Summarization.IsWriteToDiskEnabled() {
+		t.Error("expected IsWriteToDiskEnabled()=true (default), got false")
+	}
+}
+
+func TestSummarizationConfig_WriteToDiskExplicitFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yamlContent := `summarization:
+  enabled: true
+  provider_url: "https://test/v1"
+  model: "test-model"
+  write_to_disk: false
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if cfg.Summarization.IsWriteToDiskEnabled() {
+		t.Error("expected IsWriteToDiskEnabled()=false (explicit), got true")
+	}
+}
+
+func TestSummarizationConfig_OutputDirTildeExpanded(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yamlContent := `summarization:
+  enabled: true
+  provider_url: "https://test/v1"
+  model: "test-model"
+  output_dir: "~/foo/bar"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if strings.HasPrefix(cfg.Summarization.OutputDir, "~/") {
+		t.Errorf("expected OutputDir to be tilde-expanded, got %q", cfg.Summarization.OutputDir)
+	}
+	if !strings.HasSuffix(cfg.Summarization.OutputDir, "/foo/bar") {
+		t.Errorf("expected OutputDir to end with /foo/bar, got %q", cfg.Summarization.OutputDir)
+	}
+}
+
+func TestSummarizationConfig_OutputDirDefaultPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yamlContent := `summarization:
+  enabled: true
+  provider_url: "https://test/v1"
+  model: "test-model"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if !strings.HasSuffix(cfg.Summarization.OutputDir, "/.nano-brain/summaries") {
+		t.Errorf("expected OutputDir to end with /.nano-brain/summaries, got %q", cfg.Summarization.OutputDir)
 	}
 }
 
