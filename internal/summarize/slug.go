@@ -24,7 +24,7 @@ const (
 // portability across macOS, Linux, and Obsidian-on-mobile matters more than
 // preserving original glyphs. The session title itself remains intact in the
 // markdown body's frontmatter-equivalent header.
-func slugify(title string) string {
+func Slugify(title string) string {
 	var b strings.Builder
 	b.Grow(len(title))
 

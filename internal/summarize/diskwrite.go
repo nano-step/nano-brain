@@ -11,7 +11,7 @@ import (
 
 // ensureDir creates the parent directory of filePath (and all intermediate
 // dirs) with mode 0o755. Returns nil if the directory already exists.
-func ensureDir(filePath string) error {
+func EnsureDir(filePath string) error {
 	dir := filepath.Dir(filePath)
 	return os.MkdirAll(dir, 0o755)
 }
@@ -19,7 +19,7 @@ func ensureDir(filePath string) error {
 // writeFileAtomic writes content to path atomically: write to path+".tmp",
 // fsync the tmp file, then os.Rename to final path. Prevents partial files
 // on crash. Caller must ensure parent dir exists (call ensureDir first).
-func writeFileAtomic(path string, content []byte) error {
+func WriteFileAtomic(path string, content []byte) error {
 	tmpPath := path + ".tmp"
 	f, err := os.Create(tmpPath)
 	if err != nil {
@@ -54,7 +54,7 @@ func writeFileAtomic(path string, content []byte) error {
 //     where sha8 is first 8 chars of sha256(sessionID) hex, inserted before ".md"
 // Caller writes to the returned path. SessionID is used to make the suffix
 // stable across re-runs (same session always gets same suffix).
-func resolveCollision(path string, content []byte, sessionID string) (string, error) {
+func ResolveCollision(path string, content []byte, sessionID string) (string, error) {
 	existing, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

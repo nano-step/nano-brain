@@ -95,7 +95,7 @@ func TestPersister_Save_UsesWorkspaceHashFromMeta(t *testing.T) {
 	pgDB := setupPersistTestPG(t)
 
 	logger := zerolog.Nop()
-	p := NewPersister(pgDB, nil, logger)
+	p := NewPersister(pgDB, nil, false, "", logger)
 
 	ctx := context.Background()
 	q := sqlc.New(pgDB)
@@ -146,7 +146,7 @@ func TestPersister_Save_UsesWorkspaceHashFromMeta(t *testing.T) {
 func TestPersister_Save_RejectsUnregisteredWorkspace(t *testing.T) {
 	pgDB := setupPersistTestPG(t)
 
-	p := NewPersister(pgDB, nil, zerolog.Nop())
+	p := NewPersister(pgDB, nil, false, "", zerolog.Nop())
 	ctx := context.Background()
 
 	meta := SessionMetadata{
@@ -178,7 +178,7 @@ func TestPersister_Save_RejectsUnregisteredWorkspace(t *testing.T) {
 func TestPersister_Save_AcceptsRegisteredWorkspace(t *testing.T) {
 	pgDB := setupPersistTestPG(t)
 
-	p := NewPersister(pgDB, nil, zerolog.Nop())
+	p := NewPersister(pgDB, nil, false, "", zerolog.Nop())
 	ctx := context.Background()
 	q := sqlc.New(pgDB)
 

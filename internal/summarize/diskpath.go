@@ -15,7 +15,7 @@ const workspaceFallbackPrefix = "ws-"
 //
 // Required because YAML config commonly uses "~/.nano-brain/summaries"
 // and Go's os.Open does not expand tilde itself (issue #258).
-func expandTilde(p string) (string, error) {
+func ExpandTilde(p string) (string, error) {
 	if !strings.HasPrefix(p, "~/") && p != "~" {
 		return p, nil
 	}
@@ -35,7 +35,7 @@ func expandTilde(p string) (string, error) {
 //
 // The name is also slugified to guarantee filesystem safety (handles names
 // with spaces, slashes, or other special characters).
-func workspaceFolderName(name, hash string) string {
+func WorkspaceFolderName(name, hash string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		if len(hash) >= 12 {
@@ -43,7 +43,7 @@ func workspaceFolderName(name, hash string) string {
 		}
 		return workspaceFallbackPrefix + hash
 	}
-	return slugify(name)
+	return Slugify(name)
 }
 
 // buildDiskPath returns the full filesystem path where a summary should
@@ -53,11 +53,11 @@ func workspaceFolderName(name, hash string) string {
 //
 // outputDir MUST already be tilde-expanded (caller responsibility).
 // All path components are sanitized to be filesystem-safe.
-func buildDiskPath(outputDir, workspaceName, workspaceHash, source, title string, date time.Time) string {
-	ws := workspaceFolderName(workspaceName, workspaceHash)
-	titleSlug := slugify(title)
+func BuildDiskPath(outputDir, workspaceName, workspaceHash, source, title string, date time.Time) string {
+	ws := WorkspaceFolderName(workspaceName, workspaceHash)
+	titleSlug := Slugify(title)
 	dateStr := date.UTC().Format("2006-01-02")
-	srcSlug := slugify(source)
+	srcSlug := Slugify(source)
 	filename := fmt.Sprintf("%s_%s_%s.md", srcSlug, titleSlug, dateStr)
 	return filepath.Join(outputDir, ws, filename)
 }
