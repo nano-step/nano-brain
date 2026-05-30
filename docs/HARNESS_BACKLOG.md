@@ -153,3 +153,29 @@ Tiny
 ### Status
 
 implemented — added Forbidden Practice #14 to HARNESS.md. Constructor error logging already applied in `main.go` commit `afb0d2f`.
+
+---
+
+## Live rescan of db_root on each harvest tick
+
+### Problem
+
+`buildOpenCodeHarvesters` runs once at startup. New per-project OpenCode DBs
+added after the daemon starts are not discovered until restart.
+
+### Proposed solution
+
+On each `Runner.Run` tick (or a dedicated rescan ticker), call
+`ScanOpenCodeDBRoot` again and diff against the current harvester set.
+Add new harvesters; remove stale ones (workspace deregistered).
+
+### Risk
+
+Normal — touches `Runner` internals and liveness semantics. Defer until
+a user reports needing it.
+
+### Status
+
+deferred — startup-only discovery chosen for v1 (simpler, lower risk).
+Inline TODO comment in `buildOpenCodeHarvesters` references this entry.
+Tracking: opencode-multi-db-discovery (#199), Task 5.

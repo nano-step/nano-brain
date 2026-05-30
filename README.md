@@ -111,7 +111,9 @@ search:
 
 harvester:
   opencode:
-    session_dir: ""             # e.g., ~/.local/share/opencode/storage
+    db_root: ""                 # e.g., ~/.ai-sandbox/opencode-dbs (multi-DB, highest priority)
+    db_path: ""                 # e.g., ~/.local/share/opencode/opencode.db (single DB)
+    session_dir: ""             # e.g., ~/.local/share/opencode/storage (legacy JSON)
   claudecode:
     enabled: false
     session_dir: ""
@@ -136,18 +138,18 @@ summarization:
   provider_url: ""              # OpenAI-compatible endpoint, e.g. https://ai-proxy.example.com/v1
   api_key: ""                   # or set NANO_BRAIN_SUMMARIZE_API_KEY env var
   model: "nano-brain"           # model name passed to the provider
-  max_tokens: 4096              # max tokens per LLM completion
+  max_tokens: 8000              # max tokens per LLM completion
   concurrency: 3                # parallel map-phase LLM calls
-  output_dir: "~/.nano-brain/summaries"  # directory for .md summary files
 ```
 
 ### Session Summarization
 
 When `summarization.enabled: true`, nano-brain automatically generates structured markdown summaries of each harvested session using an OpenAI-compatible LLM provider. Summaries are:
 
-- Written as `.md` files to `output_dir` (`{source}_{title-slug}_{YYYY-MM-DD}.md`)
-- Stored in the vector DB under collection `session-summary` for semantic search
+- Stored in PostgreSQL under collection `session-summary` for semantic search via the standard query/vsearch API (PG is the source of truth)
 - Idempotent — unchanged sessions are skipped; re-harvested sessions overwrite old summaries
+
+> **Note**: as of `harvest-summary-only` (May 2026), summaries are no longer written to disk as `.md` files. The legacy `output_dir` YAML key is silently ignored for backward compat. Any pre-existing files under `~/.nano-brain/summaries/` are stale artifacts and can be safely deleted.
 
 **Quick setup with ai-proxy:**
 
@@ -157,9 +159,8 @@ summarization:
   provider_url: "https://ai-proxy.example.com/v1"
   api_key: ""           # set NANO_BRAIN_SUMMARIZE_API_KEY instead
   model: "claude-sonnet-4-5"
-  max_tokens: 4096
+  max_tokens: 8000
   concurrency: 3
-  output_dir: "~/.nano-brain/summaries"
 ```
 
 Or via environment variable:
@@ -176,7 +177,9 @@ Large sessions (100K+ tokens) are handled via map-reduce chunking — no session
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `VOYAGE_API_KEY` | Voyage AI API key |
-| `OPENCODE_STORAGE_DIR` | OpenCode session directory |
+| `OPENCODE_DB_ROOT` | OpenCode per-project DB root directory (multi-DB mode) |
+| `OPENCODE_DB_PATH` | OpenCode single SQLite database path |
+| `OPENCODE_STORAGE_DIR` | OpenCode session directory (legacy) |
 | `NANO_BRAIN_SUMMARIZE_API_KEY` | API key for the summarization LLM provider |
 | `NANO_BRAIN_*` | Override any config (e.g., `NANO_BRAIN_SERVER_PORT=3100`) |
 
@@ -234,6 +237,7 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | `nano-brain vsearch` | Vector similarity search |
 | `nano-brain collection add\|remove\|list` | Manage collections |
 | `nano-brain harvest` | Trigger session harvesting |
+| `nano-brain cleanup-stale-raw [--dry-run]` | Delete pre-#192 raw OpenCode session docs superseded by summaries |
 | `nano-brain bench generate\|run\|compare\|stress` | Benchmarking suite |
 | `nano-brain db:migrate` | Run pending goose migrations |
 | `nano-brain db:migrate --from-v1 <path>` | Import V1 SQLite data |

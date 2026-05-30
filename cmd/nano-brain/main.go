@@ -128,6 +128,9 @@ func main() {
 		case "reset-embeddings":
 			runResetEmbeddingsCmd(args[1:])
 			return
+		case "cleanup-stale-raw":
+			runCleanupStaleRawCmd(args[1:])
+			return
 		case "version":
 			runVersionCmd(args[1:])
 			return
@@ -351,6 +354,13 @@ func startServer(configPath string) {
 		}
 	}
 
+	if cfg.Harvester.OpenCode.DBRoot == "" {
+		if detected := detectOpenCodeDBRoot(); detected != "" {
+			cfg.Harvester.OpenCode.DBRoot = detected
+			logger.Info().Str("path", detected).Msg("auto-detected opencode db root")
+		}
+	}
+
 	var harvestSummarizer *summarize.HarvestSummarizer
 	if cfg.Summarization.Enabled {
 		harvestSummarizer = buildHarvestSummarizer(cfg, db, eq, logger)
@@ -361,28 +371,15 @@ func startServer(configPath string) {
 		}
 	}
 
-	if cfg.Harvester.OpenCode.DBPath != "" {
-		oh := harvest.NewOpenCodeSQLiteHarvester(db, logger, cfg.Harvester.OpenCode.DBPath)
-		hr = harvest.NewRunner(oh, eq, interval, logger)
-		logger.Info().
-			Str("db_path", cfg.Harvester.OpenCode.DBPath).
-			Dur("interval", interval).
-			Msg("opencode sqlite harvester started")
-	} else if cfg.Harvester.OpenCode.SessionDir != "" {
-		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
-		if err != nil {
-			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode harvester")
-		} else {
-			oh := harvest.NewOpenCodeHarvester(db, logger, cfg.Harvester.OpenCode.SessionDir, wsHash)
+	ocHarvesters, ocMode := buildOpenCodeHarvesters(ctx, cfg, db, queries, logger)
+	for i, oh := range ocHarvesters {
+		if i == 0 {
 			hr = harvest.NewRunner(oh, eq, interval, logger)
-			logger.Info().
-				Str("session_dir", cfg.Harvester.OpenCode.SessionDir).
-				Dur("interval", interval).
-				Msg("opencode session harvester started")
+		} else {
+			hr.AddHarvester(oh)
 		}
-	} else {
-		logger.Info().Msg("opencode harvester disabled (no db_path or session_dir configured)")
 	}
+	srv.SetHarvestStatus(ocMode, cfg.Harvester.OpenCode.DBRoot, cfg.Harvester.OpenCode.DBPath, cfg.Harvester.OpenCode.SessionDir, len(ocHarvesters))
 
 	if cfg.Harvester.ClaudeCode.Enabled {
 		if _, err := os.Stat(cfg.Harvester.ClaudeCode.SessionDir); os.IsNotExist(err) {
@@ -430,6 +427,87 @@ func startServer(configPath string) {
 	if err := g.Wait(); err != nil {
 		logger.Fatal().Err(err).Msg("server exited with error")
 	}
+}
+
+// buildOpenCodeHarvesters constructs OpenCode harvesters in priority order:
+//
+//  1. db_root — scan for per-project SQLite DBs matching registered workspaces
+//  2. db_path — single SQLite DB (existing behavior)
+//  3. session_dir — legacy JSON session harvester
+//
+// Returns a slice of harvesters (possibly empty). The caller wires the first
+// into harvest.NewRunner and the rest via hr.AddHarvester.
+//
+// TODO: live rescan on tick — see docs/HARNESS_BACKLOG.md
+func buildOpenCodeHarvesters(ctx context.Context, cfg *config.Config, db *sql.DB, queries *sqlc.Queries, logger zerolog.Logger) ([]harvest.Harvester, string) {
+	dbRootExplicit := os.Getenv("OPENCODE_DB_ROOT") != "" || cfg.Harvester.OpenCode.DBRoot != ""
+
+	if cfg.Harvester.OpenCode.DBRoot != "" {
+		workspaces, err := queries.ListWorkspaces(ctx)
+		if err != nil {
+			logger.Warn().Err(err).Msg("db_root mode: failed to list workspaces, falling through")
+		} else {
+			registered := make(map[string]string, len(workspaces))
+			for _, ws := range workspaces {
+				registered[ws.Path] = ws.Hash
+			}
+			discovered := harvest.ScanOpenCodeDBRoot(ctx, cfg.Harvester.OpenCode.DBRoot, registered, logger)
+			if len(discovered) > 0 {
+				worktreeCounts := make(map[string]int, len(discovered))
+				for _, d := range discovered {
+					worktreeCounts[d.Worktree]++
+				}
+				var harvesters []harvest.Harvester
+				for _, d := range discovered {
+					h := harvest.NewOpenCodeSQLiteHarvester(db, logger, d.DBPath)
+					harvesters = append(harvesters, h)
+					logger.Info().
+						Str("db_path", d.DBPath).
+						Str("worktree", d.Worktree).
+						Str("workspace_hash", d.WorkspaceHash).
+						Msg("opencode per-project db harvester registered")
+				}
+				for worktree, n := range worktreeCounts {
+					if n > 1 {
+						logger.Info().Str("worktree", worktree).Int("db_count", n).
+							Msg("multiple per-project DBs map to the same worktree — content-hash dedup will collapse duplicates")
+					}
+				}
+				return harvesters, "db_root"
+			}
+			if dbRootExplicit {
+				logger.Warn().Str("db_root", cfg.Harvester.OpenCode.DBRoot).
+					Msg("db_root configured but no per-project DBs matched registered workspaces — falling through")
+			} else {
+				logger.Info().Str("db_root", cfg.Harvester.OpenCode.DBRoot).
+					Msg("auto-detected db_root produced no matches — falling through")
+			}
+		}
+	}
+
+	if cfg.Harvester.OpenCode.DBPath != "" {
+		oh := harvest.NewOpenCodeSQLiteHarvester(db, logger, cfg.Harvester.OpenCode.DBPath)
+		logger.Info().
+			Str("db_path", cfg.Harvester.OpenCode.DBPath).
+			Msg("opencode sqlite harvester started")
+		return []harvest.Harvester{oh}, "db_path"
+	}
+
+	if cfg.Harvester.OpenCode.SessionDir != "" {
+		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode harvester")
+			return nil, "disabled"
+		}
+		oh := harvest.NewOpenCodeHarvester(db, logger, cfg.Harvester.OpenCode.SessionDir, wsHash)
+		logger.Info().
+			Str("session_dir", cfg.Harvester.OpenCode.SessionDir).
+			Msg("opencode session harvester started")
+		return []harvest.Harvester{oh}, "session_dir"
+	}
+
+	logger.Info().Msg("opencode harvester disabled (no db_root, db_path, or session_dir configured)")
+	return nil, "disabled"
 }
 
 // buildHarvestSummarizer constructs the harvest summarizer with graceful degradation.

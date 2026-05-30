@@ -205,23 +205,29 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 
 ### Git push workflow (container environment)
 
-SSH is blocked inside agent containers. Always push via HTTPS using the `kokorolx` gh token:
+`origin` is configured to HTTPS (`https://github.com/nano-step/nano-brain.git`) for both fetch and push — no SSH key required. Push uses the gh credential helper to inject the active token automatically.
 
 ```bash
-# Step 1 — switch to kokorolx account (has write access to nano-step/nano-brain)
-gh auth switch --user kokorolx
+# Step 1 — make sure kokorolx is the active gh user (has write access to nano-step/nano-brain)
+gh auth status              # confirm "✓ Logged in to github.com as kokorolx"
+gh auth switch --user kokorolx   # only if currently on nus-rick
 
-# Step 2 — push using HTTPS with token (SSH won't work in container)
-KOKOROLX_TOKEN=$(gh auth token --user kokorolx) && \
-  git push "https://kokorolx:${KOKOROLX_TOKEN}@github.com/nano-step/nano-brain.git" master <tag>
+# Step 2 — push normally; gh credential helper handles auth
+git push origin <branch>
+git push origin <tag>
 
-# Step 3 — close GitHub issues (now has write permission)
+# Step 3 — close GitHub issues
 gh issue close <number> --repo nano-step/nano-brain --comment "..."
 
-# Step 4 — switch back to nus-rick for day-to-day gh CLI use
+# Step 4 (optional) — switch back to nus-rick for day-to-day gh CLI use
 gh auth switch --user nus-rick
 ```
 
-**Why:** `origin` uses `git@github.com` (SSH). Container has no SSH key. `kokorolx` token has `repo` scope and is the repo owner — use it for push + issue close. `nus-rick` is a contributor only.
+**Why:** Container has no SSH key, so `origin` is HTTPS. `kokorolx` has `repo` scope and is the repo owner — required for push + issue close. `nus-rick` is a contributor only. If `git push` ever complains about credentials, fall back to:
+
+```bash
+KOKOROLX_TOKEN=$(gh auth token --user kokorolx)
+git push "https://kokorolx:${KOKOROLX_TOKEN}@github.com/nano-step/nano-brain.git" <branch>
+```
 
 <!-- HARNESS:END -->
