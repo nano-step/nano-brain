@@ -75,6 +75,8 @@ func maskSensitive(s string) string {
 	s = re.ReplaceAllString(s, "${1}***${3}")
 	re2 := regexp.MustCompile(`(voyage_api_key:\s*).+`)
 	s = re2.ReplaceAllString(s, "${1}***")
+	re3 := regexp.MustCompile(`(api_key:\s*).+`)
+	s = re3.ReplaceAllString(s, "${1}***")
 	return s
 }
 
