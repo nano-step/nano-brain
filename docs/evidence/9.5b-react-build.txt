@@ -1,0 +1,35 @@
+=== npm run build ===
+
+> @nano-step/nano-brain-web@0.0.1 build
+> tsc --noEmit && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 181 modules transformed.
+rendering chunks...
+computing gzip size...
+../internal/server/webui/dist/index.html                   0.58 kB │ gzip:  0.33 kB
+../internal/server/webui/dist/assets/index-BHIw7DKS.css    8.95 kB │ gzip:  2.31 kB
+../internal/server/webui/dist/assets/react-DDhhcKeE.js     0.03 kB │ gzip:  0.05 kB
+../internal/server/webui/dist/assets/index-CfoaFPX1.js    14.93 kB │ gzip:  5.39 kB
+../internal/server/webui/dist/assets/query-uMLdydpi.js    38.63 kB │ gzip: 11.67 kB
+../internal/server/webui/dist/assets/router-CzhP1bwv.js  229.38 kB │ gzip: 73.69 kB
+✓ built in 1.67s
+
+=== Bundle sizes (raw) ===
+total 300
+drwxr-xr-x 7 agent agent    224 May 30 13:43 .
+drwxr-xr-x 4 agent agent    128 May 30 13:43 ..
+-rw-r--r-- 1 agent agent   8945 May 30 13:43 index-BHIw7DKS.css
+-rw-r--r-- 1 agent agent  14953 May 30 13:43 index-CfoaFPX1.js
+-rw-r--r-- 1 agent agent  38633 May 30 13:43 query-uMLdydpi.js
+-rw-r--r-- 1 agent agent     30 May 30 13:43 react-DDhhcKeE.js
+-rw-r--r-- 1 agent agent 229381 May 30 13:43 router-CzhP1bwv.js
+
+=== Gzip estimates ===
+router-CzhP1bwv.js: 229.38 KB raw → ~73.69 KB gzip
+query-uMLdydpi.js:  38.63 KB raw  → ~11.67 KB gzip
+index-CfoaFPX1.js:  14.93 KB raw  → ~5.39 KB gzip
+react-DDhhcKeE.js:   0.03 KB raw  → ~0.05 KB gzip
+index-BHIw7DKS.css:  8.95 KB raw  → ~2.31 KB gzip
+Total gzipped: ~93.11 KB (well under 600 KB budget)
