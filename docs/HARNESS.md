@@ -500,6 +500,90 @@ and retro output template.
     // Pass only non-nil values to registry
     ```
 
+## Manual npm Publish Runbook
+
+Fallback for when the `npm-publish` job in `.github/workflows/release.yml` fails
+(`E404`, `ENEEDAUTH`, or token-permission errors) and an unblocked release is
+needed before CI is fixed. Use this only when:
+
+- The auto-tag + release pipeline has already produced a valid git tag and
+  GitHub Release (binaries are uploaded) — verify via
+  `gh release view v<YYYY>.<M>.<DDNN> --repo nano-step/nano-brain`.
+- Only the npm registry step failed; binaries on GitHub are intact.
+- The fix to CI (token rotation, OIDC migration, etc.) is being tracked
+  in a separate GitHub issue and won't land in the next few minutes.
+
+### Prerequisites
+
+1. **npm login as a maintainer** of `@nano-step/nano-brain`. Verify:
+   ```bash
+   npm whoami                                    # must be nano-step001 or nhonh
+   npm view @nano-step/nano-brain maintainers    # confirm whoami is in the list
+   ```
+2. **Clean master worktree.** Stash any WIP first — the steps below mutate
+   `package.json` in-place and you do NOT want those changes mixed with a
+   feature branch.
+   ```bash
+   git checkout master
+   git pull --ff-only origin master
+   git status --short                            # must be empty
+   ```
+3. **Target tag exists.** Pick the latest tag the CI tried to publish:
+   ```bash
+   git tag --list "v$(date -u +%Y.%-m).*" --sort=-v:refname | head -1
+   ```
+
+### Steps
+
+```bash
+# 1. Bump package.json in-place (do NOT commit — workflow expects 0.0.0-dev on master)
+TAG=v2026.5.3004              # use the actual failed tag
+VERSION="${TAG#v}"
+npm version --no-git-tag-version "$VERSION"
+
+# 2. Dry-run to confirm tarball contents (4 files: README, npm/run.js, npm/postinstall.js, package.json)
+npm publish --tag latest --access public --dry-run
+
+# 3. Publish scoped package
+npm publish --tag latest --access public
+
+# 4. Publish unscoped alias — rewrite package.json transiently
+node -e "const p=require('./package.json'); p.name='nano-brain'; delete p.publishConfig; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+npm publish --tag latest
+
+# 5. Restore package.json to its committed state
+git checkout package.json
+
+# 6. Verify both packages on the registry
+npm view @nano-step/nano-brain version dist-tags
+npm view nano-brain version dist-tags
+```
+
+### Evidence to capture
+
+Manual publish is an unusual operation — leave an audit trail:
+
+1. **Comment on the failing CI run's GitHub issue** (or the release issue if
+   one exists) with: tag published, npm versions of both packages,
+   `npm whoami` output (which maintainer published), and a link to the CI
+   run that failed.
+2. **Open or update a follow-up issue** to actually fix CI (token rotation,
+   OIDC migration). Label `change-type:infrastructure`, lane based on root
+   cause. Manual publish is not a fix — it's a workaround.
+
+### Forbidden during manual publish
+
+- **Do NOT commit the bumped `package.json`.** `package.json.version` stays
+  at `0.0.0-dev` on master — auto-tag rewrites it in-place per tag.
+- **Do NOT publish to a different scope or rename the package.** Use the
+  exact names `@nano-step/nano-brain` and `nano-brain` (unscoped alias).
+- **Do NOT publish without `--access public` for the scoped package on
+  the first publish of a version.** npm defaults scoped packages to private.
+- **Do NOT publish from a feature/PR branch.** Master HEAD only — the
+  published artifact must match what the failed CI run would have shipped.
+- **Do NOT skip step 5 (restore `package.json`).** Leaving the bumped
+  version unstaged risks an accidental commit on the next unrelated change.
+
 ## GitHub Issue Tracking
 
 Every user request that triggers harness work (not a pure question) gets a
