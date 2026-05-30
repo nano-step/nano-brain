@@ -63,11 +63,19 @@ After reading file content from disk in `processFile()`, the watcher SHALL valid
 
 After this change, the watcher MUST NOT produce any `SQLSTATE 22021` (invalid byte sequence for encoding UTF8) errors during normal operation. The combination of extension blacklist + UTF-8 validity check is sufficient to prevent any binary content from reaching `UpsertDocumentBySourcePath`.
 
-#### Scenario: Real PNG drop produces zero PG errors
+#### Scenario: Binary file in watched directory triggers zero upserts
 
-- **GIVEN** a workspace registered for `/tmp/test-binary/`
-- **WHEN** a real PNG file (first 8 bytes `\x89PNG\r\n\x1a\n` followed by IHDR chunk + data) is copied into the watched directory
-- **AND** the watcher's debounce timer fires
-- **THEN** the server log contains 0 occurrences of the string `SQLSTATE 22021`
-- **AND** 0 occurrences of `index failed`
-- **AND** 1 occurrence of `skipping binary file (extension)` for the PNG
+- **GIVEN** a watched collection on a temp directory containing `image.png` (real PNG magic bytes)
+- **WHEN** `processFile` is invoked on the PNG path
+- **THEN** the mock querier records `upsertDocCalls == 0` (no DB write attempted)
+- **AND** the test log captures `skipping binary file (extension)`
+
+#### Scenario: PNG-as-txt trap triggers UTF-8 safety net
+
+- **GIVEN** a watched collection on a temp directory containing `data.txt` whose bytes are PNG magic (`\x89PNG\r\n\x1a\n`)
+- **WHEN** `processFile` is invoked on `data.txt`
+- **THEN** the extension check returns false (`.txt` is not in the blacklist)
+- **AND** `os.ReadFile` succeeds
+- **AND** the UTF-8 validity check returns true (bytes are not valid UTF-8)
+- **AND** the mock querier records `upsertDocCalls == 0`
+- **AND** the test log captures `skipping binary file (non-UTF8 content)`

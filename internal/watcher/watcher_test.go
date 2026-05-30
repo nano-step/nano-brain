@@ -298,3 +298,77 @@ func TestTriggerRescanByName(t *testing.T) {
 		t.Fatal("expected TriggerRescanByName to return false for wrong workspace")
 	}
 }
+
+func TestProcessFile_SkipsBinaryExtension(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "image.png")
+	pngBytes := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d}
+	if err := os.WriteFile(fp, pngBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+
+	col := watchedCollection{
+		name:          "testcol",
+		dirPath:       dir,
+		workspaceHash: "ws123",
+		globPattern:   "*",
+	}
+
+	w.processFile(context.Background(), col, fp)
+
+	if mq.upsertDocCalls.Load() != 0 {
+		t.Fatalf("expected binary file to be skipped by extension, got %d upserts", mq.upsertDocCalls.Load())
+	}
+}
+
+func TestProcessFile_SkipsBinaryContentDespiteExtension(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "trap.txt")
+	trapBytes := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
+	if err := os.WriteFile(fp, trapBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+
+	col := watchedCollection{
+		name:          "testcol",
+		dirPath:       dir,
+		workspaceHash: "ws123",
+		globPattern:   "*.txt",
+	}
+
+	w.processFile(context.Background(), col, fp)
+
+	if mq.upsertDocCalls.Load() != 0 {
+		t.Fatalf("expected non-UTF8 content to be skipped by safety net, got %d upserts", mq.upsertDocCalls.Load())
+	}
+}
+
+func TestProcessFile_AcceptsValidUTF8(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "notes.md")
+	if err := os.WriteFile(fp, []byte("# Notes\n\nValid UTF-8 content with emoji: Chào thế giới 👋"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+
+	col := watchedCollection{
+		name:          "testcol",
+		dirPath:       dir,
+		workspaceHash: "ws123",
+		globPattern:   "*.md",
+	}
+
+	w.processFile(context.Background(), col, fp)
+
+	if mq.upsertDocCalls.Load() != 1 {
+		t.Fatalf("expected valid UTF-8 markdown to be indexed, got %d upserts", mq.upsertDocCalls.Load())
+	}
+}

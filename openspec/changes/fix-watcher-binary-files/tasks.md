@@ -41,16 +41,16 @@ Tasks ordered for safe incremental commits. Each phase independently committable
 
 - [ ] **C4** — Commit: `fix(watcher): skip binary files before UTF-8 upsert (#252)`
 
-## Phase D — Integration test (proves end-to-end)
+## Phase D — End-to-end mock-based test (matches existing watcher test pattern)
 
-- [ ] **D1** — Add `internal/watcher/binary_integration_test.go` (real PG via existing test PG harness, see `harvest_adapter_test.go` for setup pattern):
-  - Setup: schema-per-test PG instance + run migrations + register a workspace
-  - Create `t.TempDir()` with: `test.md` (valid markdown), `image.png` (real PNG bytes `\x89PNG\r\n\x1a\n` + small body), `photo.jpg` (real JPEG `\xff\xd8\xff` + body), `data.txt` containing only PNG bytes (UTF-8 trap)
-  - Start watcher pointed at the temp dir, wait for debounce + scan cycle
-  - Assert: query workspace docs → exactly 1 document (the .md). No documents for PNG, JPG, or trap .txt.
-  - Capture log output → assert 0 occurrences of `index failed` or `SQLSTATE 22021`
+Revised from original spec: use `mockQuerier` like all other watcher tests (e.g., `TestProcessFile_SkipsLargeFile`). Real-PG integration is unnecessary because the fix is purely watcher-side; the mock verifies `upsertDocCalls.Load() == 0` which is the exact assertion needed.
 
-- [ ] **D2** — `go test -race -tags=integration ./internal/watcher/...` PASS. Commit: `test(watcher): integration test for binary file skip (#252)`
+- [ ] **D1** — Append to `internal/watcher/watcher_test.go`:
+  - `TestProcessFile_SkipsBinaryExtension` — write `image.png` to `t.TempDir()` with PNG bytes; call `processFile`; assert `upsertDocCalls == 0`.
+  - `TestProcessFile_SkipsBinaryContentDespiteExtension` — write `trap.txt` containing PNG magic bytes; call `processFile`; assert `upsertDocCalls == 0` (UTF-8 safety net catches it).
+  - `TestProcessFile_AcceptsValidUTF8` — write `notes.md` with UTF-8 content; call `processFile`; assert `upsertDocCalls == 1` (regression test for text files).
+
+- [ ] **D2** — `go test -race -short ./internal/watcher/... -v` → all 3 new tests PASS + no regression. Commit: `test(watcher): cover binary file skip + valid UTF-8 happy path (#252)`
 
 ## Phase E — Validation ladder
 
