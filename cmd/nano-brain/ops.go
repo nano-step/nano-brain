@@ -566,6 +566,7 @@ Commands:
    collection         Manage collections (add/remove/list)
    harvest            Trigger session harvesting
    reindex            Queue collection reindex
+   wake-up            Workspace briefing (recent memories, collections, stats)
    logs               View log file (-f to follow, -n <count>)
   docker             Manage Docker Compose (start/stop/status)
   db:migrate         Run database migrations
