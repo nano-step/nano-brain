@@ -233,4 +233,30 @@ KOKOROLX_TOKEN=$(gh auth token --user kokorolx)
 git push "https://kokorolx:${KOKOROLX_TOKEN}@github.com/nano-step/nano-brain.git" <branch>
 ```
 
+### Release flow
+
+Release pipeline is wired through `nano-step/shared-workflows@v1` reusable workflows:
+
+| Branch | Workflow | Effect |
+|---|---|---|
+| `master` push | `.github/workflows/publish-stable.yml` → shared `publish-stable.yml@v1` | Conventional-commit semver bump → CHANGELOG update → tag `vX.Y.Z` → push tag → `npm publish --tag latest` → create GH Release |
+| `beta` push | `.github/workflows/publish-beta.yml` → shared `publish-beta.yml@v1` | Bump to `<base>-beta.<run>` → `npm publish --tag beta` |
+| `v*` tag push | `.github/workflows/release.yml` | Build 4-platform Go binaries (linux/darwin × amd64/arm64) → attach to existing GH Release |
+| PR opened/sync | `.github/workflows/gemini-review.yml` → shared `gemini-review.yml@v1` | Gemini code review comment on PR |
+
+Required repo secrets (set via `gh secret set --repo nano-step/nano-brain`):
+
+| Secret | Used by | Source |
+|---|---|---|
+| `NPM_TOKEN` | publish-stable, publish-beta | `npm token create --read-only=false` (Automation type) |
+| `RELEASE_PAT` | (legacy auto-tag — no longer used; can be removed) | classic PAT with `repo` scope |
+| `GEMINI_API_KEY` | gemini-review | https://aistudio.google.com/apikey |
+
+**Conventional commit prefixes** drive semver bump in publish-stable:
+- `feat!:`, `BREAKING CHANGE` → **major**
+- `feat:` → **minor**
+- `fix:`, `refactor:`, `chore:`, `docs:` → **patch** (default)
+
+**Skip-release marker**: include `[skip ci]` in the commit subject to bypass publish-stable. Bot commits (`github-actions[bot]`) are auto-skipped to prevent infinite loops.
+
 <!-- HARNESS:END -->
