@@ -28,3 +28,37 @@ ORDER BY w.name;
 
 -- name: DeleteWorkspace :exec
 DELETE FROM workspaces WHERE hash = $1;
+
+-- name: ListOrphanDocumentWorkspaces :many
+SELECT d.workspace_hash AS workspace_hash, COUNT(*) AS doc_count
+FROM documents d
+LEFT JOIN workspaces w ON d.workspace_hash = w.hash
+WHERE w.hash IS NULL
+GROUP BY d.workspace_hash
+ORDER BY doc_count DESC;
+
+-- name: CountOrphanDocuments :one
+SELECT COUNT(*) FROM documents d
+LEFT JOIN workspaces w ON d.workspace_hash = w.hash
+WHERE w.hash IS NULL;
+
+-- name: CountOrphanChunks :one
+SELECT COUNT(*) FROM chunks c
+LEFT JOIN workspaces w ON c.workspace_hash = w.hash
+WHERE w.hash IS NULL;
+
+-- name: DeleteOrphanDocuments :execrows
+DELETE FROM documents
+WHERE workspace_hash IN (
+    SELECT d.workspace_hash FROM documents d
+    LEFT JOIN workspaces w ON d.workspace_hash = w.hash
+    WHERE w.hash IS NULL
+);
+
+-- name: DeleteOrphanChunks :execrows
+DELETE FROM chunks
+WHERE workspace_hash IN (
+    SELECT c.workspace_hash FROM chunks c
+    LEFT JOIN workspaces w ON c.workspace_hash = w.hash
+    WHERE w.hash IS NULL
+);

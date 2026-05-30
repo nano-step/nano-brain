@@ -112,7 +112,7 @@ func TestMemoryWrite_RejectsWorkspaceAll(t *testing.T) {
 		t.Fatal("expected error result for workspace 'all' on write")
 	}
 	text := result.Content[0].(*mcpsdk.TextContent).Text
-	if !strings.Contains(text, "not valid for write") {
+	if !strings.Contains(text, "workspace_all_not_supported") {
 		t.Errorf("unexpected error message: %s", text)
 	}
 }
@@ -133,7 +133,7 @@ func TestMemoryUpdate_RejectsWorkspaceAll(t *testing.T) {
 		t.Fatal("expected error result for workspace 'all' on update")
 	}
 	text := result.Content[0].(*mcpsdk.TextContent).Text
-	if !strings.Contains(text, "not valid for write") {
+	if !strings.Contains(text, "workspace_all_not_supported") {
 		t.Errorf("unexpected error message: %s", text)
 	}
 }

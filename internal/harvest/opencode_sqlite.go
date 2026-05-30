@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -138,29 +139,44 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 		if rawWorktree != "" {
 			worktree = filepath.Clean(rawWorktree)
 		}
+
+		if worktree == "" {
+			h.logger.Warn().
+				Str("session_id", sess.ID).
+				Msg("opencode harvest: skipping orphan session (no worktree)")
+			skipped++
+			continue
+		}
+
 		wsHash, ok := wsCache[worktree]
 		if !ok {
-			var hashErr error
-			if worktree == "" {
-				h.logger.Warn().Str("session_id", sess.ID).Msg("session has no project row, using fallback workspace")
-				wsHash, hashErr = storage.WorkspaceHash(h.dbPath)
-			} else {
-				wsHash, hashErr = storage.WorkspaceHash(worktree)
-			}
+			computedHash, hashErr := storage.WorkspaceHash(worktree)
 			if hashErr != nil {
 				h.logger.Warn().Err(hashErr).Str("session", sess.ID).Msg("workspace hash failed, skipping")
 				errCount++
 				continue
 			}
-			if worktree != "" {
-				rq := sqlc.New(h.pgDB)
-				if _, uErr := rq.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
-					Hash: wsHash,
-					Path: worktree,
-				}); uErr != nil {
-					h.logger.Warn().Err(uErr).Str("worktree", worktree).Msg("upsert workspace failed")
+
+			if _, regErr := q.GetWorkspaceByHash(ctx, computedHash); regErr != nil {
+				if errors.Is(regErr, sql.ErrNoRows) {
+					h.logger.Warn().
+						Str("session_id", sess.ID).
+						Str("worktree", worktree).
+						Str("workspace_hash", computedHash).
+						Msg("opencode harvest: skipping session for unregistered workspace; run nano-brain init --root=<worktree> to register")
+					skipped++
+					continue
 				}
+				h.logger.Error().
+					Err(regErr).
+					Str("session_id", sess.ID).
+					Str("workspace_hash", computedHash).
+					Msg("opencode harvest: workspace lookup failed")
+				errCount++
+				continue
 			}
+
+			wsHash = computedHash
 			wsCache[worktree] = wsHash
 		}
 
