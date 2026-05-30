@@ -26,7 +26,7 @@ func registerRoutes(s *Server) {
 	api.POST("/init", handlers.InitWorkspace(s.queries, s.db, s.watcher, s.currentConfig().Watcher, s.logger))
 	api.GET("/workspaces", handlers.ListWorkspaces(s.queries, s.logger))
 	api.DELETE("/workspaces/:hash", handlers.RemoveWorkspace(s.queries, s.db, s.logger))
-	api.POST("/reset-workspace", handlers.ResetWorkspace(s.queries, s.logger))
+	api.POST("/reset-workspace", handlers.ResetWorkspace(s.queries, s.db, s.logger))
 
 	var enqueuer handlers.ChunkEnqueuer
 	if s.embedQueue != nil {
