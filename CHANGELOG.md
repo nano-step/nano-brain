@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixes
+- fix(handler): wrap `ResetWorkspace` document+workspace deletion in a single transaction with rollback — matches the pattern already shipped in `RemoveWorkspace` (#155). Prevents orphaned documents if the workspace delete fails after docs are already removed (#225)
+
 ### Features
 - feat(cli): `get`, `tags`, `multi-get` commands — fetch a single document by source_path or UUID, list all tags with counts, and batch-fetch multiple documents in one round-trip; backed by `POST /api/v1/get`, `GET /api/v1/tags` (existing), and `POST /api/v1/multi-get` REST endpoints (#152)
 - feat(cli): `--tags=t1,t2,t3` filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL `&&` array op) with the given set; works in --workspace= or --scope=all mode (#160)
