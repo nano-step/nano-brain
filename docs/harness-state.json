@@ -1,10 +1,10 @@
 {
-  "updated": "2026-05-23",
+  "updated": "2026-05-30",
   "position": {
-    "epic": 8,
-    "story": "COMPLETE",
-    "branch": "b-main",
-    "base_commit": "ad815a4"
+    "epic": 9,
+    "story": "9.1",
+    "branch": "feat/9.1-eventbus",
+    "base_commit": "1a4826a"
   },
   "debt": [
     {
@@ -59,6 +59,7 @@
     "8.3": { "status": "done", "pr": 121, "issue": 120, "review": "oracle:0C+2M+2m:all_fixed", "pr_comments": "gemini_quota_exceeded" },
     "8.4": { "status": "done", "pr": 123, "issue": 122, "review": "oracle:0C+1M+4m:M_fixed", "pr_comments": "gemini_quota_exceeded" },
     "8.5": { "status": "done", "pr": 125, "issue": 124, "review": "manual:no_issues", "pr_comments": "gemini_quota_exceeded" },
-    "8.6": { "status": "done", "pr": 127, "issue": 126, "review": "skipped:S_complexity", "pr_comments": "gemini_quota_exceeded" }
+    "8.6": { "status": "done", "pr": 127, "issue": 126, "review": "skipped:S_complexity", "pr_comments": "gemini_quota_exceeded" },
+    "9.1": { "status": "in-review", "pr": 241, "issue": 240, "epic_issue": 239, "review": "oracle:0C+0M+0m:PASS", "pr_comments": "pending" }
   }
 }
