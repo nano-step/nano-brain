@@ -235,28 +235,32 @@ git push "https://kokorolx:${KOKOROLX_TOKEN}@github.com/nano-step/nano-brain.git
 
 ### Release flow
 
-Release pipeline is wired through `nano-step/shared-workflows@v1` reusable workflows:
+Date-based auto-release pipeline (master push → tag → binaries + npm publish):
 
-| Branch | Workflow | Effect |
+| Trigger | Workflow | Effect |
 |---|---|---|
-| `master` push | `.github/workflows/publish-stable.yml` → shared `publish-stable.yml@v1` | Conventional-commit semver bump → CHANGELOG update → tag `vX.Y.Z` → push tag → `npm publish --tag latest` → create GH Release |
-| `beta` push | `.github/workflows/publish-beta.yml` → shared `publish-beta.yml@v1` | Bump to `<base>-beta.<run>` → `npm publish --tag beta` |
-| `v*` tag push | `.github/workflows/release.yml` | Build 4-platform Go binaries (linux/darwin × amd64/arm64) → attach to existing GH Release |
+| `master` push | `.github/workflows/auto-tag.yml` | Compute next tag `v{YYYY}.{M}.{D}.{N}` (e.g. `v2026.5.30.1`) → push tag via `RELEASE_PAT` |
+| `v*` tag push | `.github/workflows/release.yml` | Cross-build 4-platform Go binaries (linux/darwin × amd64/arm64) → create GH Release with binaries → `npm publish --tag latest` both `@nano-step/nano-brain` and `nano-brain` (unscoped alias) |
 | PR opened/sync | `.github/workflows/gemini-review.yml` → shared `gemini-review.yml@v1` | Gemini code review comment on PR |
+| `master` / `b-main` push, PR | `.github/workflows/ci.yml` | `go build` + `go test -race -short` against ephemeral PG service |
 
 Required repo secrets (set via `gh secret set --repo nano-step/nano-brain`):
 
 | Secret | Used by | Source |
 |---|---|---|
-| `NPM_TOKEN` | publish-stable, publish-beta | `npm token create --read-only=false` (Automation type) |
-| `RELEASE_PAT` | (legacy auto-tag — no longer used; can be removed) | classic PAT with `repo` scope |
+| `RELEASE_PAT` | auto-tag | Classic PAT with `repo` scope. Required so the tag push re-triggers release.yml (tags pushed by `GITHUB_TOKEN` do NOT trigger downstream workflows — GitHub anti-recursion guard) |
+| `NPM_TOKEN` | release.yml (npm-publish job) | `npm token create --read-only=false` (Automation type) for npmjs.org |
 | `GEMINI_API_KEY` | gemini-review | https://aistudio.google.com/apikey |
 
-**Conventional commit prefixes** drive semver bump in publish-stable:
-- `feat!:`, `BREAKING CHANGE` → **major**
-- `feat:` → **minor**
-- `fix:`, `refactor:`, `chore:`, `docs:` → **patch** (default)
+**Tag scheme:** `v{YYYY}.{M}.{D}.{N}` where `N` is the daily run-number (starts at 1, increments per push). Example: `v2026.5.30.1`, `v2026.5.30.2`. The dot before `N` is mandatory — the prior no-dot scheme (`v2026.5.301`) collided between single-digit and multi-digit days.
 
-**Skip-release marker**: include `[skip ci]` in the commit subject to bypass publish-stable. Bot commits (`github-actions[bot]`) are auto-skipped to prevent infinite loops.
+**Skip-release markers:** any of these in the commit subject bypass auto-tag:
+- `[skip-release]`
+- `[skip ci]`
+- `chore: bump version` prefix (anti-loop guard for any historic publish-stable-style bump commits)
+
+Bot commits authored as `github-actions[bot]` are also auto-skipped.
+
+**`package.json.version`** stays at `0.0.0-dev` on master. The auto-tag workflow rewrites it in-place from the tag value before `npm publish` — the bump is NEVER committed back to master.
 
 <!-- HARNESS:END -->
