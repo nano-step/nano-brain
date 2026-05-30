@@ -1,0 +1,92 @@
+name: Auto-tag on master
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+# Avoid concurrent tag races when multiple pushes land in quick succession.
+concurrency:
+  group: auto-tag-master
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    # Skip when:
+    #  - the push was created by github-actions itself (avoid loops)
+    #  - the commit message contains [skip-release] (manual opt-out)
+    #  - the commit is a version-bump commit (publish-stable historic compat
+    #    — should not happen anymore but kept as belt-and-braces)
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.head_commit.message, '[skip-release]') &&
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      !startsWith(github.event.head_commit.message, 'chore: bump version')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Use RELEASE_PAT so the resulting tag push re-triggers release.yml
+          # (tags created by GITHUB_TOKEN do NOT trigger other workflows).
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - name: Compute next tag (v{YYYY}.{M}.{D}.{N})
+        id: ver
+        run: |
+          set -euo pipefail
+          YEAR=$(date -u +%Y)
+          MONTH=$(date -u +%-m)
+          DAY=$(date -u +%-d)
+          PREFIX="v${YEAR}.${MONTH}.${DAY}."
+
+          git fetch --tags --quiet
+
+          # New scheme: v{YYYY}.{M}.{D}.{N} (dot before run-number) — disambiguates
+          # single-digit-day tags from multi-digit-day tags. Old scheme
+          # v{YYYY}.{M}.{D}{N} (no dot) is still recognized for sort purposes
+          # but new tags always use the dot separator.
+          MAX=$(git tag --list "${PREFIX}*" \
+                | sed -E "s|^${PREFIX}||" \
+                | grep -E '^[0-9]{1,3}$' \
+                | sort -n \
+                | tail -1 || true)
+          NEXT=$(( ${MAX:-0} + 1 ))
+          TAG="${PREFIX}${NEXT}"
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Next tag: ${TAG}"
+
+      - name: Create and push tag
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "${TAG}" -m "Auto-tag from master @ ${GITHUB_SHA::7}"
+          git push origin "${TAG}"
+
+      - name: Bump package.json to match tag (no commit)
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          # Update package.json version in-place so the published npm package
+          # version matches the git tag. We do NOT commit this — release.yml's
+          # npm-publish step will use the in-place edit. The next master push
+          # will start from the previous committed version regardless.
+          VERSION="${TAG#v}"
+          node -e "const p=require('./package.json'); p.version='${VERSION}'; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+          echo "package.json version set to ${VERSION} (in-place only)"
+
+      - name: Summary
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          echo "## Tagged \`${TAG}\` :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Downstream release pipeline (release.yml on \`v*\` tags) will build binaries + publish npm." >> "$GITHUB_STEP_SUMMARY"

@@ -20,6 +20,9 @@ _bmad/config.user.yaml
 .opencode/worktree-sessions.json
 .opencode/.repo-id
 
+# Node (no npm deps in this project)
+package-lock.json
+
 # Go
 /nano-brain
 *.exe
