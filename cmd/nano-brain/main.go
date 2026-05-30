@@ -286,7 +286,8 @@ func startServer(configPath string) {
 			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", cfg.Embedding.URL).Msg("embedding provider init failed")
 		} else {
 			embedder = e
-			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency)
+			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency).
+				WithMaxChars(cfg.Embedding.MaxChars)
 			fw.WithEmbedQueue(eq)
 		}
 	}

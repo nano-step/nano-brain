@@ -2,6 +2,7 @@ package embed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -45,9 +46,11 @@ type mockQuerier struct {
 	insertEmbeddingFn                     func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	markChunkEmbeddedFn                   func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	markChunkEmbedFailedFn                func(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
+	markChunkEmbedPermanentlyFailedFn     func(ctx context.Context, arg sqlc.MarkChunkEmbedPermanentlyFailedParams) error
 	insertEmbeddingCalls                  int
 	markChunkEmbeddedCalls                int
 	markChunkEmbedFailedCalls             int
+	markChunkEmbedPermanentlyFailedCalls  int
 }
 
 func (m *mockQuerier) GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
@@ -101,6 +104,16 @@ func (m *mockQuerier) MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChu
 	m.mu.Unlock()
 	if m.markChunkEmbedFailedFn != nil {
 		return m.markChunkEmbedFailedFn(ctx, arg)
+	}
+	return nil
+}
+
+func (m *mockQuerier) MarkChunkEmbedPermanentlyFailed(ctx context.Context, arg sqlc.MarkChunkEmbedPermanentlyFailedParams) error {
+	m.mu.Lock()
+	m.markChunkEmbedPermanentlyFailedCalls++
+	m.mu.Unlock()
+	if m.markChunkEmbedPermanentlyFailedFn != nil {
+		return m.markChunkEmbedPermanentlyFailedFn(ctx, arg)
 	}
 	return nil
 }
@@ -661,5 +674,110 @@ func TestScanFailed_WorkspaceScoped(t *testing.T) {
 
 	if len(eq.ch) != 0 {
 		t.Errorf("channel len = %d, want 0: failed chunks for unregistered workspace must not be enqueued", len(eq.ch))
+	}
+}
+
+func TestIsDeterministicEmbedError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"unrelated", errors.New("network timeout"), false},
+		{"ollama_context_length", errors.New(`ollama: unexpected status 400: {"error":"the input length exceeds the context length"}`), true},
+		{"context_length_lowercase", errors.New("context length exceeded"), true},
+		{"input_length", errors.New("input length too large"), true},
+		{"exceeds_context", errors.New("text exceeds context window"), true},
+		{"maximum_context", errors.New("input larger than maximum context"), true},
+		{"transient_500", errors.New("ollama: unexpected status 500: internal error"), false},
+		{"transient_503", errors.New("ollama: unexpected status 503: service unavailable"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isDeterministicEmbedError(tc.err)
+			if got != tc.want {
+				t.Errorf("isDeterministicEmbedError(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWithMaxChars(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	if eq.maxChars != defaultMaxEmbedChars {
+		t.Errorf("default maxChars = %d, want %d", eq.maxChars, defaultMaxEmbedChars)
+	}
+	eq.WithMaxChars(2000)
+	if eq.maxChars != 2000 {
+		t.Errorf("after WithMaxChars(2000), got %d", eq.maxChars)
+	}
+	eq.WithMaxChars(0)
+	if eq.maxChars != 2000 {
+		t.Errorf("WithMaxChars(0) should be no-op, got %d", eq.maxChars)
+	}
+	eq.WithMaxChars(-1)
+	if eq.maxChars != 2000 {
+		t.Errorf("WithMaxChars(-1) should be no-op, got %d", eq.maxChars)
+	}
+}
+
+func TestProcessChunk_DeterministicErrorMarksPermanentlyFailed(t *testing.T) {
+	chunkID := uuid.New()
+	mq := &mockQuerier{
+		getChunkByIDFn: func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
+			return sqlc.GetChunkByIDRow{
+				ID:            chunkID,
+				WorkspaceHash: "ws1",
+				Content:       "some content",
+			}, nil
+		},
+	}
+	me := &mockEmbedder{
+		embedFn: func(ctx context.Context, text string) ([]float32, error) {
+			return nil, errors.New(`ollama: unexpected status 400: {"error":"the input length exceeds the context length"}`)
+		},
+	}
+	eq := newTestQueue(me, mq)
+	eq.pending.Add(1)
+	eq.processChunk(context.Background(), chunkID)
+
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+	if mq.markChunkEmbedPermanentlyFailedCalls != 1 {
+		t.Errorf("MarkChunkEmbedPermanentlyFailed calls = %d, want 1", mq.markChunkEmbedPermanentlyFailedCalls)
+	}
+	if mq.markChunkEmbedFailedCalls != 0 {
+		t.Errorf("MarkChunkEmbedFailed calls = %d, want 0 (deterministic must skip retry path)", mq.markChunkEmbedFailedCalls)
+	}
+	if eq.pending.Load() != 0 {
+		t.Errorf("pending counter = %d, want 0 (permanent failure must decrement)", eq.pending.Load())
+	}
+}
+
+func TestProcessChunk_TransientErrorStillRetries(t *testing.T) {
+	chunkID := uuid.New()
+	mq := &mockQuerier{
+		getChunkByIDFn: func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
+			return sqlc.GetChunkByIDRow{
+				ID:            chunkID,
+				WorkspaceHash: "ws1",
+				Content:       "some content",
+			}, nil
+		},
+	}
+	me := &mockEmbedder{
+		embedFn: func(ctx context.Context, text string) ([]float32, error) {
+			return nil, errors.New("connection refused")
+		},
+	}
+	eq := newTestQueue(me, mq)
+	eq.pending.Add(1)
+	eq.processChunk(context.Background(), chunkID)
+
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+	if mq.markChunkEmbedPermanentlyFailedCalls != 0 {
+		t.Errorf("MarkChunkEmbedPermanentlyFailed calls = %d, want 0 (transient must NOT permanently fail)", mq.markChunkEmbedPermanentlyFailedCalls)
 	}
 }
