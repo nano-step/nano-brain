@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,10 +29,13 @@ const (
 	backoffMax         = 300 * time.Second
 	rejectionThreshold = 50000
 	maxRetries         = 3
-	// maxEmbedChars is a conservative char limit per embed call.
-	// nomic-embed-text has a 2048-token context window. With ~2 chars/token worst-case
-	// (CJK, code), 4000 chars gives a safe margin below the hard limit.
-	maxEmbedChars = 4000
+	// defaultMaxEmbedChars is the fallback char budget when EmbeddingConfig.MaxChars
+	// is unset. SentencePiece tokenizes dense CSV/code at ~1 char/token, so 3000 chars
+	// stays well under nomic-embed-text's 2048-token limit (worst case ~2300 tokens).
+	// Override via config (embedding.max_chars) or env (NANO_BRAIN_EMBED_MAX_CHARS).
+	// History: 8000 → 4000 → 3000 across issues #208 and prior. Do not raise without
+	// confirming via real ollama tokenization on dense CSV input.
+	defaultMaxEmbedChars = 3000
 )
 
 type QueueQuerier interface {
@@ -41,6 +45,7 @@ type QueueQuerier interface {
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
+	MarkChunkEmbedPermanentlyFailed(ctx context.Context, arg sqlc.MarkChunkEmbedPermanentlyFailedParams) error
 }
 
 type Queue struct {
@@ -51,6 +56,7 @@ type Queue struct {
 	provider    string
 	model       string
 	concurrency int
+	maxChars    int
 	backoff     backoffState
 	mu          sync.Mutex
 	pending        atomic.Int64
@@ -75,9 +81,17 @@ func NewQueue(embedder Embedder, queries QueueQuerier, logger zerolog.Logger, pr
 		provider:    provider,
 		model:       model,
 		concurrency: concurrency,
+		maxChars:    defaultMaxEmbedChars,
 		backoff:     backoffState{current: 0},
 		retries:     make(map[uuid.UUID]int),
 	}
+}
+
+func (q *Queue) WithMaxChars(n int) *Queue {
+	if n > 0 {
+		q.maxChars = n
+	}
+	return q
 }
 
 func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
@@ -229,7 +243,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 
 	embedCtx, cancel := context.WithTimeout(ctx, embedTimeout)
 	defer cancel()
-	content := truncateToMaxChars(chunk.Content, maxEmbedChars)
+	content := truncateToMaxChars(chunk.Content, q.maxChars)
 	if len(content) < len(chunk.Content) {
 		q.logger.Warn().
 			Str("chunk_id", chunkID.String()).
@@ -243,6 +257,23 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 			Str("chunk_id", chunkID.String()).
 			Str("file", chunk.SourcePath).
 			Msg("embedding failed")
+		if isDeterministicEmbedError(err) {
+			if mErr := q.queries.MarkChunkEmbedPermanentlyFailed(ctx, sqlc.MarkChunkEmbedPermanentlyFailedParams{
+				ID:            chunkID,
+				WorkspaceHash: chunk.WorkspaceHash,
+			}); mErr != nil {
+				q.logger.Error().Err(mErr).Str("chunk_id", chunkID.String()).Msg("mark embed_permanently_failed failed")
+			}
+			q.pending.Add(-1)
+			q.clearRetries(chunkID)
+			q.logger.Warn().
+				Str("chunk_id", chunkID.String()).
+				Str("reason", err.Error()).
+				Int("content_len", len(content)).
+				Int("max_chars", q.maxChars).
+				Msg("chunk marked embed_permanently_failed (deterministic error — not retryable)")
+			return
+		}
 		q.increaseBackoff()
 		q.handleRetry(ctx, chunkID, chunk.WorkspaceHash)
 		return
@@ -349,6 +380,22 @@ func truncateToMaxChars(s string, max int) string {
 		truncated = truncated[:len(truncated)-1]
 	}
 	return truncated
+}
+
+// isDeterministicEmbedError reports whether the embedder error is content-shape
+// driven (will recur on every retry) rather than transient. Triggers the
+// permanent-failure path so the chunk stops re-entering the rescan loop.
+// Issue #208: ollama returns HTTP 400 with body containing "context length"
+// or "input length" when tokenized input exceeds model's context window.
+func isDeterministicEmbedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "context length") ||
+		strings.Contains(msg, "input length") ||
+		strings.Contains(msg, "exceeds context") ||
+		strings.Contains(msg, "maximum context")
 }
 
 func (q *Queue) checkCapacity() {

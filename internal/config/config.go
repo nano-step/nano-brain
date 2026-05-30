@@ -42,12 +42,19 @@ type DatabaseConfig struct {
 }
 
 // EmbeddingConfig holds embedding provider configuration.
+//
+// MaxChars is the per-embed-call character budget used to truncate oversized
+// chunks before sending to the provider. Default 3000 chars is empirically
+// safe for nomic-embed-text's 2048-token context window (SentencePiece tokenizes
+// dense CSV/code at ~1 char/token, so 4000 chars produced >2048 tokens and
+// triggered ollama 400s — see issue #208).
 type EmbeddingConfig struct {
 	Provider     string `koanf:"provider"`
 	URL          string `koanf:"url"`
 	Model        string `koanf:"model"`
 	Dimension    int    `koanf:"dimension"`
 	Concurrency  int    `koanf:"concurrency"`
+	MaxChars     int    `koanf:"max_chars"`
 	VoyageAPIKey string `koanf:"voyage_api_key"`
 }
 
@@ -197,6 +204,7 @@ func Load(configPath string) (*Config, error) {
 		"OPENCODE_STORAGE_DIR":     "harvester.opencode.session_dir",
 		"OPENCODE_DB_PATH":         "harvester.opencode.db_path",
 		"OPENCODE_DB_ROOT":         "harvester.opencode.db_root",
+		"NANO_BRAIN_EMBED_MAX_CHARS": "embedding.max_chars",
 		"NANO_BRAIN_SUMMARIZE_API_KEY": "summarization.api_key",
 	}
 	for envVar, key := range specialEnvVars {

@@ -25,6 +25,7 @@ func getDefaults() *Config {
 			URL:         "http://localhost:11434",
 			Model:       "nomic-embed-text",
 			Concurrency: 3,
+			MaxChars:    3000,
 			VoyageAPIKey: "",
 		},
 		Harvester: HarvesterConfig{
