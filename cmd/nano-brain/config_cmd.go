@@ -36,7 +36,7 @@ func runConfigCmd(args []string, configPath string) {
 
 func runConfigShow(configPath string, jsonFlag bool) {
 	if configPath == "" {
-		configPath = config.DefaultConfigPath()
+		configPath = config.ResolveConfigPath("")
 	}
 	cfg, err := config.Load(configPath)
 	if err != nil {

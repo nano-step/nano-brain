@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Features
+- feat(cli): wake-up command — pretty/JSON workspace briefing at session start (#151, PR #216)
+- feat(cli): `--scope=all` flag on query/search/vsearch for cross-workspace search (#156, PR #217)
+- feat(config): `NANO_BRAIN_CONFIG` env var support — precedence `--config` flag > env var > `~/.nano-brain/config.yml`. Enables Docker/k8s deployments to point at a container-specific config without mounting over the host's default.
+
+### Documentation
+- docs(roadmap): reconcile ROADMAP.md status with actually shipped features (#214, PR #215)
+- docs(readme): document `NANO_BRAIN_CONFIG` env var + Docker example
+
+---
+
 ## [2026.5.267] — 2026-05-26
 
 ### Features

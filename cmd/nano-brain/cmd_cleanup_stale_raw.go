@@ -29,7 +29,7 @@ func runCleanupStaleRawCmd(args []string) {
 		}
 	}
 
-	configPath := config.DefaultConfigPath()
+	configPath := config.ResolveConfigPath("")
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
