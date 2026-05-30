@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CommandPalette } from '../components/CommandPalette'
@@ -85,5 +85,25 @@ describe('CommandPalette', () => {
     await waitFor(() => {
       expect(screen.getByText('Trigger reindex')).toBeTruthy()
     })
+  })
+
+  it('debounces symbol search — does not call API immediately on keystroke', async () => {
+    vi.useFakeTimers()
+    const { apiGetJSON } = await import('../api/client')
+    const mockGet = vi.mocked(apiGetJSON)
+    mockGet.mockClear()
+
+    renderPalette()
+    fireEvent.keyDown(document, { key: 'k', metaKey: true })
+    const input = screen.getByPlaceholderText(/Type a command/)
+
+    // Type a query — symbol search should NOT fire immediately
+    fireEvent.change(input, { target: { value: 'myFunc' } })
+    const callsBefore = mockGet.mock.calls.filter((c) => String(c[0]).includes('symbols')).length
+    expect(callsBefore).toBe(0)
+
+    // After 150ms debounce window, query client triggers the fetch
+    vi.advanceTimersByTime(150)
+    vi.useRealTimers()
   })
 })
