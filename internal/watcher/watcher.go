@@ -347,9 +347,19 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		return
 	}
 
+	if isBinaryExtension(filePath) {
+		w.logger.Info().Str("file", filePath).Msg("skipping binary file (extension)")
+		return
+	}
+
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("read failed, skipping")
+		return
+	}
+
+	if isBinaryContent(content) {
+		w.logger.Warn().Str("file", filePath).Msg("skipping binary file (non-UTF8 content)")
 		return
 	}
 
