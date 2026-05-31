@@ -2,6 +2,7 @@ package embed
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -229,6 +230,11 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 
 	chunk, err := q.queries.GetChunkByID(ctx, chunkID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("embed-queue: chunk no longer exists (likely cascade-deleted), skipping")
+			q.pending.Add(-1)
+			return
+		}
 		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("failed to fetch chunk")
 		q.pending.Add(-1)
 		return

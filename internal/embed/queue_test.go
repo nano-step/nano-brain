@@ -1,8 +1,11 @@
 package embed
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -661,5 +664,65 @@ func TestScanFailed_WorkspaceScoped(t *testing.T) {
 
 	if len(eq.ch) != 0 {
 		t.Errorf("channel len = %d, want 0: failed chunks for unregistered workspace must not be enqueued", len(eq.ch))
+	}
+}
+
+func TestProcessChunk_SkipsDeletedChunk(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{}
+	mq := &mockQuerier{
+		getChunkByIDFn: func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
+			return sqlc.GetChunkByIDRow{}, sql.ErrNoRows
+		},
+	}
+
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf).Level(zerolog.DebugLevel)
+	eq := NewQueue(me, mq, logger, "test-provider", "test-model", 1)
+	eq.pending.Store(1)
+
+	eq.processChunk(context.Background(), chunkID)
+
+	if me.callCount() != 0 {
+		t.Errorf("embed calls = %d, want 0 (deleted chunk should not be embedded)", me.callCount())
+	}
+	if got := eq.pending.Load(); got != 0 {
+		t.Errorf("pending counter = %d, want 0 (must decrement on skip)", got)
+	}
+
+	logs := buf.String()
+	if strings.Contains(logs, `"level":"error"`) && strings.Contains(logs, "failed to fetch chunk") {
+		t.Errorf("expected no ERROR log for deleted chunk, got:\n%s", logs)
+	}
+	if !strings.Contains(logs, `"level":"debug"`) || !strings.Contains(logs, "chunk no longer exists") {
+		t.Errorf("expected DEBUG log 'chunk no longer exists', got:\n%s", logs)
+	}
+	if !strings.Contains(logs, chunkID.String()) {
+		t.Errorf("expected DEBUG log to contain chunk_id %s, got:\n%s", chunkID, logs)
+	}
+}
+
+func TestProcessChunk_OtherDBErrorStillLogsError(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{}
+	mq := &mockQuerier{
+		getChunkByIDFn: func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
+			return sqlc.GetChunkByIDRow{}, fmt.Errorf("connection refused")
+		},
+	}
+
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf).Level(zerolog.DebugLevel)
+	eq := NewQueue(me, mq, logger, "test-provider", "test-model", 1)
+	eq.pending.Store(1)
+
+	eq.processChunk(context.Background(), chunkID)
+
+	logs := buf.String()
+	if !strings.Contains(logs, `"level":"error"`) || !strings.Contains(logs, "failed to fetch chunk") {
+		t.Errorf("expected ERROR log for non-ErrNoRows error, got:\n%s", logs)
+	}
+	if got := eq.pending.Load(); got != 0 {
+		t.Errorf("pending counter = %d, want 0 (must decrement on error)", got)
 	}
 }
