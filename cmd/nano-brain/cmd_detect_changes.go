@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -197,7 +198,7 @@ type fileSymbol struct {
 
 func queryFileSymbols(base, workspace, file string) []fileSymbol {
 	u := fmt.Sprintf("%s/api/v1/symbols?workspace=%s&query=%s&limit=100",
-		base, workspace, file)
+		base, url.QueryEscape(workspace), url.QueryEscape(file))
 	resp, _, err := doRequest("GET", u, nil)
 	if err != nil {
 		return nil

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"path"
 	"strings"
@@ -49,7 +48,7 @@ func TriggerSummarize(
 	return func(c echo.Context) error {
 		var req SummarizeRequest
 		if err := c.Bind(&req); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 		}
 		workspace := c.Get("workspace").(string)
 
@@ -78,7 +77,8 @@ func TriggerSummarize(
 			Lim:           int32(lim),
 		})
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("list sessions: %v", err))
+			logger.Error().Err(err).Str("workspace", workspace).Msg("list session documents failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to list sessions")
 		}
 
 		reqLog := LoggerFromCtx(c, logger)

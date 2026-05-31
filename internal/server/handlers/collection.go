@@ -6,7 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -92,9 +94,23 @@ func AddCollection(q CollectionQuerier, fw *watcher.Watcher, watcherCfg config.W
 			return echo.NewHTTPError(http.StatusBadRequest, "path is required")
 		}
 
-		if _, err := os.Stat(req.Path); err != nil {
+		cleanPath := filepath.Clean(req.Path)
+		if !filepath.IsAbs(cleanPath) {
+			return echo.NewHTTPError(http.StatusBadRequest, "path must be absolute")
+		}
+
+		if strings.Contains(cleanPath, "..") {
+			return echo.NewHTTPError(http.StatusBadRequest, "path must not contain '..'")
+		}
+
+		info, err := os.Stat(cleanPath)
+		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "path does not exist on filesystem")
 		}
+		if !info.IsDir() {
+			return echo.NewHTTPError(http.StatusBadRequest, "path must be a directory")
+		}
+		req.Path = cleanPath
 
 		globPattern := req.GlobPattern
 		if globPattern == "" {
