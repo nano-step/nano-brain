@@ -281,6 +281,17 @@ func startServer(configPath string) {
 		WithSymbolRegistry(symRegistry).
 		WithGraphRegistry(graphRegistry, queries)
 
+	if homeDir, hErr := os.UserHomeDir(); hErr == nil {
+		if gi, path, lErr := watcher.LoadGlobalIgnore(homeDir); lErr != nil {
+			logger.Warn().Err(lErr).Str("path", path).Msg("global .nano-brainignore failed to load; using empty matcher")
+		} else if gi != nil {
+			logger.Info().Str("path", path).Msg("loaded global .nano-brainignore")
+			fw.SetGlobalIgnore(gi)
+		} else {
+			logger.Debug().Str("path", path).Msg(".nano-brainignore not found, skipping (issue #263)")
+		}
+	}
+
 	var eq *embed.Queue
 	var embedder embed.Embedder
 	if cfg.Embedding.Provider != "" {

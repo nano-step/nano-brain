@@ -121,6 +121,9 @@ harvester:
 watcher:
   debounce_ms: 2000
   reindex_interval: 300
+  # Per-collection exclude_patterns and allowed_extensions are also supported
+  # via the workspaces map. See "Global ignore patterns" section below for
+  # the cross-collection .nano-brainignore file.
 
 storage:
   max_file_size: 314572800      # 300MB
@@ -141,6 +144,39 @@ summarization:
   max_tokens: 8000              # max tokens per LLM completion
   concurrency: 3                # parallel map-phase LLM calls
 ```
+
+### Global ignore patterns (`~/.nano-brain/.nano-brainignore`)
+
+The watcher loads a global gitignore-style file at `~/.nano-brain/.nano-brainignore`
+on startup. Patterns in this file apply to **all** registered collections, removing
+the need to repeat the same exclusions in each `watcher.workspaces` block.
+
+**Format**: standard `.gitignore` syntax (one pattern per line, supports `**`, `!negation`, blank lines, `#` comments).
+
+**Example** `~/.nano-brain/.nano-brainignore`:
+
+```
+# Skip generated files everywhere
+*.png
+*.jpg
+*.pdf
+build/
+dist/
+node_modules/
+
+# But keep this one icon
+!icons/important.png
+```
+
+**Order of evaluation** (most aggressive first):
+
+1. Hardcoded default exclude dirs (`node_modules`, `.git`, `dist`, `build`, `target`, etc.)
+2. **Global `.nano-brainignore`** (this feature)
+3. Per-collection `.gitignore` (in collection root)
+4. Per-collection `exclude_patterns` (config-level)
+5. Per-collection `allowed_extensions` (whitelist)
+
+**Restart required**: changes to `.nano-brainignore` take effect on next server start (hot-reload deferred to a follow-up). Issue #263.
 
 ### Session Summarization
 

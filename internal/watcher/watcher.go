@@ -17,6 +17,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
+	gitignore "github.com/sabhiram/go-gitignore"
 	"github.com/nano-brain/nano-brain/internal/chunk"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
@@ -69,6 +70,18 @@ type Watcher struct {
 	dirty       map[string]bool
 	pub         eventbus.Publisher
 	rateLimiters map[string]*rate.Limiter
+
+	globalIgnore *gitignore.GitIgnore
+}
+
+// SetGlobalIgnore configures the watcher to apply a global gitignore-style
+// matcher to every collection's file filter. Pass nil to disable. Must be
+// called BEFORE any WatchWithFilter — existing filters are not updated.
+// See issue #263.
+func (w *Watcher) SetGlobalIgnore(gi *gitignore.GitIgnore) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.globalIgnore = gi
 }
 
 func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.Config) *Watcher {
@@ -127,7 +140,7 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 		globPattern:       globPattern,
 		excludePatterns:   excludePatterns,
 		allowedExtensions: allowedExtensions,
-		filter:            newFileFilter(absPath, excludePatterns, allowedExtensions),
+		filter:            newFileFilter(absPath, excludePatterns, allowedExtensions, w.globalIgnore),
 	}
 
 	if w.fsw != nil {
