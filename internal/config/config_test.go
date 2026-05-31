@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -842,5 +843,107 @@ func TestAuthConfig_DefaultsDisabled(t *testing.T) {
 	}
 	if cfg.Server.Auth.Realm != "nano-brain" {
 		t.Errorf("expected default Realm=nano-brain, got %q", cfg.Server.Auth.Realm)
+	}
+}
+
+func TestConfig_JSONUsesSnakeCase(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	// Marshal config to JSON
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+
+	jsonStr := string(data)
+
+	// Check that snake_case keys are present
+	requiredKeys := []string{
+		`"server"`,
+		`"host"`,
+		`"port"`,
+		`"database"`,
+		`"embedding"`,
+		`"provider"`,
+		`"voyage_api_key"`,
+		`"harvester"`,
+		`"opencode"`,
+		`"session_dir"`,
+		`"db_path"`,
+		`"db_root"`,
+		`"claudecode"`,
+		`"watcher"`,
+		`"debounce_ms"`,
+		`"reindex_interval"`,
+		`"search"`,
+		`"rrf_k"`,
+		`"recency_weight"`,
+		`"recency_half_life_days"`,
+		`"storage"`,
+		`"max_file_size"`,
+		`"max_size"`,
+		`"telemetry"`,
+		`"retention_days"`,
+		`"logging"`,
+		`"summarization"`,
+		`"provider_url"`,
+		`"max_tokens"`,
+		`"requests_per_second"`,
+		`"write_to_disk"`,
+		`"output_dir"`,
+	}
+
+	for _, key := range requiredKeys {
+		if !strings.Contains(jsonStr, key) {
+			t.Errorf("expected JSON key %s, not found in output", key)
+		}
+	}
+
+	// Check that PascalCase keys are NOT present (the bug we're fixing)
+	forbiddenKeys := []string{
+		`"Server"`,
+		`"Host"`,
+		`"Port"`,
+		`"Database"`,
+		`"Embedding"`,
+		`"Provider"`,
+		`"VoyageAPIKey"`,
+		`"Harvester"`,
+		`"OpenCode"`,
+		`"SessionDir"`,
+		`"DBPath"`,
+		`"DBRoot"`,
+		`"ClaudeCode"`,
+		`"Watcher"`,
+		`"DebounceMs"`,
+		`"ReindexInterval"`,
+		`"Search"`,
+		`"RrfK"`,
+		`"RecencyWeight"`,
+		`"RecencyHalfLifeDays"`,
+		`"Storage"`,
+		`"MaxFileSize"`,
+		`"MaxSize"`,
+		`"Telemetry"`,
+		`"RetentionDays"`,
+		`"Logging"`,
+		`"Summarization"`,
+		`"ProviderURL"`,
+		`"MaxTokens"`,
+		`"RequestsPerSecond"`,
+		`"WriteToDisk"`,
+		`"OutputDir"`,
+	}
+
+	for _, key := range forbiddenKeys {
+		if strings.Contains(jsonStr, key) {
+			t.Errorf("unexpected PascalCase key %s found in JSON output (should be snake_case)", key)
+		}
 	}
 }
