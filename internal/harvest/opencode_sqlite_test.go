@@ -432,16 +432,13 @@ func TestOpenCodeSQLite_SkipCheck_UnifiedPath(t *testing.T) {
 	worktree := "/home/user/test-skip"
 
 	insertTestProject(t, sqdb, "proj1", worktree)
-	seedRegisteredWorkspace(t, pgDB, worktree)
+	wsHash := seedRegisteredWorkspace(t, pgDB, worktree)
 	insertTestSession(t, sqdb, "sess-skip1", "proj1", "Skip Session", oldMs)
 	if _, err := sqdb.Exec(`UPDATE session SET time_updated = ? WHERE id = ?`, oldMs, "sess-skip1"); err != nil {
 		t.Fatal(err)
 	}
 	insertTestMessage(t, sqdb, "msg1", "sess-skip1", "user", oldMs)
 	insertTestPart(t, sqdb, "p1", "msg1", "text", "Hello from skip test!")
-
-	h := sha256.Sum256([]byte(worktree))
-	wsHash := hex.EncodeToString(h[:])
 
 	// Pre-insert doc at unified path to trigger skip
 	q := sqlc.New(pgDB)
@@ -729,9 +726,6 @@ func TestOpenCodeSQLite_LLMFailure_FallbackUnifiedPath(t *testing.T) {
 	if errCount != 0 {
 		t.Errorf("errCount = %d, want 0", errCount)
 	}
-
-	wsHash := hex.EncodeToString(sha256.New().Sum([]byte("/home/user/test-app")))[:16]
-	_ = wsHash
 
 	q := sqlc.New(pgDB)
 	ctx := context.Background()

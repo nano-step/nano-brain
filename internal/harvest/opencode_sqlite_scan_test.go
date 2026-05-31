@@ -215,7 +215,7 @@ func TestHarvestAll_TrailingSlashWorktreeMatches(t *testing.T) {
 	}
 
 	h := NewOpenCodeSQLiteHarvesterFromDB(sqdb, nil)
-	sessions, err := h.listSessions(context.Background(), sqdb)
+	sessions, err := h.listSessions(context.Background(), sqdb, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

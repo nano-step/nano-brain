@@ -13,7 +13,6 @@ src/web/node_modules/
 .npmrc
 .npmrc2
 _bmad/config.user.yaml
-/skills/
 
 # OpenCode internal metadata
 .opencode/worktrees/
@@ -31,5 +30,7 @@ package-lock.json
 bin/
 npm/nano-brain
 npm/nano-brain.exe
+
+# Sisyphus agent runtime state
 .sisyphus/
 ai/test-case/

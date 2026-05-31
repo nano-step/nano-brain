@@ -48,9 +48,11 @@ type mockQuerier struct {
 	insertEmbeddingFn                     func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	markChunkEmbeddedFn                   func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	markChunkEmbedFailedFn                func(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
+	markChunkEmbedPermanentlyFailedFn     func(ctx context.Context, arg sqlc.MarkChunkEmbedPermanentlyFailedParams) error
 	insertEmbeddingCalls                  int
 	markChunkEmbeddedCalls                int
 	markChunkEmbedFailedCalls             int
+	markChunkEmbedPermanentlyFailedCalls  int
 }
 
 func (m *mockQuerier) GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
@@ -104,6 +106,16 @@ func (m *mockQuerier) MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChu
 	m.mu.Unlock()
 	if m.markChunkEmbedFailedFn != nil {
 		return m.markChunkEmbedFailedFn(ctx, arg)
+	}
+	return nil
+}
+
+func (m *mockQuerier) MarkChunkEmbedPermanentlyFailed(ctx context.Context, arg sqlc.MarkChunkEmbedPermanentlyFailedParams) error {
+	m.mu.Lock()
+	m.markChunkEmbedPermanentlyFailedCalls++
+	m.mu.Unlock()
+	if m.markChunkEmbedPermanentlyFailedFn != nil {
+		return m.markChunkEmbedPermanentlyFailedFn(ctx, arg)
 	}
 	return nil
 }
@@ -769,6 +781,25 @@ func TestIsHardFailureEmbedError(t *testing.T) {
 				t.Errorf("isHardFailureEmbedError(%v) = %v, want %v", c.err, got, c.want)
 			}
 		})
+	}
+}
+
+func TestWithMaxChars(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	if eq.maxChars != defaultMaxEmbedChars {
+		t.Errorf("default maxChars = %d, want %d", eq.maxChars, defaultMaxEmbedChars)
+	}
+	eq.WithMaxChars(2000)
+	if eq.maxChars != 2000 {
+		t.Errorf("after WithMaxChars(2000), got %d", eq.maxChars)
+	}
+	eq.WithMaxChars(0)
+	if eq.maxChars != 2000 {
+		t.Errorf("WithMaxChars(0) should be no-op, got %d", eq.maxChars)
+	}
+	eq.WithMaxChars(-1)
+	if eq.maxChars != 2000 {
+		t.Errorf("WithMaxChars(-1) should be no-op, got %d", eq.maxChars)
 	}
 }
 

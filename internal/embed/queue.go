@@ -33,10 +33,13 @@ const (
 	backoffMax         = 300 * time.Second
 	rejectionThreshold = 50000
 	maxRetries         = 3
-	// maxEmbedChars is a conservative char limit per embed call.
-	// nomic-embed-text has a 2048-token context window. With ~2 chars/token worst-case
-	// (CJK, code), 4000 chars gives a safe margin below the hard limit.
-	maxEmbedChars = 4000
+	// defaultMaxEmbedChars is the fallback char budget when EmbeddingConfig.MaxChars
+	// is unset. SentencePiece tokenizes dense CSV/code at ~1 char/token, so 3000 chars
+	// stays well under nomic-embed-text's 2048-token limit (worst case ~2300 tokens).
+	// Override via config (embedding.max_chars) or env (NANO_BRAIN_EMBED_MAX_CHARS).
+	// History: 8000 → 4000 → 3000 across issues #208 and prior. Do not raise without
+	// confirming via real ollama tokenization on dense CSV input.
+	defaultMaxEmbedChars = 3000
 )
 
 type QueueQuerier interface {
@@ -46,6 +49,7 @@ type QueueQuerier interface {
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
+	MarkChunkEmbedPermanentlyFailed(ctx context.Context, arg sqlc.MarkChunkEmbedPermanentlyFailedParams) error
 }
 
 type Queue struct {
@@ -56,6 +60,7 @@ type Queue struct {
 	provider    string
 	model       string
 	concurrency int
+	maxChars    int
 	backoff     backoffState
 	mu          sync.Mutex
 	pending        atomic.Int64
@@ -82,6 +87,7 @@ func NewQueue(embedder Embedder, queries QueueQuerier, logger zerolog.Logger, pr
 		provider:    provider,
 		model:       model,
 		concurrency: concurrency,
+		maxChars:    defaultMaxEmbedChars,
 		backoff:     backoffState{current: 0},
 		retries:     make(map[uuid.UUID]int),
 	}
@@ -90,6 +96,13 @@ func NewQueue(embedder Embedder, queries QueueQuerier, logger zerolog.Logger, pr
 // WithPublisher sets the event bus publisher for embed_queue status events.
 func (q *Queue) WithPublisher(pub eventbus.Publisher) *Queue {
 	q.pub = pub
+	return q
+}
+
+func (q *Queue) WithMaxChars(n int) *Queue {
+	if n > 0 {
+		q.maxChars = n
+	}
 	return q
 }
 
@@ -249,7 +262,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 
 	embedCtx, cancel := context.WithTimeout(ctx, embedTimeout)
 	defer cancel()
-	content := truncateToMaxChars(chunk.Content, maxEmbedChars)
+	content := truncateToMaxChars(chunk.Content, q.maxChars)
 	if len(content) < len(chunk.Content) {
 		q.logger.Warn().
 			Str("chunk_id", chunkID.String()).

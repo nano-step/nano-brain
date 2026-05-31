@@ -75,7 +75,7 @@ func (h *OpenCodeSQLiteHarvester) ListSessions(ctx context.Context) ([]SqSession
 	if owned {
 		defer sqdb.Close()
 	}
-	return h.listSessions(ctx, sqdb)
+	return h.listSessions(ctx, sqdb, nil)
 }
 
 func (h *OpenCodeSQLiteHarvester) RenderSession(ctx context.Context, sessionID, title string, createdAt time.Time) (string, error) {
@@ -105,16 +105,32 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 		defer sqdb.Close()
 	}
 
-	sessions, err := h.listSessions(ctx, sqdb)
+	q := sqlc.New(h.pgDB)
+
+	workspaces, wsErr := q.ListWorkspaces(ctx)
+	if wsErr != nil {
+		h.logger.Error().Err(wsErr).Msg("failed to list registered workspaces")
+		return 0, 0, 1
+	}
+	if len(workspaces) == 0 {
+		h.logger.Warn().Msg("no registered workspaces, skipping harvest")
+		return 0, 0, 0
+	}
+
+	wsCache := make(map[string]string, len(workspaces))
+	registeredPaths := make([]string, 0, len(workspaces))
+	for _, ws := range workspaces {
+		wsCache[ws.Path] = ws.Hash
+		registeredPaths = append(registeredPaths, ws.Path)
+	}
+
+	sessions, err := h.listSessions(ctx, sqdb, registeredPaths)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("failed to list opencode sessions")
 		return 0, 0, 1
 	}
 
 	h.logger.Info().Int("count", len(sessions)).Msg("found opencode sessions")
-
-	q := sqlc.New(h.pgDB)
-	wsCache := make(map[string]string) // worktree → wsHash
 
 	var (
 		summarySuccess  int
@@ -128,12 +144,10 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 			continue
 		}
 
-		// Derive workspace hash for this session's project.
 		// Normalize trailing-slash for cache lookup (Oracle M3, #199), but
 		// preserve empty-string semantics: filepath.Clean("") returns "." so
 		// we must check the raw value BEFORE cleaning, else "." gets hashed
-		// as a path and a spurious workspace is created (gemini-code-assist
-		// review on PR #200).
+		// as a spurious path (gemini-code-assist review on PR #200).
 		rawWorktree := sess.Worktree
 		var worktree string
 		if rawWorktree != "" {
@@ -267,14 +281,42 @@ type sqMessage struct {
 	createdAt time.Time
 }
 
-func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB) ([]SqSession, error) {
-	rows, err := sqdb.QueryContext(ctx, `
-		SELECT s.id, COALESCE(s.title, ''), COALESCE(s.time_created, 0),
-		       COALESCE(s.time_updated, s.time_created, 0), COALESCE(p.worktree, '')
-		FROM session s
-		LEFT JOIN project p ON s.project_id = p.id
-		ORDER BY s.time_created DESC
-	`)
+// listSessions queries sessions from SQLite. If registeredPaths is non-nil,
+// only sessions whose project.worktree matches one of the paths are returned.
+// If registeredPaths is non-nil but empty, returns nil (no sessions).
+// If registeredPaths is nil, all sessions are returned (unfiltered).
+func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB, registeredPaths []string) ([]SqSession, error) {
+	var query string
+	var args []any
+
+	if registeredPaths != nil {
+		if len(registeredPaths) == 0 {
+			return nil, nil
+		}
+		placeholders := strings.Repeat("?,", len(registeredPaths)-1) + "?"
+		query = `
+			SELECT s.id, COALESCE(s.title, ''), COALESCE(s.time_created, 0),
+			       COALESCE(s.time_updated, s.time_created, 0), COALESCE(p.worktree, '')
+			FROM session s
+			LEFT JOIN project p ON s.project_id = p.id
+			WHERE p.worktree IN (` + placeholders + `)
+			ORDER BY s.time_created DESC
+		`
+		args = make([]any, len(registeredPaths))
+		for i, p := range registeredPaths {
+			args[i] = p
+		}
+	} else {
+		query = `
+			SELECT s.id, COALESCE(s.title, ''), COALESCE(s.time_created, 0),
+			       COALESCE(s.time_updated, s.time_created, 0), COALESCE(p.worktree, '')
+			FROM session s
+			LEFT JOIN project p ON s.project_id = p.id
+			ORDER BY s.time_created DESC
+		`
+	}
+
+	rows, err := sqdb.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query sessions: %w", err)
 	}

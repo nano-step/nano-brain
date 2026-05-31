@@ -63,6 +63,73 @@ For RRI-T testing (skill: `rri-t-testing`), use a **separate nano-brain instance
 
 Never run RRI-T against the default 3100 instance — it pollutes production memory and conflicts with the sibling process.
 
+<!-- BEHAVIORAL-GUIDELINES:START -->
+# Behavioral Guidelines (Always Apply)
+
+Reduce common LLM coding mistakes. Apply to every task regardless of scope.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it — don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+<!-- BEHAVIORAL-GUIDELINES:END -->
+
 ## ⛔ CRITICAL: nano-brain Server Rule
 
 **NEVER start nano-brain server inside the container.** The server runs via Docker compose on the HOST only.
@@ -123,23 +190,53 @@ git worktree move ../nano-brain-foo .opencode/worktrees/feat-NNN-short-name
 - `Write` tool to create a file with 100+ lines in one shot
 - Regenerating an entire file to change a few lines
 
+## Project Architecture
+
+**Stack:** Go 1.23, PostgreSQL 17 + pgvector 0.8.2, Echo v4, sqlc, goose v3, zerolog, koanf, fsnotify.
+**Binary:** `CGO_ENABLED=0` static build. No DI framework. Constructor injection throughout.
+**Entry:** `cmd/nano-brain/` — CLI dispatcher + server startup. `internal/` — 17 packages.
+**Injection pattern:** config, logger, `*pgxpool.Pool` passed at construction; `sqlc.Queries` wraps the pool.
+
+### Cross-Cutting Conventions
+
+- **Errors:** `fmt.Errorf("<context>: %w", err)` — no custom error types, no bare `errors.New` in callers
+- **Logging:** zerolog structured; scope per component via `.With().Str("component","x").Logger()`
+- **Context:** `ctx context.Context` first param on all I/O functions; `errgroup` for goroutine lifecycle
+- **Interfaces:** small, role-based (Embedder, Querier, Harvester); defined on the consumer side
+- **Config:** koanf YAML + env, dynamic reload via `RWMutex`; hot-reload via `POST /api/reload-config`
+- **DB:** `storage.NewPool()` → `*pgxpool.Pool` → `sqlc.New(pool)` — generated files are DO NOT EDIT
+
+### Testing
+
+- **Unit:** `package <name>_test`, inline struct mocks (no gomock), table-driven with `t.Run`
+- **Integration:** `//go:build integration`, `testutil.SetupTestDB(t)` creates an isolated PG schema per test
+- **Quick:** `go build ./... && go test -race -short ./...`
+- **Full:** `go test -race -tags=integration ./...`
+
+### Key Directories
+
+| Path | Contents | Child docs |
+|------|----------|------------|
+| `cmd/nano-brain/` | CLI dispatcher + server startup | `cmd/nano-brain/AGENTS.md` |
+| `internal/server/handlers/` | 34 HTTP handler files | `internal/server/handlers/AGENTS.md` |
+| `internal/storage/` | sqlc codegen + queries + goose migrations | `internal/storage/AGENTS.md` |
+| `internal/harvest/` | Session harvesting (OpenCode, Claude Code) | `internal/harvest/AGENTS.md` |
+| `internal/search/` | Hybrid search pipeline (BM25 + vector + RRF) | `internal/search/AGENTS.md` |
+| `internal/embed/` | Embedding queue + provider adapters | `internal/embed/AGENTS.md` |
+| `internal/mcp/` | MCP protocol tool implementations | `internal/mcp/AGENTS.md` |
+
 ## Development Workflow
 
 ### OpenSpec-First (MANDATORY)
 
-**Every feature, fix, or refactor MUST go through OpenSpec before implementation.**
+Features, fixes, and refactors touching multiple files go through OpenSpec before coding.
 
-1. **Propose** → `openspec new change "<name>"` → create proposal.md, design.md, specs, tasks.md
+1. **Propose** → `openspec new change "<name>"` → proposal.md, design.md, specs, tasks.md
 2. **Validate** → `openspec validate "<name>" --strict --no-interactive`
 3. **Implement** → `/opsx-apply` or work through tasks.md
 4. **Archive** → `openspec archive "<name>"` after merge
 
-**No exceptions.** Do not skip straight to coding. The proposal captures *why*, the spec captures *what*, the design captures *how*, and tasks capture *the plan*. This applies to:
-- New features (even small ones)
-- Bug fixes that change behavior
-- Refactors that touch multiple files
-
-**Only skip OpenSpec for:** typo fixes, dependency bumps, or single-line config changes.
+Skip only for: typo fixes, dependency bumps, single-line config changes.
 
 <!-- HARNESS:START -->
 <!-- Managed block - do not edit manually. Updated by: harness-init skill -->
@@ -215,6 +312,9 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 - **No starting work without a GitHub issue.**
 - **No archiving without Review Verdict = PASS.**
 - **No modifying harness rules without user approval.**
+- **No direct commits to `master` or `b-main`.** Always work on a feature branch (`feat/`, `fix/`, `chore/`, `docs/`) and open a PR. The only exception is a merge commit produced by resolving an existing PR's conflicts — and even then the resolution should normally happen on the PR's head branch, not on the target.
+- **No `git push origin <branch>` without first verifying you are ON `<branch>`.** Always run `git branch --show-current` (or check `git status` header) before pushing. Pushing while on the wrong branch silently returns "Everything up-to-date" without error. Use `git push` (no args, relies on upstream tracking) when in doubt.
+- **No merging trunk-into-trunk locally.** If a PR's base needs to absorb its head (e.g. `b-main → master`), let the GitHub merge button handle it after conflicts are resolved on the PR head. Local `git merge origin/<other-trunk>` followed by `push origin <this-trunk>` bypasses CI gates and PR review history.
 
 ### Git push workflow (container environment)
 
@@ -242,5 +342,35 @@ gh auth switch --user nus-rick
 KOKOROLX_TOKEN=$(gh auth token --user kokorolx)
 git push "https://kokorolx:${KOKOROLX_TOKEN}@github.com/nano-step/nano-brain.git" <branch>
 ```
+
+### Release flow
+
+Date-based auto-release pipeline (master push → tag → binaries + npm publish):
+
+| Trigger | Workflow | Effect |
+|---|---|---|
+| `master` push | `.github/workflows/auto-tag.yml` | Compute next tag `v{YYYY}.{M}.{D}.{N}` (e.g. `v2026.5.30.1`) → push tag via `RELEASE_PAT` |
+| `v*` tag push | `.github/workflows/release.yml` | Cross-build 4-platform Go binaries (linux/darwin × amd64/arm64) → create GH Release with binaries → `npm publish --tag latest` both `@nano-step/nano-brain` and `nano-brain` (unscoped alias) |
+| PR opened/sync | `.github/workflows/gemini-review.yml` → shared `gemini-review.yml@v1` | Gemini code review comment on PR |
+| `master` / `b-main` push, PR | `.github/workflows/ci.yml` | `go build` + `go test -race -short` against ephemeral PG service |
+
+Required repo secrets (set via `gh secret set --repo nano-step/nano-brain`):
+
+| Secret | Used by | Source |
+|---|---|---|
+| `RELEASE_PAT` | auto-tag | Classic PAT with `repo` scope. Required so the tag push re-triggers release.yml (tags pushed by `GITHUB_TOKEN` do NOT trigger downstream workflows — GitHub anti-recursion guard) |
+| `NPM_TOKEN` | release.yml (npm-publish job) | `npm token create --read-only=false` (Automation type) for npmjs.org |
+| `GEMINI_API_KEY` | gemini-review | https://aistudio.google.com/apikey |
+
+**Tag scheme:** `v{YYYY}.{M}.{D}.{N}` where `N` is the daily run-number (starts at 1, increments per push). Example: `v2026.5.30.1`, `v2026.5.30.2`. The dot before `N` is mandatory — the prior no-dot scheme (`v2026.5.301`) collided between single-digit and multi-digit days.
+
+**Skip-release markers:** any of these in the commit subject bypass auto-tag:
+- `[skip-release]`
+- `[skip ci]`
+- `chore: bump version` prefix (anti-loop guard for any historic publish-stable-style bump commits)
+
+Bot commits authored as `github-actions[bot]` are also auto-skipped.
+
+**`package.json.version`** stays at `0.0.0-dev` on master. The auto-tag workflow rewrites it in-place from the tag value before `npm publish` — the bump is NEVER committed back to master.
 
 <!-- HARNESS:END -->

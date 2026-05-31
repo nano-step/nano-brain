@@ -117,6 +117,15 @@ func main() {
 		case "doctor":
 			runDoctorCmd(args[1:], configPath)
 			return
+		case "context":
+			runContextCmd(args[1:])
+			return
+		case "code-impact":
+			runCodeImpactCmd(args[1:])
+			return
+		case "detect-changes":
+			runDetectChangesCmd(args[1:])
+			return
 		case "reset-embeddings":
 			runResetEmbeddingsCmd(args[1:])
 			return
@@ -278,6 +287,21 @@ func startServer(configPath string) {
 	} else {
 		graphExtractors = append(graphExtractors, goGE)
 	}
+	if tsGE, err := graph.NewTypeScriptGraphExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("typescript graph extractor init failed, skipping")
+	} else {
+		graphExtractors = append(graphExtractors, tsGE)
+	}
+	if jsGE, err := graph.NewJavaScriptGraphExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("javascript graph extractor init failed, skipping")
+	} else {
+		graphExtractors = append(graphExtractors, jsGE)
+	}
+	if pyGE, err := graph.NewPythonGraphExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("python graph extractor init failed, skipping")
+	} else {
+		graphExtractors = append(graphExtractors, pyGE)
+	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 
 	fw := watcher.New(db, queries, logger, *cfg).
@@ -303,7 +327,8 @@ func startServer(configPath string) {
 			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", cfg.Embedding.URL).Msg("embedding provider init failed")
 		} else {
 			embedder = e
-			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency)
+			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency).
+				WithMaxChars(cfg.Embedding.MaxChars)
 			fw.WithEmbedQueue(eq)
 			// Publisher is wired after bus creation below.
 		}

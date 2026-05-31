@@ -164,7 +164,7 @@ func TestOpenCodeSQLite_Integration_RealPostgres(t *testing.T) {
 		t.Errorf("errCount = %d, want 0", errCount)
 	}
 
-	q := sqlc.New(pgDB)
+	q = sqlc.New(pgDB)
 	doc, lookupErr := q.GetDocumentBySourcePath(context.Background(), sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    "summary://opencode/int-sess-1",
 		WorkspaceHash: wsHash,

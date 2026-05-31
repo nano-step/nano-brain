@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "open-design": {
+      "type": "local",
+      "command": ["npx", "-y", "open-design-mcp@latest"],
+      "enabled": false
+    },
+    "playwright_port_19223": {
+      "type": "local",
+      "command": ["playwright-mcp", "--cdp-endpoint", "http://192.168.65.254:19223"],
+      "enabled": false
+    },
+    "chrome-devtools_port_19223": {
+      "type": "local",
+      "command": ["chrome-devtools-mcp", "--browserUrl", "http://192.168.65.254:19223"],
+      "enabled": false
+    },
+    "playwright_port_19280": {
+      "type": "local",
+      "command": ["playwright-mcp", "--cdp-endpoint", "http://192.168.65.254:19280"],
+      "enabled": false
+    },
+    "chrome-devtools_port_19280": {
+      "type": "local",
+      "command": ["chrome-devtools-mcp", "--browserUrl", "http://192.168.65.254:19280"],
+      "enabled": false
+    }
+  }
+}

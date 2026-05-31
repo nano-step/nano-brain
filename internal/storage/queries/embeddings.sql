@@ -21,6 +21,9 @@ UPDATE chunks SET embed_status = 'embedded' WHERE id = $1 AND workspace_hash = $
 -- name: MarkChunkEmbedFailed :exec
 UPDATE chunks SET embed_status = 'embed_failed' WHERE id = $1 AND workspace_hash = $2;
 
+-- name: MarkChunkEmbedPermanentlyFailed :exec
+UPDATE chunks SET embed_status = 'embed_permanently_failed' WHERE id = $1 AND workspace_hash = $2;
+
 -- name: CountPendingChunks :one
 SELECT count(*) FROM chunks WHERE workspace_hash = $1 AND embed_status = 'pending';
 
