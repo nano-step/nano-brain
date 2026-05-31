@@ -159,6 +159,11 @@ func GraphNeighborhood(q NeighborhoodQuerier, logger zerolog.Logger) echo.Handle
 						neighbor = e.SourceNode
 					}
 					if !visited[neighbor] {
+						if len(visited) >= maxNeighborhoodNodes {
+							truncated = true
+							frontierNodes = append(frontierNodes, neighbor)
+							continue
+						}
 						visited[neighbor] = true
 						nextFrontier = append(nextFrontier, neighbor)
 					}
