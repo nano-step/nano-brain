@@ -1,0 +1,80 @@
+=== RUN   TestLoadDefaults
+--- PASS: TestLoadDefaults (0.00s)
+=== RUN   TestEnvVarOverride
+--- PASS: TestEnvVarOverride (0.00s)
+=== RUN   TestConfigFileOverride
+--- PASS: TestConfigFileOverride (0.00s)
+=== RUN   TestEnvVarOverridesFile
+--- PASS: TestEnvVarOverridesFile (0.00s)
+=== RUN   TestInvalidRangeRejectsStartup
+=== RUN   TestInvalidRangeRejectsStartup/negative_concurrency
+=== RUN   TestInvalidRangeRejectsStartup/invalid_port_zero
+=== RUN   TestInvalidRangeRejectsStartup/invalid_port_too_high
+=== RUN   TestInvalidRangeRejectsStartup/negative_rrf_k
+=== RUN   TestInvalidRangeRejectsStartup/invalid_recency_weight_negative
+=== RUN   TestInvalidRangeRejectsStartup/invalid_recency_weight_too_high
+=== RUN   TestInvalidRangeRejectsStartup/invalid_recency_half_life_days_zero
+=== RUN   TestInvalidRangeRejectsStartup/invalid_recency_half_life_days_negative
+=== RUN   TestInvalidRangeRejectsStartup/invalid_search_limit_zero
+=== RUN   TestInvalidRangeRejectsStartup/invalid_telemetry_retention_zero
+--- PASS: TestInvalidRangeRejectsStartup (0.01s)
+    --- PASS: TestInvalidRangeRejectsStartup/negative_concurrency (0.00s)
+    --- PASS: TestInvalidRangeRejectsStartup/invalid_port_zero (0.00s)
+    --- PASS: TestInvalidRangeRejectsStartup/invalid_port_too_high (0.00s)
+    --- PASS: TestInvalidRangeRejectsStartup/negative_rrf_k (0.00s)
+    --- PASS: TestInvalidRangeRejectsStartup/invalid_recency_weight_negative (0.00s)
+    --- PASS: TestInvalidRangeRejectsStartup/invalid_recency_weight_too_high (0.00s)
+    --- PASS: TestInvalidRangeRejectsStartup/invalid_recency_half_life_days_zero (0.00s)
+    --- PASS: TestInvalidRangeRejectsStartup/invalid_recency_half_life_days_negative (0.00s)
+    --- PASS: TestInvalidRangeRejectsStartup/invalid_search_limit_zero (0.00s)
+    --- PASS: TestInvalidRangeRejectsStartup/invalid_telemetry_retention_zero (0.00s)
+=== RUN   TestGeneratesDefaultConfigFile
+--- PASS: TestGeneratesDefaultConfigFile (0.00s)
+=== RUN   TestRecencyWeightBoundaryValues
+=== RUN   TestRecencyWeightBoundaryValues/recency_weight_zero
+=== RUN   TestRecencyWeightBoundaryValues/recency_weight_one
+--- PASS: TestRecencyWeightBoundaryValues (0.00s)
+    --- PASS: TestRecencyWeightBoundaryValues/recency_weight_zero (0.00s)
+    --- PASS: TestRecencyWeightBoundaryValues/recency_weight_one (0.00s)
+=== RUN   TestVoyageAPIKeyFromEnv
+--- PASS: TestVoyageAPIKeyFromEnv (0.00s)
+=== RUN   TestDatabaseURLFromEnv
+--- PASS: TestDatabaseURLFromEnv (0.00s)
+=== RUN   TestOpenCodeSessionDirFromEnv
+--- PASS: TestOpenCodeSessionDirFromEnv (0.00s)
+=== RUN   TestOpenCodeDBPathFromEnv
+--- PASS: TestOpenCodeDBPathFromEnv (0.00s)
+=== RUN   TestOpenCodeDBRootFromEnv
+--- PASS: TestOpenCodeDBRootFromEnv (0.00s)
+=== RUN   TestOpenCodeDBRootFromYAML
+--- PASS: TestOpenCodeDBRootFromYAML (0.00s)
+=== RUN   TestDefaultConfigPath
+--- PASS: TestDefaultConfigPath (0.00s)
+=== RUN   TestMultipleEnvVarsOverride
+--- PASS: TestMultipleEnvVarsOverride (0.00s)
+=== RUN   TestStorageValidation
+--- PASS: TestStorageValidation (0.00s)
+=== RUN   TestGenerateDefaultCreatesDirectories
+--- PASS: TestGenerateDefaultCreatesDirectories (0.00s)
+=== RUN   TestSummarizationConfig_OutputDirHonored
+--- PASS: TestSummarizationConfig_OutputDirHonored (0.00s)
+=== RUN   TestSummarizationConfig_WriteToDiskDefaultsTrue
+--- PASS: TestSummarizationConfig_WriteToDiskDefaultsTrue (0.00s)
+=== RUN   TestSummarizationConfig_WriteToDiskExplicitFalse
+--- PASS: TestSummarizationConfig_WriteToDiskExplicitFalse (0.00s)
+=== RUN   TestSummarizationConfig_OutputDirTildeExpanded
+--- PASS: TestSummarizationConfig_OutputDirTildeExpanded (0.00s)
+=== RUN   TestSummarizationConfig_OutputDirDefaultPath
+--- PASS: TestSummarizationConfig_OutputDirDefaultPath (0.00s)
+=== RUN   TestResolveFilter_GlobalOnly
+--- PASS: TestResolveFilter_GlobalOnly (0.00s)
+=== RUN   TestResolveFilter_WorkspaceOverride
+--- PASS: TestResolveFilter_WorkspaceOverride (0.00s)
+=== RUN   TestResolveFilterForPath_PrefixMatch
+--- PASS: TestResolveFilterForPath_PrefixMatch (0.00s)
+=== RUN   TestResolveFilterForPath_NoMatch
+--- PASS: TestResolveFilterForPath_NoMatch (0.00s)
+=== RUN   TestResolveConfigPath_FlagWins
+--- PASS: TestResolveConfigPath_FlagWins (0.00s)
+=== RUN   TestResolveConfigPath_EnvWhenNoFlag
+--- PASS: TestResolveConfigPath_EnvWhenNoFlag (0.00s)

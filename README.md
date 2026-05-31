@@ -145,6 +145,49 @@ summarization:
   concurrency: 3                # parallel map-phase LLM calls
 ```
 
+### Authentication (VPS / remote deployment)
+
+When binding to a non-loopback address, enable auth to protect your memory:
+
+```yaml
+server:
+  host: 0.0.0.0
+  port: 3100
+  auth:
+    enabled: true
+    realm: nano-brain
+    users:
+      - username: admin
+        password_hash: "$2a$10$..."   # from: nano-brain auth hash <password>
+    tokens:
+      - "nbt_..."                     # from: nano-brain auth token
+    bypass_paths:
+      - /health
+```
+
+Generate credentials:
+
+```bash
+# Generate bcrypt hash for Basic Auth
+nano-brain auth hash mypassword
+
+# Generate bearer token
+nano-brain auth token
+```
+
+Usage examples:
+
+```bash
+# Basic Auth
+curl -u admin:mypassword http://host:3100/api/v1/query -d '{"query":"test"}'
+
+# Bearer token
+curl -H "Authorization: Bearer nbt_..." http://host:3100/api/v1/query -d '{"query":"test"}'
+
+# MCP client with URL-embedded credentials
+# url: http://admin:mypassword@host:3100/mcp
+```
+
 ### Global ignore patterns (`~/.nano-brain/.nano-brainignore`)
 
 The watcher loads a global gitignore-style file at `~/.nano-brain/.nano-brainignore`
@@ -243,6 +286,8 @@ Large sessions (100K+ tokens) are handled via map-reduce chunking — no session
 | `OPENCODE_DB_PATH` | OpenCode single SQLite database path |
 | `OPENCODE_STORAGE_DIR` | OpenCode session directory (legacy) |
 | `NANO_BRAIN_SUMMARIZE_API_KEY` | API key for the summarization LLM provider |
+| `NANO_BRAIN_AUTH_ENABLED` | Enable Basic Auth + Bearer Token (`true`/`false`) |
+| `NANO_BRAIN_AUTH_TOKENS` | Comma-separated bearer tokens |
 | `NANO_BRAIN_*` | Override any config field (e.g., `NANO_BRAIN_SERVER_PORT=3100`) |
 
 **Docker example** — run the server in a container against a host PostgreSQL:
@@ -328,6 +373,8 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | `nano-brain logs [-n 50] [-f]` | Tail log file |
 | `nano-brain docker start\|stop\|status` | Docker compose management |
 | `nano-brain status [--json]` | Server status |
+| `nano-brain auth hash <password>` | Generate bcrypt password hash for config |
+| `nano-brain auth token` | Generate random bearer token (`nbt_`-prefixed) |
 | `nano-brain doctor [--json]` | Check prerequisites (config, PostgreSQL, pgvector, Ollama, model) |
 
 ## MCP Tools

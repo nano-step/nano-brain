@@ -215,6 +215,11 @@ export interface Config {
   server: {
     host: string
     port: number
+    auth?: {
+      enabled: boolean
+      realm?: string
+      bypass_paths?: string[]
+    }
   }
   database: {
     url: string

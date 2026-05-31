@@ -7,6 +7,8 @@ var SecretFieldPaths = []string{
 	"database.url",
 	"embedding.voyage_api_key",
 	"summarization.api_key",
+	"server.auth.users",
+	"server.auth.tokens",
 }
 
 func IsSecretFieldPath(path string) bool {
@@ -23,5 +25,7 @@ func RedactSecrets(cfg *Config) *Config {
 	cp.Database.URL = "<redacted>"
 	cp.Embedding.VoyageAPIKey = "<redacted>"
 	cp.Summarization.APIKey = "<redacted>"
+	cp.Server.Auth.Users = nil
+	cp.Server.Auth.Tokens = nil
 	return &cp
 }

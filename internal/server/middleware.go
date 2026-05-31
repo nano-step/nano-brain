@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/server/middleware"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
@@ -26,7 +28,22 @@ const (
 func registerMiddleware(s *Server) {
 	s.echo.Use(requestLoggingMiddleware(s.logger))
 	s.echo.Use(versionHeaderMiddleware(s.version))
+	s.echo.Use(middleware.Auth(authSnapshotFromConfig(s.fullCfg.Server.Auth), s.logger))
 	s.echo.HTTPErrorHandler = httpErrorHandler(s)
+}
+
+func authSnapshotFromConfig(ac config.AuthConfig) middleware.AuthSnapshot {
+	users := make([]middleware.AuthUser, len(ac.Users))
+	for i, u := range ac.Users {
+		users[i] = middleware.AuthUser{Username: u.Username, PasswordHash: u.PasswordHash}
+	}
+	return middleware.AuthSnapshot{
+		Enabled:     ac.Enabled,
+		Realm:       ac.Realm,
+		Users:       users,
+		Tokens:      ac.Tokens,
+		BypassPaths: ac.BypassPaths,
+	}
 }
 
 // generateShortID returns an 8-character hex request ID derived from 4 random

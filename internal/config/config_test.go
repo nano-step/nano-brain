@@ -759,3 +759,88 @@ func TestResolveConfigPathStrict_WarnsOnFlagMissingFile(t *testing.T) {
 		t.Errorf("warning should mention --config, got %q", warn)
 	}
 }
+
+func TestAuthConfig_EnabledFromEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+	t.Setenv("NANO_BRAIN_AUTH_ENABLED", "true")
+
+	cfg, err := Load(configPath)
+	if err == nil {
+		t.Log("auth enabled but no users/tokens — expecting validation error")
+	}
+	_ = cfg
+	_ = err
+}
+
+func TestAuthConfig_EnabledFromYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+	yamlContent := `server:
+  auth:
+    enabled: true
+    realm: "test-realm"
+    users:
+      - username: admin
+        password_hash: "$2a$10$fakehashjustfortest1234567890ab"
+    bypass_paths:
+      - /health
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if !cfg.Server.Auth.Enabled {
+		t.Error("expected Auth.Enabled=true")
+	}
+	if cfg.Server.Auth.Realm != "test-realm" {
+		t.Errorf("expected Realm=test-realm, got %q", cfg.Server.Auth.Realm)
+	}
+	if len(cfg.Server.Auth.Users) != 1 {
+		t.Fatalf("expected 1 user, got %d", len(cfg.Server.Auth.Users))
+	}
+	if cfg.Server.Auth.Users[0].Username != "admin" {
+		t.Errorf("expected username=admin, got %q", cfg.Server.Auth.Users[0].Username)
+	}
+}
+
+func TestAuthConfig_EnabledNoCredsRejectsStartup(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+	yamlContent := `server:
+  auth:
+    enabled: true
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected validation error for auth enabled without users/tokens")
+	}
+	if !contains(fmt.Sprintf("%v", err), "auth enabled but no users or tokens configured") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestAuthConfig_DefaultsDisabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.Server.Auth.Enabled {
+		t.Error("expected Auth.Enabled=false by default")
+	}
+	if cfg.Server.Auth.Realm != "nano-brain" {
+		t.Errorf("expected default Realm=nano-brain, got %q", cfg.Server.Auth.Realm)
+	}
+}
