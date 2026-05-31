@@ -680,6 +680,10 @@ func TestProcessChunk_SkipsDeletedChunk(t *testing.T) {
 	logger := zerolog.New(&buf).Level(zerolog.DebugLevel)
 	eq := NewQueue(me, mq, logger, "test-provider", "test-model", 1)
 	eq.pending.Store(1)
+	// Seed retry state so we can assert it's cleared (memory-leak fix per Gemini).
+	eq.retriesMu.Lock()
+	eq.retries[chunkID] = 2
+	eq.retriesMu.Unlock()
 
 	eq.processChunk(context.Background(), chunkID)
 
@@ -688,6 +692,13 @@ func TestProcessChunk_SkipsDeletedChunk(t *testing.T) {
 	}
 	if got := eq.pending.Load(); got != 0 {
 		t.Errorf("pending counter = %d, want 0 (must decrement on skip)", got)
+	}
+
+	eq.retriesMu.Lock()
+	_, retryStillPresent := eq.retries[chunkID]
+	eq.retriesMu.Unlock()
+	if retryStillPresent {
+		t.Errorf("expected retry entry for %s to be cleared (memory-leak fix), but it is still in q.retries", chunkID)
 	}
 
 	logs := buf.String()
