@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
@@ -604,7 +605,7 @@ func TestQueue_ScanPendingRecoversFailed(t *testing.T) {
 	}
 }
 
-func TestQueue_PendingDecrementsOnMarkEmbeddedError(t *testing.T) {
+func TestQueue_PendingPreservedOnMarkEmbeddedError(t *testing.T) {
 	mq := &mockQuerier{
 		markChunkEmbeddedFn: func(_ context.Context, _ sqlc.MarkChunkEmbeddedParams) error {
 			return fmt.Errorf("db error")
@@ -615,8 +616,8 @@ func TestQueue_PendingDecrementsOnMarkEmbeddedError(t *testing.T) {
 
 	eq.processChunk(context.Background(), uuid.New())
 
-	if eq.pending.Load() != 0 {
-		t.Errorf("pending = %d, want 0 after MarkChunkEmbedded error", eq.pending.Load())
+	if eq.pending.Load() != 1 {
+		t.Errorf("pending = %d, want 1 after MarkChunkEmbedded error (invariant: chunk still pending in DB)", eq.pending.Load())
 	}
 }
 
@@ -838,5 +839,146 @@ func TestProcessChunk_TransientErrorRetries(t *testing.T) {
 	eq.retriesMu.Unlock()
 	if !retryPresent || count == 0 {
 		t.Errorf("retry counter not incremented for transient error (present=%v count=%d)", retryPresent, count)
+	}
+}
+
+type mockPublisher struct {
+	mu     sync.Mutex
+	events []eventbus.Event
+}
+
+func (m *mockPublisher) Publish(e eventbus.Event) {
+	m.mu.Lock()
+	m.events = append(m.events, e)
+	m.mu.Unlock()
+}
+
+func (m *mockPublisher) eventCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.events)
+}
+
+func TestQueue_RetryRequeueChannelFull(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{
+		embedFn: func(_ context.Context, _ string) ([]float32, error) {
+			return nil, fmt.Errorf("provider down")
+		},
+	}
+	mq := &mockQuerier{}
+
+	eq := NewQueue(me, mq, zerolog.Nop(), "test-provider", "test-model", 1)
+	eq.pending.Store(1)
+	eq.resetBackoff()
+
+	for i := 0; i < channelCapacity; i++ {
+		eq.ch <- uuid.New()
+	}
+
+	eq.processChunk(context.Background(), chunkID)
+
+	if got := eq.pending.Load(); got != 1 {
+		t.Errorf("pending = %d, want 1 (channel-full retry must not decrement pending)", got)
+	}
+
+	eq.retriesMu.Lock()
+	count := eq.retries[chunkID]
+	eq.retriesMu.Unlock()
+	if count != 1 {
+		t.Errorf("retry count = %d, want 1", count)
+	}
+
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+	if mq.markChunkEmbedFailedCalls != 0 {
+		t.Errorf("MarkChunkEmbedFailed calls = %d, want 0 (not at maxRetries yet)", mq.markChunkEmbedFailedCalls)
+	}
+}
+
+func TestQueue_MarkChunkEmbeddedFailure(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{}
+	mq := &mockQuerier{
+		markChunkEmbeddedFn: func(_ context.Context, _ sqlc.MarkChunkEmbeddedParams) error {
+			return fmt.Errorf("db connection lost")
+		},
+	}
+
+	pub := &mockPublisher{}
+	eq := newTestQueue(me, mq)
+	eq.WithPublisher(pub)
+	eq.pending.Store(1)
+
+	eq.processChunk(context.Background(), chunkID)
+
+	if got := eq.pending.Load(); got != 1 {
+		t.Errorf("pending = %d, want 1 (MarkChunkEmbedded failure must not decrement pending)", got)
+	}
+
+	mq.mu.Lock()
+	insertCalls := mq.insertEmbeddingCalls
+	markCalls := mq.markChunkEmbeddedCalls
+	mq.mu.Unlock()
+	if insertCalls != 1 {
+		t.Errorf("InsertEmbedding calls = %d, want 1", insertCalls)
+	}
+	if markCalls != 1 {
+		t.Errorf("MarkChunkEmbedded calls = %d, want 1", markCalls)
+	}
+
+	if pub.eventCount() == 0 {
+		t.Error("publishStatus should have been called on MarkChunkEmbedded failure")
+	}
+}
+
+func TestQueue_InvariantPendingMatchesDB(t *testing.T) {
+	if testing.Short() {
+		t.Skip("stress test skipped in -short mode")
+	}
+
+	scenarios := []struct {
+		name          string
+		embedErr      error
+		markErr       error
+		wantPendingDelta int64 // -1 means decremented (success/hard-fail), 0 means preserved
+	}{
+		{"success", nil, nil, -1},
+		{"transient_embed_error", fmt.Errorf("connection refused"), nil, 0},
+		{"mark_embedded_failure", nil, fmt.Errorf("db timeout"), 0},
+		{"hard_fail_400", fmt.Errorf("ollama: unexpected status 400: bad input"), nil, -1},
+		{"success_2", nil, nil, -1},
+		{"transient_then_ok", fmt.Errorf("timeout"), nil, 0},
+		{"mark_fail_2", nil, fmt.Errorf("connection lost"), 0},
+	}
+
+	for _, sc := range scenarios {
+		t.Run(sc.name, func(t *testing.T) {
+			chunkID := uuid.New()
+			me := &mockEmbedder{
+				embedFn: func(_ context.Context, _ string) ([]float32, error) {
+					if sc.embedErr != nil {
+						return nil, sc.embedErr
+					}
+					return []float32{0.1, 0.2, 0.3}, nil
+				},
+			}
+			mq := &mockQuerier{
+				markChunkEmbeddedFn: func(_ context.Context, _ sqlc.MarkChunkEmbeddedParams) error {
+					return sc.markErr
+				},
+			}
+
+			eq := newTestQueue(me, mq)
+			eq.pending.Store(1)
+			eq.resetBackoff()
+
+			eq.processChunk(context.Background(), chunkID)
+
+			wantPending := int64(1) + sc.wantPendingDelta
+			if got := eq.pending.Load(); got != wantPending {
+				t.Errorf("pending = %d, want %d", got, wantPending)
+			}
+		})
 	}
 }

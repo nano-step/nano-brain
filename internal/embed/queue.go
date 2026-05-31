@@ -58,6 +58,7 @@ type Queue struct {
 	concurrency int
 	backoff     backoffState
 	mu          sync.Mutex
+	// pending tracks chunks awaiting embed. Invariant: pending.Load() == COUNT(chunks WHERE embed_status='pending').
 	pending        atomic.Int64
 	retries        map[uuid.UUID]int
 	retriesMu      sync.Mutex
@@ -305,7 +306,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		WorkspaceHash: chunk.WorkspaceHash,
 	}); err != nil {
 		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("mark embedded failed")
-		q.pending.Add(-1)
+		q.publishStatus()
 		return
 	}
 
@@ -362,8 +363,7 @@ func (q *Queue) handleRetry(ctx context.Context, chunkID uuid.UUID, workspaceHas
 	case q.ch <- chunkID:
 		q.logger.Debug().Str("chunk_id", chunkID.String()).Int("retry", count).Msg("chunk re-enqueued for retry")
 	default:
-		q.pending.Add(-1)
-		q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("retry re-enqueue failed, will be picked up on scan")
+		q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("retry re-enqueue failed (channel full), will be picked up on scan")
 	}
 }
 
