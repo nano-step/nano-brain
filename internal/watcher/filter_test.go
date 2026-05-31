@@ -192,6 +192,34 @@ func TestFileFilter_GlobalIgnoreApplies(t *testing.T) {
 	}
 }
 
+func TestFileFilter_GlobalIgnoreMatchesDirectoryWithTrailingSlash(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+	gdir := filepath.Join(home, ".nano-brain")
+	if err := os.MkdirAll(gdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// gitignore pattern with trailing slash matches dirs only — common Obsidian/build pattern.
+	if err := os.WriteFile(filepath.Join(gdir, ".nano-brainignore"), []byte("custom_build/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gi, _, err := LoadGlobalIgnore(home)
+	if err != nil || gi == nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	f := newFileFilter(root, nil, nil, gi)
+	if !f.shouldSkip(filepath.Join(root, "custom_build"), true) {
+		t.Error("custom_build directory must be skipped (gitignore 'custom_build/' pattern requires trailing slash)")
+	}
+	if !f.shouldSkip(filepath.Join(root, "custom_build", "output.bin"), false) {
+		t.Error("file inside custom_build/ should also be skipped")
+	}
+	if f.shouldSkip(filepath.Join(root, "src"), true) {
+		t.Error("src directory should NOT be skipped")
+	}
+}
+
 func TestFileFilter_GlobalIgnoreCombinesWithPerCollection(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()

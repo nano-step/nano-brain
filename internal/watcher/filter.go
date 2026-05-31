@@ -80,11 +80,16 @@ func (f *fileFilter) shouldSkip(absPath string, isDir bool) bool {
 		}
 	}
 
-	if f.globalIgnore != nil && f.globalIgnore.MatchesPath(rel) {
+	matchRel := rel
+	if isDir && rel != "." && !strings.HasSuffix(matchRel, "/") {
+		matchRel = matchRel + "/"
+	}
+
+	if f.globalIgnore != nil && f.globalIgnore.MatchesPath(matchRel) {
 		return true
 	}
 
-	if f.gitignoreMatcher != nil && f.gitignoreMatcher.MatchesPath(rel) {
+	if f.gitignoreMatcher != nil && f.gitignoreMatcher.MatchesPath(matchRel) {
 		return true
 	}
 
