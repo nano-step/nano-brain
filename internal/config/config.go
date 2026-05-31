@@ -48,8 +48,24 @@ type Config struct {
 
 // ServerConfig holds server configuration.
 type ServerConfig struct {
-	Host string `koanf:"host"`
-	Port int    `koanf:"port"`
+	Host string     `koanf:"host"`
+	Port int        `koanf:"port"`
+	Auth AuthConfig `koanf:"auth"`
+}
+
+// AuthConfig holds authentication configuration for VPS/remote deployments.
+type AuthConfig struct {
+	Enabled     bool       `koanf:"enabled"`
+	Realm       string     `koanf:"realm"`
+	Users       []UserCred `koanf:"users"`
+	Tokens      []string   `koanf:"tokens"`
+	BypassPaths []string   `koanf:"bypass_paths"`
+}
+
+// UserCred holds a single Basic Auth credential (username + bcrypt hash).
+type UserCred struct {
+	Username     string `koanf:"username"`
+	PasswordHash string `koanf:"password_hash"`
 }
 
 // DatabaseConfig holds database configuration.
@@ -219,12 +235,15 @@ func Load(configPath string) (*Config, error) {
 
 	// Special non-prefixed env vars
 	specialEnvVars := map[string]string{
-		"VOYAGE_API_KEY":           "embedding.voyage_api_key",
-		"DATABASE_URL":             "database.url",
-		"OPENCODE_STORAGE_DIR":     "harvester.opencode.session_dir",
-		"OPENCODE_DB_PATH":         "harvester.opencode.db_path",
-		"OPENCODE_DB_ROOT":         "harvester.opencode.db_root",
+		"VOYAGE_API_KEY":               "embedding.voyage_api_key",
+		"DATABASE_URL":                 "database.url",
+		"OPENCODE_STORAGE_DIR":         "harvester.opencode.session_dir",
+		"OPENCODE_DB_PATH":             "harvester.opencode.db_path",
+		"OPENCODE_DB_ROOT":             "harvester.opencode.db_root",
 		"NANO_BRAIN_SUMMARIZE_API_KEY": "summarization.api_key",
+		"NANO_BRAIN_AUTH_ENABLED":      "server.auth.enabled",
+		"NANO_BRAIN_AUTH_REALM":        "server.auth.realm",
+		"NANO_BRAIN_AUTH_TOKENS":       "server.auth.tokens",
 	}
 	for envVar, key := range specialEnvVars {
 		if value, exists := os.LookupEnv(envVar); exists {
@@ -326,6 +345,13 @@ func validate(cfg *Config) error {
 	if cfg.Logging.Level != "" {
 		if _, err := zerolog.ParseLevel(cfg.Logging.Level); err != nil {
 			errs = append(errs, fmt.Errorf("logging.level %q is not valid", cfg.Logging.Level))
+		}
+	}
+
+	// Validate Auth
+	if cfg.Server.Auth.Enabled {
+		if len(cfg.Server.Auth.Users) == 0 && len(cfg.Server.Auth.Tokens) == 0 {
+			errs = append(errs, errors.New("auth enabled but no users or tokens configured"))
 		}
 	}
 

@@ -4,10 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { NonLoopbackBindBanner } from '../components/NonLoopbackBindBanner'
 import type { ConfigResponse } from '../api/types'
 
-function makeConfig(host: string, port = 3100): ConfigResponse {
+function makeConfig(host: string, port = 3100, authEnabled = false): ConfigResponse {
   return {
     config: {
-      server: { host, port },
+      server: { host, port, auth: { enabled: authEnabled } },
       database: { url: '<redacted>' },
       embedding: { provider: 'ollama', url: '', model: '', dimension: 0, concurrency: 3, voyage_api_key: '<redacted>' },
       harvester: { opencode: { session_dir: '', db_path: '', db_root: '' }, claudecode: { enabled: false, session_dir: '' } },
@@ -66,6 +66,12 @@ describe('NonLoopbackBindBanner', () => {
 
   it('hides banner for ::1', async () => {
     const { container } = renderBanner(makeConfig('::1'))
+    await new Promise((r) => setTimeout(r, 100))
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('hides banner when auth.enabled=true and host is non-loopback', async () => {
+    const { container } = renderBanner(makeConfig('0.0.0.0', 3100, true))
     await new Promise((r) => setTimeout(r, 100))
     expect(container.querySelector('[role="alert"]')).toBeNull()
   })

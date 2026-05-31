@@ -19,8 +19,9 @@ export function NonLoopbackBindBanner() {
 
   const host = data.config?.server?.host ?? 'localhost'
   const port = data.config?.server?.port ?? 3100
+  const authEnabled = data.config?.server?.auth?.enabled ?? false
 
-  if (isLoopback(host)) return null
+  if (isLoopback(host) || authEnabled) return null
 
   return (
     <div className="banner-danger" role="alert" aria-live="polite">

@@ -141,6 +141,9 @@ func main() {
 		case "multi-get":
 			runMultiGetCmd(args[1:])
 			return
+		case "auth":
+			runAuthCmd(args[1:])
+			return
 		case "version":
 			runVersionCmd(args[1:])
 			return
@@ -205,7 +208,7 @@ func startServer(configPath string) {
 
 	applyVerbose(&cfg.Logging)
 
-	if err := checkBindSafety(cfg.Server.Host); err != nil {
+	if err := checkBindSafety(cfg.Server.Host, cfg.Server.Auth.Enabled); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -216,7 +219,7 @@ func startServer(configPath string) {
 	}
 	cliLog = logger
 
-	if unsafeNoAuth && !isLoopback(cfg.Server.Host) {
+	if unsafeNoAuth && !isLoopback(cfg.Server.Host) && !cfg.Server.Auth.Enabled {
 		logger.Warn().Str("host", cfg.Server.Host).Msg("bound to non-loopback without auth (--unsafe-no-auth set)")
 	}
 

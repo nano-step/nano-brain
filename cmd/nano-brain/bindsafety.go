@@ -18,11 +18,14 @@ func isLoopback(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func checkBindSafety(host string) error {
+func checkBindSafety(host string, authEnabled bool) error {
 	if host == "" {
 		host = "localhost"
 	}
 	if isLoopback(host) {
+		return nil
+	}
+	if authEnabled {
 		return nil
 	}
 	if unsafeNoAuth {
@@ -31,7 +34,7 @@ func checkBindSafety(host string) error {
 	return fmt.Errorf(
 		"server.host=%q binds to a non-loopback address without authentication. "+
 			"This exposes your memory to anyone on the network. Either bind to "+
-			"localhost/127.0.0.1/::1 OR pass --unsafe-no-auth to acknowledge the risk",
+			"localhost/127.0.0.1/::1, configure auth, OR pass --unsafe-no-auth to acknowledge the risk",
 		host,
 	)
 }

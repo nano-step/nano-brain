@@ -16,6 +16,11 @@ func getDefaults() *Config {
 		Server: ServerConfig{
 			Host: "localhost",
 			Port: 3100,
+			Auth: AuthConfig{
+				Enabled:     false,
+				Realm:       "nano-brain",
+				BypassPaths: []string{"/health"},
+			},
 		},
 		Database: DatabaseConfig{
 			URL: "postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev",

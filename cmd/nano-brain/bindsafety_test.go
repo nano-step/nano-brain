@@ -34,7 +34,7 @@ func TestCheckBindSafety_RejectsNonLoopback(t *testing.T) {
 	unsafeNoAuth = false
 	defer func() { unsafeNoAuth = old }()
 
-	err := checkBindSafety("0.0.0.0")
+	err := checkBindSafety("0.0.0.0", false)
 	if err == nil {
 		t.Fatal("checkBindSafety(0.0.0.0) should return error without --unsafe-no-auth")
 	}
@@ -46,7 +46,7 @@ func TestCheckBindSafety_AllowsLoopback(t *testing.T) {
 	defer func() { unsafeNoAuth = old }()
 
 	for _, host := range []string{"localhost", "127.0.0.1", "::1", ""} {
-		if err := checkBindSafety(host); err != nil {
+		if err := checkBindSafety(host, false); err != nil {
 			t.Errorf("checkBindSafety(%q) returned unexpected error: %v", host, err)
 		}
 	}
@@ -57,7 +57,17 @@ func TestCheckBindSafety_UnsafeFlagBypasses(t *testing.T) {
 	unsafeNoAuth = true
 	defer func() { unsafeNoAuth = old }()
 
-	if err := checkBindSafety("0.0.0.0"); err != nil {
+	if err := checkBindSafety("0.0.0.0", false); err != nil {
 		t.Fatalf("checkBindSafety(0.0.0.0) with --unsafe-no-auth should not error: %v", err)
+	}
+}
+
+func TestCheckBindSafety_AuthEnabledBypasses(t *testing.T) {
+	old := unsafeNoAuth
+	unsafeNoAuth = false
+	defer func() { unsafeNoAuth = old }()
+
+	if err := checkBindSafety("0.0.0.0", true); err != nil {
+		t.Fatalf("checkBindSafety(0.0.0.0) with auth enabled should not error: %v", err)
 	}
 }
