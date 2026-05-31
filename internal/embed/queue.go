@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -262,6 +263,18 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 			Str("chunk_id", chunkID.String()).
 			Str("file", chunk.SourcePath).
 			Msg("embedding failed")
+		if isHardFailureEmbedError(err) {
+			if mErr := q.queries.MarkChunkEmbedFailed(ctx, sqlc.MarkChunkEmbedFailedParams{
+				ID:            chunkID,
+				WorkspaceHash: chunk.WorkspaceHash,
+			}); mErr != nil {
+				q.logger.Error().Err(mErr).Str("chunk_id", chunkID.String()).Msg("mark embed_failed (hard) failed")
+			}
+			q.pending.Add(-1)
+			q.clearRetries(chunkID)
+			q.publishStatus()
+			return
+		}
 		q.increaseBackoff()
 		q.handleRetry(ctx, chunkID, chunk.WorkspaceHash)
 		return
@@ -369,6 +382,31 @@ func truncateToMaxChars(s string, max int) string {
 		truncated = truncated[:len(truncated)-1]
 	}
 	return truncated
+}
+
+// hardFailureStatusCodes is the set of HTTP status codes that indicate a
+// permanent embed failure — retrying will not help. Provider strings are
+// "ollama: unexpected status <N>: ..." and "voyageai: unexpected status <N>: ..."
+// (verified in ollama.go:64 and voyageai.go:76). See issue #260.
+var hardFailureStatusCodes = []string{
+	"unexpected status 400:",
+	"unexpected status 401:",
+	"unexpected status 403:",
+	"unexpected status 413:",
+	"unexpected status 422:",
+}
+
+func isHardFailureEmbedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, code := range hardFailureStatusCodes {
+		if strings.Contains(msg, code) {
+			return true
+		}
+	}
+	return false
 }
 
 const embedPubDebounce = 500 * time.Millisecond
