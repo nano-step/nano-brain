@@ -43,9 +43,11 @@ func runServeCmd(args []string, configPath string) {
 		switch a {
 		case "-d", "--detach":
 			daemon = true
+		case "--unsafe-no-auth":
+			unsafeNoAuth = true
 		default:
 			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", a)
-			fmt.Fprintln(os.Stderr, "Usage: nano-brain serve [-d]")
+			fmt.Fprintln(os.Stderr, "Usage: nano-brain serve [-d] [--unsafe-no-auth]")
 			os.Exit(1)
 		}
 	}

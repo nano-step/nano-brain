@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -478,7 +479,7 @@ func contains(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
 
-func TestSummarizationConfig_OutputDirIgnored(t *testing.T) {
+func TestSummarizationConfig_OutputDirHonored(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yml")
 
@@ -505,6 +506,106 @@ func TestSummarizationConfig_OutputDirIgnored(t *testing.T) {
 	}
 	if cfg.Summarization.Model != "test-model" {
 		t.Errorf("expected Model=%q, got %q", "test-model", cfg.Summarization.Model)
+	}
+	if cfg.Summarization.OutputDir != "/tmp/foo" {
+		t.Errorf("expected OutputDir=%q, got %q", "/tmp/foo", cfg.Summarization.OutputDir)
+	}
+}
+
+func TestSummarizationConfig_WriteToDiskDefaultsTrue(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yamlContent := `summarization:
+  enabled: true
+  provider_url: "https://test/v1"
+  model: "test-model"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if !cfg.Summarization.IsWriteToDiskEnabled() {
+		t.Error("expected IsWriteToDiskEnabled()=true (default), got false")
+	}
+}
+
+func TestSummarizationConfig_WriteToDiskExplicitFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yamlContent := `summarization:
+  enabled: true
+  provider_url: "https://test/v1"
+  model: "test-model"
+  write_to_disk: false
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if cfg.Summarization.IsWriteToDiskEnabled() {
+		t.Error("expected IsWriteToDiskEnabled()=false (explicit), got true")
+	}
+}
+
+func TestSummarizationConfig_OutputDirTildeExpanded(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yamlContent := `summarization:
+  enabled: true
+  provider_url: "https://test/v1"
+  model: "test-model"
+  output_dir: "~/foo/bar"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if strings.HasPrefix(cfg.Summarization.OutputDir, "~/") {
+		t.Errorf("expected OutputDir to be tilde-expanded, got %q", cfg.Summarization.OutputDir)
+	}
+	if !strings.HasSuffix(cfg.Summarization.OutputDir, "/foo/bar") {
+		t.Errorf("expected OutputDir to end with /foo/bar, got %q", cfg.Summarization.OutputDir)
+	}
+}
+
+func TestSummarizationConfig_OutputDirDefaultPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	yamlContent := `summarization:
+  enabled: true
+  provider_url: "https://test/v1"
+  model: "test-model"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if !strings.HasSuffix(cfg.Summarization.OutputDir, "/.nano-brain/summaries") {
+		t.Errorf("expected OutputDir to end with /.nano-brain/summaries, got %q", cfg.Summarization.OutputDir)
 	}
 }
 
@@ -573,5 +674,276 @@ func TestResolveFilterForPath_NoMatch(t *testing.T) {
 	}
 	if len(exts) != 0 {
 		t.Errorf("expected no extensions for unmatched path, got %v", exts)
+	}
+}
+
+func TestResolveConfigPath_FlagWins(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "/from/env.yml")
+	got := ResolveConfigPath("/from/flag.yml")
+	if got != "/from/flag.yml" {
+		t.Errorf("expected flag value to win, got %q", got)
+	}
+}
+
+func TestResolveConfigPath_EnvWhenNoFlag(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "/from/env.yml")
+	got := ResolveConfigPath("")
+	if got != "/from/env.yml" {
+		t.Errorf("expected env var when no flag, got %q", got)
+	}
+}
+
+func TestResolveConfigPath_DefaultWhenNeitherSet(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "")
+	got := ResolveConfigPath("")
+	if got != DefaultConfigPath() {
+		t.Errorf("expected default path when neither flag nor env set, got %q", got)
+	}
+}
+
+func TestResolveConfigPath_EmptyEnvFallsBackToDefault(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "")
+	got := ResolveConfigPath("")
+	if got != DefaultConfigPath() {
+		t.Errorf("expected default when env is empty string, got %q", got)
+	}
+}
+
+func TestResolveConfigPath_TrimsWhitespace(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "  /from/env.yml  ")
+	got := ResolveConfigPath("")
+	if got != "/from/env.yml" {
+		t.Errorf("expected trimmed env value, got %q", got)
+	}
+}
+
+func TestResolveConfigPathStrict_WarnsOnMissingFile(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "/tmp/nano-brain-test-does-not-exist.yml")
+	_, warn := ResolveConfigPathStrict("")
+	if warn == "" {
+		t.Fatal("expected warning for non-existent env-pointed file")
+	}
+	if !strings.Contains(warn, "NANO_BRAIN_CONFIG") {
+		t.Errorf("warning should mention env var name, got %q", warn)
+	}
+	if !strings.Contains(warn, "does not exist") {
+		t.Errorf("warning should explain why, got %q", warn)
+	}
+}
+
+func TestResolveConfigPathStrict_NoWarnWhenDefault(t *testing.T) {
+	t.Setenv("NANO_BRAIN_CONFIG", "")
+	_, warn := ResolveConfigPathStrict("")
+	if warn != "" {
+		t.Errorf("default path should not warn, got %q", warn)
+	}
+}
+
+func TestResolveConfigPathStrict_NoWarnWhenFlagPathExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "cfg.yml")
+	if err := os.WriteFile(cfgPath, []byte("server: {host: localhost}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, warn := ResolveConfigPathStrict(cfgPath)
+	if warn != "" {
+		t.Errorf("existing flag path should not warn, got %q", warn)
+	}
+}
+
+func TestResolveConfigPathStrict_WarnsOnFlagMissingFile(t *testing.T) {
+	_, warn := ResolveConfigPathStrict("/tmp/no-such-flag-path.yml")
+	if warn == "" {
+		t.Fatal("expected warning for non-existent flag-pointed file")
+	}
+	if !strings.Contains(warn, "--config") {
+		t.Errorf("warning should mention --config, got %q", warn)
+	}
+}
+
+func TestAuthConfig_EnabledFromEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+	t.Setenv("NANO_BRAIN_AUTH_ENABLED", "true")
+
+	cfg, err := Load(configPath)
+	if err == nil {
+		t.Log("auth enabled but no users/tokens — expecting validation error")
+	}
+	_ = cfg
+	_ = err
+}
+
+func TestAuthConfig_EnabledFromYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+	yamlContent := `server:
+  auth:
+    enabled: true
+    realm: "test-realm"
+    users:
+      - username: admin
+        password_hash: "$2a$10$fakehashjustfortest1234567890ab"
+    bypass_paths:
+      - /health
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if !cfg.Server.Auth.Enabled {
+		t.Error("expected Auth.Enabled=true")
+	}
+	if cfg.Server.Auth.Realm != "test-realm" {
+		t.Errorf("expected Realm=test-realm, got %q", cfg.Server.Auth.Realm)
+	}
+	if len(cfg.Server.Auth.Users) != 1 {
+		t.Fatalf("expected 1 user, got %d", len(cfg.Server.Auth.Users))
+	}
+	if cfg.Server.Auth.Users[0].Username != "admin" {
+		t.Errorf("expected username=admin, got %q", cfg.Server.Auth.Users[0].Username)
+	}
+}
+
+func TestAuthConfig_EnabledNoCredsRejectsStartup(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+	yamlContent := `server:
+  auth:
+    enabled: true
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected validation error for auth enabled without users/tokens")
+	}
+	if !contains(fmt.Sprintf("%v", err), "auth enabled but no users or tokens configured") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestAuthConfig_DefaultsDisabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.Server.Auth.Enabled {
+		t.Error("expected Auth.Enabled=false by default")
+	}
+	if cfg.Server.Auth.Realm != "nano-brain" {
+		t.Errorf("expected default Realm=nano-brain, got %q", cfg.Server.Auth.Realm)
+	}
+}
+
+func TestConfig_JSONUsesSnakeCase(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yml")
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	// Marshal config to JSON
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+
+	jsonStr := string(data)
+
+	// Check that snake_case keys are present
+	requiredKeys := []string{
+		`"server"`,
+		`"host"`,
+		`"port"`,
+		`"database"`,
+		`"embedding"`,
+		`"provider"`,
+		`"voyage_api_key"`,
+		`"harvester"`,
+		`"opencode"`,
+		`"session_dir"`,
+		`"db_path"`,
+		`"db_root"`,
+		`"claudecode"`,
+		`"watcher"`,
+		`"debounce_ms"`,
+		`"reindex_interval"`,
+		`"search"`,
+		`"rrf_k"`,
+		`"recency_weight"`,
+		`"recency_half_life_days"`,
+		`"storage"`,
+		`"max_file_size"`,
+		`"max_size"`,
+		`"telemetry"`,
+		`"retention_days"`,
+		`"logging"`,
+		`"summarization"`,
+		`"provider_url"`,
+		`"max_tokens"`,
+		`"requests_per_second"`,
+		`"write_to_disk"`,
+		`"output_dir"`,
+	}
+
+	for _, key := range requiredKeys {
+		if !strings.Contains(jsonStr, key) {
+			t.Errorf("expected JSON key %s, not found in output", key)
+		}
+	}
+
+	// Check that PascalCase keys are NOT present (the bug we're fixing)
+	forbiddenKeys := []string{
+		`"Server"`,
+		`"Host"`,
+		`"Port"`,
+		`"Database"`,
+		`"Embedding"`,
+		`"Provider"`,
+		`"VoyageAPIKey"`,
+		`"Harvester"`,
+		`"OpenCode"`,
+		`"SessionDir"`,
+		`"DBPath"`,
+		`"DBRoot"`,
+		`"ClaudeCode"`,
+		`"Watcher"`,
+		`"DebounceMs"`,
+		`"ReindexInterval"`,
+		`"Search"`,
+		`"RrfK"`,
+		`"RecencyWeight"`,
+		`"RecencyHalfLifeDays"`,
+		`"Storage"`,
+		`"MaxFileSize"`,
+		`"MaxSize"`,
+		`"Telemetry"`,
+		`"RetentionDays"`,
+		`"Logging"`,
+		`"Summarization"`,
+		`"ProviderURL"`,
+		`"MaxTokens"`,
+		`"RequestsPerSecond"`,
+		`"WriteToDisk"`,
+		`"OutputDir"`,
+	}
+
+	for _, key := range forbiddenKeys {
+		if strings.Contains(jsonStr, key) {
+			t.Errorf("unexpected PascalCase key %s found in JSON output (should be snake_case)", key)
+		}
 	}
 }

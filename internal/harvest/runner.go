@@ -2,9 +2,12 @@ package harvest
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/rs/zerolog"
 )
 
@@ -26,6 +29,7 @@ type Runner struct {
 	interval   time.Duration
 	logger     zerolog.Logger
 	summarizer SessionSummarizer
+	pub        eventbus.Publisher
 }
 
 // NewRunner creates a Runner that calls HarvestAll at the given interval.
@@ -46,6 +50,12 @@ func (r *Runner) AddHarvester(h Harvester) {
 			ss.setSummarizer(r.summarizer)
 		}
 	}
+}
+
+// WithPublisher sets the event bus publisher for harvest lifecycle events.
+func (r *Runner) WithPublisher(pub eventbus.Publisher) *Runner {
+	r.pub = pub
+	return r
 }
 
 func (r *Runner) WithSummarizer(s SessionSummarizer) *Runner {
@@ -83,18 +93,48 @@ func (r *Runner) RunOnce(ctx context.Context) (harvested, skipped, errCount int)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	r.publishHarvest("started", 0, 0, "")
+
 	for _, harv := range r.harvesters {
 		h, s, e := harv.HarvestAll(ctx, r.enqueuer)
 		harvested += h
 		skipped += s
 		errCount += e
 	}
+
+	state := "completed"
+	errStr := ""
+	if errCount > 0 {
+		state = "completed"
+		errStr = fmt.Sprintf("%d errors during harvest", errCount)
+	}
+	r.publishHarvest(state, harvested, skipped, errStr)
+
 	r.logger.Info().
 		Int("harvested", harvested).
 		Int("skipped", skipped).
 		Int("errors", errCount).
 		Msg("harvest cycle complete")
 	return
+}
+
+func (r *Runner) publishHarvest(state string, sessionsSeen, sessionsSummarized int, errMsg string) {
+	if r.pub == nil {
+		return
+	}
+	m := map[string]any{
+		"state":                state,
+		"sessions_seen":        sessionsSeen,
+		"sessions_summarized":  sessionsSummarized,
+	}
+	if errMsg != "" {
+		m["error"] = errMsg
+	}
+	payload, _ := json.Marshal(m)
+	r.pub.Publish(eventbus.Event{
+		Type:    "harvest",
+		Payload: payload,
+	})
 }
 
 func (r *Runner) tick(ctx context.Context) {

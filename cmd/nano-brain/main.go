@@ -15,6 +15,7 @@ import (
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/harvest"
 	"github.com/nano-brain/nano-brain/internal/health"
@@ -128,8 +129,29 @@ func main() {
 		case "reset-embeddings":
 			runResetEmbeddingsCmd(args[1:])
 			return
+		case "backfill-summaries":
+			runBackfillSummariesCmd(args[1:])
+			return
 		case "cleanup-stale-raw":
 			runCleanupStaleRawCmd(args[1:])
+			return
+		case "cleanup-orphan-workspaces":
+			runCleanupOrphanWorkspacesCmd(args[1:])
+			return
+		case "wake-up":
+			runWakeUpCmd(args[1:])
+			return
+		case "get":
+			runGetCmd(args[1:])
+			return
+		case "tags":
+			runTagsCmd(args[1:])
+			return
+		case "multi-get":
+			runMultiGetCmd(args[1:])
+			return
+		case "auth":
+			runAuthCmd(args[1:])
 			return
 		case "version":
 			runVersionCmd(args[1:])
@@ -151,10 +173,7 @@ func main() {
 // initCLILog builds a best-effort logger for CLI commands before they dispatch.
 // Failures are non-fatal: cliLog falls back to zerolog.Nop().
 func initCLILog(configPath string) {
-	path := configPath
-	if path == "" {
-		path = config.DefaultConfigPath()
-	}
+	path := config.ResolveConfigPath(configPath)
 	cfg, err := config.Load(path)
 	if err != nil {
 		return
@@ -185,8 +204,10 @@ func startServer(configPath string) {
 		os.Exit(1)
 	}
 
-	if configPath == "" {
-		configPath = config.DefaultConfigPath()
+	var configWarning string
+	configPath, configWarning = config.ResolveConfigPathStrict(configPath)
+	if configWarning != "" {
+		fmt.Fprintln(os.Stderr, configWarning)
 	}
 
 	cfg, err := config.Load(configPath)
@@ -196,11 +217,20 @@ func startServer(configPath string) {
 
 	applyVerbose(&cfg.Logging)
 
+	if err := checkBindSafety(cfg.Server.Host, cfg.Server.Auth.Enabled); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
 	logger, err := health.NewLogger(cfg.Logging)
 	if err != nil {
 		log.Fatalf("failed to create logger: %v", err)
 	}
 	cliLog = logger
+
+	if unsafeNoAuth && !isLoopback(cfg.Server.Host) && !cfg.Server.Auth.Enabled {
+		logger.Warn().Str("host", cfg.Server.Host).Msg("bound to non-loopback without auth (--unsafe-no-auth set)")
+	}
 
 	logger.Info().
 		Str("version", Version).
@@ -278,6 +308,17 @@ func startServer(configPath string) {
 		WithSymbolRegistry(symRegistry).
 		WithGraphRegistry(graphRegistry, queries)
 
+	if homeDir, hErr := os.UserHomeDir(); hErr == nil {
+		if gi, path, lErr := watcher.LoadGlobalIgnore(homeDir); lErr != nil {
+			logger.Warn().Err(lErr).Str("path", path).Msg("global .nano-brainignore failed to load; using empty matcher")
+		} else if gi != nil {
+			logger.Info().Str("path", path).Msg("loaded global .nano-brainignore")
+			fw.SetGlobalIgnore(gi)
+		} else {
+			logger.Debug().Str("path", path).Msg(".nano-brainignore not found, skipping (issue #263)")
+		}
+	}
+
 	var eq *embed.Queue
 	var embedder embed.Embedder
 	if cfg.Embedding.Provider != "" {
@@ -289,10 +330,18 @@ func startServer(configPath string) {
 			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency).
 				WithMaxChars(cfg.Embedding.MaxChars)
 			fw.WithEmbedQueue(eq)
+			// Publisher is wired after bus creation below.
 		}
 	}
 
-	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, logger, Version, migrationVersion)
+	bus := eventbus.New(ctx)
+
+	if eq != nil {
+		eq.WithPublisher(bus)
+	}
+	fw.WithPublisher(bus)
+
+	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, bus, logger, Version, migrationVersion)
 
 	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
 		for _, ws := range workspaces {
@@ -382,34 +431,28 @@ func startServer(configPath string) {
 	}
 	srv.SetHarvestStatus(ocMode, cfg.Harvester.OpenCode.DBRoot, cfg.Harvester.OpenCode.DBPath, cfg.Harvester.OpenCode.SessionDir, len(ocHarvesters))
 
-	if cfg.Harvester.ClaudeCode.Enabled {
-		if _, err := os.Stat(cfg.Harvester.ClaudeCode.SessionDir); os.IsNotExist(err) {
-			logger.Warn().
-				Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
-				Msg("claude code harvester enabled but session_dir does not exist, skipping")
+	if ch, ccErr := initClaudeCodeHarvester(ctx, cfg.Harvester.ClaudeCode, db, logger); ccErr != nil {
+		logger.Error().Err(ccErr).Msg("claude code harvester init failed")
+	} else if ch != nil {
+		if hr == nil {
+			hr = harvest.NewRunner(ch, eq, interval, logger)
 		} else {
-			wsHash, err := storage.WorkspaceHash(cfg.Harvester.ClaudeCode.SessionDir)
-			if err != nil {
-				logger.Warn().Err(err).Msg("failed to compute workspace hash for claude code harvester")
-			} else {
-				ch := harvest.NewClaudeCodeHarvester(db, logger, cfg.Harvester.ClaudeCode.SessionDir, wsHash)
-				if hr == nil {
-					hr = harvest.NewRunner(ch, eq, interval, logger)
-				} else {
-					hr.AddHarvester(ch)
-				}
-				logger.Info().
-					Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
-					Dur("interval", interval).
-					Msg("claude code session harvester started")
-			}
+			hr.AddHarvester(ch)
 		}
+		logger.Info().
+			Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+			Dur("interval", interval).
+			Msg("claude code session harvester started")
 	}
 
 	if hr != nil {
+		hr.WithPublisher(bus)
 		if harvestSummarizer != nil {
 			hr.WithSummarizer(harvestSummarizer)
 			srv.SetSummarizer(harvestSummarizer)
+			if res, ext := srv.LinkDeps(); res != nil && ext != nil {
+				harvestSummarizer.SetLinkExtractor(res, ext)
+			}
 		}
 		srv.SetHarvestRunner(hr)
 		g.Go(func() error {
@@ -420,6 +463,7 @@ func startServer(configPath string) {
 	g.Go(func() error {
 		<-gctx.Done()
 		logger.Info().Msg("shutdown signal received")
+		bus.Close()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
@@ -495,12 +539,10 @@ func buildOpenCodeHarvesters(ctx context.Context, cfg *config.Config, db *sql.DB
 	}
 
 	if cfg.Harvester.OpenCode.SessionDir != "" {
-		wsHash, err := storage.WorkspaceHash(cfg.Harvester.OpenCode.SessionDir)
-		if err != nil {
-			logger.Warn().Err(err).Msg("failed to compute workspace hash for opencode harvester")
+		oh, err := initOpenCodeFileHarvester(ctx, cfg.Harvester.OpenCode, db, logger)
+		if err != nil || oh == nil {
 			return nil, "disabled"
 		}
-		oh := harvest.NewOpenCodeHarvester(db, logger, cfg.Harvester.OpenCode.SessionDir, wsHash)
 		logger.Info().
 			Str("session_dir", cfg.Harvester.OpenCode.SessionDir).
 			Msg("opencode session harvester started")
@@ -538,7 +580,13 @@ func buildHarvestSummarizer(cfg *config.Config, db *sql.DB, eq *embed.Queue, log
 	if eq != nil {
 		enqueuer = eq
 	}
-	persister := summarize.NewPersister(db, enqueuer, logger)
+	persister := summarize.NewPersister(
+		db,
+		enqueuer,
+		cfg.Summarization.IsWriteToDiskEnabled(),
+		cfg.Summarization.OutputDir,
+		logger,
+	)
 	if persister == nil {
 		logger.Warn().Msg("persister init returned nil, disabling summarization")
 		return nil

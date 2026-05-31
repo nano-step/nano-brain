@@ -1,6 +1,6 @@
 # nano-brain Roadmap
 
-> Last updated: 2026-05-29
+> Last updated: 2026-05-30
 
 ---
 
@@ -144,25 +144,26 @@ Phase 3 — Memory & DX ✅ (shipped 2026-05)
   ├── Init onboarding, doctor, benchmarks
   └── V1 migration, config hot-reload, telemetry
 
-Phase 4 — Hardening (Current)
-  ├── #180 — Ollama context length overflow on large chunks
-  ├── #181 — UTF-8 null byte in harvested sessions
-  ├── #184 — Require explicit --workspace on CLI commands
-  ├── #158 — Incremental reindex (only changed files)
-  └── #190, #191 — Harvest follow-ups (stale doc cleanup, max_tokens bump)
+Phase 4 — Hardening (mostly shipped)
+  ├── ✅ #180 — Ollama context length overflow on large chunks (PR #208/#209)
+  ├── ✅ #181 — UTF-8 null byte in harvested sessions
+  ├── ⚠️ #184 — Require explicit --workspace on CLI commands (partial: only reset-embeddings)
+  ├── ❌ #158 — Incremental reindex (only changed files) — still full reindex
+  ├── ✅ #190 — cleanup-stale-raw command
+  └── ✅ #191 — Summarization max_tokens default 4096 → 8000
 
-Phase 5 — CLI Completeness (Next)
-  ├── #153 — Code intelligence CLI (context, code-impact, detect-changes)
-  ├── #151 — Wake-up command (compact context briefing)
-  ├── #152 — get, tags, multi-get commands
-  ├── #155 — Workspace remove command
-  ├── #156 — Cross-workspace search (--scope=all)
-  ├── #157 — Cache management (clear, stats)
-  └── #160 — --tags filter for query/search
+Phase 5 — CLI Completeness (in progress)
+  ├── ✅ #153 — Code intelligence CLI (context, code-impact, detect-changes)
+  ├── ⚠️ #151 — Wake-up (REST API + MCP done; CLI command pending)
+  ├── ❌ #152 — get, tags, multi-get commands
+  ├── ❌ #155 — Workspace remove command (SQL query exists, no CLI/handler)
+  ├── ❌ #156 — Cross-workspace search (--scope=all)
+  ├── ❌ #157 — Cache management (clear, stats)
+  └── ⚠️ #160 — --tags filter (works on write; pending on query/search)
 
-Phase 6 — Enhanced Code Intelligence
-  ├── #174 — Symbol extraction with go-tree-sitter (replace regex)
-  └── Cross-language support (TypeScript, Python, Rust)
+Phase 6 — Enhanced Code Intelligence (in progress)
+  ├── ✅ #174 — Symbol extraction with go-tree-sitter (Python extractor shipped)
+  └── ⚠️ Cross-language support — Python via tree-sitter; TypeScript, Rust pending
 
 Phase 7 — Self-Learning (Discuss)
   ├── #154 — Memory consolidation + categorization + Thompson Sampling

@@ -145,7 +145,7 @@ phase_pre_work() {
         add_check "SKIP" "1.2 openspec not installed"
     fi
     
-    # 1.3 GitHub issue exists (if --issue provided)
+    # 1.3 GitHub issue exists or skip-conditions met (R89)
     if [[ -n "$ISSUE" ]]; then
         if cmd_exists gh; then
             if gh issue view "$ISSUE" --json state &>/dev/null; then
@@ -158,7 +158,13 @@ phase_pre_work() {
             add_check "SKIP" "1.3 gh CLI not installed"
         fi
     else
-        add_check "SKIP" "1.3 --issue not provided"
+        # R89: --issue omitted → verify zero file changes in last commit
+        changed=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+        if [[ "$changed" -gt 0 ]]; then
+            add_check "FAIL" "1.3 $changed file(s) changed in HEAD but no --issue provided (R89)"
+        else
+            add_check "PASS" "1.3 No file changes detected; issue not required (R89)"
+        fi
     fi
     
     # 1.4 Branch b-main up-to-date
@@ -233,22 +239,30 @@ phase_in_progress() {
     fi
     
     # 2.4 Self-review evidence
+    # 2.4 Self-review evidence — Tier 2 format (TRACE_SPEC.md)
     review_files=$(find docs/evidence -name "self-review-*.md" -type f 2>/dev/null | sort -r | head -1)
-    if [[ -n "$review_files" ]]; then
-        # Check the file has content (not just template)
-        if grep -q "## Findings" "$review_files" 2>/dev/null; then
-            # Check no unresolved critical/major
-            unresolved=$(grep -cE "critical.*OPEN|critical.*UNRESOLVED|major.*OPEN|major.*UNRESOLVED" "$review_files" 2>/dev/null || true)
+    if [[ -z "$review_files" ]]; then
+        add_check "SKIP" "2.4 No self-review evidence file found in docs/evidence/"
+    else
+        missing_sections=""
+        for section in \
+            "## Actions Taken" \
+            "## Files Changed" \
+            "## Findings Summary" \
+            "## Resolution Status"; do
+            grep -qF "$section" "$review_files" || missing_sections="$missing_sections '$section'"
+        done
+
+        if [[ -n "$missing_sections" ]]; then
+            add_check "FAIL" "2.4 $review_files missing required sections:$missing_sections (TRACE_SPEC Tier 2)"
+        else
+            unresolved=$(grep -cE "critical.*(OPEN|UNRESOLVED)|major.*(OPEN|UNRESOLVED)" "$review_files" 2>/dev/null || true)
             if [[ "$unresolved" -eq 0 ]]; then
-                add_check "PASS" "2.4 Self-review evidence found, no unresolved critical/major"
+                add_check "PASS" "2.4 Self-review evidence has all required sections, no unresolved critical/major"
             else
                 add_check "FAIL" "2.4 Self-review has $unresolved unresolved critical/major findings"
             fi
-        else
-            add_check "FAIL" "2.4 Self-review file exists but missing findings section"
         fi
-    else
-        add_check "SKIP" "2.4 No self-review evidence file found in docs/evidence/"
     fi
 }
 
@@ -299,36 +313,69 @@ phase_pre_merge() {
         add_check "SKIP" "3.4 golangci-lint not installed"
     fi
     
-    # 3.5 Review gate evidence
-    review_files=$(find docs/evidence -name "review-*.md" 2>/dev/null || echo "")
-    if [[ -n "$review_files" ]]; then
-        add_check "PASS" "3.5 Review gate evidence found"
-    else
+    # 3.5 Review Gate verdict (R27: must contain literal 'Review Verdict: PASS')
+    review_files=$(find docs/evidence -name "review-*.md" 2>/dev/null || true)
+    if [[ -z "$review_files" ]]; then
         add_check "SKIP" "3.5 Review gate evidence not yet created"
+    else
+        latest_review=$(echo "$review_files" | head -1)
+        if grep -qE '^Review Verdict: PASS' "$latest_review"; then
+            add_check "PASS" "3.5 Review Verdict: PASS in $latest_review (R27)"
+        elif grep -qE '^Review Verdict: FAIL' "$latest_review"; then
+            add_check "FAIL" "3.5 Review Verdict: FAIL in $latest_review — fix before merge (R27)"
+        else
+            add_check "FAIL" "3.5 $latest_review missing 'Review Verdict: PASS|FAIL' line (R27)"
+        fi
     fi
     
-    # 3.6 PR review comments — check for unresolved critical/high comments
-    if cmd_exists gh; then
-        pr_number=$(gh pr view --json number --jq '.number' 2>/dev/null || echo "")
-        if [[ -n "$pr_number" ]]; then
-            # Get all review comments from the PR
-            comments=$(gh pr view "$pr_number" --comments 2>/dev/null || echo "")
-            if [[ -n "$comments" ]]; then
-                # Check for unresolved critical/high markers (Gemini often uses severity labels)
-                critical_unresolved=$(echo "$comments" | grep -ciE "critical|high.*severity|must.fix|blocking|unresolved.*critical|unresolved.*high" 2>/dev/null || true)
-                if [[ "$critical_unresolved" -gt 0 ]]; then
-                    add_check "FAIL" "3.6 PR has unresolved critical/high comments — must fix before merge ($critical_unresolved matches)"
-                else
-                    add_check "PASS" "3.6 No critical/high PR comments detected"
-                fi
-            else
-                add_check "PASS" "3.6 No PR comments found"
-            fi
-        else
-            add_check "SKIP" "3.6 No open PR found"
-        fi
-    else
+    # 3.6 Gemini comment triage (R31) + override check (R7)
+    if ! cmd_exists gh; then
         add_check "SKIP" "3.6 gh CLI not installed"
+    else
+        pr_number=$(gh pr view --json number --jq '.number' 2>/dev/null || echo "")
+        if [[ -z "$pr_number" ]]; then
+            add_check "SKIP" "3.6 No open PR found"
+        else
+            # R7: check for [HARNESS-OVERRIDE]: <reason> (reason >= 20 chars)
+            override=$(gh pr view "$pr_number" --comments 2>/dev/null \
+                | grep -oE '\[HARNESS-OVERRIDE\]: .{20,}' | head -1 || true)
+            if [[ -n "$override" ]]; then
+                add_check "PASS" "3.6 PR has [HARNESS-OVERRIDE] (R7: Gemini bypass approved)"
+            else
+                # R31: count Gemini comments vs triage rows in evidence file
+                gemini_count=$(gh pr view "$pr_number" --json comments \
+                    --jq '[.comments[] | select(.author.login | test("gemini"; "i"))] | length' \
+                    2>/dev/null || echo "0")
+
+                current_branch=$(git branch --show-current 2>/dev/null || echo "")
+                slug=$(echo "$current_branch" | sed 's|^[^/]*/||')
+                triage_file=$(find docs/evidence -name "self-review-${slug}*.md" -type f 2>/dev/null | head -1)
+
+                if [[ "$gemini_count" -eq 0 ]]; then
+                    add_check "PASS" "3.6 No Gemini comments on PR"
+                elif [[ -z "$triage_file" ]]; then
+                    add_check "FAIL" "3.6 $gemini_count Gemini comment(s) but no self-review-${slug}*.md (R31)"
+                else
+                    # Count triage rows under '## Gemini Verification Triage' section
+                    triage_rows=$(awk '/^## Gemini Verification Triage/{f=1;next} /^## /{f=0} f' "$triage_file" \
+                        | grep -cE '^\| (PR#|line)' || true)
+
+                    if [[ "$triage_rows" -lt "$gemini_count" ]]; then
+                        add_check "FAIL" "3.6 Gemini comments=$gemini_count but triage rows=$triage_rows (R31: every comment must be triaged)"
+                    else
+                        # Check VALID:critical / VALID:high rows have fix commit reference
+                        unresolved=$(awk '/^## Gemini Verification Triage/{f=1;next} /^## /{f=0} f' "$triage_file" \
+                            | grep -E 'VALID:(critical|high)' \
+                            | grep -vcE 'fixed in commit [a-f0-9]{6,}' || true)
+                        if [[ "$unresolved" -gt 0 ]]; then
+                            add_check "FAIL" "3.6 $unresolved VALID:critical/high row(s) without 'fixed in commit <sha>' (R31)"
+                        else
+                            add_check "PASS" "3.6 All $gemini_count Gemini comment(s) triaged and resolved (R31)"
+                        fi
+                    fi
+                fi
+            fi
+        fi
     fi
     
     # 3.7 CI workflow pass
@@ -343,13 +390,20 @@ phase_pre_merge() {
         add_check "SKIP" "3.7 gh CLI not installed"
     fi
     
-    # 3.8 PR linked to issue (Closes #)
+    # 3.8 PR linked to exactly 1 issue (R1: no bundling)
     if cmd_exists gh; then
         body=$(gh pr view --json body --jq '.body' 2>/dev/null || echo "")
-        if echo "$body" | grep -q "Closes #"; then
-            add_check "PASS" "3.8 PR linked to issue"
+        if [[ -z "$body" ]]; then
+            add_check "SKIP" "3.8 No open PR found"
         else
-            add_check "SKIP" "3.8 No open PR or not linked to issue"
+            closes_count=$(echo "$body" | grep -cE 'Closes #[0-9]+' || true)
+            if [[ "$closes_count" -eq 1 ]]; then
+                add_check "PASS" "3.8 PR closes exactly 1 issue (R1)"
+            elif [[ "$closes_count" -eq 0 ]]; then
+                add_check "FAIL" "3.8 PR body missing 'Closes #N' reference (R1)"
+            else
+                add_check "FAIL" "3.8 PR closes $closes_count issues (R1: must be exactly 1; split PR)"
+            fi
         fi
     else
         add_check "SKIP" "3.8 gh CLI not installed"
@@ -385,6 +439,43 @@ phase_pre_merge() {
         fi
     else
         add_check "SKIP" "3.10 Cannot determine story ID from branch name"
+    fi
+
+    # 3.11 Max 3 push cycles per PR (R29)
+    if cmd_exists gh; then
+        pr_number=$(gh pr view --json number --jq '.number' 2>/dev/null || echo "")
+        if [[ -n "$pr_number" ]]; then
+            commit_count=$(gh pr view "$pr_number" --json commits \
+                --jq '.commits | length' 2>/dev/null || echo "0")
+            if [[ "$commit_count" -gt 3 ]]; then
+                add_check "FAIL" "3.11 PR has $commit_count commits (R29: max 3 push cycles; escalate to human)"
+            else
+                add_check "PASS" "3.11 PR commit count: $commit_count (R29: ≤ 3)"
+            fi
+        else
+            add_check "SKIP" "3.11 No open PR found"
+        fi
+    else
+        add_check "SKIP" "3.11 gh CLI not installed"
+    fi
+
+    # 3.12 smoke:e2e evidence for user-feature/bug-fix changes (R19, R20)
+    if [[ -n "$branch_slug" ]]; then
+        smoke_file=$(find docs/evidence -name "smoke-e2e-${branch_slug}*" -type f 2>/dev/null | head -1)
+        if [[ -z "$smoke_file" && -n "$story_id" ]]; then
+            smoke_file=$(find docs/evidence -name "smoke-e2e-${story_id}*" -type f 2>/dev/null | head -1)
+        fi
+        if [[ -n "$smoke_file" ]]; then
+            if grep -qE '^(curl|HTTP/[12])' "$smoke_file"; then
+                add_check "PASS" "3.12 smoke:e2e evidence with curl/HTTP found (R19, R20)"
+            else
+                add_check "FAIL" "3.12 $smoke_file has no curl command or HTTP response (R20)"
+            fi
+        else
+            add_check "SKIP" "3.12 No smoke-e2e-${branch_slug}*.{md,txt} (R19: required if change-type ∈ {user-feature, bug-fix})"
+        fi
+    else
+        add_check "SKIP" "3.12 Cannot determine story ID for smoke:e2e check"
     fi
 }
 
@@ -429,13 +520,20 @@ phase_post_merge() {
         add_check "SKIP" "4.2 gh CLI not installed"
     fi
     
-    # 4.3 OpenSpec archived
+    # 4.3 OpenSpec archived AND Review Verdict was PASS (R28)
     if cmd_exists openspec; then
         ospec_out=$(openspec list 2>/dev/null || echo "")
         if echo "$ospec_out" | grep -qE "active|pending|in-progress"; then
             add_check "FAIL" "4.3 OpenSpec change still active"
         else
-            add_check "PASS" "4.3 OpenSpec change archived"
+            review_files=$(find docs/evidence -name "review-*.md" -type f 2>/dev/null || true)
+            if [[ -z "$review_files" ]]; then
+                add_check "FAIL" "4.3 OpenSpec archived but no review-*.md evidence (R28)"
+            elif echo "$review_files" | xargs grep -lE '^Review Verdict: PASS' &>/dev/null; then
+                add_check "PASS" "4.3 OpenSpec archived with Review Verdict: PASS (R28)"
+            else
+                add_check "FAIL" "4.3 OpenSpec archived but no Review Verdict: PASS found (R28)"
+            fi
         fi
     else
         add_check "SKIP" "4.3 openspec not installed"
@@ -490,22 +588,76 @@ phase_next_ready() {
 }
 
 phase_retro() {
-    echo "─ RETRO (lightweight informational)"
-    
-    # 6.1–6.5 Collect metrics
-    if cmd_exists gh; then
-        merged_count=0
-        if [[ -n "$EPIC" ]]; then
-            closed_prs=$(gh pr list --state closed --json number 2>/dev/null || echo "[]")
-            merged_count=$(echo "$closed_prs" | grep -c '"number"' || true)
-        fi
-        add_check "PASS" "6.1 Merged PRs for epic: $merged_count"
-        add_check "PASS" "6.2 Average review cycles: (metric collection pending)"
-        add_check "PASS" "6.3 CI failures: (metric collection pending)"
-        add_check "PASS" "6.4 Document lessons learned in docs/evidence/"
-        add_check "PASS" "6.5 Consider creating retro summary"
-    else
+    echo "─ RETRO (computed metrics — W1.2)"
+
+    if ! cmd_exists gh; then
         add_check "SKIP" "6.x gh CLI not installed"
+        return
+    fi
+    if [[ -z "$EPIC" ]]; then
+        add_check "FAIL" "6.0 --epic <N> is required for retro gate"
+        return
+    fi
+
+    # 6.1 Merged PRs in epic (search PRs whose body or title mentions epic-N)
+    merged_count=$(gh pr list --state merged --search "epic-${EPIC} in:title,body" \
+        --json number --jq 'length' 2>/dev/null || echo "0")
+    add_check "PASS" "6.1 Merged PRs for epic-$EPIC: $merged_count"
+
+    # 6.2 Average review cycles per PR (commits per PR; > 2.5 = bot loop issue)
+    if [[ "$merged_count" -gt 0 ]]; then
+        total_commits=$(gh pr list --state merged --search "epic-${EPIC} in:title,body" \
+            --json commits --jq '[.[].commits | length] | add // 0' 2>/dev/null || echo "0")
+        avg_cycles=$(awk "BEGIN { printf \"%.2f\", $total_commits / $merged_count }")
+        if awk "BEGIN { exit !($avg_cycles > 2.5) }"; then
+            add_check "FAIL" "6.2 Avg PR cycles: $avg_cycles (> 2.5 — investigate bot review loop)"
+        else
+            add_check "PASS" "6.2 Avg PR cycles: $avg_cycles"
+        fi
+    else
+        add_check "SKIP" "6.2 No merged PRs to compute avg cycles"
+    fi
+
+    # 6.3 CI failure count on b-main during epic window
+    if gh run list --branch b-main --limit 100 --json conclusion &>/dev/null; then
+        ci_fails=$(gh run list --branch b-main --limit 100 \
+            --json conclusion --jq '[.[] | select(.conclusion == "failure")] | length' \
+            2>/dev/null || echo "0")
+        if [[ "$ci_fails" -gt 5 ]]; then
+            add_check "FAIL" "6.3 CI failures on b-main: $ci_fails (> 5 — investigate)"
+        else
+            add_check "PASS" "6.3 CI failures on b-main: $ci_fails"
+        fi
+    else
+        add_check "SKIP" "6.3 gh run list not accessible"
+    fi
+
+    # 6.4 Retro evidence file exists with min 200 words
+    retro_file="docs/evidence/retro-epic-${EPIC}.md"
+    if [[ ! -f "$retro_file" ]]; then
+        add_check "FAIL" "6.4 Retro file missing: $retro_file"
+    else
+        word_count=$(wc -w < "$retro_file" | tr -d ' ')
+        if [[ "$word_count" -lt 200 ]]; then
+            add_check "FAIL" "6.4 Retro too thin: $word_count words (< 200)"
+        else
+            add_check "PASS" "6.4 Retro complete: $word_count words"
+        fi
+    fi
+
+    # 6.5 Retro contains required sections (Metrics, Patterns, Root Cause, Proposed Changes)
+    if [[ -f "$retro_file" ]]; then
+        missing=""
+        for section in "## Metrics" "## Patterns" "## Root Cause" "## Proposed Changes"; do
+            grep -qF "$section" "$retro_file" || missing="$missing $section"
+        done
+        if [[ -n "$missing" ]]; then
+            add_check "FAIL" "6.5 Retro missing required sections:$missing"
+        else
+            add_check "PASS" "6.5 Retro has all required sections"
+        fi
+    else
+        add_check "SKIP" "6.5 Retro file missing (see 6.4)"
     fi
 }
 

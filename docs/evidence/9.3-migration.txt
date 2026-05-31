@@ -1,0 +1,24 @@
+Deferred: no local test PostgreSQL available in this environment.
+
+Migration file: migrations/00011_graph_edge_references.sql
+
+Up SQL:
+  ALTER TABLE graph_edges DROP CONSTRAINT graph_edges_edge_type_check;
+  ALTER TABLE graph_edges ADD CONSTRAINT graph_edges_edge_type_check
+      CHECK (edge_type IN ('contains', 'imports', 'calls', 'references'));
+
+Down SQL:
+  ALTER TABLE graph_edges DROP CONSTRAINT graph_edges_edge_type_check;
+  ALTER TABLE graph_edges ADD CONSTRAINT graph_edges_edge_type_check
+      CHECK (edge_type IN ('contains', 'imports', 'calls'));
+
+Down prerequisite: DELETE FROM graph_edges WHERE edge_type = 'references';
+
+Verification plan (to run in CI or local PG):
+  1. goose -dir migrations up → exit 0
+  2. INSERT INTO graph_edges (..., edge_type) VALUES (..., 'references') → succeeds
+  3. goose -dir migrations down → fails if references rows exist (documented)
+  4. DELETE FROM graph_edges WHERE edge_type = 'references'
+  5. goose -dir migrations down → succeeds
+  6. INSERT INTO graph_edges (..., edge_type) VALUES (..., 'references') → fails (restored CHECK)
+  7. goose -dir migrations up → exit 0 (idempotent re-apply)

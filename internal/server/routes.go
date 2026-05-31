@@ -1,9 +1,15 @@
 package server
 
 import (
+	"fmt"
+
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
+	"github.com/nano-brain/nano-brain/internal/server/middleware"
+	"github.com/nano-brain/nano-brain/internal/server/webui"
 )
 
 func registerRoutes(s *Server) {
@@ -25,16 +31,48 @@ func registerRoutes(s *Server) {
 	api := s.echo.Group("/api/v1", contentTypeMiddleware())
 	api.POST("/init", handlers.InitWorkspace(s.queries, s.db, s.watcher, s.currentConfig().Watcher, s.logger))
 	api.GET("/workspaces", handlers.ListWorkspaces(s.queries, s.logger))
-	api.POST("/reset-workspace", handlers.ResetWorkspace(s.queries, s.logger))
+	api.DELETE("/workspaces/:hash", handlers.RemoveWorkspace(s.queries, s.db, s.logger))
+	api.POST("/reset-workspace", handlers.ResetWorkspace(s.queries, s.db, s.logger))
+
+	api.GET("/config", handlers.GetConfig(s.configPath, s.currentConfig, s.logger))
+	api.POST("/config", handlers.PatchConfig(s.configPath, s.currentConfig, func() {
+		newCfg, err := config.Load(s.configPath)
+		if err != nil {
+			s.logger.Warn().Err(err).Msg("config reload after patch failed")
+			return
+		}
+		s.applyReloadedConfig(newCfg, nil)
+	}, s.logger))
+
+	api.GET("/doctor", handlers.Doctor(handlers.DoctorDeps{
+		ConfigPath: s.configPath,
+		LoadConfig: func() (*config.Config, error) { return config.Load(s.configPath) },
+	}, s.logger))
 
 	var enqueuer handlers.ChunkEnqueuer
 	if s.embedQueue != nil {
 		enqueuer = s.embedQueue
 	}
 
+	boundAddr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
+	csrfMW := middleware.CSRF(boundAddr)
+
 	data := api.Group("", workspaceMiddleware())
-	data.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize))
-	data.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
+
+	if s.eventBus != nil {
+		data.GET("/events", handlers.EventsHandler(s.eventBus, s.logger))
+	}
+
+	write := data.Group("", workspaceRegisteredMiddleware(s.db), csrfMW)
+	write.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize, s.linkResolver, s.linkExtractor))
+	write.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
+	var reindexPub eventbus.Publisher
+	if s.eventBus != nil {
+		reindexPub = s.eventBus
+	}
+	write.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, reindexPub, s.logger))
+	write.POST("/update", handlers.TriggerUpdate(s.logger))
+	write.POST("/summarize", handlers.TriggerSummarize(s.getSummarizer, s.queries, s.logger))
 
 	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.currentConfig().Watcher, s.logger))
 	data.GET("/collections", handlers.ListCollectionsHandler(s.queries, s.logger))
@@ -42,19 +80,25 @@ func registerRoutes(s *Server) {
 	data.DELETE("/collections/:name", handlers.RemoveCollection(s.queries, s.watcher, s.logger))
 
 	data.GET("/tags", handlers.ListTags(s.queries, s.logger))
+	data.POST("/get", handlers.GetDocument(s.queries, s.logger))
+	data.POST("/multi-get", handlers.MultiGet(s.queries, s.logger))
 	data.GET("/symbols", handlers.ListSymbols(s.queries, s.logger))
 	data.POST("/graph/query", handlers.GraphQuery(s.queries, s.logger))
 	data.POST("/graph/impact", handlers.GraphImpact(s.queries, s.logger))
 	data.POST("/graph/trace", handlers.GraphTrace(s.queries, s.logger))
-	data.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, s.logger))
-	data.POST("/update", handlers.TriggerUpdate(s.logger))
-	data.POST("/summarize", handlers.TriggerSummarize(s.getSummarizer, s.queries, s.logger))
 
 	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger, s.recorder))
 	data.POST("/search", handlers.BM25Search(s.queries, s.logger, s.recorder))
 
 	if s.searchService != nil {
 		data.POST("/query", handlers.Query(s.searchService, s.logger, s.recorder))
+	}
+
+	data.GET("/stats", handlers.Stats(s.queries, s.logger))
+	write.POST("/graph/neighborhood", handlers.GraphNeighborhood(s.queries, s.logger))
+	data.GET("/links/:doc_id/backlinks", handlers.Backlinks(s.queries, s.logger))
+	if s.concreteLinkRes != nil {
+		data.GET("/links/resolve", handlers.ResolveLink(s.concreteLinkRes, s.logger))
 	}
 
 	wakeUp := handlers.WakeUpHandler(s.queries, s.logger)
@@ -73,6 +117,8 @@ func registerRoutes(s *Server) {
 	s.echo.GET("/mcp", echo.WrapHandler(streamableHandler))
 	s.echo.POST("/mcp", echo.WrapHandler(streamableHandler))
 	s.echo.DELETE("/mcp", echo.WrapHandler(streamableHandler))
+
+	webui.RegisterUIRoutes(s.echo, webui.EmbedFS, middleware.SecurityHeaders())
 }
 
 const defaultMaxFileSize int64 = 307200

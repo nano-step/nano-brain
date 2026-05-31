@@ -76,11 +76,25 @@ Record the returned issue number (`#N`). This is the **harness tracking ID**
 for the entire flow. Update it at every milestone (see HARNESS.md
 § GitHub Issue Tracking).
 
-**Skip issue creation only for:**
-- Pure questions / explanations (no deliverable expected)
-- Read-only exploration
-- Live setup tasks where user is the orchestrator
-- Tasks that revise the harness itself (those go via `HARNESS_BACKLOG.md`)
+**R89: Skip issue creation only when ALL three conditions are true:**
+
+1. `git diff HEAD` produces zero output at end of task (no tracked file changes).
+2. No new files created in `docs/`, `src/`, `scripts/`, `tests/`, `openspec/`,
+   or any other version-controlled location.
+3. The agent's final response is an answer/explanation only — no edits applied.
+
+If ANY condition is false → issue is REQUIRED (gate 1.3 will FAIL).
+
+**Edge cases (issue REQUIRED, no exceptions):**
+- Editing `HARNESS.md`, `HARNESS_GATES.md`, or any harness rule file → these
+  are code changes; the "harness revision" exception is REMOVED.
+- Creating or modifying any file under `docs/` (including ADRs, glossary,
+  context rules) → issue required.
+- "Live setup tasks" where the agent runs commands but no files change →
+  acceptable to skip only if conditions 1–3 all hold.
+
+**Enforced by:** gate 1.3 (PRE-WORK) — if `git diff HEAD~1 HEAD` shows ≥ 1 file
+changed and `--issue` was not provided, gate 1.3 FAILS.
 
 When unsure: **create the issue**. Closing is cheap.
 

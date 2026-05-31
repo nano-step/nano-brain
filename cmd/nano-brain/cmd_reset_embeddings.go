@@ -62,7 +62,7 @@ func runResetEmbeddingsCmd(args []string) {
 		workspaceHash = h
 	}
 
-	cfg, err := config.Load(config.DefaultConfigPath())
+	cfg, err := config.Load(config.ResolveConfigPath(""))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)

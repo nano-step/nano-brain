@@ -29,11 +29,22 @@ func (m *mockEmbedder) Embed(ctx context.Context, text string) ([]float32, error
 func (m *mockEmbedder) Dimension() int { return m.dimension }
 
 type mockVSearchQuerier struct {
-	vectorSearchFn func(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error)
+	vectorSearchFn         func(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error)
+	vectorSearchWithTagsFn func(ctx context.Context, arg sqlc.VectorSearchWithTagsParams) ([]sqlc.VectorSearchWithTagsRow, error)
 }
 
 func (m *mockVSearchQuerier) VectorSearch(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error) {
-	return m.vectorSearchFn(ctx, arg)
+	if m.vectorSearchFn != nil {
+		return m.vectorSearchFn(ctx, arg)
+	}
+	return nil, nil
+}
+
+func (m *mockVSearchQuerier) VectorSearchWithTags(ctx context.Context, arg sqlc.VectorSearchWithTagsParams) ([]sqlc.VectorSearchWithTagsRow, error) {
+	if m.vectorSearchWithTagsFn != nil {
+		return m.vectorSearchWithTagsFn(ctx, arg)
+	}
+	return nil, nil
 }
 
 func newVSearchContext(e *echo.Echo, body string, workspace string) (echo.Context, *httptest.ResponseRecorder) {
@@ -310,6 +321,70 @@ func TestVSearch_EmbedError(t *testing.T) {
 	}
 	if he.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", he.Code)
+	}
+}
+
+func TestVSearch_WithTags(t *testing.T) {
+	docID := uuid.New()
+	embID := uuid.New()
+	now := time.Now().Truncate(time.Second)
+
+	emb := &mockEmbedder{
+		embedFn:   func(_ context.Context, _ string) ([]float32, error) { return testVector(), nil },
+		dimension: 3,
+	}
+
+	var capturedTags []string
+	q := &mockVSearchQuerier{
+		vectorSearchWithTagsFn: func(_ context.Context, arg sqlc.VectorSearchWithTagsParams) ([]sqlc.VectorSearchWithTagsRow, error) {
+			capturedTags = arg.Tags
+			if arg.WorkspaceHash != "ws1" {
+				t.Errorf("expected workspace ws1, got %q", arg.WorkspaceHash)
+			}
+			return []sqlc.VectorSearchWithTagsRow{
+				{
+					ID:            embID,
+					ChunkID:       uuid.New(),
+					WorkspaceHash: "ws1",
+					Content:       "tagged content",
+					DocumentID:    docID,
+					SourcePath:    "/tagged.md",
+					Title:         "Tagged Doc",
+					Collection:    "memory",
+					Tags:          []string{"decision"},
+					CreatedAt:     now,
+					UpdatedAt:     now,
+					Score:         0.88,
+				},
+			}, nil
+		},
+	}
+
+	e := echo.New()
+	body := `{"query":"hello","workspace":"ws1","tags":["decision"]}`
+	c, rec := newVSearchContext(e, body, "ws1")
+
+	h := handlers.VectorSearch(q, emb, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	if len(capturedTags) != 1 || capturedTags[0] != "decision" {
+		t.Errorf("expected captured tags=[decision], got %v", capturedTags)
+	}
+
+	var resp handlers.SearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Total != 1 {
+		t.Errorf("expected total=1, got %d", resp.Total)
+	}
+	if resp.Results[0].Title != "Tagged Doc" {
+		t.Errorf("expected title=Tagged Doc, got %q", resp.Results[0].Title)
 	}
 }
 

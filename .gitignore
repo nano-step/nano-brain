@@ -33,3 +33,4 @@ npm/nano-brain.exe
 
 # Sisyphus agent runtime state
 .sisyphus/
+ai/test-case/

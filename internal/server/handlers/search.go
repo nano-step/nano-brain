@@ -21,11 +21,13 @@ type Embedder interface {
 // VSearchQuerier is the database interface for vector search.
 type VSearchQuerier interface {
 	VectorSearch(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error)
+	VectorSearchWithTags(ctx context.Context, arg sqlc.VectorSearchWithTagsParams) ([]sqlc.VectorSearchWithTagsRow, error)
 }
 
 type VSearchRequest struct {
-	Query      string `json:"query"`
-	MaxResults int    `json:"max_results,omitempty"`
+	Query      string   `json:"query"`
+	MaxResults int      `json:"max_results,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
 }
 
 const maxSnippetLen = 700
@@ -102,31 +104,60 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, re
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to embed query")
 		}
 
-		rows, err := q.VectorSearch(c.Request().Context(), sqlc.VectorSearchParams{
-			QueryEmbedding: pgvector_go.NewVector(vec),
-			WorkspaceHash:  workspace,
-			MaxResults:     int32(maxResults),
-		})
-		if err != nil {
-			logger.Error().Err(err).Str("workspace", workspace).Msg("vector search failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "vector search failed")
-		}
-
-		results := make([]SearchResult, 0, len(rows))
-		for _, r := range rows {
-			results = append(results, SearchResult{
-				ID:            r.ID.String(),
-				Title:         r.Title,
-				Snippet:       truncateSnippet(r.Content, maxSnippetLen),
-				Score:         r.Score,
-				Tags:          r.Tags,
-				Collection:    r.Collection,
-				WorkspaceHash: r.WorkspaceHash,
-				SourcePath:    r.SourcePath,
-				DocumentID:    r.DocumentID.String(),
-				CreatedAt:     r.CreatedAt,
-				UpdatedAt:     r.UpdatedAt,
+		var results []SearchResult
+		if len(req.Tags) > 0 {
+			rows, err := q.VectorSearchWithTags(c.Request().Context(), sqlc.VectorSearchWithTagsParams{
+				QueryEmbedding: pgvector_go.NewVector(vec),
+				WorkspaceHash:  workspace,
+				Tags:           req.Tags,
+				MaxResults:     int32(maxResults),
 			})
+			if err != nil {
+				logger.Error().Err(err).Str("workspace", workspace).Msg("vector search failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "vector search failed")
+			}
+			results = make([]SearchResult, 0, len(rows))
+			for _, r := range rows {
+				results = append(results, SearchResult{
+					ID:            r.ID.String(),
+					Title:         r.Title,
+					Snippet:       truncateSnippet(r.Content, maxSnippetLen),
+					Score:         r.Score,
+					Tags:          r.Tags,
+					Collection:    r.Collection,
+					WorkspaceHash: r.WorkspaceHash,
+					SourcePath:    r.SourcePath,
+					DocumentID:    r.DocumentID.String(),
+					CreatedAt:     r.CreatedAt,
+					UpdatedAt:     r.UpdatedAt,
+				})
+			}
+		} else {
+			rows, err := q.VectorSearch(c.Request().Context(), sqlc.VectorSearchParams{
+				QueryEmbedding: pgvector_go.NewVector(vec),
+				WorkspaceHash:  workspace,
+				MaxResults:     int32(maxResults),
+			})
+			if err != nil {
+				logger.Error().Err(err).Str("workspace", workspace).Msg("vector search failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "vector search failed")
+			}
+			results = make([]SearchResult, 0, len(rows))
+			for _, r := range rows {
+				results = append(results, SearchResult{
+					ID:            r.ID.String(),
+					Title:         r.Title,
+					Snippet:       truncateSnippet(r.Content, maxSnippetLen),
+					Score:         r.Score,
+					Tags:          r.Tags,
+					Collection:    r.Collection,
+					WorkspaceHash: r.WorkspaceHash,
+					SourcePath:    r.SourcePath,
+					DocumentID:    r.DocumentID.String(),
+					CreatedAt:     r.CreatedAt,
+					UpdatedAt:     r.UpdatedAt,
+				})
+			}
 		}
 
 		elapsed := time.Since(start).Milliseconds()

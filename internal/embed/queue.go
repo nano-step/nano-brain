@@ -2,7 +2,10 @@ package embed
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"strings"
 	"sync"
@@ -15,6 +18,7 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 	"github.com/rs/zerolog"
 
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 )
 
@@ -63,6 +67,8 @@ type Queue struct {
 	retries        map[uuid.UUID]int
 	retriesMu      sync.Mutex
 	lastCapacityLog time.Time
+	pub             eventbus.Publisher
+	lastPubTime     time.Time
 }
 
 type backoffState struct {
@@ -87,6 +93,12 @@ func NewQueue(embedder Embedder, queries QueueQuerier, logger zerolog.Logger, pr
 	}
 }
 
+// WithPublisher sets the event bus publisher for embed_queue status events.
+func (q *Queue) WithPublisher(pub eventbus.Publisher) *Queue {
+	q.pub = pub
+	return q
+}
+
 func (q *Queue) WithMaxChars(n int) *Queue {
 	if n > 0 {
 		q.maxChars = n
@@ -105,6 +117,7 @@ func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
 	case q.ch <- chunkID:
 		q.pending.Add(1)
 		q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("chunk enqueued")
+		q.publishStatus()
 		return true
 	default:
 		q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("queue full, chunk dropped")
@@ -231,6 +244,12 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 
 	chunk, err := q.queries.GetChunkByID(ctx, chunkID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("embed-queue: chunk no longer exists (likely cascade-deleted), skipping")
+			q.pending.Add(-1)
+			q.clearRetries(chunkID)
+			return
+		}
 		q.logger.Error().Err(err).Str("chunk_id", chunkID.String()).Msg("failed to fetch chunk")
 		q.pending.Add(-1)
 		return
@@ -257,21 +276,16 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 			Str("chunk_id", chunkID.String()).
 			Str("file", chunk.SourcePath).
 			Msg("embedding failed")
-		if isDeterministicEmbedError(err) {
-			if mErr := q.queries.MarkChunkEmbedPermanentlyFailed(ctx, sqlc.MarkChunkEmbedPermanentlyFailedParams{
+		if isHardFailureEmbedError(err) {
+			if mErr := q.queries.MarkChunkEmbedFailed(ctx, sqlc.MarkChunkEmbedFailedParams{
 				ID:            chunkID,
 				WorkspaceHash: chunk.WorkspaceHash,
 			}); mErr != nil {
-				q.logger.Error().Err(mErr).Str("chunk_id", chunkID.String()).Msg("mark embed_permanently_failed failed")
+				q.logger.Error().Err(mErr).Str("chunk_id", chunkID.String()).Msg("mark embed_failed (hard) failed")
 			}
 			q.pending.Add(-1)
 			q.clearRetries(chunkID)
-			q.logger.Warn().
-				Str("chunk_id", chunkID.String()).
-				Str("reason", err.Error()).
-				Int("content_len", len(content)).
-				Int("max_chars", q.maxChars).
-				Msg("chunk marked embed_permanently_failed (deterministic error — not retryable)")
+			q.publishStatus()
 			return
 		}
 		q.increaseBackoff()
@@ -311,6 +325,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 	q.pending.Add(-1)
 	q.clearRetries(chunkID)
 	q.resetBackoff()
+	q.publishStatus()
 	q.logger.Info().
 		Str("chunk_id", chunkID.String()).
 		Str("file", chunk.SourcePath).
@@ -382,20 +397,51 @@ func truncateToMaxChars(s string, max int) string {
 	return truncated
 }
 
-// isDeterministicEmbedError reports whether the embedder error is content-shape
-// driven (will recur on every retry) rather than transient. Triggers the
-// permanent-failure path so the chunk stops re-entering the rescan loop.
-// Issue #208: ollama returns HTTP 400 with body containing "context length"
-// or "input length" when tokenized input exceeds model's context window.
-func isDeterministicEmbedError(err error) bool {
+// hardFailureStatusCodes is the set of HTTP status codes that indicate a
+// permanent embed failure — retrying will not help. Provider strings are
+// "ollama: unexpected status <N>: ..." and "voyageai: unexpected status <N>: ..."
+// (verified in ollama.go:64 and voyageai.go:76). See issue #260.
+var hardFailureStatusCodes = []string{
+	"unexpected status 400:",
+	"unexpected status 401:",
+	"unexpected status 403:",
+	"unexpected status 413:",
+	"unexpected status 422:",
+}
+
+func isHardFailureEmbedError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "context length") ||
-		strings.Contains(msg, "input length") ||
-		strings.Contains(msg, "exceeds context") ||
-		strings.Contains(msg, "maximum context")
+	msg := err.Error()
+	for _, code := range hardFailureStatusCodes {
+		if strings.Contains(msg, code) {
+			return true
+		}
+	}
+	return false
+}
+
+const embedPubDebounce = 500 * time.Millisecond
+
+func (q *Queue) publishStatus() {
+	if q.pub == nil {
+		return
+	}
+	q.mu.Lock()
+	if time.Since(q.lastPubTime) < embedPubDebounce {
+		q.mu.Unlock()
+		return
+	}
+	q.lastPubTime = time.Now()
+	q.mu.Unlock()
+
+	payload := fmt.Sprintf(`{"pending":%d,"status":%q}`, q.pending.Load(), q.Status())
+	q.pub.Publish(eventbus.Event{
+		Type:    "embed_queue",
+		Payload: json.RawMessage(payload),
+		TS:      time.Now(),
+	})
 }
 
 func (q *Queue) checkCapacity() {

@@ -1,0 +1,495 @@
+=== RUN   TestUIServesIndex
+--- PASS: TestUIServesIndex (0.00s)
+=== RUN   TestUISPAFallback
+--- PASS: TestUISPAFallback (0.00s)
+=== RUN   TestUIHashedAssetCache
+--- PASS: TestUIHashedAssetCache (0.00s)
+=== RUN   TestUIMissingFallback
+--- PASS: TestUIMissingFallback (0.00s)
+=== RUN   TestUIMissingFallbackSubpath
+--- PASS: TestUIMissingFallbackSubpath (0.00s)
+=== RUN   TestUISecurityHeadersApplied
+--- PASS: TestUISecurityHeadersApplied (0.00s)
+=== RUN   TestUISecurityHeadersNotOnAPI
+--- PASS: TestUISecurityHeadersNotOnAPI (0.00s)
+PASS
+ok  	github.com/nano-brain/nano-brain/internal/server/webui	1.049s
+=== RUN   TestIsLoopback
+--- PASS: TestIsLoopback (0.00s)
+=== RUN   TestCheckBindSafety_RejectsNonLoopback
+--- PASS: TestCheckBindSafety_RejectsNonLoopback (0.00s)
+=== RUN   TestCheckBindSafety_AllowsLoopback
+--- PASS: TestCheckBindSafety_AllowsLoopback (0.00s)
+=== RUN   TestCheckBindSafety_UnsafeFlagBypasses
+--- PASS: TestCheckBindSafety_UnsafeFlagBypasses (0.00s)
+=== RUN   TestInitClaudeCodeHarvester_Disabled
+--- PASS: TestInitClaudeCodeHarvester_Disabled (0.00s)
+=== RUN   TestInitClaudeCodeHarvester_SessionDirMissing
+--- PASS: TestInitClaudeCodeHarvester_SessionDirMissing (0.00s)
+=== RUN   TestInitClaudeCodeHarvester_UnregisteredWorkspace
+2026/05/30 13:12:43 OK   00001_initial_schema.sql (29.25ms)
+2026/05/30 13:12:43 OK   00002_fix_chunk_unique_constraint.sql (5.51ms)
+2026/05/30 13:12:43 OK   00003_add_source_path_unique.sql (2.78ms)
+2026/05/30 13:12:43 OK   00004_hnsw_embedding_schema.sql (7.52ms)
+2026/05/30 13:12:43 OK   00005_bm25_search_vector.sql (9.38ms)
+2026/05/30 13:12:43 OK   00006_add_supersedes.sql (5ms)
+2026/05/30 13:12:43 OK   00007_search_telemetry.sql (7.18ms)
+2026/05/30 13:12:43 OK   00008_knowledge_graph.sql (13.14ms)
+2026/05/30 13:12:43 OK   00009_collection_extensions.sql (6.12ms)
+2026/05/30 13:12:43 OK   00010_drop_content_hash_unique.sql (2.8ms)
+2026/05/30 13:12:43 OK   00011_add_fk_documents_workspace.sql (6.15ms)
+2026/05/30 13:12:43 OK   00012_graph_edge_references.sql (5.88ms)
+2026/05/30 13:12:43 goose: successfully migrated database to version: 12
+--- PASS: TestInitClaudeCodeHarvester_UnregisteredWorkspace (0.27s)
+=== RUN   TestInitClaudeCodeHarvester_RegisteredWorkspace
+2026/05/30 13:12:43 OK   00001_initial_schema.sql (32.05ms)
+2026/05/30 13:12:43 OK   00002_fix_chunk_unique_constraint.sql (3.6ms)
+2026/05/30 13:12:43 OK   00003_add_source_path_unique.sql (2.83ms)
+2026/05/30 13:12:43 OK   00004_hnsw_embedding_schema.sql (6.69ms)
+2026/05/30 13:12:43 OK   00005_bm25_search_vector.sql (13.99ms)
+2026/05/30 13:12:43 OK   00006_add_supersedes.sql (6.25ms)
+2026/05/30 13:12:43 OK   00007_search_telemetry.sql (5.99ms)
+2026/05/30 13:12:43 OK   00008_knowledge_graph.sql (5.93ms)
+2026/05/30 13:12:43 OK   00009_collection_extensions.sql (3.21ms)
+2026/05/30 13:12:43 OK   00010_drop_content_hash_unique.sql (2.46ms)
+2026/05/30 13:12:43 OK   00011_add_fk_documents_workspace.sql (5.62ms)
+2026/05/30 13:12:43 OK   00012_graph_edge_references.sql (4.93ms)
+2026/05/30 13:12:43 goose: successfully migrated database to version: 12
+--- PASS: TestInitClaudeCodeHarvester_RegisteredWorkspace (0.19s)
+=== RUN   TestCleanupOrphanWorkspaces_EmptyDB
+2026/05/30 13:12:43 OK   00001_initial_schema.sql (25.85ms)
+2026/05/30 13:12:43 OK   00002_fix_chunk_unique_constraint.sql (4.55ms)
+2026/05/30 13:12:43 OK   00003_add_source_path_unique.sql (2.54ms)
+2026/05/30 13:12:43 OK   00004_hnsw_embedding_schema.sql (4.13ms)
+2026/05/30 13:12:43 OK   00005_bm25_search_vector.sql (6.26ms)
+2026/05/30 13:12:43 OK   00006_add_supersedes.sql (3.76ms)
+2026/05/30 13:12:43 OK   00007_search_telemetry.sql (3.95ms)
+2026/05/30 13:12:43 OK   00008_knowledge_graph.sql (5.16ms)
+2026/05/30 13:12:43 OK   00009_collection_extensions.sql (1.95ms)
+2026/05/30 13:12:43 OK   00010_drop_content_hash_unique.sql (2.56ms)
+2026/05/30 13:12:43 goose: successfully migrated database to version: 10
+--- PASS: TestCleanupOrphanWorkspaces_EmptyDB (0.13s)
+=== RUN   TestCleanupOrphanWorkspaces_DeletesOnlyOrphans
+2026/05/30 13:12:43 OK   00001_initial_schema.sql (25.33ms)
+2026/05/30 13:12:43 OK   00002_fix_chunk_unique_constraint.sql (3.94ms)
+2026/05/30 13:12:43 OK   00003_add_source_path_unique.sql (4.47ms)
+2026/05/30 13:12:43 OK   00004_hnsw_embedding_schema.sql (6.6ms)
+2026/05/30 13:12:43 OK   00005_bm25_search_vector.sql (5.55ms)
+2026/05/30 13:12:43 OK   00006_add_supersedes.sql (2.8ms)
+2026/05/30 13:12:43 OK   00007_search_telemetry.sql (3.9ms)
+2026/05/30 13:12:43 OK   00008_knowledge_graph.sql (5.77ms)
+2026/05/30 13:12:43 OK   00009_collection_extensions.sql (2.23ms)
+2026/05/30 13:12:43 OK   00010_drop_content_hash_unique.sql (2.87ms)
+2026/05/30 13:12:43 goose: successfully migrated database to version: 10
+--- PASS: TestCleanupOrphanWorkspaces_DeletesOnlyOrphans (0.14s)
+=== RUN   TestCleanupOrphanWorkspaces_HandlesChunks
+2026/05/30 13:12:44 OK   00001_initial_schema.sql (20.12ms)
+2026/05/30 13:12:44 OK   00002_fix_chunk_unique_constraint.sql (4.3ms)
+2026/05/30 13:12:44 OK   00003_add_source_path_unique.sql (2.68ms)
+2026/05/30 13:12:44 OK   00004_hnsw_embedding_schema.sql (4.43ms)
+2026/05/30 13:12:44 OK   00005_bm25_search_vector.sql (5.21ms)
+2026/05/30 13:12:44 OK   00006_add_supersedes.sql (2.7ms)
+2026/05/30 13:12:44 OK   00007_search_telemetry.sql (3.98ms)
+2026/05/30 13:12:44 OK   00008_knowledge_graph.sql (5.94ms)
+2026/05/30 13:12:44 OK   00009_collection_extensions.sql (1.87ms)
+2026/05/30 13:12:44 OK   00010_drop_content_hash_unique.sql (1.98ms)
+2026/05/30 13:12:44 goose: successfully migrated database to version: 10
+--- PASS: TestCleanupOrphanWorkspaces_HandlesChunks (0.13s)
+=== RUN   TestCleanupOrphanWorkspaces_PreflightWarnIsNonBlocking
+WARNING: nano-brain server appears to be running on port 8899. Concurrent harvests could re-create orphans. Stop the server before cleanup for safety.
+
+--- PASS: TestCleanupOrphanWorkspaces_PreflightWarnIsNonBlocking (0.01s)
+=== RUN   TestRunGetCmd_BySourcePath
+--- PASS: TestRunGetCmd_BySourcePath (0.00s)
+=== RUN   TestRunGetCmd_ByID
+--- PASS: TestRunGetCmd_ByID (0.00s)
+=== RUN   TestRunGetCmd_NotFound
+--- PASS: TestRunGetCmd_NotFound (0.00s)
+=== RUN   TestPrintGetResult
+ID:         uuid-1
+Title:      My Doc
+Path:       memory://doc.md
+Collection: memory
+Tags:       tag1
+Updated:    2026-05-30T10:00:00Z
+
+Some content here
+--- PASS: TestPrintGetResult (0.00s)
+=== RUN   TestPrintGetResult_NoTitle
+ID:         uuid-1
+Path:       memory://doc.md
+Collection: memory
+Updated:    2026-05-30T10:00:00Z
+
+content
+--- PASS: TestPrintGetResult_NoTitle (0.00s)
+=== RUN   TestRunMultiGetCmd_PathsPassedInBody
+--- PASS: TestRunMultiGetCmd_PathsPassedInBody (0.00s)
+=== RUN   TestRunMultiGetCmd_IDsPassedInBody
+--- PASS: TestRunMultiGetCmd_IDsPassedInBody (0.00s)
+=== RUN   TestRunMultiGetCmd_ServerError
+--- PASS: TestRunMultiGetCmd_ServerError (0.00s)
+=== RUN   TestSplitCSV
+--- PASS: TestSplitCSV (0.00s)
+=== RUN   TestPrintMultiGetResult
+ID:         a
+Path:       p1
+Collection: memory
+Updated:    2026-05-30
+
+c1
+---
+ID:         b
+Path:       p2
+Collection: memory
+Updated:    2026-05-29
+
+c2
+
+Not found (1): p3
+--- PASS: TestPrintMultiGetResult (0.00s)
+=== RUN   TestRunTagsCmd_WorkspacePassedAsQueryParam
+--- PASS: TestRunTagsCmd_WorkspacePassedAsQueryParam (0.00s)
+=== RUN   TestRunTagsCmd_EmptyResponse
+--- PASS: TestRunTagsCmd_EmptyResponse (0.00s)
+=== RUN   TestRunTagsCmd_ServerError
+--- PASS: TestRunTagsCmd_ServerError (0.00s)
+=== RUN   TestRunWakeUpCmd_RequestBodyContainsWorkspace
+--- PASS: TestRunWakeUpCmd_RequestBodyContainsWorkspace (0.00s)
+=== RUN   TestRunWakeUpCmd_DefaultLimitOmitted
+--- PASS: TestRunWakeUpCmd_DefaultLimitOmitted (0.00s)
+=== RUN   TestRunWakeUpCmd_ServerError
+--- PASS: TestRunWakeUpCmd_ServerError (0.00s)
+=== RUN   TestPrintWakeUpResponse_NoCollections
+No data yet.
+
+Stats: 0 documents, 0 chunks
+--- PASS: TestPrintWakeUpResponse_NoCollections (0.00s)
+=== RUN   TestPrintWakeUpResponse_SnippetTruncation
+ok
+
+Stats: 0 documents, 0 chunks
+
+Recent memories (1):
+  [2026-01-01T00:00:00Z] test
+    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
+--- PASS: TestPrintWakeUpResponse_SnippetTruncation (0.00s)
+=== RUN   TestParseWorkspaceRemoveFlags_Basic
+--- PASS: TestParseWorkspaceRemoveFlags_Basic (0.00s)
+=== RUN   TestParseWorkspaceRemoveFlags_DryRun
+--- PASS: TestParseWorkspaceRemoveFlags_DryRun (0.00s)
+=== RUN   TestParseWorkspaceRemoveFlags_WorkspaceSplit
+--- PASS: TestParseWorkspaceRemoveFlags_WorkspaceSplit (0.00s)
+=== RUN   TestParseWorkspaceRemoveFlags_UnknownFlag
+--- PASS: TestParseWorkspaceRemoveFlags_UnknownFlag (0.00s)
+=== RUN   TestParseWorkspaceRemoveFlags_Help
+--- PASS: TestParseWorkspaceRemoveFlags_Help (0.00s)
+=== RUN   TestWorkspaceRemoveCLI_MissingWorkspace
+--- PASS: TestWorkspaceRemoveCLI_MissingWorkspace (0.00s)
+=== RUN   TestWorkspaceRemoveCLI_RefusesWithoutForce
+--- PASS: TestWorkspaceRemoveCLI_RefusesWithoutForce (0.00s)
+=== RUN   TestWorkspaceRemoveCLI_DryRun
+--- PASS: TestWorkspaceRemoveCLI_DryRun (0.00s)
+=== RUN   TestWorkspaceRemoveCLI_ForceSuccess
+--- PASS: TestWorkspaceRemoveCLI_ForceSuccess (0.00s)
+=== RUN   TestWorkspaceRemoveCLI_ForceJSON
+--- PASS: TestWorkspaceRemoveCLI_ForceJSON (0.00s)
+=== RUN   TestWorkspaceRemoveCLI_NotFound
+--- PASS: TestWorkspaceRemoveCLI_NotFound (0.00s)
+=== RUN   TestParseStubFlags_ScopeAll
+--- PASS: TestParseStubFlags_ScopeAll (0.00s)
+=== RUN   TestParseStubFlags_ScopeAllEquals
+--- PASS: TestParseStubFlags_ScopeAllEquals (0.00s)
+=== RUN   TestParseStubFlags_ScopeWorkspaceDefault
+--- PASS: TestParseStubFlags_ScopeWorkspaceDefault (0.00s)
+=== RUN   TestParseStubFlags_ScopeWorkspaceExplicit
+--- PASS: TestParseStubFlags_ScopeWorkspaceExplicit (0.00s)
+=== RUN   TestParseStubFlags_ScopeInvalid
+--- PASS: TestParseStubFlags_ScopeInvalid (0.00s)
+=== RUN   TestParseStubFlags_ScopeMissingValue
+--- PASS: TestParseStubFlags_ScopeMissingValue (0.00s)
+=== RUN   TestParseStubFlags_ScopeAllOverridesWorkspace
+--- PASS: TestParseStubFlags_ScopeAllOverridesWorkspace (0.00s)
+=== RUN   TestStubCmd_ScopeAll
+--- PASS: TestStubCmd_ScopeAll (0.00s)
+=== RUN   TestStubCmd_ScopeWorkspace
+--- PASS: TestStubCmd_ScopeWorkspace (0.00s)
+=== RUN   TestParseStubFlags_TagsSpaceForm
+--- PASS: TestParseStubFlags_TagsSpaceForm (0.00s)
+=== RUN   TestParseStubFlags_TagsEqualsForm
+--- PASS: TestParseStubFlags_TagsEqualsForm (0.00s)
+=== RUN   TestParseStubFlags_TagsSingleTag
+--- PASS: TestParseStubFlags_TagsSingleTag (0.00s)
+=== RUN   TestParseStubFlags_TagsMissingValue
+--- PASS: TestParseStubFlags_TagsMissingValue (0.00s)
+=== RUN   TestParseStubFlags_NoTags
+--- PASS: TestParseStubFlags_NoTags (0.00s)
+=== RUN   TestStubCmd_TagsSentInBody
+--- PASS: TestStubCmd_TagsSentInBody (0.00s)
+=== RUN   TestStubCmd_ScopeAllOverridesWorkspace
+--- PASS: TestStubCmd_ScopeAllOverridesWorkspace (0.00s)
+=== RUN   TestParseTagList_TrimsWhitespace
+--- PASS: TestParseTagList_TrimsWhitespace (0.00s)
+=== RUN   TestParseTagList_FiltersEmpty
+--- PASS: TestParseTagList_FiltersEmpty (0.00s)
+=== RUN   TestParseTagList_AllEmptyReturnsNil
+--- PASS: TestParseTagList_AllEmptyReturnsNil (0.00s)
+=== RUN   TestParseTagList_EmptyStringReturnsNil
+--- PASS: TestParseTagList_EmptyStringReturnsNil (0.00s)
+=== RUN   TestGetBaseURL_Defaults
+--- PASS: TestGetBaseURL_Defaults (0.00s)
+=== RUN   TestGetBaseURL_EnvOverride
+--- PASS: TestGetBaseURL_EnvOverride (0.00s)
+=== RUN   TestGetBaseURL_PartialOverride
+--- PASS: TestGetBaseURL_PartialOverride (0.00s)
+=== RUN   TestDoRequest_Success
+--- PASS: TestDoRequest_Success (0.00s)
+=== RUN   TestDoRequest_ServerError
+--- PASS: TestDoRequest_ServerError (0.00s)
+=== RUN   TestDoRequest_ConnectionRefused
+Error: cannot connect to nano-brain server at localhost:19999
+The server does not appear to be running.
+Run this to start it: nano-brain serve -d
+--- PASS: TestDoRequest_ConnectionRefused (0.00s)
+=== RUN   TestDoRequest_NotFound_ReturnsBody
+--- PASS: TestDoRequest_NotFound_ReturnsBody (0.00s)
+=== RUN   TestDoRequest_SetsContentType
+--- PASS: TestDoRequest_SetsContentType (0.00s)
+=== RUN   TestDoRequest_NoContentTypeWithoutBody
+--- PASS: TestDoRequest_NoContentTypeWithoutBody (0.00s)
+=== RUN   TestGetBaseURL_EnvVarsFromOS
+--- PASS: TestGetBaseURL_EnvVarsFromOS (0.00s)
+=== RUN   TestInitCmdBuildsCorrectBody
+--- PASS: TestInitCmdBuildsCorrectBody (0.00s)
+=== RUN   TestWriteCmdWithTagsBuildsCorrectBody
+--- PASS: TestWriteCmdWithTagsBuildsCorrectBody (0.00s)
+=== RUN   TestStubCmdHandles404
+--- PASS: TestStubCmdHandles404 (0.00s)
+=== RUN   TestIsNpxLaunched
+=== RUN   TestIsNpxLaunched/both_unset
+=== RUN   TestIsNpxLaunched/npm_execpath_set
+=== RUN   TestIsNpxLaunched/npm_package_name_set
+=== RUN   TestIsNpxLaunched/both_set
+--- PASS: TestIsNpxLaunched (0.00s)
+    --- PASS: TestIsNpxLaunched/both_unset (0.00s)
+    --- PASS: TestIsNpxLaunched/npm_execpath_set (0.00s)
+    --- PASS: TestIsNpxLaunched/npm_package_name_set (0.00s)
+    --- PASS: TestIsNpxLaunched/both_set (0.00s)
+=== RUN   TestSuggestStartCommand
+=== RUN   TestSuggestStartCommand/binary
+=== RUN   TestSuggestStartCommand/npx_via_execpath
+=== RUN   TestSuggestStartCommand/npx_via_package_name
+--- PASS: TestSuggestStartCommand (0.00s)
+    --- PASS: TestSuggestStartCommand/binary (0.00s)
+    --- PASS: TestSuggestStartCommand/npx_via_execpath (0.00s)
+    --- PASS: TestSuggestStartCommand/npx_via_package_name (0.00s)
+=== RUN   TestFormatConnectError_Structure
+--- PASS: TestFormatConnectError_Structure (0.00s)
+=== RUN   TestFormatConnectError_CustomHostPort
+--- PASS: TestFormatConnectError_CustomHostPort (0.00s)
+=== RUN   TestFormatConnectError_NpxSuggestion
+--- PASS: TestFormatConnectError_NpxSuggestion (0.00s)
+=== RUN   TestIsTTY_NonTTYStdin
+--- PASS: TestIsTTY_NonTTYStdin (0.00s)
+=== RUN   TestIsTTY_NonTTYStderr
+--- PASS: TestIsTTY_NonTTYStderr (0.00s)
+=== RUN   TestIsCharDevice_NilFile
+--- PASS: TestIsCharDevice_NilFile (0.00s)
+=== RUN   TestIsCharDevice_RegularFile
+--- PASS: TestIsCharDevice_RegularFile (0.00s)
+=== RUN   TestWaitForServerHealthy_BecomesHealthy
+--- PASS: TestWaitForServerHealthy_BecomesHealthy (0.41s)
+=== RUN   TestWaitForServerHealthy_Timeout
+--- PASS: TestWaitForServerHealthy_Timeout (0.50s)
+=== RUN   TestWaitForServerHealthy_UnreachableHost
+--- PASS: TestWaitForServerHealthy_UnreachableHost (0.40s)
+=== RUN   TestPromptStartServer
+=== RUN   TestPromptStartServer/empty_input_(Enter)
+=== RUN   TestPromptStartServer/capital_Y
+=== RUN   TestPromptStartServer/lowercase_y
+=== RUN   TestPromptStartServer/yes-with-trailing-text
+=== RUN   TestPromptStartServer/capital_N
+=== RUN   TestPromptStartServer/lowercase_n
+=== RUN   TestPromptStartServer/no
+=== RUN   TestPromptStartServer/garbage
+=== RUN   TestPromptStartServer/whitespace_only
+=== RUN   TestPromptStartServer/eof
+--- PASS: TestPromptStartServer (0.00s)
+    --- PASS: TestPromptStartServer/empty_input_(Enter) (0.00s)
+    --- PASS: TestPromptStartServer/capital_Y (0.00s)
+    --- PASS: TestPromptStartServer/lowercase_y (0.00s)
+    --- PASS: TestPromptStartServer/yes-with-trailing-text (0.00s)
+    --- PASS: TestPromptStartServer/capital_N (0.00s)
+    --- PASS: TestPromptStartServer/lowercase_n (0.00s)
+    --- PASS: TestPromptStartServer/no (0.00s)
+    --- PASS: TestPromptStartServer/garbage (0.00s)
+    --- PASS: TestPromptStartServer/whitespace_only (0.00s)
+    --- PASS: TestPromptStartServer/eof (0.00s)
+=== RUN   TestDoRequest_ConnectionRefused_NoTTY_NoPrompt
+Error: cannot connect to nano-brain server at 127.0.0.1:19997
+The server does not appear to be running.
+Run this to start it: nano-brain serve -d
+--- PASS: TestDoRequest_ConnectionRefused_NoTTY_NoPrompt (0.00s)
+=== RUN   TestDoRequest_ConnectionRefused_NoAutoStartEnv
+Error: cannot connect to nano-brain server at 127.0.0.1:19996
+The server does not appear to be running.
+Run this to start it: nano-brain serve -d
+--- PASS: TestDoRequest_ConnectionRefused_NoAutoStartEnv (0.00s)
+=== RUN   TestDoRequest_ConnectionRefused_UserDeclines
+Error: cannot connect to nano-brain server at 127.0.0.1:19995
+The server does not appear to be running.
+Run this to start it: nano-brain serve -d
+--- PASS: TestDoRequest_ConnectionRefused_UserDeclines (0.00s)
+=== RUN   TestDoRequest_ConnectionRefused_UserAcceptsTriggersRecovery
+Error: cannot connect to nano-brain server at 127.0.0.1:45311
+The server does not appear to be running.
+Run this to start it: nano-brain serve -d
+--- PASS: TestDoRequest_ConnectionRefused_UserAcceptsTriggersRecovery (0.00s)
+=== RUN   TestDoRequest_RetrySucceeds_HappyPath
+--- PASS: TestDoRequest_RetrySucceeds_HappyPath (0.00s)
+=== RUN   TestDoRequest_BodyBufferedForReplay
+--- PASS: TestDoRequest_BodyBufferedForReplay (0.00s)
+=== RUN   TestDetectOpenCodeStorageDir_EnvVar
+--- PASS: TestDetectOpenCodeStorageDir_EnvVar (0.00s)
+=== RUN   TestDetectOpenCodeStorageDir_EnvVarMissing
+--- PASS: TestDetectOpenCodeStorageDir_EnvVarMissing (0.00s)
+=== RUN   TestDetectOpenCodeStorageDir_XDGDataHome
+--- PASS: TestDetectOpenCodeStorageDir_XDGDataHome (0.00s)
+=== RUN   TestDetectOpenCodeStorageDir_HomeLinuxFallback
+--- PASS: TestDetectOpenCodeStorageDir_HomeLinuxFallback (0.00s)
+=== RUN   TestDetectOpenCodeStorageDir_HomeMac
+    detect_test.go:83: darwin-only path
+--- SKIP: TestDetectOpenCodeStorageDir_HomeMac (0.00s)
+=== RUN   TestDetectOpenCodeStorageDir_NoneFound
+--- PASS: TestDetectOpenCodeStorageDir_NoneFound (0.00s)
+=== RUN   TestDetectOpenCodeStorageDir_EnvVarPriority
+--- PASS: TestDetectOpenCodeStorageDir_EnvVarPriority (0.00s)
+=== RUN   TestDetectOpenCodeDBRoot_EnvVar
+--- PASS: TestDetectOpenCodeDBRoot_EnvVar (0.00s)
+=== RUN   TestDetectOpenCodeDBRoot_EnvVarMissing
+--- PASS: TestDetectOpenCodeDBRoot_EnvVarMissing (0.00s)
+=== RUN   TestDetectOpenCodeDBRoot_EnvVarFileNotDir
+--- PASS: TestDetectOpenCodeDBRoot_EnvVarFileNotDir (0.00s)
+=== RUN   TestDetectOpenCodeDBRoot_PlatformDefault
+--- PASS: TestDetectOpenCodeDBRoot_PlatformDefault (0.00s)
+=== RUN   TestDetectOpenCodeDBRoot_NoneFound
+--- PASS: TestDetectOpenCodeDBRoot_NoneFound (0.00s)
+=== RUN   TestDetectOpenCodeDBRoot_EnvVarPriority
+--- PASS: TestDetectOpenCodeDBRoot_EnvVarPriority (0.00s)
+=== RUN   TestPlatformOpenCodeDBRootPaths_Windows
+    detect_test.go:231: windows-only path check
+--- SKIP: TestPlatformOpenCodeDBRootPaths_Windows (0.00s)
+=== RUN   TestPadRight
+--- PASS: TestPadRight (0.00s)
+=== RUN   TestCheckResultJSONFormat
+--- PASS: TestCheckResultJSONFormat (0.00s)
+=== RUN   TestCheckEmbeddingModelOllamaMatch
+--- PASS: TestCheckEmbeddingModelOllamaMatch (0.00s)
+=== RUN   TestCheckConfigMissingPath
+--- PASS: TestCheckConfigMissingPath (0.00s)
+=== RUN   TestCheckConfigSuccess
+--- PASS: TestCheckConfigSuccess (0.00s)
+=== RUN   TestMigration00011_FKRejectsOrphanInsert
+2026/05/30 13:12:45 OK   00001_initial_schema.sql (21.19ms)
+2026/05/30 13:12:45 OK   00002_fix_chunk_unique_constraint.sql (3.46ms)
+2026/05/30 13:12:45 OK   00003_add_source_path_unique.sql (2.88ms)
+2026/05/30 13:12:45 OK   00004_hnsw_embedding_schema.sql (4.52ms)
+2026/05/30 13:12:45 OK   00005_bm25_search_vector.sql (7.78ms)
+2026/05/30 13:12:45 OK   00006_add_supersedes.sql (3.52ms)
+2026/05/30 13:12:45 OK   00007_search_telemetry.sql (5.55ms)
+2026/05/30 13:12:45 OK   00008_knowledge_graph.sql (5.9ms)
+2026/05/30 13:12:45 OK   00009_collection_extensions.sql (2.22ms)
+2026/05/30 13:12:45 OK   00010_drop_content_hash_unique.sql (1.75ms)
+2026/05/30 13:12:45 OK   00011_add_fk_documents_workspace.sql (3.94ms)
+2026/05/30 13:12:45 OK   00012_graph_edge_references.sql (2.98ms)
+2026/05/30 13:12:45 goose: successfully migrated database to version: 12
+--- PASS: TestMigration00011_FKRejectsOrphanInsert (0.19s)
+=== RUN   TestMigration00011_FKRejectsOrphanUpdate
+2026/05/30 13:12:45 OK   00001_initial_schema.sql (21.9ms)
+2026/05/30 13:12:45 OK   00002_fix_chunk_unique_constraint.sql (3.43ms)
+2026/05/30 13:12:45 OK   00003_add_source_path_unique.sql (2.81ms)
+2026/05/30 13:12:45 OK   00004_hnsw_embedding_schema.sql (3.99ms)
+2026/05/30 13:12:45 OK   00005_bm25_search_vector.sql (6.94ms)
+2026/05/30 13:12:45 OK   00006_add_supersedes.sql (3.3ms)
+2026/05/30 13:12:45 OK   00007_search_telemetry.sql (4.98ms)
+2026/05/30 13:12:45 OK   00008_knowledge_graph.sql (8.65ms)
+2026/05/30 13:12:45 OK   00009_collection_extensions.sql (2.45ms)
+2026/05/30 13:12:45 OK   00010_drop_content_hash_unique.sql (2.26ms)
+2026/05/30 13:12:45 OK   00011_add_fk_documents_workspace.sql (3.33ms)
+2026/05/30 13:12:45 OK   00012_graph_edge_references.sql (3.11ms)
+2026/05/30 13:12:45 goose: successfully migrated database to version: 12
+--- PASS: TestMigration00011_FKRejectsOrphanUpdate (0.15s)
+=== RUN   TestMigration00011_CascadeDeletesDocsAndChunks
+2026/05/30 13:12:45 OK   00001_initial_schema.sql (19.49ms)
+2026/05/30 13:12:45 OK   00002_fix_chunk_unique_constraint.sql (3.14ms)
+2026/05/30 13:12:45 OK   00003_add_source_path_unique.sql (1.97ms)
+2026/05/30 13:12:45 OK   00004_hnsw_embedding_schema.sql (4.28ms)
+2026/05/30 13:12:45 OK   00005_bm25_search_vector.sql (5.12ms)
+2026/05/30 13:12:45 OK   00006_add_supersedes.sql (2.61ms)
+2026/05/30 13:12:45 OK   00007_search_telemetry.sql (4.59ms)
+2026/05/30 13:12:45 OK   00008_knowledge_graph.sql (5.44ms)
+2026/05/30 13:12:45 OK   00009_collection_extensions.sql (2.85ms)
+2026/05/30 13:12:45 OK   00010_drop_content_hash_unique.sql (2.38ms)
+2026/05/30 13:12:45 OK   00011_add_fk_documents_workspace.sql (4.5ms)
+2026/05/30 13:12:45 OK   00012_graph_edge_references.sql (3.05ms)
+2026/05/30 13:12:45 goose: successfully migrated database to version: 12
+--- PASS: TestMigration00011_CascadeDeletesDocsAndChunks (0.15s)
+=== RUN   TestMigration00011_FKRejectsOrphanChunkInsert
+2026/05/30 13:12:46 OK   00001_initial_schema.sql (22.09ms)
+2026/05/30 13:12:46 OK   00002_fix_chunk_unique_constraint.sql (3.57ms)
+2026/05/30 13:12:46 OK   00003_add_source_path_unique.sql (4.05ms)
+2026/05/30 13:12:46 OK   00004_hnsw_embedding_schema.sql (5.43ms)
+2026/05/30 13:12:46 OK   00005_bm25_search_vector.sql (4.34ms)
+2026/05/30 13:12:46 OK   00006_add_supersedes.sql (3.19ms)
+2026/05/30 13:12:46 OK   00007_search_telemetry.sql (4.18ms)
+2026/05/30 13:12:46 OK   00008_knowledge_graph.sql (5.29ms)
+2026/05/30 13:12:46 OK   00009_collection_extensions.sql (1.91ms)
+2026/05/30 13:12:46 OK   00010_drop_content_hash_unique.sql (2.11ms)
+2026/05/30 13:12:46 OK   00011_add_fk_documents_workspace.sql (3.08ms)
+2026/05/30 13:12:46 OK   00012_graph_edge_references.sql (2.34ms)
+2026/05/30 13:12:46 goose: successfully migrated database to version: 12
+--- PASS: TestMigration00011_FKRejectsOrphanChunkInsert (0.17s)
+=== RUN   TestResolveHostPort_Defaults
+--- PASS: TestResolveHostPort_Defaults (0.00s)
+=== RUN   TestResolveHostPort_EnvOverride
+--- PASS: TestResolveHostPort_EnvOverride (0.00s)
+=== RUN   TestResolveHostPort_InvalidPort
+--- PASS: TestResolveHostPort_InvalidPort (0.00s)
+=== RUN   TestResolveHostPort_OutOfRangePort
+--- PASS: TestResolveHostPort_OutOfRangePort (0.00s)
+=== RUN   TestTailLines_Basic
+--- PASS: TestTailLines_Basic (0.00s)
+=== RUN   TestTailLines_FewerThanRequested
+--- PASS: TestTailLines_FewerThanRequested (0.00s)
+=== RUN   TestTailLines_FileNotFound
+--- PASS: TestTailLines_FileNotFound (0.00s)
+=== RUN   TestTailLines_EmptyFile
+--- PASS: TestTailLines_EmptyFile (0.00s)
+=== RUN   TestTailLines_MultiChunk
+--- PASS: TestTailLines_MultiChunk (0.01s)
+=== RUN   TestRunStatusCmd_JSON
+--- PASS: TestRunStatusCmd_JSON (0.00s)
+=== RUN   TestDefaultLogPath
+--- PASS: TestDefaultLogPath (0.00s)
+=== RUN   TestWorkspacesList_DefaultTable
+--- PASS: TestWorkspacesList_DefaultTable (0.00s)
+=== RUN   TestWorkspacesList_Json
+--- PASS: TestWorkspacesList_Json (0.00s)
+=== RUN   TestWorkspacesList_Empty_Default
+--- PASS: TestWorkspacesList_Empty_Default (0.00s)
+=== RUN   TestWorkspacesList_Empty_Json
+--- PASS: TestWorkspacesList_Empty_Json (0.00s)
+=== RUN   TestWorkspacesList_ServerError
+--- PASS: TestWorkspacesList_ServerError (0.00s)
+=== RUN   TestWorkspacesList_LongPathTruncation
+--- PASS: TestWorkspacesList_LongPathTruncation (0.00s)
+=== RUN   TestWorkspacesList_NeverColumn
+--- PASS: TestWorkspacesList_NeverColumn (0.00s)
+=== RUN   TestWorkspacesAliasLs
+--- PASS: TestWorkspacesAliasLs (0.00s)
+=== RUN   TestWorkspacesNoArgsDefaultsToList
+--- PASS: TestWorkspacesNoArgsDefaultsToList (0.00s)
+=== RUN   TestWorkspacesFlagOnlyDefaultsToList
+--- PASS: TestWorkspacesFlagOnlyDefaultsToList (0.00s)
+PASS
+ok  	github.com/nano-brain/nano-brain/cmd/nano-brain	3.958s

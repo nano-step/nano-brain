@@ -1,9 +1,11 @@
 package embed
 
 import (
+	"bytes"
 	"context"
-	"errors"
+	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -677,27 +679,106 @@ func TestScanFailed_WorkspaceScoped(t *testing.T) {
 	}
 }
 
-func TestIsDeterministicEmbedError(t *testing.T) {
+func TestProcessChunk_SkipsDeletedChunk(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{}
+	mq := &mockQuerier{
+		getChunkByIDFn: func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
+			return sqlc.GetChunkByIDRow{}, sql.ErrNoRows
+		},
+	}
+
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf).Level(zerolog.DebugLevel)
+	eq := NewQueue(me, mq, logger, "test-provider", "test-model", 1)
+	eq.pending.Store(1)
+	// Seed retry state so we can assert it's cleared (memory-leak fix per Gemini).
+	eq.retriesMu.Lock()
+	eq.retries[chunkID] = 2
+	eq.retriesMu.Unlock()
+
+	eq.processChunk(context.Background(), chunkID)
+
+	if me.callCount() != 0 {
+		t.Errorf("embed calls = %d, want 0 (deleted chunk should not be embedded)", me.callCount())
+	}
+	if got := eq.pending.Load(); got != 0 {
+		t.Errorf("pending counter = %d, want 0 (must decrement on skip)", got)
+	}
+
+	eq.retriesMu.Lock()
+	_, retryStillPresent := eq.retries[chunkID]
+	eq.retriesMu.Unlock()
+	if retryStillPresent {
+		t.Errorf("expected retry entry for %s to be cleared (memory-leak fix), but it is still in q.retries", chunkID)
+	}
+
+	logs := buf.String()
+	if strings.Contains(logs, `"level":"error"`) && strings.Contains(logs, "failed to fetch chunk") {
+		t.Errorf("expected no ERROR log for deleted chunk, got:\n%s", logs)
+	}
+	if !strings.Contains(logs, `"level":"debug"`) || !strings.Contains(logs, "chunk no longer exists") {
+		t.Errorf("expected DEBUG log 'chunk no longer exists', got:\n%s", logs)
+	}
+	if !strings.Contains(logs, chunkID.String()) {
+		t.Errorf("expected DEBUG log to contain chunk_id %s, got:\n%s", chunkID, logs)
+	}
+}
+
+func TestProcessChunk_OtherDBErrorStillLogsError(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{}
+	mq := &mockQuerier{
+		getChunkByIDFn: func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
+			return sqlc.GetChunkByIDRow{}, fmt.Errorf("connection refused")
+		},
+	}
+
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf).Level(zerolog.DebugLevel)
+	eq := NewQueue(me, mq, logger, "test-provider", "test-model", 1)
+	eq.pending.Store(1)
+
+	eq.processChunk(context.Background(), chunkID)
+
+	logs := buf.String()
+	if !strings.Contains(logs, `"level":"error"`) || !strings.Contains(logs, "failed to fetch chunk") {
+		t.Errorf("expected ERROR log for non-ErrNoRows error, got:\n%s", logs)
+	}
+	if got := eq.pending.Load(); got != 0 {
+		t.Errorf("pending counter = %d, want 0 (must decrement on error)", got)
+	}
+}
+
+func TestIsHardFailureEmbedError(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error
 		want bool
 	}{
+		{"ollama 400", fmt.Errorf("ollama: unexpected status 400: input length exceeds"), true},
+		{"ollama 401", fmt.Errorf("ollama: unexpected status 401: unauthorized"), true},
+		{"ollama 403", fmt.Errorf("ollama: unexpected status 403: forbidden"), true},
+		{"ollama 413", fmt.Errorf("ollama: unexpected status 413: payload too large"), true},
+		{"ollama 422", fmt.Errorf("ollama: unexpected status 422: invalid input"), true},
+		{"voyageai 400", fmt.Errorf("voyageai: unexpected status 400: bad request"), true},
+		{"voyageai 401", fmt.Errorf("voyageai: unexpected status 401: invalid key"), true},
+		{"ollama 500", fmt.Errorf("ollama: unexpected status 500: internal error"), false},
+		{"ollama 502", fmt.Errorf("ollama: unexpected status 502: bad gateway"), false},
+		{"ollama 503", fmt.Errorf("ollama: unexpected status 503: unavailable"), false},
+		{"connection refused", fmt.Errorf("connection refused"), false},
+		{"context deadline", fmt.Errorf("context deadline exceeded"), false},
+		{"empty string", fmt.Errorf(""), false},
 		{"nil", nil, false},
-		{"unrelated", errors.New("network timeout"), false},
-		{"ollama_context_length", errors.New(`ollama: unexpected status 400: {"error":"the input length exceeds the context length"}`), true},
-		{"context_length_lowercase", errors.New("context length exceeded"), true},
-		{"input_length", errors.New("input length too large"), true},
-		{"exceeds_context", errors.New("text exceeds context window"), true},
-		{"maximum_context", errors.New("input larger than maximum context"), true},
-		{"transient_500", errors.New("ollama: unexpected status 500: internal error"), false},
-		{"transient_503", errors.New("ollama: unexpected status 503: service unavailable"), false},
+		{"false-positive 4000-byte response (no colon)", fmt.Errorf("ollama: unexpected status 4000 bytes received"), false},
+		{"false-positive 4xx-like substring mid-message", fmt.Errorf("error code 400 found in body"), false},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := isDeterministicEmbedError(tc.err)
-			if got != tc.want {
-				t.Errorf("isDeterministicEmbedError(%v) = %v, want %v", tc.err, got, tc.want)
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := isHardFailureEmbedError(c.err)
+			if got != c.want {
+				t.Errorf("isHardFailureEmbedError(%v) = %v, want %v", c.err, got, c.want)
 			}
 		})
 	}
@@ -722,62 +803,71 @@ func TestWithMaxChars(t *testing.T) {
 	}
 }
 
-func TestProcessChunk_DeterministicErrorMarksPermanentlyFailed(t *testing.T) {
+func TestProcessChunk_HardFailOn400(t *testing.T) {
 	chunkID := uuid.New()
-	mq := &mockQuerier{
-		getChunkByIDFn: func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
-			return sqlc.GetChunkByIDRow{
-				ID:            chunkID,
-				WorkspaceHash: "ws1",
-				Content:       "some content",
-			}, nil
-		},
-	}
 	me := &mockEmbedder{
 		embedFn: func(ctx context.Context, text string) ([]float32, error) {
-			return nil, errors.New(`ollama: unexpected status 400: {"error":"the input length exceeds the context length"}`)
+			return nil, fmt.Errorf("ollama: unexpected status 400: input length exceeds context limit")
 		},
 	}
+	mq := &mockQuerier{}
+
 	eq := newTestQueue(me, mq)
-	eq.pending.Add(1)
+	eq.pending.Store(1)
+	// Seed retry counter so we can assert it's cleared on hard-fail.
+	eq.retriesMu.Lock()
+	eq.retries[chunkID] = 1
+	eq.retriesMu.Unlock()
+	backoffBefore := eq.backoff.current
+
 	eq.processChunk(context.Background(), chunkID)
 
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
-	if mq.markChunkEmbedPermanentlyFailedCalls != 1 {
-		t.Errorf("MarkChunkEmbedPermanentlyFailed calls = %d, want 1", mq.markChunkEmbedPermanentlyFailedCalls)
+	if mq.markChunkEmbedFailedCalls != 1 {
+		t.Errorf("MarkChunkEmbedFailed calls = %d, want 1 (hard-fail must mark failed in DB)", mq.markChunkEmbedFailedCalls)
 	}
-	if mq.markChunkEmbedFailedCalls != 0 {
-		t.Errorf("MarkChunkEmbedFailed calls = %d, want 0 (deterministic must skip retry path)", mq.markChunkEmbedFailedCalls)
+	if eq.backoff.current != backoffBefore {
+		t.Errorf("backoff changed (before=%v after=%v), hard-fail must NOT increaseBackoff", backoffBefore, eq.backoff.current)
 	}
-	if eq.pending.Load() != 0 {
-		t.Errorf("pending counter = %d, want 0 (permanent failure must decrement)", eq.pending.Load())
+	if got := eq.pending.Load(); got != 0 {
+		t.Errorf("pending = %d, want 0", got)
+	}
+	eq.retriesMu.Lock()
+	_, retryStillPresent := eq.retries[chunkID]
+	eq.retriesMu.Unlock()
+	if retryStillPresent {
+		t.Errorf("retry entry not cleared on hard-fail")
 	}
 }
 
-func TestProcessChunk_TransientErrorStillRetries(t *testing.T) {
+func TestProcessChunk_TransientErrorRetries(t *testing.T) {
 	chunkID := uuid.New()
-	mq := &mockQuerier{
-		getChunkByIDFn: func(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
-			return sqlc.GetChunkByIDRow{
-				ID:            chunkID,
-				WorkspaceHash: "ws1",
-				Content:       "some content",
-			}, nil
-		},
-	}
 	me := &mockEmbedder{
 		embedFn: func(ctx context.Context, text string) ([]float32, error) {
-			return nil, errors.New("connection refused")
+			return nil, fmt.Errorf("connection refused")
 		},
 	}
+	mq := &mockQuerier{}
+
 	eq := newTestQueue(me, mq)
-	eq.pending.Add(1)
+	eq.pending.Store(1)
+	backoffBefore := eq.backoff.current
+
 	eq.processChunk(context.Background(), chunkID)
 
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
-	if mq.markChunkEmbedPermanentlyFailedCalls != 0 {
-		t.Errorf("MarkChunkEmbedPermanentlyFailed calls = %d, want 0 (transient must NOT permanently fail)", mq.markChunkEmbedPermanentlyFailedCalls)
+	if mq.markChunkEmbedFailedCalls != 0 {
+		t.Errorf("MarkChunkEmbedFailed should NOT be called for transient errors, got %d calls", mq.markChunkEmbedFailedCalls)
+	}
+	if eq.backoff.current <= backoffBefore {
+		t.Errorf("backoff did not increase (before=%v after=%v), transient errors must call increaseBackoff", backoffBefore, eq.backoff.current)
+	}
+	eq.retriesMu.Lock()
+	count, retryPresent := eq.retries[chunkID]
+	eq.retriesMu.Unlock()
+	if !retryPresent || count == 0 {
+		t.Errorf("retry counter not incremented for transient error (present=%v count=%d)", retryPresent, count)
 	}
 }

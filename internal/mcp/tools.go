@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -135,6 +136,28 @@ func requireWorkspace(args map[string]any) (string, *mcpsdk.CallToolResult) {
 	return ws, nil
 }
 
+// requireRegisteredWorkspace extends requireWorkspace with a registration check
+// against the workspaces table. Use in write tool handlers (memory_write,
+// memory_update) — MCP transport bypasses HTTP middleware so registration
+// enforcement must happen inside each write tool (issue #238). Rejects the
+// literal "all" since cross-workspace writes are not supported.
+func requireRegisteredWorkspace(ctx context.Context, a *Adapter, args map[string]any) (string, *mcpsdk.CallToolResult) {
+	ws, errRes := requireWorkspace(args)
+	if errRes != nil {
+		return "", errRes
+	}
+	if ws == "all" {
+		return "", errResult("workspace_all_not_supported: this tool does not accept the 'all' workspace scope; provide a specific registered workspace hash")
+	}
+	if _, err := a.queries.GetWorkspaceByHash(ctx, ws); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", errResult(fmt.Sprintf("workspace_not_registered: workspace_hash %q is not registered; use POST /api/v1/init to register it first", ws))
+		}
+		return "", errResult(fmt.Sprintf("workspace_lookup_failed: %v", err))
+	}
+	return ws, nil
+}
+
 func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
@@ -163,7 +186,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 				return errResult("hybrid search not available (no embedding provider)"), nil
 			}
 			maxResults := argInt(args, "max_results", 10, 100)
-			results, err := a.searchService.HybridSearch(ctx, query, ws, maxResults)
+			results, err := a.searchService.HybridSearch(ctx, query, ws, maxResults, nil)
 			if err != nil {
 				return errResult(fmt.Sprintf("hybrid search failed: %v", err)), nil
 			}
@@ -503,12 +526,9 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := requireRegisteredWorkspace(ctx, a, args)
 			if errRes != nil {
 				return errRes, nil
-			}
-			if ws == "all" {
-				return errResult("workspace 'all' is not valid for write operations"), nil
 			}
 			content := argString(args, "content")
 			if content == "" {
@@ -751,17 +771,14 @@ func registerMemoryUpdate(server *mcpsdk.Server, a *Adapter) {
 				"workspace": {"type": "string", "description": "Workspace hash"},
 			}, []string{"workspace"}),
 		},
-		func(_ context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			args, err := parseArgs(req.Params.Arguments)
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := requireRegisteredWorkspace(ctx, a, args)
 			if errRes != nil {
 				return errRes, nil
-			}
-			if ws == "all" {
-				return errResult("workspace 'all' is not valid for write operations"), nil
 			}
 			return textResult(map[string]string{
 				"status":  "accepted",

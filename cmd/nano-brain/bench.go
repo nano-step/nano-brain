@@ -131,7 +131,7 @@ func runBenchGenerate(args []string) {
 		os.Exit(1)
 	}
 
-	cfg, err := config.Load(config.DefaultConfigPath())
+	cfg, err := config.Load(config.ResolveConfigPath(""))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)
@@ -225,7 +225,7 @@ func runBenchRun(args []string) {
 		os.Exit(1)
 	}
 
-	cfg, err := config.Load(config.DefaultConfigPath())
+	cfg, err := config.Load(config.ResolveConfigPath(""))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)
@@ -435,7 +435,7 @@ func runBenchStress(args []string) {
 		docsPerWriter = 10
 	}
 
-	cfg, err := config.Load(config.DefaultConfigPath())
+	cfg, err := config.Load(config.ResolveConfigPath(""))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)

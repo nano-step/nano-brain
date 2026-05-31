@@ -49,6 +49,20 @@ curl -s http://host.docker.internal:3100/api/write -d '{"content":"## Summary\n-
 
 <!-- OPENCODE-MEMORY:END -->
 
+## RRI-T Test Instance
+
+For RRI-T testing (skill: `rri-t-testing`), use a **separate nano-brain instance on port 8899** to avoid clashing with the default 3100 server (another process in this container uses 3100).
+
+- **Custom config**: `/tmp/nano-brain-custom/config.yml` (port 8899, isolated logs/summaries dir)
+- **Launch**:
+  ```bash
+  NANO_BRAIN_CONFIG=/tmp/nano-brain-custom/config.yml ./nano-brain serve
+  ```
+- **Health check**: `curl -s http://localhost:8899/api/status`
+- **Precedence**: `--config` flag > `NANO_BRAIN_CONFIG` env > `~/.nano-brain/config.yml` (default)
+
+Never run RRI-T against the default 3100 instance — it pollutes production memory and conflicts with the sibling process.
+
 <!-- BEHAVIORAL-GUIDELINES:START -->
 # Behavioral Guidelines (Always Apply)
 
@@ -132,6 +146,35 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 
 
+
+## Git Worktree Rules (MANDATORY)
+
+**All worktrees MUST live inside the repo, under `.opencode/worktrees/`.**
+
+Why: keeps worktree state co-located with the repo, avoids polluting the parent directory, and the path is already gitignored.
+
+```bash
+# CORRECT — worktree inside the repo
+git worktree add .opencode/worktrees/feat-NNN-short-name b-main
+
+# WRONG — pollutes parent dir, hard to track
+git worktree add ../nano-brain-foo b-main
+```
+
+After PR merge, clean up:
+
+```bash
+git worktree remove .opencode/worktrees/feat-NNN-short-name
+git branch -D feat/NNN-short-name   # if local branch still exists
+```
+
+If you find an old worktree outside the repo, move it:
+
+```bash
+git worktree move ../nano-brain-foo .opencode/worktrees/feat-NNN-short-name
+```
+
+`.opencode/worktrees/` is already listed in `.gitignore`. Do not commit anything inside it from the main checkout.
 
 ## File Writing Rules (MANDATORY)
 

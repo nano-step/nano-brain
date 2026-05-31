@@ -1,0 +1,30 @@
+=== npm run typecheck ===
+
+> @nano-step/nano-brain-web@0.0.1 typecheck
+> tsc --noEmit
+
+
+=== npm run lint ===
+
+> @nano-step/nano-brain-web@0.0.1 lint
+> eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0
+
+
+=== vitest run ===
+
+> @nano-step/nano-brain-web@0.0.1 test
+> vitest run
+
+
+ RUN  v1.6.1 /Users/tamlh/workspaces/self/AI/Tools/nano-brain/.opencode/worktrees/story-9.5b-react-dashboard/story-9.5b-react-dashboard/web
+
+ ✓ src/__tests__/theme.test.ts  (5 tests) 32ms
+ ✓ src/__tests__/useEvents.test.ts  (6 tests) 38ms
+ ✓ src/__tests__/DashboardPanel.test.tsx  (5 tests) 256ms
+ ✓ src/__tests__/WorkspaceSelector.test.tsx  (4 tests) 249ms
+
+ Test Files  4 passed (4)
+      Tests  20 passed (20)
+   Start at  13:43:02
+   Duration  30.33s (transform 1.04s, setup 2.76s, collect 7.91s, tests 575ms, environment 96.61s, prepare 6.86s)
+

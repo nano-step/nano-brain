@@ -3,15 +3,20 @@ package server
 import (
 	"bytes"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/server/middleware"
+	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
 
@@ -23,7 +28,22 @@ const (
 func registerMiddleware(s *Server) {
 	s.echo.Use(requestLoggingMiddleware(s.logger))
 	s.echo.Use(versionHeaderMiddleware(s.version))
+	s.echo.Use(middleware.Auth(authSnapshotFromConfig(s.fullCfg.Server.Auth), s.logger))
 	s.echo.HTTPErrorHandler = httpErrorHandler(s)
+}
+
+func authSnapshotFromConfig(ac config.AuthConfig) middleware.AuthSnapshot {
+	users := make([]middleware.AuthUser, len(ac.Users))
+	for i, u := range ac.Users {
+		users[i] = middleware.AuthUser{Username: u.Username, PasswordHash: u.PasswordHash}
+	}
+	return middleware.AuthSnapshot{
+		Enabled:     ac.Enabled,
+		Realm:       ac.Realm,
+		Users:       users,
+		Tokens:      ac.Tokens,
+		BypassPaths: ac.BypassPaths,
+	}
 }
 
 // generateShortID returns an 8-character hex request ID derived from 4 random
@@ -155,6 +175,48 @@ func contentTypeMiddleware() echo.MiddlewareFunc {
 				})
 			}
 
+			return next(c)
+		}
+	}
+}
+
+// workspaceRegisteredMiddleware extends workspaceMiddleware with a registration
+// check against the workspaces table. Apply to write endpoints that must reject
+// unregistered workspace_hash (issue #238). The literal "all" is rejected with
+// workspace_all_not_supported (write endpoints do not accept cross-workspace
+// writes). On sql.ErrNoRows: returns HTTP 400 workspace_not_registered. On
+// other DB errors: HTTP 500 workspace_lookup_failed.
+//
+// Must be applied AFTER workspaceMiddleware in the chain.
+func workspaceRegisteredMiddleware(db *sql.DB) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			workspace, ok := c.Get("workspace").(string)
+			if !ok || workspace == "" {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"error":   "workspace_required",
+					"message": "workspace identifier is required",
+				})
+			}
+			if workspace == "all" {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"error":   "workspace_all_not_supported",
+					"message": "this endpoint does not support the 'all' workspace scope; provide a specific registered workspace hash",
+				})
+			}
+			q := sqlc.New(db)
+			if _, err := q.GetWorkspaceByHash(c.Request().Context(), workspace); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return c.JSON(http.StatusBadRequest, map[string]string{
+						"error":   "workspace_not_registered",
+						"message": fmt.Sprintf("workspace_hash %q is not registered; use POST /api/v1/init to register it first", workspace),
+					})
+				}
+				return c.JSON(http.StatusInternalServerError, map[string]string{
+					"error":   "workspace_lookup_failed",
+					"message": err.Error(),
+				})
+			}
 			return next(c)
 		}
 	}

@@ -524,3 +524,156 @@ func (q *Queries) VectorSearchAll(ctx context.Context, arg VectorSearchAllParams
 	}
 	return items, nil
 }
+
+const vectorSearchAllWithTags = `-- name: VectorSearchAllWithTags :many
+SELECT e.id, e.chunk_id, e.workspace_hash,
+       c.content, c.metadata, c.document_id,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(1 - (e.embedding <=> $1::vector) AS double precision) AS score
+FROM embeddings e
+JOIN chunks c ON e.chunk_id = c.id
+JOIN documents d ON c.document_id = d.id
+WHERE d.tags && $2::text[]
+ORDER BY e.embedding <=> $1::vector
+LIMIT $3
+`
+
+type VectorSearchAllWithTagsParams struct {
+	QueryEmbedding pgvector_go.Vector
+	Tags           []string
+	MaxResults     int32
+}
+
+type VectorSearchAllWithTagsRow struct {
+	ID            uuid.UUID
+	ChunkID       uuid.UUID
+	WorkspaceHash string
+	Content       string
+	Metadata      pqtype.NullRawMessage
+	DocumentID    uuid.UUID
+	SourcePath    string
+	Title         string
+	Collection    string
+	Tags          []string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Score         float64
+}
+
+func (q *Queries) VectorSearchAllWithTags(ctx context.Context, arg VectorSearchAllWithTagsParams) ([]VectorSearchAllWithTagsRow, error) {
+	rows, err := q.db.QueryContext(ctx, vectorSearchAllWithTags, arg.QueryEmbedding, pq.Array(arg.Tags), arg.MaxResults)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VectorSearchAllWithTagsRow
+	for rows.Next() {
+		var i VectorSearchAllWithTagsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChunkID,
+			&i.WorkspaceHash,
+			&i.Content,
+			&i.Metadata,
+			&i.DocumentID,
+			&i.SourcePath,
+			&i.Title,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const vectorSearchWithTags = `-- name: VectorSearchWithTags :many
+SELECT e.id, e.chunk_id, e.workspace_hash,
+       c.content, c.metadata, c.document_id,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(1 - (e.embedding <=> $1::vector) AS double precision) AS score
+FROM embeddings e
+JOIN chunks c ON e.chunk_id = c.id
+JOIN documents d ON c.document_id = d.id
+WHERE e.workspace_hash = $2
+  AND d.tags && $3::text[]
+ORDER BY e.embedding <=> $1::vector
+LIMIT $4
+`
+
+type VectorSearchWithTagsParams struct {
+	QueryEmbedding pgvector_go.Vector
+	WorkspaceHash  string
+	Tags           []string
+	MaxResults     int32
+}
+
+type VectorSearchWithTagsRow struct {
+	ID            uuid.UUID
+	ChunkID       uuid.UUID
+	WorkspaceHash string
+	Content       string
+	Metadata      pqtype.NullRawMessage
+	DocumentID    uuid.UUID
+	SourcePath    string
+	Title         string
+	Collection    string
+	Tags          []string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Score         float64
+}
+
+func (q *Queries) VectorSearchWithTags(ctx context.Context, arg VectorSearchWithTagsParams) ([]VectorSearchWithTagsRow, error) {
+	rows, err := q.db.QueryContext(ctx, vectorSearchWithTags,
+		arg.QueryEmbedding,
+		arg.WorkspaceHash,
+		pq.Array(arg.Tags),
+		arg.MaxResults,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VectorSearchWithTagsRow
+	for rows.Next() {
+		var i VectorSearchWithTagsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChunkID,
+			&i.WorkspaceHash,
+			&i.Content,
+			&i.Metadata,
+			&i.DocumentID,
+			&i.SourcePath,
+			&i.Title,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

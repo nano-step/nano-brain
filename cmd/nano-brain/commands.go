@@ -234,44 +234,108 @@ func runWriteCmd(args []string) {
 	cliLog.Info().Str("cmd", "write").Str("document_id", result.ID).Msg("cli command completed")
 }
 
-func runStubCmd(endpoint string, args []string) {
-	cliLog.Info().Str("cmd", endpoint).Msg("cli command started")
-	var query, workspace string
-	var jsonFlag bool
+type stubFlags struct {
+	query     string
+	workspace string
+	scope     string
+	tags      []string
+	jsonFlag  bool
+}
+
+func parseTagList(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func parseStubFlags(args []string) (stubFlags, string) {
+	f := stubFlags{scope: "workspace"}
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--workspace":
+		arg := args[i]
+		switch {
+		case arg == "--workspace":
 			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "--workspace requires a value\n")
-				os.Exit(1)
+				return f, "--workspace requires a value"
 			}
 			i++
-			workspace = args[i]
-		case "--json":
-			jsonFlag = true
-		default:
-			if strings.HasPrefix(args[i], "--") {
-				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
-				os.Exit(1)
+			f.workspace = args[i]
+		case strings.HasPrefix(arg, "--workspace="):
+			f.workspace = strings.TrimPrefix(arg, "--workspace=")
+		case arg == "--scope":
+			if i+1 >= len(args) {
+				return f, "--scope requires a value"
 			}
-			if query == "" {
-				query = args[i]
+			i++
+			f.scope = args[i]
+		case strings.HasPrefix(arg, "--scope="):
+			f.scope = strings.TrimPrefix(arg, "--scope=")
+		case arg == "--tags":
+			if i+1 >= len(args) {
+				return f, "--tags requires a value"
+			}
+			i++
+			f.tags = parseTagList(args[i])
+		case strings.HasPrefix(arg, "--tags="):
+			f.tags = parseTagList(strings.TrimPrefix(arg, "--tags="))
+		case arg == "--json":
+			f.jsonFlag = true
+		case strings.HasPrefix(arg, "--"):
+			return f, "unknown flag: " + arg
+		default:
+			if f.query == "" {
+				f.query = arg
 			} else {
-				fmt.Fprintf(os.Stderr, "unexpected argument: %s\n", args[i])
-				os.Exit(1)
+				return f, "unexpected argument: " + arg
 			}
 		}
 	}
-	if query == "" || workspace == "" {
-		fmt.Fprintf(os.Stderr, "Usage: nano-brain %s \"<query>\" --workspace <hash> [--json]\n", endpoint)
+
+	if f.scope != "workspace" && f.scope != "all" {
+		return f, fmt.Sprintf("invalid --scope value %q: must be \"workspace\" or \"all\"", f.scope)
+	}
+	return f, ""
+}
+
+func runStubCmd(endpoint string, args []string) {
+	cliLog.Info().Str("cmd", endpoint).Msg("cli command started")
+
+	f, errMsg := parseStubFlags(args)
+	if errMsg != "" {
+		fmt.Fprintf(os.Stderr, "%s\n", errMsg)
 		os.Exit(1)
 	}
 
-	body := map[string]string{
-		"query":     query,
-		"workspace": workspace,
+	var workspaceVal string
+	if f.scope == "all" {
+		workspaceVal = "all"
+	} else {
+		workspaceVal = f.workspace
 	}
-	data, err := json.Marshal(body)
+
+	if f.query == "" || workspaceVal == "" {
+		fmt.Fprintf(os.Stderr, "Usage: nano-brain %s \"<query>\" --workspace <hash> [--scope all|workspace] [--json]\n", endpoint)
+		os.Exit(1)
+	}
+
+	bodyMap := map[string]interface{}{
+		"query":     f.query,
+		"workspace": workspaceVal,
+	}
+	if len(f.tags) > 0 {
+		bodyMap["tags"] = f.tags
+	}
+	data, err := json.Marshal(bodyMap)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -290,7 +354,7 @@ func runStubCmd(endpoint string, args []string) {
 		os.Exit(1)
 	}
 
-	if jsonFlag {
+	if f.jsonFlag {
 		fmt.Println(string(resp))
 		cliLog.Info().Str("cmd", endpoint).Msg("cli command completed")
 		return

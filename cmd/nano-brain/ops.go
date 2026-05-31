@@ -98,7 +98,7 @@ func runLogsCmd(args []string) {
 
 // resolveLogPath determines the log file path from config or defaults.
 func resolveLogPath() string {
-	cfg, err := config.Load(config.DefaultConfigPath())
+	cfg, err := config.Load(config.ResolveConfigPath(""))
 	if err == nil && cfg.Logging.File != "" {
 		p := cfg.Logging.File
 		if strings.HasPrefix(p, "~") {
@@ -468,7 +468,7 @@ func runStatusCmd(args []string) {
 
 // runGooseMigrateCmd runs pending goose migrations from embedded SQL files.
 func runGooseMigrateCmd(jsonFlag bool) {
-	cfg, err := config.Load(config.DefaultConfigPath())
+	cfg, err := config.Load(config.ResolveConfigPath(""))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
@@ -558,14 +558,18 @@ Commands:
   version            Show version
   config show        Show current configuration
   config check       Validate configuration
-  query              Hybrid search (BM25 + vector)
-  search             BM25 keyword search
-  vsearch            Vector similarity search
+  query              Hybrid search (BM25 + vector)    [--scope all|workspace] [--workspace <hash>]
+  search             BM25 keyword search               [--scope all|workspace] [--workspace <hash>]
+  vsearch            Vector similarity search          [--scope all|workspace] [--workspace <hash>]
   workspaces         List registered workspaces (alias: ls)
   write              Write a document
    collection         Manage collections (add/remove/list)
    harvest            Trigger session harvesting
    reindex            Queue collection reindex
+   wake-up            Workspace briefing (recent memories, collections, stats)
+   get                Fetch a single document by source_path or ID
+   tags               List all tags with counts
+   multi-get          Fetch multiple documents in one round-trip
    logs               View log file (-f to follow, -n <count>)
   docker             Manage Docker Compose (start/stop/status)
   db:migrate         Run database migrations

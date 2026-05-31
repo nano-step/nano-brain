@@ -153,7 +153,32 @@ Paste curl commands + responses in the PR description or story evidence.
 
 ## Reference
 
-- Gate specification: `docs/HARNESS_GATES.md`
-- Harness process: `docs/HARNESS.md`
-- Evidence directory: `docs/evidence/`
-- Check script: `scripts/harness-check.sh`
+| File | What it covers |
+|---|---|
+| `docs/HARNESS.md` | Master process spec (mental model, forbidden practices, Two-Output Model, HUMAN-ONLY rules) |
+| `docs/HARNESS_GATES.md` | Gate specification (6 phases × all checks, parallelism rules, verdict-based PR comment triage) |
+| `docs/FEATURE_INTAKE.md` | Risk classification, lane assignment, hard gates, R89 skip-issue conditions |
+| `docs/GLOSSARY.md` | Closed-set vocabulary (Lane, Verdict, Override, etc.) |
+| `docs/CONTEXT_RULES.md` | What to read per phase × lane (token-budget rules) |
+| `docs/TRACE_SPEC.md` | Evidence file formats per tier (Tier 1/2/3) |
+| `docs/decisions/README.md` | When to write ADRs |
+| `docs/evidence/` | Self-review, review, retro, smoke-e2e evidence files |
+| `scripts/harness-check.sh` | Gate enforcement script (source of truth for PASS/FAIL logic) |
+
+## Rule IDs
+
+Many gate FAIL messages reference rule IDs like `(R7)`, `(R29)`, `(R89)`. These
+trace back to specific rules in `docs/HARNESS.md` and `docs/HARNESS_GATES.md`.
+When a gate FAILs with a rule ID, read that rule before fixing — the rule
+defines the exact PASS condition.
+
+Current explicit rules with IDs:
+- **R1** — 1 PR = 1 issue (gate 3.8)
+- **R7** — `[HARNESS-OVERRIDE]: <reason>` mechanism (gate 3.6)
+- **R19, R20** — smoke:e2e evidence required (gate 3.12)
+- **R27** — Review Verdict: PASS literal required (gate 3.5)
+- **R28** — Archive blocked without Review Verdict: PASS (gate 4.3)
+- **R29** — Max 3 PR commits (gate 3.11)
+- **R31** — Agent-triaged Gemini verdicts (gate 3.6)
+- **R56** — Verdict-based (no effort threshold)
+- **R89** — Measurable skip-issue conditions (gate 1.3)

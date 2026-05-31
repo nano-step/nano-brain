@@ -5,6 +5,8 @@ go 1.23.0
 require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
+	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/knadh/koanf/parsers/yaml v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
@@ -14,11 +16,14 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/modelcontextprotocol/go-sdk v0.8.0
 	github.com/natefinch/lumberjack v2.0.0+incompatible
+	github.com/odvcencio/gotreesitter v0.19.1
 	github.com/pgvector/pgvector-go v0.2.2
 	github.com/pressly/goose/v3 v3.22.1
 	github.com/rs/zerolog v1.35.1
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sqlc-dev/pqtype v0.3.0
 	golang.org/x/sync v0.15.0
+	golang.org/x/time v0.9.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.38.2
 )
@@ -40,10 +45,8 @@ require (
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
-	github.com/odvcencio/gotreesitter v0.19.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
@@ -55,7 +58,6 @@ require (
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
-	golang.org/x/time v0.9.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	modernc.org/libc v1.66.3 // indirect

@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
@@ -24,6 +25,37 @@ type DeleteGraphEdgesByFileParams struct {
 func (q *Queries) DeleteGraphEdgesByFile(ctx context.Context, arg DeleteGraphEdgesByFileParams) error {
 	_, err := q.db.ExecContext(ctx, deleteGraphEdgesByFile, arg.WorkspaceHash, arg.SourceFile)
 	return err
+}
+
+const deleteReferenceEdgesBySource = `-- name: DeleteReferenceEdgesBySource :exec
+DELETE FROM graph_edges
+WHERE workspace_hash = $1 AND source_node = $2 AND edge_type = 'references'
+`
+
+type DeleteReferenceEdgesBySourceParams struct {
+	WorkspaceHash string
+	SourceNode    string
+}
+
+func (q *Queries) DeleteReferenceEdgesBySource(ctx context.Context, arg DeleteReferenceEdgesBySourceParams) error {
+	_, err := q.db.ExecContext(ctx, deleteReferenceEdgesBySource, arg.WorkspaceHash, arg.SourceNode)
+	return err
+}
+
+const existsDocByID = `-- name: ExistsDocByID :one
+SELECT EXISTS(SELECT 1 FROM documents WHERE workspace_hash = $1 AND id = $2)
+`
+
+type ExistsDocByIDParams struct {
+	WorkspaceHash string
+	ID            uuid.UUID
+}
+
+func (q *Queries) ExistsDocByID(ctx context.Context, arg ExistsDocByIDParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, existsDocByID, arg.WorkspaceHash, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const getImpactors = `-- name: GetImpactors :many
@@ -224,6 +256,81 @@ func (q *Queries) GraphStats(ctx context.Context, workspaceHash string) (GraphSt
 	return i, err
 }
 
+const listDocIDsByTitle = `-- name: ListDocIDsByTitle :many
+SELECT id FROM documents
+WHERE workspace_hash = $1 AND lower(title) = lower($2)
+`
+
+type ListDocIDsByTitleParams struct {
+	WorkspaceHash string
+	Lower         string
+}
+
+func (q *Queries) ListDocIDsByTitle(ctx context.Context, arg ListDocIDsByTitleParams) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, listDocIDsByTitle, arg.WorkspaceHash, arg.Lower)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReferenceEdgesBySource = `-- name: ListReferenceEdgesBySource :many
+SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at FROM graph_edges
+WHERE workspace_hash = $1 AND source_node = $2 AND edge_type = 'references'
+`
+
+type ListReferenceEdgesBySourceParams struct {
+	WorkspaceHash string
+	SourceNode    string
+}
+
+func (q *Queries) ListReferenceEdgesBySource(ctx context.Context, arg ListReferenceEdgesBySourceParams) ([]GraphEdge, error) {
+	rows, err := q.db.QueryContext(ctx, listReferenceEdgesBySource, arg.WorkspaceHash, arg.SourceNode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GraphEdge
+	for rows.Next() {
+		var i GraphEdge
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.SourceNode,
+			&i.TargetNode,
+			&i.EdgeType,
+			&i.SourceFile,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertGraphEdge = `-- name: UpsertGraphEdge :exec
 INSERT INTO graph_edges (workspace_hash, source_node, target_node, edge_type, source_file, metadata)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -246,6 +353,32 @@ func (q *Queries) UpsertGraphEdge(ctx context.Context, arg UpsertGraphEdgeParams
 		arg.SourceNode,
 		arg.TargetNode,
 		arg.EdgeType,
+		arg.SourceFile,
+		arg.Metadata,
+	)
+	return err
+}
+
+const upsertReferenceEdge = `-- name: UpsertReferenceEdge :exec
+INSERT INTO graph_edges (workspace_hash, source_node, target_node, edge_type, source_file, metadata)
+VALUES ($1, $2, $3, 'references', $4, $5)
+ON CONFLICT (workspace_hash, source_node, target_node, edge_type) DO UPDATE
+SET source_file = EXCLUDED.source_file, metadata = EXCLUDED.metadata
+`
+
+type UpsertReferenceEdgeParams struct {
+	WorkspaceHash string
+	SourceNode    string
+	TargetNode    string
+	SourceFile    string
+	Metadata      json.RawMessage
+}
+
+func (q *Queries) UpsertReferenceEdge(ctx context.Context, arg UpsertReferenceEdgeParams) error {
+	_, err := q.db.ExecContext(ctx, upsertReferenceEdge,
+		arg.WorkspaceHash,
+		arg.SourceNode,
+		arg.TargetNode,
 		arg.SourceFile,
 		arg.Metadata,
 	)

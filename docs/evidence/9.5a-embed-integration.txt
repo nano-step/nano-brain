@@ -1,0 +1,31 @@
+Story 9.5a Embed Scaffold — Integration Evidence
+==================================================
+
+Build verification:
+  CGO_ENABLED=0 go build ./... → exit 0
+  go vet ./internal/server/webui/... ./cmd/nano-brain/... → exit 0
+  Binary size: 53,874,726 bytes (~51 MB, well under +8 MB delta threshold)
+
+Test verification (httptest-based integration):
+  go test -race -v ./internal/server/webui/... ./cmd/nano-brain/... → exit 0
+  All 11 new tests PASS (7 webui + 4 bindsafety)
+  All existing tests PASS (no regressions)
+
+  Full suite: go test -race -short ./... → all packages pass
+
+Smoke test (httptest):
+  TestUIServesIndex:        GET /ui → 200, Content-Type: text/html, Cache-Control: no-cache
+  TestUISPAFallback:        GET /ui/memory/abc-123 → 200, returns index.html (SPA fallback)
+  TestUIHashedAssetCache:   GET /ui/assets/main-abc123.js → 200, Cache-Control: immutable
+  TestUIMissingFallback:    GET /ui (no index.html) → 200, body contains "Web UI not built"
+  TestUIMissingFallbackSubpath: GET /ui/anything (no index.html) → 200, fallback page
+  TestUISecurityHeadersApplied: /ui responses have X-Content-Type-Options: nosniff, X-Frame-Options: DENY
+  TestUISecurityHeadersNotOnAPI: /api/v1/* responses do NOT have security headers
+
+  TestIsLoopback:                 table-driven: localhost/127.0.0.1/127.0.0.5/::1/[::1] → true; 0.0.0.0/192.168.1.1/10.0.0.1 → false
+  TestCheckBindSafety_RejectsNonLoopback: 0.0.0.0 without flag → error
+  TestCheckBindSafety_AllowsLoopback:     localhost/127.0.0.1/::1/"" → no error
+  TestCheckBindSafety_UnsafeFlagBypasses: 0.0.0.0 with flag → no error
+
+Note: Live smoke test (build → start server → curl /ui) requires PostgreSQL.
+The httptest-based tests exercise the identical code path via Echo's ServeHTTP.

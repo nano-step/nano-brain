@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -15,6 +16,10 @@ type ResetWorkspaceQuerier interface {
 	DeleteWorkspace(ctx context.Context, hash string) error
 }
 
+type resetWorkspaceTxBeginner interface {
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+}
+
 type resetWorkspaceRequest struct {
 	Workspace string `json:"workspace"`
 }
@@ -24,7 +29,7 @@ type resetWorkspaceResponse struct {
 	Workspace        string `json:"workspace"`
 }
 
-func ResetWorkspace(q ResetWorkspaceQuerier, logger zerolog.Logger) echo.HandlerFunc {
+func ResetWorkspace(q ResetWorkspaceQuerier, db resetWorkspaceTxBeginner, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req resetWorkspaceRequest
 		if err := c.Bind(&req); err != nil {
@@ -42,18 +47,44 @@ func ResetWorkspace(q ResetWorkspaceQuerier, logger zerolog.Logger) echo.Handler
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count documents")
 		}
 
-		if err := q.DeleteDocumentsByWorkspace(ctx, req.Workspace); err != nil {
-			logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete documents failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
-		}
-
-		if err := q.DeleteWorkspace(ctx, req.Workspace); err != nil {
-			logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete workspace failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
+		if db == nil {
+			if err := q.DeleteDocumentsByWorkspace(ctx, req.Workspace); err != nil {
+				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete documents failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
+			}
+			if err := q.DeleteWorkspace(ctx, req.Workspace); err != nil {
+				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete workspace failed (docs already deleted)")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
+			}
+		} else {
+			tx, err := db.BeginTx(ctx, nil)
+			if err != nil {
+				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("begin transaction failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to begin transaction")
+			}
+			txq := sqlc.New(tx)
+			if err := txq.DeleteDocumentsByWorkspace(ctx, req.Workspace); err != nil {
+				_ = tx.Rollback()
+				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete documents failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
+			}
+			if err := txq.DeleteWorkspace(ctx, req.Workspace); err != nil {
+				_ = tx.Rollback()
+				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete workspace failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
+			}
+			if err := tx.Commit(); err != nil {
+				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("commit transaction failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to commit transaction")
+			}
 		}
 
 		reqLog := LoggerFromCtx(c, logger)
-		reqLog.Info().Str("workspace", req.Workspace).Int64("deleted_documents", count).Msg("workspace reset")
+		reqLog.Info().
+			Str("workspace", req.Workspace).
+			Int64("deleted_documents", count).
+			Bool("transactional", db != nil).
+			Msg("workspace reset")
 
 		return c.JSON(http.StatusOK, resetWorkspaceResponse{
 			DeletedDocuments: count,

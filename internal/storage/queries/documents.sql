@@ -99,3 +99,11 @@ WHERE d_raw.source_path LIKE 'opencode://session/%'
       AND d_summary.workspace_hash = d_raw.workspace_hash
       AND d_summary.collection = 'session-summary'
   );
+
+-- name: ListSummaryDocumentsForBackfill :many
+SELECT id, workspace_hash, content_hash, title, content, source_path, tags, metadata, created_at
+FROM documents
+WHERE collection = 'session-summary'
+  AND ($1::text = '' OR workspace_hash = $1)
+  AND ($2::timestamptz IS NULL OR created_at >= $2)
+ORDER BY created_at ASC;

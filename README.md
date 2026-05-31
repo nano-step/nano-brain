@@ -121,6 +121,9 @@ harvester:
 watcher:
   debounce_ms: 2000
   reindex_interval: 300
+  # Per-collection exclude_patterns and allowed_extensions are also supported
+  # via the workspaces map. See "Global ignore patterns" section below for
+  # the cross-collection .nano-brainignore file.
 
 storage:
   max_file_size: 314572800      # 300MB
@@ -142,14 +145,115 @@ summarization:
   concurrency: 3                # parallel map-phase LLM calls
 ```
 
+### Authentication (VPS / remote deployment)
+
+When binding to a non-loopback address, enable auth to protect your memory:
+
+```yaml
+server:
+  host: 0.0.0.0
+  port: 3100
+  auth:
+    enabled: true
+    realm: nano-brain
+    users:
+      - username: admin
+        password_hash: "$2a$10$..."   # from: nano-brain auth hash <password>
+    tokens:
+      - "nbt_..."                     # from: nano-brain auth token
+    bypass_paths:
+      - /health
+```
+
+Generate credentials:
+
+```bash
+# Generate bcrypt hash for Basic Auth
+nano-brain auth hash mypassword
+
+# Generate bearer token
+nano-brain auth token
+```
+
+Usage examples:
+
+```bash
+# Basic Auth
+curl -u admin:mypassword http://host:3100/api/v1/query -d '{"query":"test"}'
+
+# Bearer token
+curl -H "Authorization: Bearer nbt_..." http://host:3100/api/v1/query -d '{"query":"test"}'
+
+# MCP client with URL-embedded credentials
+# url: http://admin:mypassword@host:3100/mcp
+```
+
+### Global ignore patterns (`~/.nano-brain/.nano-brainignore`)
+
+The watcher loads a global gitignore-style file at `~/.nano-brain/.nano-brainignore`
+on startup. Patterns in this file apply to **all** registered collections, removing
+the need to repeat the same exclusions in each `watcher.workspaces` block.
+
+**Format**: standard `.gitignore` syntax (one pattern per line, supports `**`, `!negation`, blank lines, `#` comments).
+
+**Example** `~/.nano-brain/.nano-brainignore`:
+
+```
+# Skip generated files everywhere
+*.png
+*.jpg
+*.pdf
+build/
+dist/
+node_modules/
+
+# But keep this one icon
+!icons/important.png
+```
+
+**Order of evaluation** (most aggressive first):
+
+1. Hardcoded default exclude dirs (`node_modules`, `.git`, `dist`, `build`, `target`, etc.)
+2. **Global `.nano-brainignore`** (this feature)
+3. Per-collection `.gitignore` (in collection root)
+4. Per-collection `exclude_patterns` (config-level)
+5. Per-collection `allowed_extensions` (whitelist)
+
+**Restart required**: changes to `.nano-brainignore` take effect on next server start (hot-reload deferred to a follow-up). Issue #263.
+
 ### Session Summarization
 
 When `summarization.enabled: true`, nano-brain automatically generates structured markdown summaries of each harvested session using an OpenAI-compatible LLM provider. Summaries are:
 
 - Stored in PostgreSQL under collection `session-summary` for semantic search via the standard query/vsearch API (PG is the source of truth)
+- Optionally written to disk as Markdown files for Obsidian-compatible access (see [Disk persistence](#disk-persistence-obsidian-compatible) below)
 - Idempotent — unchanged sessions are skipped; re-harvested sessions overwrite old summaries
 
-> **Note**: as of `harvest-summary-only` (May 2026), summaries are no longer written to disk as `.md` files. The legacy `output_dir` YAML key is silently ignored for backward compat. Any pre-existing files under `~/.nano-brain/summaries/` are stale artifacts and can be safely deleted.
+#### Disk persistence (Obsidian-compatible)
+
+By default, summaries are written to disk as Markdown files at the path configured in
+`summarization.output_dir` (default: `~/.nano-brain/summaries`). The file layout is:
+
+```
+<output_dir>/<workspace_name>/<source>_<slugified-title>_<YYYY-MM-DD>.md
+```
+
+Files are byte-identical to the `documents.content` field in PostgreSQL — disk is a
+derivative view, DB is source of truth. Disk write failures (permission denied, disk
+full) log a WARN but do not roll back the DB transaction.
+
+To opt out (DB-only persistence):
+
+```yaml
+summarization:
+  write_to_disk: false
+```
+
+To backfill historical summaries already in the DB:
+
+```
+nano-brain backfill-summaries
+```
 
 **Quick setup with ai-proxy:**
 
@@ -175,13 +279,27 @@ Large sessions (100K+ tokens) are handled via map-reduce chunking — no session
 
 | Variable | Description |
 |----------|-------------|
+| `NANO_BRAIN_CONFIG` | Path to YAML config file (12-factor; useful in Docker/k8s). Precedence: `--config` flag > `NANO_BRAIN_CONFIG` > `~/.nano-brain/config.yml`. Leading/trailing whitespace is stripped. If the env-pointed file does not exist, a `WARNING:` is printed to stderr and defaults are used (operator can spot typos). |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `VOYAGE_API_KEY` | Voyage AI API key |
 | `OPENCODE_DB_ROOT` | OpenCode per-project DB root directory (multi-DB mode) |
 | `OPENCODE_DB_PATH` | OpenCode single SQLite database path |
 | `OPENCODE_STORAGE_DIR` | OpenCode session directory (legacy) |
 | `NANO_BRAIN_SUMMARIZE_API_KEY` | API key for the summarization LLM provider |
-| `NANO_BRAIN_*` | Override any config (e.g., `NANO_BRAIN_SERVER_PORT=3100`) |
+| `NANO_BRAIN_AUTH_ENABLED` | Enable Basic Auth + Bearer Token (`true`/`false`) |
+| `NANO_BRAIN_AUTH_TOKENS` | Comma-separated bearer tokens |
+| `NANO_BRAIN_*` | Override any config field (e.g., `NANO_BRAIN_SERVER_PORT=3100`) |
+
+**Docker example** — run the server in a container against a host PostgreSQL:
+
+```bash
+# /path/to/container-config.yml uses host.docker.internal for DB/Ollama
+docker run -d \
+  -e NANO_BRAIN_CONFIG=/etc/nano-brain/config.yml \
+  -v /path/to/container-config.yml:/etc/nano-brain/config.yml:ro \
+  -p 3100:3100 \
+  nano-brain:latest
+```
 
 ## REST API
 
@@ -193,6 +311,7 @@ Large sessions (100K+ tokens) are handled via map-reduce chunking — no session
 | GET | `/api/status` | Server status with version, uptime, workspace stats |
 | POST | `/api/v1/init` | Register workspace |
 | GET | `/api/v1/workspaces` | List all workspaces (with doc counts) |
+| DELETE | `/api/v1/workspaces/:hash` | Permanently delete a workspace + cascade docs/chunks/embeddings |
 | GET | `/api/v1/wake-up` | Workspace briefing |
 | POST | `/api/harvest` | Trigger session harvesting |
 | POST | `/api/reload-config` | Hot-reload configuration |
@@ -213,6 +332,8 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | PUT | `/api/v1/collections/:name` | Rename collection |
 | DELETE | `/api/v1/collections/:name` | Remove collection |
 | GET | `/api/v1/tags` | List tags with counts |
+| POST | `/api/v1/get` | Get single document by source_path or id |
+| POST | `/api/v1/multi-get` | Batch fetch documents by paths or ids |
 | POST | `/api/v1/reindex` | Queue reindex (202) |
 | POST | `/api/v1/update` | Queue update (202) |
 | POST | `/api/v1/summarize` | Trigger LLM summarization of harvested sessions |
@@ -231,24 +352,34 @@ Workspace is passed in the JSON body for POST, query param for GET.
 |---------|-------------|
 | `nano-brain` (no args) | Start HTTP server (default: port 3100) |
 | `nano-brain init --root=<path>` | Register workspace |
+| `nano-brain workspaces list` | List registered workspaces with doc counts |
+| `nano-brain workspaces remove --workspace=<hash> [--dry-run\|--force]` | Permanently delete a workspace + all its documents/chunks/embeddings |
 | `nano-brain write` | Write document via CLI |
-| `nano-brain query` | Hybrid search |
-| `nano-brain search` | BM25 keyword search |
-| `nano-brain vsearch` | Vector similarity search |
+| `nano-brain query [--scope=all] [--tags=t1,t2]` | Hybrid search (BM25 + vector + RRF + recency) |
+| `nano-brain search [--scope=all] [--tags=t1,t2]` | BM25 keyword search |
+| `nano-brain vsearch [--scope=all] [--tags=t1,t2]` | Vector similarity search |
+| `nano-brain wake-up --workspace=<hash>` | Workspace briefing (collections, stats, recent memories) |
+| `nano-brain get <source_path\|uuid> --workspace=<hash>` | Fetch a single document by source_path or UUID |
+| `nano-brain tags --workspace=<hash>` | List all tags with document counts |
+| `nano-brain multi-get --workspace=<hash> --paths=p1,p2` | Fetch multiple documents in one round-trip |
 | `nano-brain collection add\|remove\|list` | Manage collections |
 | `nano-brain harvest` | Trigger session harvesting |
+| `nano-brain backfill-summaries [--dry-run] [--workspace=] [--since=]` | Export existing DB summaries to disk (.md files for Obsidian etc.) |
 | `nano-brain cleanup-stale-raw [--dry-run]` | Delete pre-#192 raw OpenCode session docs superseded by summaries |
+| `nano-brain cleanup-orphan-workspaces [--dry-run]` | Delete documents/chunks under workspace_hash values not registered in `workspaces`. Run BEFORE migration 00011 (issue #238). |
 | `nano-brain bench generate\|run\|compare\|stress` | Benchmarking suite |
 | `nano-brain db:migrate` | Run pending goose migrations |
 | `nano-brain db:migrate --from-v1 <path>` | Import V1 SQLite data |
 | `nano-brain logs [-n 50] [-f]` | Tail log file |
 | `nano-brain docker start\|stop\|status` | Docker compose management |
 | `nano-brain status [--json]` | Server status |
+| `nano-brain auth hash <password>` | Generate bcrypt password hash for config |
+| `nano-brain auth token` | Generate random bearer token (`nbt_`-prefixed) |
 | `nano-brain doctor [--json]` | Check prerequisites (config, PostgreSQL, pgvector, Ollama, model) |
 
 ## MCP Tools
 
-nano-brain exposes 9 tools via MCP (Model Context Protocol):
+nano-brain exposes 13 tools via MCP (Model Context Protocol):
 
 | Tool | Description |
 |------|-------------|
@@ -261,6 +392,10 @@ nano-brain exposes 9 tools via MCP (Model Context Protocol):
 | `memory_status` | Server and embedding status |
 | `memory_update` | Trigger re-embedding |
 | `memory_wake_up` | Workspace briefing |
+| `memory_graph` | Knowledge graph view (module → function → dep) |
+| `memory_trace` | Call chain trace from entry point |
+| `memory_impact` | Cross-file change impact analysis |
+| `memory_symbols` | Symbol search (functions, types, constants) |
 
 ### MCP Configuration
 

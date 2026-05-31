@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -94,7 +95,17 @@ func TestPersister_Save_UsesWorkspaceHashFromMeta(t *testing.T) {
 	pgDB := setupPersistTestPG(t)
 
 	logger := zerolog.Nop()
-	p := NewPersister(pgDB, nil, logger)
+	p := NewPersister(pgDB, nil, false, "", logger)
+
+	ctx := context.Background()
+	q := sqlc.New(pgDB)
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: "test-ws-hash-abc",
+		Name: "persist-test-meta",
+		Path: "/tmp/persist-test-meta",
+	}); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
 
 	meta := SessionMetadata{
 		Source:        SourceOpenCode,
@@ -104,12 +115,11 @@ func TestPersister_Save_UsesWorkspaceHashFromMeta(t *testing.T) {
 		WorkspaceHash: "test-ws-hash-abc",
 	}
 
-	if err := p.Save(context.Background(), "# Test Summary\n\nContent here.", meta); err != nil {
+	if err := p.Save(ctx, "# Test Summary\n\nContent here.", meta); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	q := sqlc.New(pgDB)
-	doc, err := q.GetDocumentBySourcePath(context.Background(), sqlc.GetDocumentBySourcePathParams{
+	doc, err := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    "summary://opencode/ws-hash-test-123",
 		WorkspaceHash: "test-ws-hash-abc",
 	})
@@ -124,12 +134,79 @@ func TestPersister_Save_UsesWorkspaceHashFromMeta(t *testing.T) {
 		t.Error("content_hash should not be empty")
 	}
 
-	// Verify doc is NOT found with empty workspace_hash
-	_, err = q.GetDocumentBySourcePath(context.Background(), sqlc.GetDocumentBySourcePathParams{
+	_, err = q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    "summary://opencode/ws-hash-test-123",
 		WorkspaceHash: "",
 	})
 	if err == nil {
 		t.Error("expected no doc at empty workspace_hash, but found one")
+	}
+}
+
+func TestPersister_Save_RejectsUnregisteredWorkspace(t *testing.T) {
+	pgDB := setupPersistTestPG(t)
+
+	p := NewPersister(pgDB, nil, false, "", zerolog.Nop())
+	ctx := context.Background()
+
+	meta := SessionMetadata{
+		Source:        SourceOpenCode,
+		SessionID:     "leak-test-001",
+		Title:         "Unregistered Workspace Test",
+		CreatedAt:     time.Now(),
+		WorkspaceHash: "not-a-registered-workspace-hash-xyz",
+	}
+
+	err := p.Save(ctx, "# Should Not Persist\n\nbody", meta)
+	if err == nil {
+		t.Fatal("expected error, got nil — leak #3 still open")
+	}
+	if !errors.Is(err, ErrWorkspaceNotRegistered) {
+		t.Errorf("expected ErrWorkspaceNotRegistered, got: %v", err)
+	}
+
+	q := sqlc.New(pgDB)
+	_, getErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    "summary://opencode/leak-test-001",
+		WorkspaceHash: "not-a-registered-workspace-hash-xyz",
+	})
+	if getErr == nil {
+		t.Error("document was persisted under unregistered workspace_hash — defense breached")
+	}
+}
+
+func TestPersister_Save_AcceptsRegisteredWorkspace(t *testing.T) {
+	pgDB := setupPersistTestPG(t)
+
+	p := NewPersister(pgDB, nil, false, "", zerolog.Nop())
+	ctx := context.Background()
+	q := sqlc.New(pgDB)
+
+	registeredHash := "registered-ws-hash-for-positive-test"
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: registeredHash,
+		Name: "registered-positive-test",
+		Path: "/tmp/persist-positive-test",
+	}); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+
+	meta := SessionMetadata{
+		Source:        SourceOpenCode,
+		SessionID:     "positive-test-001",
+		Title:         "Registered Workspace Positive Test",
+		CreatedAt:     time.Now(),
+		WorkspaceHash: registeredHash,
+	}
+
+	if err := p.Save(ctx, "# Should Persist\n\nbody", meta); err != nil {
+		t.Fatalf("Save with registered workspace failed: %v", err)
+	}
+
+	if _, err := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    "summary://opencode/positive-test-001",
+		WorkspaceHash: registeredHash,
+	}); err != nil {
+		t.Errorf("document not found after successful Save: %v", err)
 	}
 }

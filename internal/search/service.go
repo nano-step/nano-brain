@@ -16,8 +16,12 @@ import (
 type Querier interface {
 	BM25Search(ctx context.Context, arg sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error)
 	BM25SearchAll(ctx context.Context, arg sqlc.BM25SearchAllParams) ([]sqlc.BM25SearchAllRow, error)
+	BM25SearchWithTags(ctx context.Context, arg sqlc.BM25SearchWithTagsParams) ([]sqlc.BM25SearchWithTagsRow, error)
+	BM25SearchAllWithTags(ctx context.Context, arg sqlc.BM25SearchAllWithTagsParams) ([]sqlc.BM25SearchAllWithTagsRow, error)
 	VectorSearch(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error)
 	VectorSearchAll(ctx context.Context, arg sqlc.VectorSearchAllParams) ([]sqlc.VectorSearchAllRow, error)
+	VectorSearchWithTags(ctx context.Context, arg sqlc.VectorSearchWithTagsParams) ([]sqlc.VectorSearchWithTagsRow, error)
+	VectorSearchAllWithTags(ctx context.Context, arg sqlc.VectorSearchAllWithTagsParams) ([]sqlc.VectorSearchAllWithTagsRow, error)
 }
 
 type Embedder interface {
@@ -52,8 +56,7 @@ func (s *SearchService) DefaultLimit() int {
 	return s.config.Limit
 }
 
-func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int) ([]Result, error) {
-	// Read config under lock at the start, then release before I/O
+func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string) ([]Result, error) {
 	s.configMutex.RLock()
 	rrfK := s.config.RrfK
 	recencyWeight := s.config.RecencyWeight
@@ -76,57 +79,116 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 
 	g.Go(func() error {
 		if workspace == "all" {
-			rows, err := s.queries.BM25SearchAll(gctx, sqlc.BM25SearchAllParams{
-				Query:      query,
-				MaxResults: fetchLimit,
-			})
-			if err != nil {
-				bm25Err = err
-				s.logger.Warn().Err(err).Msg("bm25 leg failed, degrading")
-				return nil
-			}
-			bm25Results = make([]Result, 0, len(rows))
-			for _, r := range rows {
-				bm25Results = append(bm25Results, Result{
-					ID:            r.ID.String(),
-					DocumentID:    r.DocumentID.String(),
-					WorkspaceHash: r.WorkspaceHash,
-					Title:         r.Title,
-					Content:       r.Content,
-					Score:         r.Score,
-					Tags:          r.Tags,
-					Collection:    r.Collection,
-					SourcePath:    r.SourcePath,
-					CreatedAt:     r.CreatedAt,
-					UpdatedAt:     r.UpdatedAt,
+			if len(tags) > 0 {
+				rows, err := s.queries.BM25SearchAllWithTags(gctx, sqlc.BM25SearchAllWithTagsParams{
+					Query:      query,
+					Tags:       tags,
+					MaxResults: fetchLimit,
 				})
+				if err != nil {
+					bm25Err = err
+					s.logger.Warn().Err(err).Msg("bm25 leg failed, degrading")
+					return nil
+				}
+				bm25Results = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					bm25Results = append(bm25Results, Result{
+						ID:            r.ID.String(),
+						DocumentID:    r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash,
+						Title:         r.Title,
+						Content:       r.Content,
+						Score:         r.Score,
+						Tags:          r.Tags,
+						Collection:    r.Collection,
+						SourcePath:    r.SourcePath,
+						CreatedAt:     r.CreatedAt,
+						UpdatedAt:     r.UpdatedAt,
+					})
+				}
+			} else {
+				rows, err := s.queries.BM25SearchAll(gctx, sqlc.BM25SearchAllParams{
+					Query:      query,
+					MaxResults: fetchLimit,
+				})
+				if err != nil {
+					bm25Err = err
+					s.logger.Warn().Err(err).Msg("bm25 leg failed, degrading")
+					return nil
+				}
+				bm25Results = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					bm25Results = append(bm25Results, Result{
+						ID:            r.ID.String(),
+						DocumentID:    r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash,
+						Title:         r.Title,
+						Content:       r.Content,
+						Score:         r.Score,
+						Tags:          r.Tags,
+						Collection:    r.Collection,
+						SourcePath:    r.SourcePath,
+						CreatedAt:     r.CreatedAt,
+						UpdatedAt:     r.UpdatedAt,
+					})
+				}
 			}
 		} else {
-			rows, err := s.queries.BM25Search(gctx, sqlc.BM25SearchParams{
-				Query:         query,
-				WorkspaceHash: workspace,
-				MaxResults:    fetchLimit,
-			})
-			if err != nil {
-				bm25Err = err
-				s.logger.Warn().Err(err).Msg("bm25 leg failed, degrading")
-				return nil
-			}
-			bm25Results = make([]Result, 0, len(rows))
-			for _, r := range rows {
-				bm25Results = append(bm25Results, Result{
-					ID:            r.ID.String(),
-					DocumentID:    r.DocumentID.String(),
-					WorkspaceHash: r.WorkspaceHash,
-					Title:         r.Title,
-					Content:       r.Content,
-					Score:         r.Score,
-					Tags:          r.Tags,
-					Collection:    r.Collection,
-					SourcePath:    r.SourcePath,
-					CreatedAt:     r.CreatedAt,
-					UpdatedAt:     r.UpdatedAt,
+			if len(tags) > 0 {
+				rows, err := s.queries.BM25SearchWithTags(gctx, sqlc.BM25SearchWithTagsParams{
+					Query:         query,
+					WorkspaceHash: workspace,
+					Tags:          tags,
+					MaxResults:    fetchLimit,
 				})
+				if err != nil {
+					bm25Err = err
+					s.logger.Warn().Err(err).Msg("bm25 leg failed, degrading")
+					return nil
+				}
+				bm25Results = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					bm25Results = append(bm25Results, Result{
+						ID:            r.ID.String(),
+						DocumentID:    r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash,
+						Title:         r.Title,
+						Content:       r.Content,
+						Score:         r.Score,
+						Tags:          r.Tags,
+						Collection:    r.Collection,
+						SourcePath:    r.SourcePath,
+						CreatedAt:     r.CreatedAt,
+						UpdatedAt:     r.UpdatedAt,
+					})
+				}
+			} else {
+				rows, err := s.queries.BM25Search(gctx, sqlc.BM25SearchParams{
+					Query:         query,
+					WorkspaceHash: workspace,
+					MaxResults:    fetchLimit,
+				})
+				if err != nil {
+					bm25Err = err
+					s.logger.Warn().Err(err).Msg("bm25 leg failed, degrading")
+					return nil
+				}
+				bm25Results = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					bm25Results = append(bm25Results, Result{
+						ID:            r.ID.String(),
+						DocumentID:    r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash,
+						Title:         r.Title,
+						Content:       r.Content,
+						Score:         r.Score,
+						Tags:          r.Tags,
+						Collection:    r.Collection,
+						SourcePath:    r.SourcePath,
+						CreatedAt:     r.CreatedAt,
+						UpdatedAt:     r.UpdatedAt,
+					})
+				}
 			}
 		}
 		return nil
@@ -143,57 +205,116 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 			return nil
 		}
 		if workspace == "all" {
-			rows, err := s.queries.VectorSearchAll(gctx, sqlc.VectorSearchAllParams{
-				QueryEmbedding: pgvector_go.NewVector(vec),
-				MaxResults:     fetchLimit,
-			})
-			if err != nil {
-				vectorErr = err
-				s.logger.Warn().Err(err).Msg("vector search leg failed, degrading")
-				return nil
-			}
-			vectorResults = make([]Result, 0, len(rows))
-			for _, r := range rows {
-				vectorResults = append(vectorResults, Result{
-					ID:            r.ChunkID.String(),
-					DocumentID:    r.DocumentID.String(),
-					WorkspaceHash: r.WorkspaceHash,
-					Title:         r.Title,
-					Content:       r.Content,
-					Score:         r.Score,
-					Tags:          r.Tags,
-					Collection:    r.Collection,
-					SourcePath:    r.SourcePath,
-					CreatedAt:     r.CreatedAt,
-					UpdatedAt:     r.UpdatedAt,
+			if len(tags) > 0 {
+				rows, err := s.queries.VectorSearchAllWithTags(gctx, sqlc.VectorSearchAllWithTagsParams{
+					QueryEmbedding: pgvector_go.NewVector(vec),
+					Tags:           tags,
+					MaxResults:     fetchLimit,
 				})
+				if err != nil {
+					vectorErr = err
+					s.logger.Warn().Err(err).Msg("vector search leg failed, degrading")
+					return nil
+				}
+				vectorResults = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					vectorResults = append(vectorResults, Result{
+						ID:            r.ChunkID.String(),
+						DocumentID:    r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash,
+						Title:         r.Title,
+						Content:       r.Content,
+						Score:         r.Score,
+						Tags:          r.Tags,
+						Collection:    r.Collection,
+						SourcePath:    r.SourcePath,
+						CreatedAt:     r.CreatedAt,
+						UpdatedAt:     r.UpdatedAt,
+					})
+				}
+			} else {
+				rows, err := s.queries.VectorSearchAll(gctx, sqlc.VectorSearchAllParams{
+					QueryEmbedding: pgvector_go.NewVector(vec),
+					MaxResults:     fetchLimit,
+				})
+				if err != nil {
+					vectorErr = err
+					s.logger.Warn().Err(err).Msg("vector search leg failed, degrading")
+					return nil
+				}
+				vectorResults = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					vectorResults = append(vectorResults, Result{
+						ID:            r.ChunkID.String(),
+						DocumentID:    r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash,
+						Title:         r.Title,
+						Content:       r.Content,
+						Score:         r.Score,
+						Tags:          r.Tags,
+						Collection:    r.Collection,
+						SourcePath:    r.SourcePath,
+						CreatedAt:     r.CreatedAt,
+						UpdatedAt:     r.UpdatedAt,
+					})
+				}
 			}
 		} else {
-			rows, err := s.queries.VectorSearch(gctx, sqlc.VectorSearchParams{
-				QueryEmbedding: pgvector_go.NewVector(vec),
-				WorkspaceHash:  workspace,
-				MaxResults:     fetchLimit,
-			})
-			if err != nil {
-				vectorErr = err
-				s.logger.Warn().Err(err).Msg("vector search leg failed, degrading")
-				return nil
-			}
-			vectorResults = make([]Result, 0, len(rows))
-			for _, r := range rows {
-				vectorResults = append(vectorResults, Result{
-					ID:            r.ChunkID.String(),
-					DocumentID:    r.DocumentID.String(),
-					WorkspaceHash: r.WorkspaceHash,
-					Title:         r.Title,
-					Content:       r.Content,
-					Score:         r.Score,
-					Tags:          r.Tags,
-					Collection:    r.Collection,
-					SourcePath:    r.SourcePath,
-					CreatedAt:     r.CreatedAt,
-					UpdatedAt:     r.UpdatedAt,
+			if len(tags) > 0 {
+				rows, err := s.queries.VectorSearchWithTags(gctx, sqlc.VectorSearchWithTagsParams{
+					QueryEmbedding: pgvector_go.NewVector(vec),
+					WorkspaceHash:  workspace,
+					Tags:           tags,
+					MaxResults:     fetchLimit,
 				})
+				if err != nil {
+					vectorErr = err
+					s.logger.Warn().Err(err).Msg("vector search leg failed, degrading")
+					return nil
+				}
+				vectorResults = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					vectorResults = append(vectorResults, Result{
+						ID:            r.ChunkID.String(),
+						DocumentID:    r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash,
+						Title:         r.Title,
+						Content:       r.Content,
+						Score:         r.Score,
+						Tags:          r.Tags,
+						Collection:    r.Collection,
+						SourcePath:    r.SourcePath,
+						CreatedAt:     r.CreatedAt,
+						UpdatedAt:     r.UpdatedAt,
+					})
+				}
+			} else {
+				rows, err := s.queries.VectorSearch(gctx, sqlc.VectorSearchParams{
+					QueryEmbedding: pgvector_go.NewVector(vec),
+					WorkspaceHash:  workspace,
+					MaxResults:     fetchLimit,
+				})
+				if err != nil {
+					vectorErr = err
+					s.logger.Warn().Err(err).Msg("vector search leg failed, degrading")
+					return nil
+				}
+				vectorResults = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					vectorResults = append(vectorResults, Result{
+						ID:            r.ChunkID.String(),
+						DocumentID:    r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash,
+						Title:         r.Title,
+						Content:       r.Content,
+						Score:         r.Score,
+						Tags:          r.Tags,
+						Collection:    r.Collection,
+						SourcePath:    r.SourcePath,
+						CreatedAt:     r.CreatedAt,
+						UpdatedAt:     r.UpdatedAt,
+					})
+				}
 			}
 		}
 		return nil

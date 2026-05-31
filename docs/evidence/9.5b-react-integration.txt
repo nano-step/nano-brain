@@ -1,0 +1,29 @@
+=== curl http://localhost:3100/ui (first 15 lines) ===
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nano-brain</title>
+    <script type="module" crossorigin src="/ui/assets/index-CfoaFPX1.js"></script>
+    <link rel="modulepreload" crossorigin href="/ui/assets/router-CzhP1bwv.js">
+    <link rel="modulepreload" crossorigin href="/ui/assets/query-uMLdydpi.js">
+    <link rel="stylesheet" crossorigin href="/ui/assets/index-BHIw7DKS.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+
+=== curl http://localhost:3100/ui/dashboard (SPA fallback - first 5 lines) ===
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+=== Confirm NOT the fallback page ===
+PASS: Serving React app (no 'Web UI not built' in response)
+
+=== HTTP status code ===
+HTTP status: 200

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
@@ -151,11 +153,45 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 		if rawWorktree != "" {
 			worktree = filepath.Clean(rawWorktree)
 		}
+
+		if worktree == "" {
+			h.logger.Warn().
+				Str("session_id", sess.ID).
+				Msg("opencode harvest: skipping orphan session (no worktree)")
+			skipped++
+			continue
+		}
+
 		wsHash, ok := wsCache[worktree]
 		if !ok {
-			h.logger.Warn().Str("session_id", sess.ID).Str("worktree", worktree).Msg("session worktree not in cache, skipping")
-			errCount++
-			continue
+			computedHash, hashErr := storage.WorkspaceHash(worktree)
+			if hashErr != nil {
+				h.logger.Warn().Err(hashErr).Str("session", sess.ID).Msg("workspace hash failed, skipping")
+				errCount++
+				continue
+			}
+
+			if _, regErr := q.GetWorkspaceByHash(ctx, computedHash); regErr != nil {
+				if errors.Is(regErr, sql.ErrNoRows) {
+					h.logger.Warn().
+						Str("session_id", sess.ID).
+						Str("worktree", worktree).
+						Str("workspace_hash", computedHash).
+						Msg("opencode harvest: skipping session for unregistered workspace; run nano-brain init --root=<worktree> to register")
+					skipped++
+					continue
+				}
+				h.logger.Error().
+					Err(regErr).
+					Str("session_id", sess.ID).
+					Str("workspace_hash", computedHash).
+					Msg("opencode harvest: workspace lookup failed")
+				errCount++
+				continue
+			}
+
+			wsHash = computedHash
+			wsCache[worktree] = wsHash
 		}
 
 		sourcePath := "summary://opencode/" + sess.ID

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/nano-brain/nano-brain/internal/harvest"
+	"github.com/nano-brain/nano-brain/internal/links"
 	"github.com/rs/zerolog"
 )
 
@@ -17,6 +18,11 @@ type HarvestSummarizer struct {
 
 func NewHarvestSummarizer(pipeline *Pipeline, persister *Persister, logger zerolog.Logger) *HarvestSummarizer {
 	return &HarvestSummarizer{pipeline: pipeline, persister: persister, logger: logger}
+}
+
+// SetLinkExtractor forwards link dependencies to the underlying Persister.
+func (s *HarvestSummarizer) SetLinkExtractor(resolver *links.Resolver, extractor *links.Extractor) {
+	s.persister.SetLinkExtractor(resolver, extractor)
 }
 
 func (s *HarvestSummarizer) SummarizeAndPersist(ctx context.Context, content string, meta harvest.SummaryMeta) error {

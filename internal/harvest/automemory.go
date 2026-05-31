@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/links"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
@@ -23,9 +24,11 @@ var (
 )
 
 type AutoMemoryExtractor struct {
-	db        *sql.DB
-	workspace string
-	logger    zerolog.Logger
+	db            *sql.DB
+	workspace     string
+	logger        zerolog.Logger
+	linkResolver  *links.Resolver
+	linkExtractor *links.Extractor
 }
 
 func NewAutoMemoryExtractor(db *sql.DB, workspace string, logger zerolog.Logger) *AutoMemoryExtractor {
@@ -34,6 +37,11 @@ func NewAutoMemoryExtractor(db *sql.DB, workspace string, logger zerolog.Logger)
 		workspace: workspace,
 		logger:    logger.With().Str("component", "auto-memory").Logger(),
 	}
+}
+
+func (e *AutoMemoryExtractor) SetLinkExtractor(resolver *links.Resolver, extractor *links.Extractor) {
+	e.linkResolver = resolver
+	e.linkExtractor = extractor
 }
 
 type memoryKind string
@@ -128,6 +136,20 @@ memoryLoop:
 			tx.Rollback() //nolint:errcheck
 			e.logger.Warn().Err(err).Str("session", sessionID).Msg("auto-memory commit failed")
 			continue
+		}
+
+		if e.linkResolver != nil && e.linkExtractor != nil {
+			e.linkResolver.FlushWorkspace(e.workspace)
+			if err := e.linkExtractor.Extract(ctx, links.Document{
+				ID:         docRow.ID,
+				Workspace:  e.workspace,
+				SourcePath: sourcePath,
+				Title:      titleFromContent(m.content),
+				Content:    m.content,
+				Collection: "memory",
+			}); err != nil {
+				e.logger.Warn().Err(err).Msg("link extractor failed; memory write succeeded")
+			}
 		}
 
 		e.logger.Info().Str("session", sessionID).Str("kind", string(m.kind)).Msg("auto-memory entry created")

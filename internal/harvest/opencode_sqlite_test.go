@@ -86,6 +86,24 @@ func insertTestMessage(t *testing.T, db *sql.DB, id, sessionID, role string, cre
 	}
 }
 
+// seedRegisteredWorkspace registers a workspace in PG so OpenCode harvest will
+// not skip sessions for this worktree. Required since #238 removed the
+// auto-registration behavior — workspaces must be explicitly registered.
+func seedRegisteredWorkspace(t *testing.T, pgDB *sql.DB, worktree string) string {
+	t.Helper()
+	h := sha256.Sum256([]byte(worktree))
+	wsHash := hex.EncodeToString(h[:])
+	q := sqlc.New(pgDB)
+	if _, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
+		Hash: wsHash,
+		Name: "test-" + wsHash[:8],
+		Path: worktree,
+	}); err != nil {
+		t.Fatalf("seedRegisteredWorkspace: %v", err)
+	}
+	return wsHash
+}
+
 func insertTestPart(t *testing.T, db *sql.DB, id, messageID, partType, content string) {
 	t.Helper()
 	data := `{"type":"` + partType + `","text":"` + content + `"}`
@@ -93,21 +111,6 @@ func insertTestPart(t *testing.T, db *sql.DB, id, messageID, partType, content s
 	if err != nil {
 		t.Fatal(err)
 	}
-}
-
-func registerTestWorkspace(t *testing.T, pgDB *sql.DB, path string) string {
-	t.Helper()
-	h := sha256.Sum256([]byte(path))
-	hash := hex.EncodeToString(h[:])
-	q := sqlc.New(pgDB)
-	_, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
-		Hash: hash,
-		Path: path,
-	})
-	if err != nil {
-		t.Fatalf("register workspace %q: %v", path, err)
-	}
-	return hash
 }
 
 func TestRenderSQLiteMarkdown_Format(t *testing.T) {
@@ -300,7 +303,7 @@ func TestOpenCodeSQLite_AgeGate_HarvestSkipsActive(t *testing.T) {
 	inactiveMs := now.Add(-15 * time.Minute).UnixMilli()
 
 	insertTestProject(t, sqdb, "proj1", "/home/user/app-age")
-	registerTestWorkspace(t, pgDB, "/home/user/app-age")
+	seedRegisteredWorkspace(t, pgDB, "/home/user/app-age")
 
 	// Active session (updated 5min ago)
 	insertTestSession(t, sqdb, "sess-active", "proj1", "Active", activeMs)
@@ -356,7 +359,7 @@ func TestOpenCodeSQLite_SummarizerHappyPath_OnlySummaryDoc(t *testing.T) {
 	oldMs := now.Add(-15 * time.Minute).UnixMilli()
 
 	insertTestProject(t, sqdb, "proj1", "/home/user/test-happy")
-	registerTestWorkspace(t, pgDB, "/home/user/test-happy")
+	seedRegisteredWorkspace(t, pgDB, "/home/user/test-happy")
 	insertTestSession(t, sqdb, "sess-happy1", "proj1", "Happy Session", oldMs)
 	if _, err := sqdb.Exec(`UPDATE session SET time_updated = ? WHERE id = ?`, oldMs, "sess-happy1"); err != nil {
 		t.Fatal(err)
@@ -429,7 +432,7 @@ func TestOpenCodeSQLite_SkipCheck_UnifiedPath(t *testing.T) {
 	worktree := "/home/user/test-skip"
 
 	insertTestProject(t, sqdb, "proj1", worktree)
-	wsHash := registerTestWorkspace(t, pgDB, worktree)
+	wsHash := seedRegisteredWorkspace(t, pgDB, worktree)
 	insertTestSession(t, sqdb, "sess-skip1", "proj1", "Skip Session", oldMs)
 	if _, err := sqdb.Exec(`UPDATE session SET time_updated = ? WHERE id = ?`, oldMs, "sess-skip1"); err != nil {
 		t.Fatal(err)
@@ -492,7 +495,12 @@ func TestOpenCodeSQLite_MultiSession_Counters(t *testing.T) {
 	worktree := "/home/user/test-multi"
 
 	insertTestProject(t, sqdb, "proj1", worktree)
-	wsHash := registerTestWorkspace(t, pgDB, worktree)
+	wsHash := seedRegisteredWorkspace(t, pgDB, worktree)
+
+	wsH := sha256.Sum256([]byte(worktree))
+	if wsHash != hex.EncodeToString(wsH[:]) {
+		t.Fatalf("workspace hash mismatch: helper=%s, expected=%s", wsHash, hex.EncodeToString(wsH[:]))
+	}
 
 	sessionIDs := []string{"success-1", "success-2", "success-3", "fail-1", "fail-2", "skip-1"}
 	for i, sid := range sessionIDs {
@@ -699,7 +707,7 @@ func TestOpenCodeSQLite_LLMFailure_FallbackUnifiedPath(t *testing.T) {
 	oldMs := now.Add(-15 * time.Minute).UnixMilli()
 
 	insertTestProject(t, sqdb, "proj1", "/home/user/test-app")
-	registerTestWorkspace(t, pgDB, "/home/user/test-app")
+	seedRegisteredWorkspace(t, pgDB, "/home/user/test-app")
 	insertTestSession(t, sqdb, "sess-fb1", "proj1", "Fallback Session", oldMs)
 	if _, err := sqdb.Exec(`UPDATE session SET time_updated = ? WHERE id = ?`, oldMs, "sess-fb1"); err != nil {
 		t.Fatal(err)
@@ -771,5 +779,90 @@ func TestOpenCodeSQLite_LLMFailure_FallbackUnifiedPath(t *testing.T) {
 	}
 	if errCount2 != 0 {
 		t.Errorf("second harvest: errCount = %d, want 0", errCount2)
+	}
+}
+
+func TestOpenCodeSQLite_OrphanSession_NoWorktree_Skipped(t *testing.T) {
+	pgDB := setupTestPG(t)
+	sqdb := setupTestSQLiteDB(t)
+
+	now := time.Now()
+	oldMs := now.Add(-15 * time.Minute).UnixMilli()
+
+	if _, err := sqdb.Exec(
+		`INSERT INTO session (id, project_id, title, time_created, time_updated) VALUES (?, ?, ?, ?, ?)`,
+		"orphan-001", nil, "Orphan Session", oldMs, oldMs,
+	); err != nil {
+		t.Fatalf("insert orphan session: %v", err)
+	}
+	insertTestMessage(t, sqdb, "msg-orphan", "orphan-001", "user", oldMs)
+	insertTestPart(t, sqdb, "p-orphan", "msg-orphan", "text", "orphan content")
+
+	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, pgDB)
+	harvested, skipped, errCount := h.HarvestAll(context.Background(), nil)
+
+	if harvested != 0 {
+		t.Errorf("harvested = %d, want 0 (orphan session must be skipped)", harvested)
+	}
+	if skipped < 1 {
+		t.Errorf("skipped = %d, want >= 1", skipped)
+	}
+	if errCount != 0 {
+		t.Errorf("errCount = %d, want 0", errCount)
+	}
+
+	q := sqlc.New(pgDB)
+	_, lookupErr := q.GetDocumentBySourcePath(context.Background(), sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    "summary://opencode/orphan-001",
+		WorkspaceHash: "",
+	})
+	if lookupErr == nil {
+		t.Error("orphan session document leaked to DB — leak #5 still open")
+	}
+}
+
+func TestOpenCodeSQLite_UnregisteredWorktree_Skipped(t *testing.T) {
+	pgDB := setupTestPG(t)
+	sqdb := setupTestSQLiteDB(t)
+
+	now := time.Now()
+	oldMs := now.Add(-15 * time.Minute).UnixMilli()
+	unregisteredWorktree := "/tmp/never-registered-via-init"
+
+	insertTestProject(t, sqdb, "proj-unreg", unregisteredWorktree)
+	insertTestSession(t, sqdb, "sess-unreg-001", "proj-unreg", "Unregistered Worktree Session", oldMs)
+	if _, err := sqdb.Exec(`UPDATE session SET time_updated = ? WHERE id = ?`, oldMs, "sess-unreg-001"); err != nil {
+		t.Fatal(err)
+	}
+	insertTestMessage(t, sqdb, "msg-unreg", "sess-unreg-001", "user", oldMs)
+	insertTestPart(t, sqdb, "p-unreg", "msg-unreg", "text", "unregistered content")
+
+	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, pgDB)
+	harvested, skipped, errCount := h.HarvestAll(context.Background(), nil)
+
+	if harvested != 0 {
+		t.Errorf("harvested = %d, want 0 (unregistered worktree must be skipped)", harvested)
+	}
+	if skipped < 1 {
+		t.Errorf("skipped = %d, want >= 1", skipped)
+	}
+	if errCount != 0 {
+		t.Errorf("errCount = %d, want 0", errCount)
+	}
+
+	wsH := sha256.Sum256([]byte(unregisteredWorktree))
+	wsHash := hex.EncodeToString(wsH[:])
+
+	q := sqlc.New(pgDB)
+	if _, err := q.GetWorkspaceByHash(context.Background(), wsHash); err == nil {
+		t.Errorf("workspace was auto-registered for %q — auto-registration not removed (leak #5)", unregisteredWorktree)
+	}
+
+	_, lookupErr := q.GetDocumentBySourcePath(context.Background(), sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    "summary://opencode/sess-unreg-001",
+		WorkspaceHash: wsHash,
+	})
+	if lookupErr == nil {
+		t.Error("document persisted under unregistered workspace_hash — leak still open")
 	}
 }

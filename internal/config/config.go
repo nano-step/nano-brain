@@ -15,30 +15,62 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// expandTildeForConfig resolves "~/..." to absolute path. Local copy to avoid
+// internal/config → internal/summarize import cycle.
+func expandTildeForConfig(p string) (string, error) {
+	if !strings.HasPrefix(p, "~/") && p != "~" {
+		return p, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if p == "~" {
+		return home, nil
+	}
+	return filepath.Join(home, p[2:]), nil
+}
+
 // Config holds all application configuration.
 type Config struct {
-	Server         ServerConfig         `koanf:"server"`
-	Database       DatabaseConfig       `koanf:"database"`
-	Embedding      EmbeddingConfig      `koanf:"embedding"`
-	Harvester      HarvesterConfig      `koanf:"harvester"`
-	Intervals      IntervalsConfig      `koanf:"intervals"`
-	Watcher        WatcherConfig        `koanf:"watcher"`
-	Search         SearchConfig         `koanf:"search"`
-	Storage        StorageConfig        `koanf:"storage"`
-	Telemetry      TelemetryConfig      `koanf:"telemetry"`
-	Logging        LoggingConfig        `koanf:"logging"`
-	Summarization  SummarizationConfig  `koanf:"summarization"`
+	Server         ServerConfig         `koanf:"server" json:"server"`
+	Database       DatabaseConfig       `koanf:"database" json:"database"`
+	Embedding      EmbeddingConfig      `koanf:"embedding" json:"embedding"`
+	Harvester      HarvesterConfig      `koanf:"harvester" json:"harvester"`
+	Intervals      IntervalsConfig      `koanf:"intervals" json:"intervals"`
+	Watcher        WatcherConfig        `koanf:"watcher" json:"watcher"`
+	Search         SearchConfig         `koanf:"search" json:"search"`
+	Storage        StorageConfig        `koanf:"storage" json:"storage"`
+	Telemetry      TelemetryConfig      `koanf:"telemetry" json:"telemetry"`
+	Logging        LoggingConfig        `koanf:"logging" json:"logging"`
+	Summarization  SummarizationConfig  `koanf:"summarization" json:"summarization"`
 }
 
 // ServerConfig holds server configuration.
 type ServerConfig struct {
-	Host string `koanf:"host"`
-	Port int    `koanf:"port"`
+	Host string     `koanf:"host" json:"host"`
+	Port int        `koanf:"port" json:"port"`
+	Auth AuthConfig `koanf:"auth" json:"auth"`
+}
+
+// AuthConfig holds authentication configuration for VPS/remote deployments.
+type AuthConfig struct {
+	Enabled     bool       `koanf:"enabled" json:"enabled"`
+	Realm       string     `koanf:"realm" json:"realm"`
+	Users       []UserCred `koanf:"users" json:"users"`
+	Tokens      []string   `koanf:"tokens" json:"tokens"`
+	BypassPaths []string   `koanf:"bypass_paths" json:"bypass_paths"`
+}
+
+// UserCred holds a single Basic Auth credential (username + bcrypt hash).
+type UserCred struct {
+	Username     string `koanf:"username" json:"username"`
+	PasswordHash string `koanf:"password_hash" json:"password_hash"`
 }
 
 // DatabaseConfig holds database configuration.
 type DatabaseConfig struct {
-	URL string `koanf:"url"`
+	URL string `koanf:"url" json:"url"`
 }
 
 // EmbeddingConfig holds embedding provider configuration.
@@ -49,19 +81,19 @@ type DatabaseConfig struct {
 // dense CSV/code at ~1 char/token, so 4000 chars produced >2048 tokens and
 // triggered ollama 400s — see issue #208).
 type EmbeddingConfig struct {
-	Provider     string `koanf:"provider"`
-	URL          string `koanf:"url"`
-	Model        string `koanf:"model"`
-	Dimension    int    `koanf:"dimension"`
-	Concurrency  int    `koanf:"concurrency"`
-	MaxChars     int    `koanf:"max_chars"`
-	VoyageAPIKey string `koanf:"voyage_api_key"`
+	Provider     string `koanf:"provider" json:"provider"`
+	URL          string `koanf:"url" json:"url"`
+	Model        string `koanf:"model" json:"model"`
+	Dimension    int    `koanf:"dimension" json:"dimension"`
+	Concurrency  int    `koanf:"concurrency" json:"concurrency"`
+	MaxChars     int    `koanf:"max_chars" json:"max_chars"`
+	VoyageAPIKey string `koanf:"voyage_api_key" json:"voyage_api_key"`
 }
 
 // HarvesterConfig holds harvester configuration.
 type HarvesterConfig struct {
-	OpenCode   OpenCodeHarvesterConfig   `koanf:"opencode"`
-	ClaudeCode ClaudeCodeHarvesterConfig `koanf:"claudecode"`
+	OpenCode   OpenCodeHarvesterConfig   `koanf:"opencode" json:"opencode"`
+	ClaudeCode ClaudeCodeHarvesterConfig `koanf:"claudecode" json:"claudecode"`
 }
 
 // OpenCodeHarvesterConfig holds OpenCode harvester configuration.
@@ -71,68 +103,79 @@ type HarvesterConfig struct {
 //  2. DBPath — single global SQLite DB (legacy single-DB layout)
 //  3. SessionDir — filesystem JSON sessions (legacy storage)
 type OpenCodeHarvesterConfig struct {
-	SessionDir string `koanf:"session_dir"`
-	DBPath     string `koanf:"db_path"`
-	DBRoot     string `koanf:"db_root"`
+	SessionDir string `koanf:"session_dir" json:"session_dir"`
+	DBPath     string `koanf:"db_path" json:"db_path"`
+	DBRoot     string `koanf:"db_root" json:"db_root"`
 }
 
 // ClaudeCodeHarvesterConfig holds ClaudeCode harvester configuration.
 type ClaudeCodeHarvesterConfig struct {
-	Enabled    bool   `koanf:"enabled"`
-	SessionDir string `koanf:"session_dir"`
+	Enabled    bool   `koanf:"enabled" json:"enabled"`
+	SessionDir string `koanf:"session_dir" json:"session_dir"`
 }
 
 // IntervalsConfig holds interval configuration.
 type IntervalsConfig struct {
-	SessionPoll int `koanf:"session_poll"`
+	SessionPoll int `koanf:"session_poll" json:"session_poll"`
 }
 
 type WorkspaceFilterConfig struct {
-	ExcludePatterns   []string `koanf:"exclude_patterns"`
-	AllowedExtensions []string `koanf:"allowed_extensions"`
+	ExcludePatterns   []string `koanf:"exclude_patterns" json:"exclude_patterns"`
+	AllowedExtensions []string `koanf:"allowed_extensions" json:"allowed_extensions"`
 }
 
 type WatcherConfig struct {
-	DebounceMs        int                               `koanf:"debounce_ms"`
-	ReindexInterval   int                               `koanf:"reindex_interval"`
-	ExcludePatterns   []string                          `koanf:"exclude_patterns"`
-	AllowedExtensions []string                          `koanf:"allowed_extensions"`
-	Workspaces        map[string]WorkspaceFilterConfig  `koanf:"workspaces"`
+	DebounceMs        int                               `koanf:"debounce_ms" json:"debounce_ms"`
+	ReindexInterval   int                               `koanf:"reindex_interval" json:"reindex_interval"`
+	ExcludePatterns   []string                          `koanf:"exclude_patterns" json:"exclude_patterns"`
+	AllowedExtensions []string                          `koanf:"allowed_extensions" json:"allowed_extensions"`
+	Workspaces        map[string]WorkspaceFilterConfig  `koanf:"workspaces" json:"workspaces"`
 }
 
 // SearchConfig holds search configuration.
 type SearchConfig struct {
-	RrfK                float64 `koanf:"rrf_k"`
-	RecencyWeight       float64 `koanf:"recency_weight"`
-	RecencyHalfLifeDays int     `koanf:"recency_half_life_days"`
-	Limit               int     `koanf:"limit"`
+	RrfK                float64 `koanf:"rrf_k" json:"rrf_k"`
+	RecencyWeight       float64 `koanf:"recency_weight" json:"recency_weight"`
+	RecencyHalfLifeDays int     `koanf:"recency_half_life_days" json:"recency_half_life_days"`
+	Limit               int     `koanf:"limit" json:"limit"`
 }
 
 // StorageConfig holds storage configuration.
 type StorageConfig struct {
-	MaxFileSize int64 `koanf:"max_file_size"`
-	MaxSize     int64 `koanf:"max_size"`
+	MaxFileSize int64 `koanf:"max_file_size" json:"max_file_size"`
+	MaxSize     int64 `koanf:"max_size" json:"max_size"`
 }
 
 type TelemetryConfig struct {
-	RetentionDays int `koanf:"retention_days"`
+	RetentionDays int `koanf:"retention_days" json:"retention_days"`
 }
 
 // LoggingConfig holds logging configuration.
 type LoggingConfig struct {
-	Level string `koanf:"level"`
-	File  string `koanf:"file"`
+	Level string `koanf:"level" json:"level"`
+	File  string `koanf:"file" json:"file"`
 }
 
 // SummarizationConfig holds summarization configuration.
 type SummarizationConfig struct {
-	Enabled           bool    `koanf:"enabled"`
-	ProviderURL       string  `koanf:"provider_url"`
-	APIKey            string  `koanf:"api_key"`
-	Model             string  `koanf:"model"`
-	MaxTokens         int     `koanf:"max_tokens"`
-	Concurrency       int     `koanf:"concurrency"`
-	RequestsPerSecond float64 `koanf:"requests_per_second"`
+	Enabled           bool    `koanf:"enabled" json:"enabled"`
+	ProviderURL       string  `koanf:"provider_url" json:"provider_url"`
+	APIKey            string  `koanf:"api_key" json:"api_key"`
+	Model             string  `koanf:"model" json:"model"`
+	MaxTokens         int     `koanf:"max_tokens" json:"max_tokens"`
+	Concurrency       int     `koanf:"concurrency" json:"concurrency"`
+	RequestsPerSecond float64 `koanf:"requests_per_second" json:"requests_per_second"`
+	WriteToDisk       *bool   `koanf:"write_to_disk" json:"write_to_disk"`
+	OutputDir         string  `koanf:"output_dir" json:"output_dir"`
+}
+
+// IsWriteToDiskEnabled returns true unless the operator explicitly set write_to_disk: false.
+// Default is true (Obsidian-compatible disk persistence; see issue #258).
+func (s SummarizationConfig) IsWriteToDiskEnabled() bool {
+	if s.WriteToDisk == nil {
+		return true
+	}
+	return *s.WriteToDisk
 }
 
 // Load loads configuration from file and environment variables.
@@ -199,13 +242,16 @@ func Load(configPath string) (*Config, error) {
 
 	// Special non-prefixed env vars
 	specialEnvVars := map[string]string{
-		"VOYAGE_API_KEY":           "embedding.voyage_api_key",
-		"DATABASE_URL":             "database.url",
-		"OPENCODE_STORAGE_DIR":     "harvester.opencode.session_dir",
-		"OPENCODE_DB_PATH":         "harvester.opencode.db_path",
-		"OPENCODE_DB_ROOT":         "harvester.opencode.db_root",
-		"NANO_BRAIN_EMBED_MAX_CHARS": "embedding.max_chars",
+		"VOYAGE_API_KEY":               "embedding.voyage_api_key",
+		"DATABASE_URL":                 "database.url",
+		"OPENCODE_STORAGE_DIR":         "harvester.opencode.session_dir",
+		"OPENCODE_DB_PATH":             "harvester.opencode.db_path",
+		"OPENCODE_DB_ROOT":             "harvester.opencode.db_root",
+		"NANO_BRAIN_EMBED_MAX_CHARS":   "embedding.max_chars",
 		"NANO_BRAIN_SUMMARIZE_API_KEY": "summarization.api_key",
+		"NANO_BRAIN_AUTH_ENABLED":      "server.auth.enabled",
+		"NANO_BRAIN_AUTH_REALM":        "server.auth.realm",
+		"NANO_BRAIN_AUTH_TOKENS":       "server.auth.tokens",
 	}
 	for envVar, key := range specialEnvVars {
 		if value, exists := os.LookupEnv(envVar); exists {
@@ -223,6 +269,15 @@ func Load(configPath string) (*Config, error) {
 
 	if err := expandPaths(cfg); err != nil {
 		return nil, err
+	}
+
+	// Tilde-expand summary output dir (issue #258).
+	if cfg.Summarization.OutputDir != "" {
+		expanded, err := expandTildeForConfig(cfg.Summarization.OutputDir)
+		if err != nil {
+			return nil, fmt.Errorf("expand output_dir: %w", err)
+		}
+		cfg.Summarization.OutputDir = expanded
 	}
 
 	// Validate configuration
@@ -301,6 +356,13 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	// Validate Auth
+	if cfg.Server.Auth.Enabled {
+		if len(cfg.Server.Auth.Users) == 0 && len(cfg.Server.Auth.Tokens) == 0 {
+			errs = append(errs, errors.New("auth enabled but no users or tokens configured"))
+		}
+	}
+
 	// Validate Summarization
 	if cfg.Summarization.Enabled {
 		if cfg.Summarization.ProviderURL == "" {
@@ -367,4 +429,52 @@ func DefaultConfigPath() string {
 		return "~/.nano-brain/config.yml"
 	}
 	return filepath.Join(home, ".nano-brain", "config.yml")
+}
+
+// ResolveConfigPath returns the effective config file path with precedence:
+//  1. explicit --config flag value (non-empty, after TrimSpace)
+//  2. NANO_BRAIN_CONFIG environment variable (non-empty, after TrimSpace)
+//  3. DefaultConfigPath() (~/.nano-brain/config.yml)
+//
+// Whitespace is trimmed from both sources. Existence is not checked — use
+// ResolveConfigPathStrict when the caller needs a warning on missing files.
+func ResolveConfigPath(flagValue string) string {
+	if v := strings.TrimSpace(flagValue); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("NANO_BRAIN_CONFIG")); v != "" {
+		return v
+	}
+	return DefaultConfigPath()
+}
+
+// ResolveConfigPathStrict behaves like ResolveConfigPath but ALSO emits a
+// warning to stderr (and returns the warning) when --config flag or
+// NANO_BRAIN_CONFIG env was set explicitly but the resolved file does not
+// exist. The path is still returned so the caller can fall through to
+// defaults — this is a warning, not a fatal error.
+//
+// Returns (path, warning). warning is "" when no problem detected.
+func ResolveConfigPathStrict(flagValue string) (string, string) {
+	flagTrimmed := strings.TrimSpace(flagValue)
+	envTrimmed := strings.TrimSpace(os.Getenv("NANO_BRAIN_CONFIG"))
+
+	var path string
+	var source string
+	switch {
+	case flagTrimmed != "":
+		path, source = flagTrimmed, "--config flag"
+	case envTrimmed != "":
+		path, source = envTrimmed, "NANO_BRAIN_CONFIG env"
+	default:
+		return DefaultConfigPath(), ""
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return path, fmt.Sprintf("WARNING: %s points to %q but that file does not exist — defaults will be used.", source, path)
+		}
+		return path, fmt.Sprintf("WARNING: %s = %q: %v", source, path, err)
+	}
+	return path, ""
 }

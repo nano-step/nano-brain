@@ -6,14 +6,21 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/links"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 	"github.com/sqlc-dev/pqtype"
 )
+
+// ErrWorkspaceNotRegistered is returned by Persister.Save when meta.WorkspaceHash
+// does not correspond to a row in the workspaces table. This is defense-in-depth
+// against bypassing HTTP middleware or harvester validation. See issue #238.
+var ErrWorkspaceNotRegistered = errors.New("workspace_not_registered")
 
 // PersisterEnqueuer enqueues chunk IDs for embedding.
 // Defined locally to avoid circular imports with the harvest package.
@@ -23,29 +30,56 @@ type PersisterEnqueuer interface {
 
 // Persister saves a summary to the DB.
 type Persister struct {
-	db       *sql.DB
-	enqueuer PersisterEnqueuer
-	logger   zerolog.Logger
+	db            *sql.DB
+	enqueuer      PersisterEnqueuer
+	linkResolver  *links.Resolver
+	linkExtractor *links.Extractor
+	logger        zerolog.Logger
+	writeToDisk   bool   // write summary markdown to outputDir after DB commit
+	outputDir     string // absolute path (already tilde-expanded by config Load)
 }
 
 // NewPersister constructs a Persister.
-func NewPersister(db *sql.DB, enqueuer PersisterEnqueuer, logger zerolog.Logger) *Persister {
+func NewPersister(db *sql.DB, enqueuer PersisterEnqueuer, writeToDisk bool, outputDir string, logger zerolog.Logger) *Persister {
 	return &Persister{
-		db:       db,
-		enqueuer: enqueuer,
-		logger:   logger.With().Str("component", "summary-persister").Logger(),
+		db:          db,
+		enqueuer:    enqueuer,
+		writeToDisk: writeToDisk,
+		outputDir:   outputDir,
+		logger:      logger.With().Str("component", "summary-persister").Logger(),
 	}
+}
+
+// SetLinkExtractor wires optional wikilink extraction after summary persistence.
+func (p *Persister) SetLinkExtractor(resolver *links.Resolver, extractor *links.Extractor) {
+	p.linkResolver = resolver
+	p.linkExtractor = extractor
 }
 
 // Save upserts summaryMarkdown into the document store.
 // It is idempotent: if the content hash matches the stored hash, it skips all work.
+//
+// Returns ErrWorkspaceNotRegistered if meta.WorkspaceHash is not in the workspaces
+// table (defense-in-depth — issue #238).
 func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta SessionMetadata) error {
+	q := sqlc.New(p.db)
+
+	if _, err := q.GetWorkspaceByHash(ctx, meta.WorkspaceHash); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			p.logger.Warn().
+				Str("workspace_hash", meta.WorkspaceHash).
+				Str("session_id", meta.SessionID).
+				Msg("persist: refusing to save summary for unregistered workspace")
+			return fmt.Errorf("%w: %s", ErrWorkspaceNotRegistered, meta.WorkspaceHash)
+		}
+		return fmt.Errorf("persist: workspace lookup failed: %w", err)
+	}
+
 	sum := sha256.Sum256([]byte(summaryMarkdown))
 	contentHash := hex.EncodeToString(sum[:])
 
 	sourcePath := buildSourcePath(meta)
 
-	q := sqlc.New(p.db)
 	existing, lookupErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    sourcePath,
 		WorkspaceHash: meta.WorkspaceHash,
@@ -113,6 +147,24 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 		return fmt.Errorf("persist: commit tx: %w", err)
 	}
 
+	if p.writeToDisk && p.outputDir != "" {
+		p.persistToDisk(ctx, summaryMarkdown, meta, docRow.ID, q)
+	}
+
+	if p.linkResolver != nil && p.linkExtractor != nil {
+		p.linkResolver.FlushWorkspace(meta.WorkspaceHash)
+		if err := p.linkExtractor.Extract(ctx, links.Document{
+			ID:         docRow.ID,
+			Workspace:  meta.WorkspaceHash,
+			SourcePath: sourcePath,
+			Title:      title,
+			Content:    summaryMarkdown,
+			Collection: "session-summary",
+		}); err != nil {
+			p.logger.Warn().Err(err).Msg("link extractor failed; summary persisted")
+		}
+	}
+
 	if p.enqueuer != nil {
 		for _, id := range chunkIDs {
 			p.enqueuer.Enqueue(id)
@@ -125,6 +177,32 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 		Msg("summary persisted")
 
 	return nil
+}
+
+// persistToDisk writes the summary markdown to a file under outputDir. Errors
+// are logged but never propagated — DB persist already succeeded; disk is a
+// derivative view. See issue #258.
+func (p *Persister) persistToDisk(ctx context.Context, summaryMarkdown string, meta SessionMetadata, _ uuid.UUID, q *sqlc.Queries) {
+	ws, err := q.GetWorkspaceByHash(ctx, meta.WorkspaceHash)
+	var wsName string
+	if err == nil {
+		wsName = ws.Name
+	}
+	targetPath := BuildDiskPath(p.outputDir, wsName, meta.WorkspaceHash, string(meta.Source), meta.Title, meta.CreatedAt)
+	if err := EnsureDir(targetPath); err != nil {
+		p.logger.Warn().Err(err).Str("path", targetPath).Msg("disk persist: ensureDir failed")
+		return
+	}
+	finalPath, err := ResolveCollision(targetPath, []byte(summaryMarkdown), meta.SessionID)
+	if err != nil {
+		p.logger.Warn().Err(err).Str("path", targetPath).Msg("disk persist: resolveCollision failed")
+		return
+	}
+	if err := WriteFileAtomic(finalPath, []byte(summaryMarkdown)); err != nil {
+		p.logger.Warn().Err(err).Str("path", finalPath).Msg("disk persist: writeFileAtomic failed")
+		return
+	}
+	p.logger.Info().Str("path", finalPath).Str("session_id", meta.SessionID).Msg("summary written to disk")
 }
 
 // buildSourcePath returns the canonical source path for summary documents.

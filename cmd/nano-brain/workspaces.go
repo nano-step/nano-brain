@@ -12,7 +12,7 @@ import (
 )
 
 func workspacesUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: nano-brain workspaces [list|ls] [--json]")
+	fmt.Fprintln(os.Stderr, "Usage: nano-brain workspaces [list|ls|remove] [flags]")
 	os.Exit(1)
 }
 
@@ -24,6 +24,8 @@ func runWorkspacesCmd(args []string) {
 	switch args[0] {
 	case "list", "ls":
 		runWorkspacesList(args[1:])
+	case "remove", "rm":
+		runWorkspacesRemove(args[1:])
 	default:
 		workspacesUsage()
 	}

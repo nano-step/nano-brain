@@ -1,0 +1,22 @@
+Build output — Story 9.8 (Settings + Cmd+K + non-loopback banner + a11y)
+
+Command: cd web && npm run build
+Date: 2026-05-30
+
+Output:
+vite v5.4.21 building for production...
+✓ 356 modules transformed.
+
+Chunk sizes (gzipped):
+  index.html              0.33 kB
+  index.css               3.09 kB
+  react-*.js              0.05 kB
+  SigmaGraph-*.js         4.20 kB
+  query-*.js             12.30 kB
+  sigma-*.js             39.59 kB
+  index-*.js (main)      60.37 kB
+  router-*.js            73.85 kB
+
+Total gzip: ~193 kB  (limit: 600 kB) ✅
+Go build: PASS
+Go test -race -short: PASS (all packages)

@@ -79,11 +79,21 @@ The review flow is designed for parallelism: create the PR first so Gemini bot s
 - **Review ∥ Next-story prep**: While Oracle + Gemini review story N, orchestrator MAY start story N+1 **prep only** (create issue, create branch, read spec). NO code/test work until story N merges. If story N review fails critically → cancel N+1 prep, fix N first.
 - **POST-MERGE gates run in parallel**: After confirming 4.1 (merged), gates 4.2–4.4 run simultaneously. Gate 4.5 (validation) runs last since it depends on merged code.
 
-**PR comment review rules:**
-- Critical/High severity Gemini comments → VERIFY first (explore subagents), then fix VALID ones before merge (BLOCKING). FALSE POSITIVEs must be replied to in PR with explanation.
-- Medium severity Gemini comments → VERIFY first, fix VALID ones if effort < 15 min, otherwise note in PR and defer
-- Low/Informational comments → ACKNOWLEDGE in PR, fix is optional
-- If Gemini finds nothing → proceed (no evidence needed beyond PR review thread)
+**PR comment review rules (R31 — verdict-based, NOT effort-based):**
+
+Every Gemini comment receives an agent verdict from the closed set defined in
+HARNESS.md § PR + Bot Review Loop. The verdict — not Gemini's own severity label
+and not the agent's effort estimate — determines whether merge is blocked.
+
+- `VALID:critical` / `VALID:high` → BLOCKING. Must include `fixed in commit <sha>`
+  in the triage Action column, OR PR must have `[HARNESS-OVERRIDE]` (R7).
+- `VALID:medium` / `VALID:low` → NON-BLOCKING. Agent MUST acknowledge in a PR
+  reply. Fix is optional. No effort threshold; no "fix if cheap" judgment.
+- `FALSE_POSITIVE` → NON-BLOCKING. Reasoning column must explain the context
+  Gemini lacks. PR reply explaining the FP is required.
+- `DEFER` → NON-BLOCKING. Action column must link to backlog/follow-up issue.
+- `ACKNOWLEDGED` → NON-BLOCKING. For informational comments.
+- If Gemini posts no comments → proceed (no triage table needed).
 
 **Gemini verification rule (MANDATORY):**
 Gemini reviews without full codebase context and frequently flags false positives (e.g., missing deferred rollback it didn't read, wrong driver assumptions, buffer limits that don't apply to the actual usage). Before fixing ANY Gemini comment, fire explore subagents to verify the finding against actual code. This saves wasted fix cycles and prevents introducing unnecessary complexity.
