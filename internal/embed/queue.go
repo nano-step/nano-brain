@@ -272,6 +272,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 			}
 			q.pending.Add(-1)
 			q.clearRetries(chunkID)
+			q.publishStatus()
 			return
 		}
 		q.increaseBackoff()
@@ -388,11 +389,11 @@ func truncateToMaxChars(s string, max int) string {
 // "ollama: unexpected status <N>: ..." and "voyageai: unexpected status <N>: ..."
 // (verified in ollama.go:64 and voyageai.go:76). See issue #260.
 var hardFailureStatusCodes = []string{
-	"unexpected status 400",
-	"unexpected status 401",
-	"unexpected status 403",
-	"unexpected status 413",
-	"unexpected status 422",
+	"unexpected status 400:",
+	"unexpected status 401:",
+	"unexpected status 403:",
+	"unexpected status 413:",
+	"unexpected status 422:",
 }
 
 func isHardFailureEmbedError(err error) bool {

@@ -758,6 +758,8 @@ func TestIsHardFailureEmbedError(t *testing.T) {
 		{"context deadline", fmt.Errorf("context deadline exceeded"), false},
 		{"empty string", fmt.Errorf(""), false},
 		{"nil", nil, false},
+		{"false-positive 4000-byte response (no colon)", fmt.Errorf("ollama: unexpected status 4000 bytes received"), false},
+		{"false-positive 4xx-like substring mid-message", fmt.Errorf("error code 400 found in body"), false},
 	}
 
 	for _, c := range cases {
