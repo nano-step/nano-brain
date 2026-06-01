@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, Suspense } from 'react'
 import { getCurrentWorkspace } from '../api/workspace'
 import { useGraphNeighborhood } from './graph/useGraphNeighborhood'
+import { useGraphOverview, nodeKindToMode } from './graph/useGraphOverview'
 import { usePositionCache } from './graph/usePositionCache'
 import { GraphLegend } from './graph/GraphLegend'
 import type { NodeKind, GraphDirection, EdgeType, GraphNode, GraphEdge } from '../api/types'
@@ -180,9 +181,18 @@ export function GraphPanel() {
   const state = mode === 'symbol' ? codeState : knowledgeState
   const setState = mode === 'symbol' ? setCodeState : setKnowledgeState
 
-  const { mutate: fetchNeighborhood, data, isPending, isError, error } = useGraphNeighborhood({
+  const { mutate: fetchNeighborhood, data: neighborhoodData, isPending: isNeighborhoodPending, isError: isNeighborhoodError, error: neighborhoodError } = useGraphNeighborhood({
     workspace,
   })
+
+  const { mutate: fetchOverview, data: overviewData, isPending: isOverviewPending, isError: isOverviewError, error: overviewError } = useGraphOverview({
+    workspace,
+  })
+
+  const data = state.focus ? neighborhoodData : overviewData
+  const isPending = state.focus ? isNeighborhoodPending : isOverviewPending
+  const isError = state.focus ? isNeighborhoodError : isOverviewError
+  const error = state.focus ? neighborhoodError : overviewError
 
   const positionCache = usePositionCache({
     workspace: workspace ?? '',
@@ -196,17 +206,25 @@ export function GraphPanel() {
   const [cachedPositions, setCachedPositions] = useState<PositionMap | null>(null)
 
   useEffect(() => {
-    if (!state.focus || !workspace) return
+    if (!workspace) return
     setCachedPositions(positionCache.read())
-    fetchNeighborhood({
-      focus: state.focus,
-      depth: state.depth,
-      direction: state.direction,
-      edge_types: state.edgeTypes,
-      node_kind: mode,
-    })
-    // positionCache.read is stable (memoized by useCallback); fetchNeighborhood from useMutation
-    // is intentionally excluded — it's a stable reference that doesn't need to be in deps.
+    if (state.focus) {
+      fetchNeighborhood({
+        focus: state.focus,
+        depth: state.depth,
+        direction: state.direction,
+        edge_types: state.edgeTypes,
+        node_kind: mode,
+      })
+    } else {
+      fetchOverview({
+        mode: nodeKindToMode(mode),
+        edge_types: state.edgeTypes,
+        limit: 50,
+      })
+    }
+    // positionCache.read is stable (memoized by useCallback); mutate fns from useMutation
+    // are stable references intentionally excluded from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.focus, state.depth, state.direction, state.edgeTypes, mode, workspace])
 
@@ -303,33 +321,14 @@ export function GraphPanel() {
       />
 
       <div className="graph-wrap" style={{ height: 480 }}>
-        {!state.focus && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-3)',
-              fontSize: 13,
-              pointerEvents: 'none',
-            }}
-          >
-            {mode === 'symbol'
-              ? 'Enter a symbol name above to explore the code graph'
-              : 'Enter a memory document title or ID above to explore the knowledge graph'}
-          </div>
-        )}
-
-        {state.focus && isPending && (
+        {isPending && (
           <div
             className="skel"
             style={{ position: 'absolute', inset: 0 }}
           />
         )}
 
-        {state.focus && isError && (
+        {isError && (
           <div
             style={{
               position: 'absolute',
@@ -345,7 +344,7 @@ export function GraphPanel() {
           </div>
         )}
 
-        {state.focus && !isPending && !isError && nodes.length > 0 && (
+        {!isPending && !isError && nodes.length > 0 && (
           <Suspense fallback={<GraphSkeleton />}>
             <SigmaGraph
               nodes={nodes}
@@ -361,7 +360,7 @@ export function GraphPanel() {
           </Suspense>
         )}
 
-        {state.focus && !isPending && !isError && nodes.length === 0 && data && (
+        {!isPending && !isError && nodes.length === 0 && data && (
           <div
             style={{
               position: 'absolute',
@@ -373,10 +372,19 @@ export function GraphPanel() {
               fontSize: 12,
             }}
           >
-            No nodes found for{' '}
-            <span className="mono" style={{ margin: '0 4px' }}>
-              {state.focus}
-            </span>
+            {state.focus ? (
+              <>
+                No nodes found for{' '}
+                <span className="mono" style={{ margin: '0 4px' }}>
+                  {state.focus}
+                </span>
+              </>
+            ) : (
+              <>
+                No {mode === 'symbol' ? 'code' : 'knowledge'} graph data in this workspace yet.
+                Try indexing some {mode === 'symbol' ? 'source files' : 'notes with [[wiki-links]]'}.
+              </>
+            )}
           </div>
         )}
 

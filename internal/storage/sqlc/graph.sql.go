@@ -13,6 +13,31 @@ import (
 	"github.com/lib/pq"
 )
 
+const countDistinctGraphNodes = `-- name: CountDistinctGraphNodes :one
+WITH degrees AS (
+    SELECT ge.source_node AS node
+    FROM graph_edges ge
+    WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+    UNION
+    SELECT ge.target_node AS node
+    FROM graph_edges ge
+    WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+)
+SELECT count(*)::bigint FROM degrees
+`
+
+type CountDistinctGraphNodesParams struct {
+	WorkspaceHash string
+	Column2       []string
+}
+
+func (q *Queries) CountDistinctGraphNodes(ctx context.Context, arg CountDistinctGraphNodesParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDistinctGraphNodes, arg.WorkspaceHash, pq.Array(arg.Column2))
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteGraphEdgesByFile = `-- name: DeleteGraphEdgesByFile :exec
 DELETE FROM graph_edges WHERE workspace_hash = $1 AND source_file = $2
 `
@@ -289,6 +314,106 @@ func (q *Queries) ListDocIDsByTitle(ctx context.Context, arg ListDocIDsByTitlePa
 	return items, nil
 }
 
+const listEdgesBetweenNodes = `-- name: ListEdgesBetweenNodes :many
+SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND edge_type = ANY($2::text[])
+  AND source_node = ANY($3::text[])
+  AND target_node = ANY($3::text[])
+`
+
+type ListEdgesBetweenNodesParams struct {
+	WorkspaceHash string
+	Column2       []string
+	Column3       []string
+}
+
+func (q *Queries) ListEdgesBetweenNodes(ctx context.Context, arg ListEdgesBetweenNodesParams) ([]GraphEdge, error) {
+	rows, err := q.db.QueryContext(ctx, listEdgesBetweenNodes, arg.WorkspaceHash, pq.Array(arg.Column2), pq.Array(arg.Column3))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GraphEdge
+	for rows.Next() {
+		var i GraphEdge
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.SourceNode,
+			&i.TargetNode,
+			&i.EdgeType,
+			&i.SourceFile,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEdgesTouchingNodes = `-- name: ListEdgesTouchingNodes :many
+SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND edge_type = ANY($2::text[])
+  AND (source_node = ANY($3::text[]) OR target_node = ANY($3::text[]))
+LIMIT $4
+`
+
+type ListEdgesTouchingNodesParams struct {
+	WorkspaceHash string
+	Column2       []string
+	Column3       []string
+	Limit         int32
+}
+
+func (q *Queries) ListEdgesTouchingNodes(ctx context.Context, arg ListEdgesTouchingNodesParams) ([]GraphEdge, error) {
+	rows, err := q.db.QueryContext(ctx, listEdgesTouchingNodes,
+		arg.WorkspaceHash,
+		pq.Array(arg.Column2),
+		pq.Array(arg.Column3),
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GraphEdge
+	for rows.Next() {
+		var i GraphEdge
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.SourceNode,
+			&i.TargetNode,
+			&i.EdgeType,
+			&i.SourceFile,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReferenceEdgesBySource = `-- name: ListReferenceEdgesBySource :many
 SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at FROM graph_edges
 WHERE workspace_hash = $1 AND source_node = $2 AND edge_type = 'references'
@@ -318,6 +443,57 @@ func (q *Queries) ListReferenceEdgesBySource(ctx context.Context, arg ListRefere
 			&i.Metadata,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTopGraphNodesByDegree = `-- name: ListTopGraphNodesByDegree :many
+WITH degrees AS (
+    SELECT ge.source_node AS node
+    FROM graph_edges ge
+    WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+    UNION ALL
+    SELECT ge.target_node AS node
+    FROM graph_edges ge
+    WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+)
+SELECT degrees.node, count(*)::bigint AS degree
+FROM degrees
+GROUP BY degrees.node
+ORDER BY degree DESC, degrees.node ASC
+LIMIT $3
+`
+
+type ListTopGraphNodesByDegreeParams struct {
+	WorkspaceHash string
+	Column2       []string
+	Limit         int32
+}
+
+type ListTopGraphNodesByDegreeRow struct {
+	Node   string
+	Degree int64
+}
+
+func (q *Queries) ListTopGraphNodesByDegree(ctx context.Context, arg ListTopGraphNodesByDegreeParams) ([]ListTopGraphNodesByDegreeRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTopGraphNodesByDegree, arg.WorkspaceHash, pq.Array(arg.Column2), arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTopGraphNodesByDegreeRow
+	for rows.Next() {
+		var i ListTopGraphNodesByDegreeRow
+		if err := rows.Scan(&i.Node, &i.Degree); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

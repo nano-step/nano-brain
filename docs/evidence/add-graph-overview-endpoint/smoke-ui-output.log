@@ -1,0 +1,14 @@
+=== smoke:ui run 2026-06-01T08:10:20Z ===
+INFO: Binary built: /tmp/nano-brain-smoke/nano-brain (size=55229640 bytes)
+INFO: Server started on port 3199 (PID=62334)
+PASS: /health → 200 OK {"status":"ok","ready":true,"version":"dev","workspace_count":19}
+PASS: /ui/ Content-Type=text/html; charset=utf-8
+PASS: /ui/ body has <!DOCTYPE html>
+PASS: /ui/ HTML contains <script> tag
+PASS: /ui/assets/index-0b9C5XlC.css → 200 text/css size=14861
+PASS: /ui/assets/index-D4OsjtS7.js → 200 application/javascript size=559866
+PASS: /ui/assets/query-gm5Q81X9.js → 200 application/javascript size=45437
+PASS: /ui/assets/router-DkWWlq3L.js → 200 application/javascript size=229953
+INFO: Asset summary: 3 JS, 1 CSS
+=== smoke:ui PASS ===
+Server stopped (PID=62334)
