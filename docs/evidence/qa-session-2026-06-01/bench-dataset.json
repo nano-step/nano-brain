@@ -1,0 +1,407 @@
+{
+  "scale": 50,
+  "workspace_hash": "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
+  "generated_at": "2026-06-01T17:04:17Z",
+  "entries": [
+    {
+      "query": "spec.md",
+      "relevant_doc_ids": [
+        "11a4c48d-d58f-44f7-854b-3547ea22a8b1"
+      ],
+      "source_doc_id": "11a4c48d-d58f-44f7-854b-3547ea22a8b1",
+      "source_title": "spec.md"
+    },
+    {
+      "query": "TestQueue_BackoffMax",
+      "relevant_doc_ids": [
+        "1b1966db-eab7-4186-80aa-3c167da234a7"
+      ],
+      "source_doc_id": "1b1966db-eab7-4186-80aa-3c167da234a7",
+      "source_title": "TestQueue_BackoffMax"
+    },
+    {
+      "query": "ChunkTargetSize",
+      "relevant_doc_ids": [
+        "4e4c93e5-485a-4160-abc6-813847484ff3"
+      ],
+      "source_doc_id": "4e4c93e5-485a-4160-abc6-813847484ff3",
+      "source_title": "ChunkTargetSize"
+    },
+    {
+      "query": "perf-test-8",
+      "relevant_doc_ids": [
+        "12b7971e-5295-464b-83fc-df47a2363c4a"
+      ],
+      "source_doc_id": "12b7971e-5295-464b-83fc-df47a2363c4a",
+      "source_title": "perf-test-8"
+    },
+    {
+      "query": "TestWakeUp_LimitParam_GET",
+      "relevant_doc_ids": [
+        "11dcf54f-82ab-4469-90eb-d6b0374c3c18"
+      ],
+      "source_doc_id": "11dcf54f-82ab-4469-90eb-d6b0374c3c18",
+      "source_title": "TestWakeUp_LimitParam_GET"
+    },
+    {
+      "query": "missingUIHTML",
+      "relevant_doc_ids": [
+        "38d25137-ae9c-43dd-a9e3-f57e1e666e7c"
+      ],
+      "source_doc_id": "38d25137-ae9c-43dd-a9e3-f57e1e666e7c",
+      "source_title": "missingUIHTML"
+    },
+    {
+      "query": "TestChunkEmptyInput",
+      "relevant_doc_ids": [
+        "83ce9f31-4ed0-4775-bd62-a92719defb32"
+      ],
+      "source_doc_id": "83ce9f31-4ed0-4775-bd62-a92719defb32",
+      "source_title": "TestChunkEmptyInput"
+    },
+    {
+      "query": "extractImports",
+      "relevant_doc_ids": [
+        "8f09d82a-f6b3-4bca-838d-0fd4cd344577"
+      ],
+      "source_doc_id": "8f09d82a-f6b3-4bca-838d-0fd4cd344577",
+      "source_title": "extractImports"
+    },
+    {
+      "query": "resolveHostPort",
+      "relevant_doc_ids": [
+        "b574196a-1e67-4938-8990-b72322b063c6"
+      ],
+      "source_doc_id": "b574196a-1e67-4938-8990-b72322b063c6",
+      "source_title": "resolveHostPort"
+    },
+    {
+      "query": "extractBackfillSource",
+      "relevant_doc_ids": [
+        "03095abc-ce4f-434c-8164-28690d28103c"
+      ],
+      "source_doc_id": "03095abc-ce4f-434c-8164-28690d28103c",
+      "source_title": "extractBackfillSource"
+    },
+    {
+      "query": "tasks.md",
+      "relevant_doc_ids": [
+        "1df394f2-ef4a-40b8-a142-327ef1127f9a"
+      ],
+      "source_doc_id": "1df394f2-ef4a-40b8-a142-327ef1127f9a",
+      "source_title": "tasks.md"
+    },
+    {
+      "query": "TestParseWorkspaceRemoveFlags_Help",
+      "relevant_doc_ids": [
+        "6f0e9894-7de8-4027-a8a1-fbd1763f4f01"
+      ],
+      "source_doc_id": "6f0e9894-7de8-4027-a8a1-fbd1763f4f01",
+      "source_title": "TestParseWorkspaceRemoveFlags_Help"
+    },
+    {
+      "query": "attempts",
+      "relevant_doc_ids": [
+        "880affbf-d2f8-4838-9d8f-c24542731863"
+      ],
+      "source_doc_id": "880affbf-d2f8-4838-9d8f-c24542731863",
+      "source_title": "attempts"
+    },
+    {
+      "query": "queryRequest",
+      "relevant_doc_ids": [
+        "1797d61a-4cb2-40f9-b3d6-90e967f41e28"
+      ],
+      "source_doc_id": "1797d61a-4cb2-40f9-b3d6-90e967f41e28",
+      "source_title": "queryRequest"
+    },
+    {
+      "query": "GetCollectionByName",
+      "relevant_doc_ids": [
+        "49bdd32d-45ea-4941-a741-eb944a44475a"
+      ],
+      "source_doc_id": "49bdd32d-45ea-4941-a741-eb944a44475a",
+      "source_title": "GetCollectionByName"
+    },
+    {
+      "query": "TestCSRF_7StepMatrix",
+      "relevant_doc_ids": [
+        "c7158c36-cf73-49b5-867f-cf89683d5d88"
+      ],
+      "source_doc_id": "c7158c36-cf73-49b5-867f-cf89683d5d88",
+      "source_title": "TestCSRF_7StepMatrix"
+    },
+    {
+      "query": "documents_test.go",
+      "relevant_doc_ids": [
+        "98dddb69-2219-4248-809f-5e7eaa81ae94"
+      ],
+      "source_doc_id": "98dddb69-2219-4248-809f-5e7eaa81ae94",
+      "source_title": "documents_test.go"
+    },
+    {
+      "query": "remaining",
+      "relevant_doc_ids": [
+        "2985fa27-5656-47a5-9fe3-8d59f7d45c70"
+      ],
+      "source_doc_id": "2985fa27-5656-47a5-9fe3-8d59f7d45c70",
+      "source_title": "remaining"
+    },
+    {
+      "query": "resp",
+      "relevant_doc_ids": [
+        "a2b8ea32-94a4-442c-a4fc-203dd0f0ee41"
+      ],
+      "source_doc_id": "a2b8ea32-94a4-442c-a4fc-203dd0f0ee41",
+      "source_title": "resp"
+    },
+    {
+      "query": "extractImports",
+      "relevant_doc_ids": [
+        "6cef8765-ba62-4737-9b0d-f277211d34ef"
+      ],
+      "source_doc_id": "6cef8765-ba62-4737-9b0d-f277211d34ef",
+      "source_title": "extractImports"
+    },
+    {
+      "query": "ListDocumentsByIDsRow",
+      "relevant_doc_ids": [
+        "ed239a19-294f-4cab-8bdc-37d20ce86f16"
+      ],
+      "source_doc_id": "ed239a19-294f-4cab-8bdc-37d20ce86f16",
+      "source_title": "ListDocumentsByIDsRow"
+    },
+    {
+      "query": "NewRunner",
+      "relevant_doc_ids": [
+        "3c6c4a2c-d9df-4e57-9220-cb1094205820"
+      ],
+      "source_doc_id": "3c6c4a2c-d9df-4e57-9220-cb1094205820",
+      "source_title": "NewRunner"
+    },
+    {
+      "query": "TestResolveCollision_NoExisting",
+      "relevant_doc_ids": [
+        "8868ae42-60a0-4dff-afb8-99e9df819697"
+      ],
+      "source_doc_id": "8868ae42-60a0-4dff-afb8-99e9df819697",
+      "source_title": "TestResolveCollision_NoExisting"
+    },
+    {
+      "query": "HybridSearch",
+      "relevant_doc_ids": [
+        "d3768520-8dc2-4c55-8133-9059d3acceaf"
+      ],
+      "source_doc_id": "d3768520-8dc2-4c55-8133-9059d3acceaf",
+      "source_title": "HybridSearch"
+    },
+    {
+      "query": "search.sql",
+      "relevant_doc_ids": [
+        "9dea99ff-e056-46fd-bbda-6f27142d7abc"
+      ],
+      "source_doc_id": "9dea99ff-e056-46fd-bbda-6f27142d7abc",
+      "source_title": "search.sql"
+    },
+    {
+      "query": ".dockerignore",
+      "relevant_doc_ids": [
+        "9feb99f6-b101-4ab5-a5f4-cd4f85ee9eda"
+      ],
+      "source_doc_id": "9feb99f6-b101-4ab5-a5f4-cd4f85ee9eda",
+      "source_title": ".dockerignore"
+    },
+    {
+      "query": "ResolveConfigPathStrict",
+      "relevant_doc_ids": [
+        "5dfcb461-f811-4e11-a807-b5584028c9cc"
+      ],
+      "source_doc_id": "5dfcb461-f811-4e11-a807-b5584028c9cc",
+      "source_title": "ResolveConfigPathStrict"
+    },
+    {
+      "query": "goNodeKind",
+      "relevant_doc_ids": [
+        "5f9d451d-04d6-4b5f-9bbd-2f588e638345"
+      ],
+      "source_doc_id": "5f9d451d-04d6-4b5f-9bbd-2f588e638345",
+      "source_title": "goNodeKind"
+    },
+    {
+      "query": "TestLoadMessagesNoDir",
+      "relevant_doc_ids": [
+        "65861ccb-fb09-4ed5-975f-3c1d6edc8ad5"
+      ],
+      "source_doc_id": "65861ccb-fb09-4ed5-975f-3c1d6edc8ad5",
+      "source_title": "TestLoadMessagesNoDir"
+    },
+    {
+      "query": "TestRunMultiGetCmd_ServerError",
+      "relevant_doc_ids": [
+        "58063cf4-a2c1-4a0b-a626-bf3e03a63d12"
+      ],
+      "source_doc_id": "58063cf4-a2c1-4a0b-a626-bf3e03a63d12",
+      "source_title": "TestRunMultiGetCmd_ServerError"
+    },
+    {
+      "query": "embedRequest",
+      "relevant_doc_ids": [
+        "5873f136-973d-42e0-9e1c-792f37bcf016"
+      ],
+      "source_doc_id": "5873f136-973d-42e0-9e1c-792f37bcf016",
+      "source_title": "embedRequest"
+    },
+    {
+      "query": "cmd_get_test.go",
+      "relevant_doc_ids": [
+        "8bdd141a-bd04-4cf7-b405-070f82b76654"
+      ],
+      "source_doc_id": "8bdd141a-bd04-4cf7-b405-070f82b76654",
+      "source_title": "cmd_get_test.go"
+    },
+    {
+      "query": "oracle-review-multi-db-discovery.md",
+      "relevant_doc_ids": [
+        "71843180-00dd-48f2-9682-8e6bc075849a"
+      ],
+      "source_doc_id": "71843180-00dd-48f2-9682-8e6bc075849a",
+      "source_title": "oracle-review-multi-db-discovery.md"
+    },
+    {
+      "query": "TestConfigFileOverride",
+      "relevant_doc_ids": [
+        "5731af18-b54e-400e-8592-bb5b75f0dee7"
+      ],
+      "source_doc_id": "5731af18-b54e-400e-8592-bb5b75f0dee7",
+      "source_title": "TestConfigFileOverride"
+    },
+    {
+      "query": "fetchOverview",
+      "relevant_doc_ids": [
+        "41514575-1228-481c-a9d2-545ce0245d45"
+      ],
+      "source_doc_id": "41514575-1228-481c-a9d2-545ce0245d45",
+      "source_title": "fetchOverview"
+    },
+    {
+      "query": "chunksAfter",
+      "relevant_doc_ids": [
+        "15a62b98-397b-40e0-8baf-1b1de3ad145f"
+      ],
+      "source_doc_id": "15a62b98-397b-40e0-8baf-1b1de3ad145f",
+      "source_title": "chunksAfter"
+    },
+    {
+      "query": "vsearchRow",
+      "relevant_doc_ids": [
+        "f798b187-14b5-4575-856d-2fd07c00c4d5"
+      ],
+      "source_doc_id": "f798b187-14b5-4575-856d-2fd07c00c4d5",
+      "source_title": "vsearchRow"
+    },
+    {
+      "query": "docker-compose.yml",
+      "relevant_doc_ids": [
+        "084bf40b-9fa2-489a-9d8f-e5150802447e"
+      ],
+      "source_doc_id": "084bf40b-9fa2-489a-9d8f-e5150802447e",
+      "source_title": "docker-compose.yml"
+    },
+    {
+      "query": "DeleteGraphEdgesByFile",
+      "relevant_doc_ids": [
+        "7b5cf336-a5f6-4723-8ddd-2c33cb656261"
+      ],
+      "source_doc_id": "7b5cf336-a5f6-4723-8ddd-2c33cb656261",
+      "source_title": "DeleteGraphEdgesByFile"
+    },
+    {
+      "query": "isLoopback",
+      "relevant_doc_ids": [
+        "f2da6e3b-ab53-4739-9642-61d9a5896c87"
+      ],
+      "source_doc_id": "f2da6e3b-ab53-4739-9642-61d9a5896c87",
+      "source_title": "isLoopback"
+    },
+    {
+      "query": "DeleteOrphanChunks",
+      "relevant_doc_ids": [
+        "8d3799dc-ff5c-45f3-9808-f2e30b54b69a"
+      ],
+      "source_doc_id": "8d3799dc-ff5c-45f3-9808-f2e30b54b69a",
+      "source_title": "DeleteOrphanChunks"
+    },
+    {
+      "query": "RegisterTools",
+      "relevant_doc_ids": [
+        "bd2be87e-4f07-4601-97ee-486bd75c94a2"
+      ],
+      "source_doc_id": "bd2be87e-4f07-4601-97ee-486bd75c94a2",
+      "source_title": "RegisterTools"
+    },
+    {
+      "query": "TestGoGraphExtractor_NoPanic_LargeFile",
+      "relevant_doc_ids": [
+        "d387ce8d-5454-457d-84ff-4fba003c0a74"
+      ],
+      "source_doc_id": "d387ce8d-5454-457d-84ff-4fba003c0a74",
+      "source_title": "TestGoGraphExtractor_NoPanic_LargeFile"
+    },
+    {
+      "query": "MarkChunkEmbedded",
+      "relevant_doc_ids": [
+        "7bd5468d-65d2-4861-a57c-10ab8e8d49e0"
+      ],
+      "source_doc_id": "7bd5468d-65d2-4861-a57c-10ab8e8d49e0",
+      "source_title": "MarkChunkEmbedded"
+    },
+    {
+      "query": "StorageConfig",
+      "relevant_doc_ids": [
+        "b7eed16e-b431-4e49-9052-16caca9663c0"
+      ],
+      "source_doc_id": "b7eed16e-b431-4e49-9052-16caca9663c0",
+      "source_title": "StorageConfig"
+    },
+    {
+      "query": "proposal.md",
+      "relevant_doc_ids": [
+        "cc39ee02-c927-432f-b280-6ccd7628ea83"
+      ],
+      "source_doc_id": "cc39ee02-c927-432f-b280-6ccd7628ea83",
+      "source_title": "proposal.md"
+    },
+    {
+      "query": "useMnemonicNav.test.tsx",
+      "relevant_doc_ids": [
+        "b265f211-910e-4cdf-9657-bf11ce9235d8"
+      ],
+      "source_doc_id": "b265f211-910e-4cdf-9657-bf11ce9235d8",
+      "source_title": "useMnemonicNav.test.tsx"
+    },
+    {
+      "query": "client.ts",
+      "relevant_doc_ids": [
+        "fcdc5d1b-826e-432d-af98-b89a7beba063"
+      ],
+      "source_doc_id": "fcdc5d1b-826e-432d-af98-b89a7beba063",
+      "source_title": "client.ts"
+    },
+    {
+      "query": "MarkChunkEmbedPermanentlyFailedParams",
+      "relevant_doc_ids": [
+        "509b8d0a-ddbb-42da-8170-0db2566deb93"
+      ],
+      "source_doc_id": "509b8d0a-ddbb-42da-8170-0db2566deb93",
+      "source_title": "MarkChunkEmbedPermanentlyFailedParams"
+    },
+    {
+      "query": "column_1",
+      "relevant_doc_ids": [
+        "748a0374-d0e9-4d07-b60f-64407a01e1a8"
+      ],
+      "source_doc_id": "748a0374-d0e9-4d07-b60f-64407a01e1a8",
+      "source_title": "column_1"
+    }
+  ]
+}
