@@ -9,6 +9,7 @@ const SEQUENCES: Record<string, string> = {
   'g': '/graph',
   's': '/symbols',
   'h': '/harvest',
+  'w': '/workspaces',
   ',': '/settings',
 }
 

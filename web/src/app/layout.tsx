@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { path: '/graph', label: 'Graph', key: 'g g' },
   { path: '/symbols', label: 'Symbols', key: 'g s' },
   { path: '/harvest', label: 'Harvest', key: 'g h' },
+  { path: '/workspaces', label: 'Workspaces', key: 'g w' },
   { path: '/settings', label: 'Settings', key: 'g ,' },
 ] as const
 
@@ -41,6 +42,7 @@ function NavIcon({ name }: { name: string }) {
     symbols: 'M4 6h16M4 12h10M4 18h16',
     harvest: 'M4 4l8 16 4-8 4-4-4-4z',
     settings: 'M12 8a4 4 0 100 8 4 4 0 000-8zM3 12l2 .8M19 12l2 .8M12 3v2M12 19v2',
+    workspaces: 'M3 7h7v7H3V7zm11 0h7v7h-7V7zM3 16h18v5H3v-5z',
   }
   return (
     <svg

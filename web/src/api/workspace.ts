@@ -7,3 +7,7 @@ export function getCurrentWorkspace(): string | null {
 export function setCurrentWorkspace(hash: string): void {
   localStorage.setItem(WORKSPACE_KEY, hash)
 }
+
+export function clearCurrentWorkspace(): void {
+  localStorage.removeItem(WORKSPACE_KEY)
+}
