@@ -94,7 +94,10 @@ func registerRoutes(s *Server) {
 		data.POST("/query", handlers.Query(s.searchService, s.logger, s.recorder))
 	}
 
-	data.GET("/stats", handlers.Stats(s.queries, s.logger))
+	statsH := handlers.NewStatsHandler(s.queries, s.logger, s.version, s.startTime, s.embedCfg, s.migrationVersion, s.getHealthCfg, s.currentConfig().Watcher, s.watcher)
+	statsH.SetHarvestStatus(s.harvestStatus)
+	s.statsHandler = statsH
+	data.GET("/stats", statsH.Handle)
 	write.POST("/graph/neighborhood", handlers.GraphNeighborhood(s.queries, s.logger))
 	data.GET("/links/:doc_id/backlinks", handlers.Backlinks(s.queries, s.logger))
 	if s.concreteLinkRes != nil {

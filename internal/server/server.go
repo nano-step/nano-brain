@@ -60,6 +60,7 @@ type Server struct {
 	migrationVersion int64
 	harvestStatus  handlers.HarvestStatusSnapshot
 	healthHandler  *handlers.Health
+	statsHandler   *handlers.StatsHandler
 	linkResolver       handlers.LinkResolver
 	linkExtractor      handlers.LinkExtractor
 	concreteLinkRes    *links.Resolver
@@ -192,6 +193,9 @@ func (s *Server) SetHarvestStatus(mode, dbRoot, dbPath, sessionDir string, dbCou
 	}
 	if s.healthHandler != nil {
 		s.healthHandler.SetHarvestStatus(s.harvestStatus)
+	}
+	if s.statsHandler != nil {
+		s.statsHandler.SetHarvestStatus(s.harvestStatus)
 	}
 }
 
