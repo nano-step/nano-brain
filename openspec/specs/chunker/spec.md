@@ -1,7 +1,8 @@
-# Spec — Chunker Hard-Split Safety Net
+# chunker Specification
 
-## ADDED Requirements
-
+## Purpose
+TBD - created by archiving change fix-chunker-hard-split. Update Purpose after archive.
+## Requirements
 ### Requirement: Bounded Chunk Size
 
 `chunk.Split` SHALL guarantee that every returned Chunk's content length in bytes is `<= TargetSize + searchWindow/2` (default: 4000 bytes). No chunk shall be emitted whose length exceeds this bound, regardless of input shape.
@@ -59,8 +60,6 @@ When hard-split is required, the cut boundary SHALL be chosen from the range `[T
 - **THEN** the chunk boundary falls at the nearest valid UTF-8 rune start within the upper range
 - **AND** the resulting chunks are still `<= TargetSize`
 
-## MODIFIED Requirements
-
 ### Requirement: Line-Aware Splitting Preserved
 
 `chunk.Split` SHALL continue to prefer line-boundary splits (via `findSplitPoints`) for any input whose lines are within `TargetSize`. Hard-split SHALL only activate as a post-process for chunks that would otherwise exceed `TargetSize + searchWindow/2`.
@@ -70,3 +69,4 @@ When hard-split is required, the cut boundary SHALL be chosen from the range `[T
 - **WHEN** the input is a typical markdown document with paragraphs of 200-500 chars per line and total length 12,000 chars
 - **THEN** the chunks returned are identical (byte-for-byte) to chunks produced by the pre-fix algorithm
 - **AND** chunk boundaries are at section headers / blank lines as before
+
