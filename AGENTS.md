@@ -155,10 +155,10 @@ Why: keeps worktree state co-located with the repo, avoids polluting the parent 
 
 ```bash
 # CORRECT — worktree inside the repo
-git worktree add .opencode/worktrees/feat-NNN-short-name b-main
+git worktree add .opencode/worktrees/feat-NNN-short-name master
 
 # WRONG — pollutes parent dir, hard to track
-git worktree add ../nano-brain-foo b-main
+git worktree add ../nano-brain-foo master
 ```
 
 After PR merge, clean up:
@@ -312,9 +312,9 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 - **No starting work without a GitHub issue.**
 - **No archiving without Review Verdict = PASS.**
 - **No modifying harness rules without user approval.**
-- **No direct commits to `master` or `b-main`.** Always work on a feature branch (`feat/`, `fix/`, `chore/`, `docs/`) and open a PR. The only exception is a merge commit produced by resolving an existing PR's conflicts — and even then the resolution should normally happen on the PR's head branch, not on the target.
+- **No direct commits to `master`.** Always work on a feature branch (`feat/`, `fix/`, `chore/`, `docs/`) and open a PR. The only exception is a merge commit produced by resolving an existing PR's conflicts — and even then the resolution should normally happen on the PR's head branch, not on the target.
 - **No `git push origin <branch>` without first verifying you are ON `<branch>`.** Always run `git branch --show-current` (or check `git status` header) before pushing. Pushing while on the wrong branch silently returns "Everything up-to-date" without error. Use `git push` (no args, relies on upstream tracking) when in doubt.
-- **No merging trunk-into-trunk locally.** If a PR's base needs to absorb its head (e.g. `b-main → master`), let the GitHub merge button handle it after conflicts are resolved on the PR head. Local `git merge origin/<other-trunk>` followed by `push origin <this-trunk>` bypasses CI gates and PR review history.
+- **Single-trunk model: `master` only.** All feature branches branch from `master` and PR back to `master`. The `b-main` staging branch was retired on 2026-06-01 — no more `b-main → master` promotion step. Every merge to `master` triggers `auto-tag.yml` → `release.yml` → npm publish.
 
 ### Git push workflow (container environment)
 
@@ -352,7 +352,7 @@ Date-based auto-release pipeline (master push → tag → binaries + npm publish
 | `master` push | `.github/workflows/auto-tag.yml` | Compute next tag `v{YYYY}.{M}.{D}.{N}` (e.g. `v2026.5.30.1`) → push tag via `RELEASE_PAT` |
 | `v*` tag push | `.github/workflows/release.yml` | Cross-build 4-platform Go binaries (linux/darwin × amd64/arm64) → create GH Release with binaries → `npm publish --tag latest` both `@nano-step/nano-brain` and `nano-brain` (unscoped alias) |
 | PR opened/sync | `.github/workflows/gemini-review.yml` → shared `gemini-review.yml@v1` | Gemini code review comment on PR |
-| `master` / `b-main` push, PR | `.github/workflows/ci.yml` | `go build` + `go test -race -short` against ephemeral PG service |
+| `master` push, PR | `.github/workflows/ci.yml` | `go build` + `go test -race -short` against ephemeral PG service |
 
 Required repo secrets (set via `gh secret set --repo nano-step/nano-brain`):
 

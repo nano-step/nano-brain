@@ -167,13 +167,13 @@ phase_pre_work() {
         fi
     fi
     
-    # 1.4 Branch b-main up-to-date
+    # 1.4 Branch master up-to-date
     if git fetch origin &>/dev/null; then
-        unpushed=$(git log origin/b-main..b-main --oneline 2>/dev/null || echo "")
+        unpushed=$(git log origin/master..master --oneline 2>/dev/null || echo "")
         if [[ -n "$unpushed" ]]; then
-            add_check "FAIL" "1.4 b-main has unpushed commits"
+            add_check "FAIL" "1.4 master has unpushed commits"
         else
-            add_check "PASS" "1.4 b-main is up-to-date"
+            add_check "PASS" "1.4 master is up-to-date"
         fi
     else
         add_check "SKIP" "1.4 Cannot fetch origin"
@@ -190,29 +190,29 @@ phase_pre_work() {
         add_check "SKIP" "1.5 Go not installed"
     fi
     
-    # 1.6 Feature branch created off b-main (NOT master)
+    # 1.6 Feature branch created off master
     current_branch=$(git branch --show-current 2>/dev/null || echo "")
-    if [[ -n "$current_branch" && "$current_branch" != "b-main" ]]; then
-        parent_is_bmain=$(git merge-base --is-ancestor b-main "$current_branch" 2>/dev/null && echo "yes" || echo "no")
-        if [[ "$parent_is_bmain" == "yes" ]]; then
-            add_check "PASS" "1.6 Branch '$current_branch' is based on b-main"
+    if [[ -n "$current_branch" && "$current_branch" != "master" ]]; then
+        parent_is_master=$(git merge-base --is-ancestor master "$current_branch" 2>/dev/null && echo "yes" || echo "no")
+        if [[ "$parent_is_master" == "yes" ]]; then
+            add_check "PASS" "1.6 Branch '$current_branch' is based on master"
         else
-            add_check "FAIL" "1.6 Branch '$current_branch' is NOT based on b-main"
+            add_check "FAIL" "1.6 Branch '$current_branch' is NOT based on master"
         fi
     else
-        add_check "SKIP" "1.6 On b-main or branch unknown (check after creating feature branch)"
+        add_check "SKIP" "1.6 On master or branch unknown (check after creating feature branch)"
     fi
 }
 
 phase_in_progress() {
     echo "─ IN-PROGRESS checks"
     
-    # 2.1 On feature branch, not b-main
+    # 2.1 On feature branch, not master
     current_branch=$(git branch --show-current 2>/dev/null || echo "unknown")
-    if [[ "$current_branch" != "b-main" ]]; then
+    if [[ "$current_branch" != "master" ]]; then
         add_check "PASS" "2.1 On feature branch: $current_branch"
     else
-        add_check "FAIL" "2.1 Still on b-main (should be on feature branch)"
+        add_check "FAIL" "2.1 Still on master (should be on feature branch)"
     fi
     
     # 2.2 OpenSpec change active
@@ -409,13 +409,13 @@ phase_pre_merge() {
         add_check "SKIP" "3.8 gh CLI not installed"
     fi
     
-    # 3.9 PR targets b-main (NOT master)
+    # 3.9 PR targets master
     if cmd_exists gh; then
         base_ref=$(gh pr view --json baseRefName --jq '.baseRefName' 2>/dev/null || echo "")
-        if [[ "$base_ref" == "b-main" ]]; then
-            add_check "PASS" "3.9 PR targets b-main"
+        if [[ "$base_ref" == "master" ]]; then
+            add_check "PASS" "3.9 PR targets master"
         elif [[ -n "$base_ref" ]]; then
-            add_check "FAIL" "3.9 PR targets '$base_ref' — MUST target b-main"
+            add_check "FAIL" "3.9 PR targets '$base_ref' — MUST target master"
         else
             add_check "SKIP" "3.9 No open PR found"
         fi
@@ -485,7 +485,7 @@ phase_pre_merge() {
     if ! cmd_exists git; then
         add_check "SKIP" "3.13 git not installed"
     else
-        web_touched=$(git diff --name-only origin/b-main...HEAD 2>/dev/null \
+        web_touched=$(git diff --name-only origin/master...HEAD 2>/dev/null \
             | grep -E '^(web/src/|web/package\.json|internal/server/handlers/|internal/server/webui/|internal/server/routes\.go)' || true)
         if [[ -z "$web_touched" ]]; then
             add_check "SKIP" "3.13 no web change in PR diff (smoke:ui not required)"
@@ -576,18 +576,18 @@ phase_post_merge() {
     
     # 4.4 Feature branch deleted
     current_branch=$(git branch --show-current 2>/dev/null || echo "unknown")
-    if [[ "$current_branch" == "b-main" ]]; then
-        add_check "PASS" "4.4 On b-main (feature branch cleaned up)"
+    if [[ "$current_branch" == "master" ]]; then
+        add_check "PASS" "4.4 On master (feature branch cleaned up)"
     else
         add_check "FAIL" "4.4 Still on feature branch: $current_branch"
     fi
     
-    # 4.5 Validation on b-main
+    # 4.5 Validation on master
     if cmd_exists go; then
-        if git checkout b-main &>/dev/null && go build ./... &>/dev/null && go test -race -short ./... >/dev/null 2>&1; then
-            add_check "PASS" "4.5 b-main validation passes"
+        if git checkout master &>/dev/null && go build ./... &>/dev/null && go test -race -short ./... >/dev/null 2>&1; then
+            add_check "PASS" "4.5 master validation passes"
         else
-            add_check "FAIL" "4.5 Validation failed on b-main"
+            add_check "FAIL" "4.5 Validation failed on master"
         fi
     else
         add_check "SKIP" "4.5 Go not installed"
@@ -653,15 +653,15 @@ phase_retro() {
         add_check "SKIP" "6.2 No merged PRs to compute avg cycles"
     fi
 
-    # 6.3 CI failure count on b-main during epic window
-    if gh run list --branch b-main --limit 100 --json conclusion &>/dev/null; then
-        ci_fails=$(gh run list --branch b-main --limit 100 \
+    # 6.3 CI failure count on master during epic window
+    if gh run list --branch master --limit 100 --json conclusion &>/dev/null; then
+        ci_fails=$(gh run list --branch master --limit 100 \
             --json conclusion --jq '[.[] | select(.conclusion == "failure")] | length' \
             2>/dev/null || echo "0")
         if [[ "$ci_fails" -gt 5 ]]; then
-            add_check "FAIL" "6.3 CI failures on b-main: $ci_fails (> 5 — investigate)"
+            add_check "FAIL" "6.3 CI failures on master: $ci_fails (> 5 — investigate)"
         else
-            add_check "PASS" "6.3 CI failures on b-main: $ci_fails"
+            add_check "PASS" "6.3 CI failures on master: $ci_fails"
         fi
     else
         add_check "SKIP" "6.3 gh run list not accessible"

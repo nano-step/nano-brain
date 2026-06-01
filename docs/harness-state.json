@@ -3,7 +3,7 @@
   "position": {
     "epic": 10,
     "story": "next",
-    "branch": "b-main",
+    "branch": "master",
     "base_commit": "bda265f",
     "note": "Epic 9 complete: 8/8 stories merged, openspec web-ui archived (2026-05-30-web-ui), Epic #239 closed"
   },
