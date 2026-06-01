@@ -59,18 +59,20 @@ func runWorkspacesListWithIO(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	var items []map[string]interface{}
-	if err := json.Unmarshal(body, &items); err != nil {
+	var resp struct {
+		Workspaces []map[string]interface{} `json:"workspaces"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
 		fmt.Fprintf(stderr, "failed to parse server response: %v\n", err)
 		return 1
 	}
 
-	if len(items) == 0 {
+	if len(resp.Workspaces) == 0 {
 		fmt.Fprintln(stderr, "No workspaces registered.")
 		return 0
 	}
 
-	renderWorkspacesTable(items, stdout)
+	renderWorkspacesTable(resp.Workspaces, stdout)
 	return 0
 }
 
@@ -78,10 +80,10 @@ func renderWorkspacesTable(items []map[string]interface{}, w io.Writer) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "HASH\tNAME\tPATH\tDOCS\tLAST UPDATE")
 	for _, it := range items {
-		hash := stringField(it, "workspace_hash")
+		hash := stringField(it, "hash")
 		name := stringField(it, "name")
 		path := stringField(it, "root_path")
-		docs := intField(it, "document_count")
+		docs := intField(it, "doc_count")
 		last := lastUpdateField(it["last_document_updated"])
 
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n",
