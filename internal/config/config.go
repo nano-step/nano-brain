@@ -47,10 +47,16 @@ type Config struct {
 }
 
 // ServerConfig holds server configuration.
+//
+// ServeOnly disables ALL background workers (embed queue, file watcher,
+// harvester) so the binary only serves HTTP requests. Useful for proxy
+// containers that share a DB with a primary host instance running the
+// workers — prevents duplicate work and races. See issue #282.
 type ServerConfig struct {
-	Host string     `koanf:"host" json:"host"`
-	Port int        `koanf:"port" json:"port"`
-	Auth AuthConfig `koanf:"auth" json:"auth"`
+	Host      string     `koanf:"host" json:"host"`
+	Port      int        `koanf:"port" json:"port"`
+	Auth      AuthConfig `koanf:"auth" json:"auth"`
+	ServeOnly bool       `koanf:"serve_only" json:"serve_only"`
 }
 
 // AuthConfig holds authentication configuration for VPS/remote deployments.
