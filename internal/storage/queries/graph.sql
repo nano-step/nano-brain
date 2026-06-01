@@ -62,3 +62,47 @@ SET source_file = EXCLUDED.source_file, metadata = EXCLUDED.metadata;
 -- name: DeleteReferenceEdgesBySource :exec
 DELETE FROM graph_edges
 WHERE workspace_hash = $1 AND source_node = $2 AND edge_type = 'references';
+
+-- name: ListTopGraphNodesByDegree :many
+WITH degrees AS (
+    SELECT ge.source_node AS node
+    FROM graph_edges ge
+    WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+    UNION ALL
+    SELECT ge.target_node AS node
+    FROM graph_edges ge
+    WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+)
+SELECT degrees.node, count(*)::bigint AS degree
+FROM degrees
+GROUP BY degrees.node
+ORDER BY degree DESC, degrees.node ASC
+LIMIT $3;
+
+-- name: CountDistinctGraphNodes :one
+WITH degrees AS (
+    SELECT ge.source_node AS node
+    FROM graph_edges ge
+    WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+    UNION
+    SELECT ge.target_node AS node
+    FROM graph_edges ge
+    WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+)
+SELECT count(*)::bigint FROM degrees;
+
+-- name: ListEdgesBetweenNodes :many
+SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND edge_type = ANY($2::text[])
+  AND source_node = ANY($3::text[])
+  AND target_node = ANY($3::text[]);
+
+-- name: ListEdgesTouchingNodes :many
+SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND edge_type = ANY($2::text[])
+  AND (source_node = ANY($3::text[]) OR target_node = ANY($3::text[]))
+LIMIT $4;
