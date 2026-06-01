@@ -3,6 +3,7 @@ package chunk
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestChunkEmptyInput(t *testing.T) {
@@ -253,4 +254,164 @@ func findOverlap(a, b string) int {
 		}
 	}
 	return 0
+}
+
+func maxChunkLen(chunks []Chunk) int {
+	maxLen := 0
+	for _, c := range chunks {
+		if len(c.Content) > maxLen {
+			maxLen = len(c.Content)
+		}
+	}
+	return maxLen
+}
+
+func TestSplit_HardSplit_SingleLongLine(t *testing.T) {
+	input := strings.Repeat("a", 10000)
+	chunks := Split(input, DefaultConfig())
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks for 10k-char single line, got %d", len(chunks))
+	}
+	allowed := DefaultConfig().TargetSize + searchWindow/2
+	if got := maxChunkLen(chunks); got > allowed {
+		t.Errorf("chunk exceeds allowed size: got %d, max allowed %d", got, allowed)
+	}
+}
+
+func TestSplit_HardSplit_FenceTrapped(t *testing.T) {
+	input := "```go\n" + strings.Repeat("x", 8000)
+	chunks := Split(input, DefaultConfig())
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks for fence-trapped 8k content, got %d", len(chunks))
+	}
+	allowed := DefaultConfig().TargetSize + searchWindow/2
+	if got := maxChunkLen(chunks); got > allowed {
+		t.Errorf("fence-trapped chunk exceeds allowed: got %d, max %d", got, allowed)
+	}
+}
+
+func TestSplit_HardSplit_UTF8_CJK(t *testing.T) {
+	input := strings.Repeat("漢", 2500)
+	chunks := Split(input, DefaultConfig())
+	allowed := DefaultConfig().TargetSize + searchWindow/2
+	for i, c := range chunks {
+		if !utf8.ValidString(c.Content) {
+			t.Errorf("chunk %d not valid UTF-8", i)
+		}
+		if len(c.Content) > allowed {
+			t.Errorf("chunk %d exceeds allowed: %d > %d", i, len(c.Content), allowed)
+		}
+	}
+	var rebuilt strings.Builder
+	for _, c := range chunks {
+		rebuilt.WriteString(c.Content)
+	}
+	if rebuilt.String() != input {
+		t.Errorf("CJK round-trip failed: got %d bytes, want %d", rebuilt.Len(), len(input))
+	}
+}
+
+func TestSplit_HardSplit_UTF8_Emoji(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 60; i++ {
+		b.WriteString(strings.Repeat("a", 100))
+		b.WriteString("🚀")
+	}
+	input := b.String()
+	chunks := Split(input, DefaultConfig())
+	allowed := DefaultConfig().TargetSize + searchWindow/2
+	for i, c := range chunks {
+		if !utf8.ValidString(c.Content) {
+			t.Errorf("chunk %d not valid UTF-8 (likely cut mid-emoji)", i)
+		}
+		if len(c.Content) > allowed {
+			t.Errorf("chunk %d exceeds allowed: %d > %d", i, len(c.Content), allowed)
+		}
+	}
+}
+
+func TestSplit_HardSplit_Pathological(t *testing.T) {
+	input := strings.Repeat("x", 1_000_000)
+	chunks := Split(input, DefaultConfig())
+	allowed := DefaultConfig().TargetSize + searchWindow/2
+	if len(chunks) < 200 {
+		t.Errorf("expected many chunks for 1MB input, got %d", len(chunks))
+	}
+	if got := maxChunkLen(chunks); got > allowed {
+		t.Errorf("pathological chunk exceeds allowed: %d > %d", got, allowed)
+	}
+}
+
+func TestSplit_HardSplit_PrefersSentenceBoundary(t *testing.T) {
+	sentence := strings.Repeat("a", 80) + ". "
+	input := strings.Repeat(sentence, 60)
+	chunks := Split(input, DefaultConfig())
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks, got %d", len(chunks))
+	}
+	for i := 0; i < len(chunks)-1; i++ {
+		c := chunks[i].Content
+		if len(c) < 2 {
+			continue
+		}
+		tail := c[len(c)-2:]
+		if tail != ". " && !strings.HasSuffix(c, "\n") && !strings.HasSuffix(c, " ") {
+			t.Errorf("chunk %d does not end at sentence/whitespace boundary: tail=%q", i, tail)
+		}
+	}
+}
+
+func TestSplit_HardSplit_NormalContentUnchanged(t *testing.T) {
+	input := strings.Repeat("# Section\n\nNormal paragraph of about 80 chars per line.\n\n", 150)
+	chunks := Split(input, DefaultConfig())
+	allowed := DefaultConfig().TargetSize + searchWindow/2
+	if got := maxChunkLen(chunks); got > allowed {
+		t.Errorf("normal content exceeds allowed: %d > %d", got, allowed)
+	}
+	if len(chunks) < 2 {
+		t.Errorf("expected multiple chunks for normal long content, got %d", len(chunks))
+	}
+}
+
+func TestFindHardBoundary_PrefersBlankLine(t *testing.T) {
+	s := strings.Repeat("a", 2700) + "\n\n" + strings.Repeat("b", 1000)
+	cut := findHardBoundary(s, 3600)
+	if cut != 2702 {
+		t.Errorf("expected cut after blank-line marker at 2702, got %d", cut)
+	}
+}
+
+func TestFindHardBoundary_FallsBackToNewline(t *testing.T) {
+	s := strings.Repeat("a", 3000) + "\n" + strings.Repeat("b", 1000)
+	cut := findHardBoundary(s, 3600)
+	if cut != 3001 {
+		t.Errorf("expected cut after newline at 3001, got %d", cut)
+	}
+}
+
+func TestFindHardBoundary_FallsBackToSentence(t *testing.T) {
+	s := strings.Repeat("a", 3400) + ". " + strings.Repeat("b", 1000)
+	cut := findHardBoundary(s, 3600)
+	if cut != 3402 {
+		t.Errorf("expected cut after sentence at 3402, got %d", cut)
+	}
+}
+
+func TestFindHardBoundary_FallsBackToWhitespace(t *testing.T) {
+	s := strings.Repeat("a", 3400) + " " + strings.Repeat("b", 1000)
+	cut := findHardBoundary(s, 3600)
+	if cut != 3401 {
+		t.Errorf("expected cut after whitespace at 3401, got %d", cut)
+	}
+}
+
+func TestFindHardBoundary_RuneBoundaryFallback(t *testing.T) {
+	s := strings.Repeat("漢", 2000)
+	cut := findHardBoundary(s, 3600)
+	if cut <= 0 || cut > 3600 {
+		t.Errorf("cut out of range: %d", cut)
+	}
+	if cut < len(s) && !utf8.RuneStart(s[cut]) {
+		t.Errorf("cut at %d is not a UTF-8 rune start (byte %x)", cut, s[cut])
+	}
 }

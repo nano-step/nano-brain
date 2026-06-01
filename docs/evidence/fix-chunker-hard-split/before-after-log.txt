@@ -1,0 +1,26 @@
+chunker hard-split evidence — issue #297
+========================================
+
+BEFORE FIX (line-aware only): adversarial inputs produced unbounded chunks.
+The embed queue would then truncate them silently, logging:
+  "chunk truncated before embedding (exceeds context limit) original_len=N truncated_len=3000"
+No finite embedding.max_chars setting could silence the warning because
+inputs like minified files (single line of 100k+ chars) always exceed any
+ceiling.
+
+AFTER FIX (hard-split safety net post-process): every chunk is bounded.
+TargetSize=3600, searchWindow=800, so maxAllowed = TargetSize+searchWindow/2 = 4000.
+
+Test cases run via internal/chunk:
+
+    10k single line                input=10000   chunks=3    max_chunk=3600   over_4000=0
+    fence-trapped 8k               input=8006    chunks=3    max_chunk=3600   over_4000=0
+    CJK 7500 bytes                 input=7500    chunks=2    max_chunk=3900   over_4000=0
+    1MB pathological               input=1000000 chunks=278  max_chunk=3600   over_4000=0
+    realistic harvested LLM msg    input=8200    chunks=3    max_chunk=3567   over_4000=0
+
+Acceptance criterion from #297: zero chunks exceed allowed size.
+Result: over_4000=0 across all 5 cases. PASS.
+
+Unit tests covering boundary algorithm: 13 tests in chunk_test.go all PASS.
+Full suite (go test -race -short ./...): all packages PASS.
