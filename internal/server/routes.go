@@ -57,7 +57,7 @@ func registerRoutes(s *Server) {
 	boundAddr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 	csrfMW := middleware.CSRF(boundAddr)
 
-	data := api.Group("", workspaceMiddleware())
+	data := api.Group("", workspaceMiddleware(s.db))
 
 	if s.eventBus != nil {
 		data.GET("/events", handlers.EventsHandler(s.eventBus, s.logger))

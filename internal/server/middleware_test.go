@@ -23,7 +23,7 @@ func applyMiddleware(mw echo.MiddlewareFunc, req *http.Request) *httptest.Respon
 }
 
 func TestWorkspaceMiddleware_POST_WithWorkspace(t *testing.T) {
-	mw := workspaceMiddleware()
+	mw := workspaceMiddleware(nil)
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"workspace":"abc"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
@@ -48,7 +48,7 @@ func TestWorkspaceMiddleware_POST_WithWorkspace(t *testing.T) {
 }
 
 func TestWorkspaceMiddleware_POST_MissingWorkspace(t *testing.T) {
-	mw := workspaceMiddleware()
+	mw := workspaceMiddleware(nil)
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := applyMiddleware(mw, req)
@@ -66,7 +66,7 @@ func TestWorkspaceMiddleware_POST_MissingWorkspace(t *testing.T) {
 }
 
 func TestWorkspaceMiddleware_GET_WithQueryParam(t *testing.T) {
-	mw := workspaceMiddleware()
+	mw := workspaceMiddleware(nil)
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/?workspace=myws", nil)
 	rec := httptest.NewRecorder()
@@ -90,7 +90,7 @@ func TestWorkspaceMiddleware_GET_WithQueryParam(t *testing.T) {
 }
 
 func TestWorkspaceMiddleware_GET_MissingQueryParam(t *testing.T) {
-	mw := workspaceMiddleware()
+	mw := workspaceMiddleware(nil)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := applyMiddleware(mw, req)
 
@@ -107,7 +107,7 @@ func TestWorkspaceMiddleware_GET_MissingQueryParam(t *testing.T) {
 }
 
 func TestWorkspaceMiddleware_AllValue(t *testing.T) {
-	mw := workspaceMiddleware()
+	mw := workspaceMiddleware(nil)
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"workspace":"all"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)

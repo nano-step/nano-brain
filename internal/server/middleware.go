@@ -117,7 +117,7 @@ func versionHeaderMiddleware(version string) echo.MiddlewareFunc {
 	}
 }
 
-func workspaceMiddleware() echo.MiddlewareFunc {
+func workspaceMiddleware(db *sql.DB) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			var workspace string
@@ -144,6 +144,28 @@ func workspaceMiddleware() echo.MiddlewareFunc {
 					"error":   "workspace_required",
 					"message": "A workspace identifier is required. Pass workspace in request body (POST) or query string (GET). Use 'all' for cross-workspace queries.",
 				})
+			}
+
+			// Validate workspace exists in DB (skip "all" for cross-workspace queries).
+			// Without this check, unknown workspace silently returns empty results (issue #309)
+			// which prevents agents from distinguishing "no results" from "wrong hash".
+			// Sets ctx flag "workspace_validated" so workspaceRegisteredMiddleware can
+			// skip its duplicate DB lookup downstream.
+			if workspace != "all" && db != nil {
+				q := sqlc.New(db)
+				if _, err := q.GetWorkspaceByHash(c.Request().Context(), workspace); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						return c.JSON(http.StatusNotFound, map[string]string{
+							"error":   "workspace_not_found",
+							"message": fmt.Sprintf("workspace %q is not registered; use POST /api/v1/init to register it first", workspace),
+						})
+					}
+					return c.JSON(http.StatusInternalServerError, map[string]string{
+						"error":   "workspace_lookup_failed",
+						"message": err.Error(),
+					})
+				}
+				c.Set("workspace_validated", true)
 			}
 
 			c.Set("workspace", workspace)
@@ -203,6 +225,10 @@ func workspaceRegisteredMiddleware(db *sql.DB) echo.MiddlewareFunc {
 					"error":   "workspace_all_not_supported",
 					"message": "this endpoint does not support the 'all' workspace scope; provide a specific registered workspace hash",
 				})
+			}
+			// Skip DB lookup if workspaceMiddleware already validated (issue #309 / PR #310 — avoid duplicate query).
+			if v, ok := c.Get("workspace_validated").(bool); ok && v {
+				return next(c)
 			}
 			q := sqlc.New(db)
 			if _, err := q.GetWorkspaceByHash(c.Request().Context(), workspace); err != nil {

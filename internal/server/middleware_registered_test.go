@@ -78,7 +78,7 @@ func setupWsRegTestPG(t *testing.T) *sql.DB {
 
 func chainWorkspaceMiddlewares(db *sql.DB) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return workspaceMiddleware()(workspaceRegisteredMiddleware(db)(next))
+		return workspaceMiddleware(nil)(workspaceRegisteredMiddleware(db)(next))
 	}
 }
 
