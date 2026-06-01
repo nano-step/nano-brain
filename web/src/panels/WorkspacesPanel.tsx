@@ -2,14 +2,15 @@ import { useState } from 'react'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useWorkspaces } from '../hooks/useWorkspaces'
 import { useRemoveWorkspace } from './workspaces/useRemoveWorkspace'
-import { getCurrentWorkspace, setCurrentWorkspace } from '../api/workspace'
+import { clearCurrentWorkspace, getCurrentWorkspace, setCurrentWorkspace } from '../api/workspace'
 import type { Workspace } from '../api/types'
 
-function fmtNum(n: number): string {
-  return n.toLocaleString()
+function fmtNum(n: number | undefined | null): string {
+  return n?.toLocaleString() ?? '0'
 }
 
-function truncHash(hash: string): string {
+function truncHash(hash: string | undefined | null): string {
+  if (!hash) return ''
   return hash.length > 16 ? hash.slice(0, 16) + '…' : hash
 }
 
@@ -53,11 +54,7 @@ function WorkspacesPanelBody() {
           if (remaining.length > 0) {
             setCurrentWorkspace(remaining[0].hash)
           } else {
-            try {
-              localStorage.removeItem('nano-brain.workspace')
-            } catch {
-              void 0
-            }
+            clearCurrentWorkspace()
           }
           window.location.reload()
         }
@@ -164,7 +161,7 @@ function WorkspacesPanelBody() {
           open={true}
           danger
           title="Remove workspace"
-          description={`This will permanently delete workspace "${pending.name}" (${pending.doc_count.toLocaleString()} docs, ${pending.chunk_count.toLocaleString()} chunks) and ALL its data. This cannot be undone.${errorMsg ? `\n\nError: ${errorMsg}` : ''}`}
+          description={`This will permanently delete workspace "${pending.name}" (${fmtNum(pending.doc_count)} docs, ${fmtNum(pending.chunk_count)} chunks) and ALL its data. This cannot be undone.${errorMsg ? `\n\nError: ${errorMsg}` : ''}`}
           confirmText={pending.name}
           confirmLabel={removeMut.isPending ? 'Removing…' : 'Remove workspace'}
           onConfirm={onConfirmRemove}
