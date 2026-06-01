@@ -149,6 +149,8 @@ func workspaceMiddleware(db *sql.DB) echo.MiddlewareFunc {
 			// Validate workspace exists in DB (skip "all" for cross-workspace queries).
 			// Without this check, unknown workspace silently returns empty results (issue #309)
 			// which prevents agents from distinguishing "no results" from "wrong hash".
+			// Sets ctx flag "workspace_validated" so workspaceRegisteredMiddleware can
+			// skip its duplicate DB lookup downstream.
 			if workspace != "all" && db != nil {
 				q := sqlc.New(db)
 				if _, err := q.GetWorkspaceByHash(c.Request().Context(), workspace); err != nil {
@@ -163,6 +165,7 @@ func workspaceMiddleware(db *sql.DB) echo.MiddlewareFunc {
 						"message": err.Error(),
 					})
 				}
+				c.Set("workspace_validated", true)
 			}
 
 			c.Set("workspace", workspace)
@@ -222,6 +225,10 @@ func workspaceRegisteredMiddleware(db *sql.DB) echo.MiddlewareFunc {
 					"error":   "workspace_all_not_supported",
 					"message": "this endpoint does not support the 'all' workspace scope; provide a specific registered workspace hash",
 				})
+			}
+			// Skip DB lookup if workspaceMiddleware already validated (issue #309 / PR #310 — avoid duplicate query).
+			if v, ok := c.Get("workspace_validated").(bool); ok && v {
+				return next(c)
 			}
 			q := sqlc.New(db)
 			if _, err := q.GetWorkspaceByHash(c.Request().Context(), workspace); err != nil {
