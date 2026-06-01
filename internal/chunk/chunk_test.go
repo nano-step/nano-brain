@@ -1,6 +1,7 @@
 package chunk
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -413,5 +414,34 @@ func TestFindHardBoundary_RuneBoundaryFallback(t *testing.T) {
 	}
 	if cut < len(s) && !utf8.RuneStart(s[cut]) {
 		t.Errorf("cut at %d is not a UTF-8 rune start (byte %x)", cut, s[cut])
+	}
+}
+
+func TestSplit_DefaultConfig_MatchesEmbedBudget(t *testing.T) {
+	cfg := DefaultConfig()
+	const defaultMaxEmbedChars = 3000
+	got := cfg.TargetSize + searchWindow/2
+	if got != defaultMaxEmbedChars {
+		t.Errorf("contract violation: DefaultConfig max output is %d, but embed queue's defaultMaxEmbedChars is %d. These MUST match — see issue #300.", got, defaultMaxEmbedChars)
+	}
+}
+
+func TestSplit_TraceJSON_NoOversize(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`{"events":[`)
+	for i := 0; i < 60; i++ {
+		fmt.Fprintf(&b, `{"ts":%d,"data":"%s"},`, i, strings.Repeat("x", 200))
+	}
+	b.WriteString(`]}`)
+	input := b.String()
+	chunks := Split(input, DefaultConfig())
+	const embedMaxChars = 3000
+	for i, c := range chunks {
+		if len(c.Content) > embedMaxChars {
+			t.Errorf("chunk %d would trigger embed-queue truncation: len=%d > %d", i, len(c.Content), embedMaxChars)
+		}
+	}
+	if len(chunks) < 2 {
+		t.Errorf("expected multiple chunks for JSON of %d chars, got %d", len(input), len(chunks))
 	}
 }

@@ -18,15 +18,21 @@ type Chunk struct {
 }
 
 // Config controls the chunking behaviour.
+//
+// Invariant for DefaultConfig: TargetSize + searchWindow/2 == defaultMaxEmbedChars
+// in internal/embed/queue.go. With defaults (2600 + 400) this gives 3000 bytes,
+// matching the embed budget so chunks never need truncation downstream.
 type Config struct {
-	TargetSize int // target chunk size in chars (default 3600)
+	TargetSize int // target chunk size in chars (default 2600)
 	Overlap    int // overlap between consecutive chunks in chars (default 200)
 	MinSize    int // minimum chunk size; shorter trailing chunks are merged (default 200)
 }
 
-// DefaultConfig returns the standard chunking configuration.
+// DefaultConfig returns the standard chunking configuration. TargetSize is
+// 2600 so that worst-case output (TargetSize + searchWindow/2 = 3000) matches
+// the embed queue's defaultMaxEmbedChars exactly — no silent truncation.
 func DefaultConfig() Config {
-	return Config{TargetSize: 3600, Overlap: 200, MinSize: 200}
+	return Config{TargetSize: 2600, Overlap: 200, MinSize: 200}
 }
 
 // lineInfo holds metadata about a single line in the source document.

@@ -1,0 +1,35 @@
+chunker/embed-queue contract evidence — issue #300
+==================================================
+
+BEFORE (v2026.6.0104, after PR #298): the chunker's max output was 4000 chars
+(TargetSize 3600 + searchWindow/2 400) but the embed queue truncated at
+defaultMaxEmbedChars=3000. Any chunk in the band 3000 < len <= 4000 silently
+tripped the queue. User saw recurring:
+
+  WRN chunk truncated before embedding (exceeds context limit)
+      chunk_id=807a44e5-... original_len=3671 truncated_len=3000
+
+AFTER (this PR): chunker DefaultConfig TargetSize lowered from 3600 -> 2600
+so worst-case output (2600 + 400) = 3000 chars, matching the embed queue
+exactly. Every chunk produced by DefaultConfig now fits without truncation.
+
+Run with the same demo program structure used in PR #298:
+
+    user's 3671-char JSON shape         input=3671   chunks=2  max_chunk=2600  over_3000=0
+    5000-char single-line trace         input=5000   chunks=2  max_chunk=2600  over_3000=0
+    10k char minified file              input=10000  chunks=4  max_chunk=2600  over_3000=0
+    CJK 5000 chars                      input=5100   chunks=2  max_chunk=2598  over_3000=0
+    realistic harvested LLM msg         input=4000   chunks=2  max_chunk=2592  over_3000=0
+
+Acceptance: zero chunks above the embed budget. over_3000=0 across all
+adversarial inputs, including the user's exact 3671-char trace scenario.
+
+Tests (internal/chunk/chunk_test.go):
+- 13 hard-split tests from #297 still PASS (thresholds auto-adjusted via
+  DefaultConfig().TargetSize + searchWindow/2)
+- New TestSplit_DefaultConfig_MatchesEmbedBudget asserts the contract invariant
+- New TestSplit_TraceJSON_NoOversize reproduces the user's failure shape
+- Fuzz seeds PASS
+
+Full suite: go test -race -short ./...  PASS
+go vet ./...  clean
