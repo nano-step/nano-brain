@@ -64,21 +64,23 @@ function candidateTagsForVersion(version) {
   const candidates = [`v${version}`];
   if (parts.length === 3) {
     const patch = parts[2];
-    const patchNum = parseInt(patch, 10);
-    if (!isNaN(patchNum) && patch.length < 4) {
-      const padded = String(patchNum).padStart(4, "0");
-      if (padded !== patch) {
-        candidates.push(`v${parts[0]}.${parts[1]}.${padded}`);
-      }
+    if (/^\d+$/.test(patch) && patch.length < 4) {
+      const padded = patch.padStart(4, "0");
+      candidates.push(`v${parts[0]}.${parts[1]}.${padded}`);
     }
   }
   return candidates;
+}
+
+function normalizeVersion(v) {
+  return v.replace(/^v/, "").split(".").map((p) => p.replace(/^0+/, "") || "0").join(".");
 }
 
 function httpGetJSON(url) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { "User-Agent": "nano-brain-postinstall" } }, (res) => {
       if (res.statusCode !== 200) {
+        res.resume();
         return reject(new Error(`API ${url} returned HTTP ${res.statusCode}`));
       }
       let body = "";
@@ -93,9 +95,10 @@ function httpGetJSON(url) {
 async function resolveTagFromAPI(version, assetName) {
   const api = `https://api.github.com/repos/${REPO}/releases`;
   const releases = await httpGetJSON(`${api}?per_page=30`);
+  const normalizedTarget = normalizeVersion(version);
   for (const r of releases) {
     if (!r.tag_name) continue;
-    if (r.tag_name === `v${version}` || r.tag_name.replace(/^v/, "").replace(/^0+/, "") === version) {
+    if (normalizeVersion(r.tag_name) === normalizedTarget) {
       if (r.assets && r.assets.some((a) => a.name === assetName)) {
         return r.tag_name;
       }
