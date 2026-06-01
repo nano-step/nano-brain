@@ -9,6 +9,10 @@ import (
 // unsafeNoAuth is set by the --unsafe-no-auth flag on the serve subcommand.
 var unsafeNoAuth bool
 
+// serveOnlyFlag is set by the --serve-only flag on the serve subcommand and
+// overrides cfg.Server.ServeOnly at startup. See issue #282.
+var serveOnlyFlag bool
+
 func isLoopback(host string) bool {
 	h := strings.ToLower(strings.Trim(host, "[]"))
 	if h == "" || h == "localhost" || h == "127.0.0.1" || h == "::1" {

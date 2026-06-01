@@ -156,7 +156,7 @@ func TestListWorkspacesHandler(t *testing.T) {
 	q := &mockQuerier{
 		listWorkspacesWithStatsFn: func(_ context.Context) ([]sqlc.ListWorkspacesWithStatsRow, error) {
 			return []sqlc.ListWorkspacesWithStatsRow{
-				{ID: uuid.New(), Hash: "abc123", Name: "myproject", Path: "/home/user/myproject", CreatedAt: now, UpdatedAt: now, DocumentCount: 5, LastDocumentUpdated: now},
+				{ID: uuid.New(), Hash: "abc123", Name: "myproject", Path: "/home/user/myproject", CreatedAt: now, UpdatedAt: now, DocumentCount: 5, ChunkCount: 42, LastDocumentUpdated: now},
 			}, nil
 		},
 	}
@@ -175,28 +175,38 @@ func TestListWorkspacesHandler(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	var items []map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&items); err != nil {
+	var resp struct {
+		Workspaces []map[string]interface{} `json:"workspaces"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(items))
+	if len(resp.Workspaces) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(resp.Workspaces))
 	}
 
-	item := items[0]
-	for _, field := range []string{"workspace_hash", "root_path", "name", "document_count", "last_document_updated", "created_at", "updated_at"} {
+	item := resp.Workspaces[0]
+	for _, field := range []string{"hash", "root_path", "name", "doc_count", "chunk_count", "last_document_updated", "created_at", "updated_at"} {
 		if _, ok := item[field]; !ok {
-			t.Errorf("missing field %q in response item", field)
+			t.Errorf("missing field %q in response item; got keys: %v", field, mapKeys(item))
 		}
 	}
 
-	if item["workspace_hash"] != "abc123" {
-		t.Errorf("expected workspace_hash=abc123, got %v", item["workspace_hash"])
+	if item["hash"] != "abc123" {
+		t.Errorf("expected hash=abc123, got %v", item["hash"])
 	}
-	if item["document_count"] != float64(5) {
-		t.Errorf("expected document_count=5, got %v", item["document_count"])
+	if item["doc_count"] != float64(5) {
+		t.Errorf("expected doc_count=5, got %v", item["doc_count"])
 	}
+}
+
+func mapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func TestInitWorkspaceCreatesCodeCollection(t *testing.T) {
@@ -349,12 +359,17 @@ func TestListWorkspacesHandlerEmpty(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	var items []map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&items); err != nil {
+	var resp struct {
+		Workspaces []map[string]interface{} `json:"workspaces"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(items) != 0 {
-		t.Errorf("expected empty list, got %d items", len(items))
+	if resp.Workspaces == nil {
+		t.Errorf("expected workspaces field to be empty array, got nil (must serialize as [])")
+	}
+	if len(resp.Workspaces) != 0 {
+		t.Errorf("expected empty list, got %d items", len(resp.Workspaces))
 	}
 }

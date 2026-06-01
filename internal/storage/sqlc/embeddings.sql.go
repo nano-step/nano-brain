@@ -26,6 +26,17 @@ func (q *Queries) CountEmbedFailedChunks(ctx context.Context, workspaceHash stri
 	return count, err
 }
 
+const countEmbeddingsByWorkspace = `-- name: CountEmbeddingsByWorkspace :one
+SELECT count(*) FROM embeddings WHERE workspace_hash = $1
+`
+
+func (q *Queries) CountEmbeddingsByWorkspace(ctx context.Context, workspaceHash string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countEmbeddingsByWorkspace, workspaceHash)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPendingChunks = `-- name: CountPendingChunks :one
 SELECT count(*) FROM chunks WHERE workspace_hash = $1 AND embed_status = 'pending'
 `

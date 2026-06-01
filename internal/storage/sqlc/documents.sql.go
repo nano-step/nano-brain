@@ -34,6 +34,23 @@ func (q *Queries) CountStaleRawOpenCodeDocs(ctx context.Context) (int32, error) 
 	return n, err
 }
 
+const deleteDocumentByIDAndWorkspace = `-- name: DeleteDocumentByIDAndWorkspace :execrows
+DELETE FROM documents WHERE id = $1 AND workspace_hash = $2
+`
+
+type DeleteDocumentByIDAndWorkspaceParams struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+}
+
+func (q *Queries) DeleteDocumentByIDAndWorkspace(ctx context.Context, arg DeleteDocumentByIDAndWorkspaceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteDocumentByIDAndWorkspace, arg.ID, arg.WorkspaceHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteDocumentsByWorkspace = `-- name: DeleteDocumentsByWorkspace :exec
 DELETE FROM documents WHERE workspace_hash = $1
 `
@@ -168,20 +185,26 @@ func (q *Queries) GetDocumentBySourcePath(ctx context.Context, arg GetDocumentBy
 }
 
 const listDocumentsByWorkspace = `-- name: ListDocumentsByWorkspace :many
-SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, created_at, updated_at
-FROM documents WHERE workspace_hash = $1 ORDER BY updated_at DESC
+SELECT d.id, d.workspace_hash, d.content_hash, d.title, d.source_path, d.collection, d.tags, d.created_at, d.updated_at,
+       d.supersedes_id,
+       (SELECT s.id FROM documents s WHERE s.supersedes_id = d.id LIMIT 1) AS superseded_by_id
+FROM documents d
+WHERE d.workspace_hash = $1
+ORDER BY d.updated_at DESC
 `
 
 type ListDocumentsByWorkspaceRow struct {
-	ID            uuid.UUID
-	WorkspaceHash string
-	ContentHash   string
-	Title         string
-	SourcePath    string
-	Collection    string
-	Tags          []string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID             uuid.UUID
+	WorkspaceHash  string
+	ContentHash    string
+	Title          string
+	SourcePath     string
+	Collection     string
+	Tags           []string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	SupersedesID   uuid.NullUUID
+	SupersededByID uuid.UUID
 }
 
 func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash string) ([]ListDocumentsByWorkspaceRow, error) {
@@ -203,6 +226,8 @@ func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash st
 			pq.Array(&i.Tags),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SupersedesID,
+			&i.SupersededByID,
 		); err != nil {
 			return nil, err
 		}

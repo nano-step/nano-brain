@@ -33,14 +33,25 @@ type initResponse struct {
 	AgentsSnippet string `json:"agents_snippet"`
 }
 
+// workspaceItem is the JSON shape of a single workspace returned by
+// GET /api/v1/workspaces. Field names match web/src/api/types.ts Workspace
+// interface. Renaming these JSON tags is a breaking API change — see
+// openspec/specs/workspaces-api-contract for the canonical contract.
 type workspaceItem struct {
-	WorkspaceHash       string     `json:"workspace_hash"`
+	Hash                string     `json:"hash"`
 	RootPath            string     `json:"root_path"`
 	Name                string     `json:"name"`
-	DocumentCount       int64      `json:"document_count"`
+	DocumentCount       int64      `json:"doc_count"`
+	ChunkCount          int64      `json:"chunk_count"`
 	LastDocumentUpdated *time.Time `json:"last_document_updated"`
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
+}
+
+// listWorkspacesResponse wraps the workspaces array. The wrapper enables
+// future extension (pagination, totals) without breaking clients.
+type listWorkspacesResponse struct {
+	Workspaces []workspaceItem `json:"workspaces"`
 }
 
 func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath string) (sqlc.Workspace, error) {
@@ -190,10 +201,11 @@ func ListWorkspaces(q WorkspaceQuerier, logger zerolog.Logger) echo.HandlerFunc 
 		items := make([]workspaceItem, 0, len(rows))
 		for _, r := range rows {
 			item := workspaceItem{
-				WorkspaceHash: r.Hash,
+				Hash:          r.Hash,
 				RootPath:      r.Path,
 				Name:          r.Name,
 				DocumentCount: r.DocumentCount,
+				ChunkCount:    r.ChunkCount,
 				CreatedAt:     r.CreatedAt,
 				UpdatedAt:     r.UpdatedAt,
 			}
@@ -203,6 +215,6 @@ func ListWorkspaces(q WorkspaceQuerier, logger zerolog.Logger) echo.HandlerFunc 
 			items = append(items, item)
 		}
 
-		return c.JSON(http.StatusOK, items)
+		return c.JSON(http.StatusOK, listWorkspacesResponse{Workspaces: items})
 	}
 }

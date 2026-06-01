@@ -37,22 +37,24 @@ func newWorkspacesServer(t *testing.T, payload interface{}, status int) *httptes
 }
 
 func TestWorkspacesList_DefaultTable(t *testing.T) {
-	payload := []map[string]interface{}{
+	payload := map[string]interface{}{"workspaces": []map[string]interface{}{
 		{
-			"workspace_hash":        "7f44356179aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"hash":                  "7f44356179aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			"root_path":             "/Users/me/projects/nano-brain",
 			"name":                  "nano-brain",
-			"document_count":        0,
+			"doc_count":             0,
+			"chunk_count":           0,
 			"last_document_updated": nil,
 		},
 		{
-			"workspace_hash":        "8a9c1d4f12bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			"hash":                  "8a9c1d4f12bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			"root_path":             "/Users/me/projects/my-app",
 			"name":                  "my-app",
-			"document_count":        42,
+			"doc_count":             42,
+			"chunk_count":           250,
 			"last_document_updated": "2026-05-25T10:30:00Z",
 		},
-	}
+	}}
 	ts := newWorkspacesServer(t, payload, http.StatusOK)
 	setHostPort(t, ts)
 
@@ -84,14 +86,14 @@ func TestWorkspacesList_DefaultTable(t *testing.T) {
 }
 
 func TestWorkspacesList_Json(t *testing.T) {
-	payload := []map[string]interface{}{
+	payload := map[string]interface{}{"workspaces": []map[string]interface{}{
 		{
-			"workspace_hash": "abc123",
-			"root_path":      "/p",
-			"name":           "x",
-			"document_count": 1,
+			"hash":      "abc123",
+			"root_path": "/p",
+			"name":      "x",
+			"doc_count": 1,
 		},
-	}
+	}}
 	ts := newWorkspacesServer(t, payload, http.StatusOK)
 	setHostPort(t, ts)
 
@@ -102,11 +104,13 @@ func TestWorkspacesList_Json(t *testing.T) {
 	}
 
 	body := strings.TrimRight(out.String(), "\n")
-	var got []map[string]interface{}
+	var got struct {
+		Workspaces []map[string]interface{} `json:"workspaces"`
+	}
 	if err := json.Unmarshal([]byte(body), &got); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\n%s", err, body)
 	}
-	if len(got) != 1 || got[0]["workspace_hash"] != "abc123" {
+	if len(got.Workspaces) != 1 || got.Workspaces[0]["hash"] != "abc123" {
 		t.Errorf("unexpected JSON body: %s", body)
 	}
 	if !strings.HasSuffix(out.String(), "\n") {
@@ -115,7 +119,7 @@ func TestWorkspacesList_Json(t *testing.T) {
 }
 
 func TestWorkspacesList_Empty_Default(t *testing.T) {
-	ts := newWorkspacesServer(t, []map[string]interface{}{}, http.StatusOK)
+	ts := newWorkspacesServer(t, map[string]interface{}{"workspaces": []map[string]interface{}{}}, http.StatusOK)
 	setHostPort(t, ts)
 
 	var out, errOut bytes.Buffer
@@ -132,7 +136,7 @@ func TestWorkspacesList_Empty_Default(t *testing.T) {
 }
 
 func TestWorkspacesList_Empty_Json(t *testing.T) {
-	ts := newWorkspacesServer(t, []map[string]interface{}{}, http.StatusOK)
+	ts := newWorkspacesServer(t, map[string]interface{}{"workspaces": []map[string]interface{}{}}, http.StatusOK)
 	setHostPort(t, ts)
 
 	var out, errOut bytes.Buffer
@@ -140,9 +144,10 @@ func TestWorkspacesList_Empty_Json(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; stderr=%q", code, errOut.String())
 	}
-	got := out.String()
-	if got != "[]\n" {
-		t.Errorf("stdout = %q, want %q", got, "[]\n")
+	got := strings.TrimRight(out.String(), "\n")
+	want := `{"workspaces":[]}`
+	if got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
 	}
 }
 
@@ -166,14 +171,14 @@ func TestWorkspacesList_ServerError(t *testing.T) {
 
 func TestWorkspacesList_LongPathTruncation(t *testing.T) {
 	longPath := "/Users/tamlh/workspaces/self/AI/Tools/nano-brain/very/deeply/nested/example/path/project"
-	payload := []map[string]interface{}{
+	payload := map[string]interface{}{"workspaces": []map[string]interface{}{
 		{
-			"workspace_hash": "deadbeef0011223344",
-			"root_path":      longPath,
-			"name":           "deep",
-			"document_count": 0,
+			"hash":      "deadbeef0011223344",
+			"root_path": longPath,
+			"name":      "deep",
+			"doc_count": 0,
 		},
-	}
+	}}
 	ts := newWorkspacesServer(t, payload, http.StatusOK)
 	setHostPort(t, ts)
 
@@ -192,15 +197,15 @@ func TestWorkspacesList_LongPathTruncation(t *testing.T) {
 }
 
 func TestWorkspacesList_NeverColumn(t *testing.T) {
-	payload := []map[string]interface{}{
+	payload := map[string]interface{}{"workspaces": []map[string]interface{}{
 		{
-			"workspace_hash":        "h1",
+			"hash":                  "h1",
 			"root_path":             "/p",
 			"name":                  "n",
-			"document_count":        0,
+			"doc_count":             0,
 			"last_document_updated": nil,
 		},
-	}
+	}}
 	ts := newWorkspacesServer(t, payload, http.StatusOK)
 	setHostPort(t, ts)
 
@@ -215,9 +220,9 @@ func TestWorkspacesList_NeverColumn(t *testing.T) {
 }
 
 func TestWorkspacesAliasLs(t *testing.T) {
-	payload := []map[string]interface{}{
-		{"workspace_hash": "h", "root_path": "/p", "name": "n", "document_count": 1},
-	}
+	payload := map[string]interface{}{"workspaces": []map[string]interface{}{
+		{"hash": "h", "root_path": "/p", "name": "n", "doc_count": 1},
+	}}
 	ts := newWorkspacesServer(t, payload, http.StatusOK)
 	setHostPort(t, ts)
 
@@ -237,9 +242,9 @@ func TestWorkspacesAliasLs(t *testing.T) {
 }
 
 func TestWorkspacesNoArgsDefaultsToList(t *testing.T) {
-	payload := []map[string]interface{}{
-		{"workspace_hash": "h", "root_path": "/p", "name": "n", "document_count": 1},
-	}
+	payload := map[string]interface{}{"workspaces": []map[string]interface{}{
+		{"hash": "h", "root_path": "/p", "name": "n", "doc_count": 1},
+	}}
 	ts := newWorkspacesServer(t, payload, http.StatusOK)
 	setHostPort(t, ts)
 
@@ -254,9 +259,9 @@ func TestWorkspacesNoArgsDefaultsToList(t *testing.T) {
 }
 
 func TestWorkspacesFlagOnlyDefaultsToList(t *testing.T) {
-	payload := []map[string]interface{}{
-		{"workspace_hash": "h", "root_path": "/p", "name": "n", "document_count": 1},
-	}
+	payload := map[string]interface{}{"workspaces": []map[string]interface{}{
+		{"hash": "h", "root_path": "/p", "name": "n", "doc_count": 1},
+	}}
 	ts := newWorkspacesServer(t, payload, http.StatusOK)
 	setHostPort(t, ts)
 
@@ -265,7 +270,7 @@ func TestWorkspacesFlagOnlyDefaultsToList(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; stderr=%q", code, errOut.String())
 	}
-	if !strings.HasPrefix(out.String(), "[") {
-		t.Errorf("expected JSON array output; got:\n%s", out.String())
+	if !strings.HasPrefix(out.String(), "{") {
+		t.Errorf("expected JSON object output; got:\n%s", out.String())
 	}
 }

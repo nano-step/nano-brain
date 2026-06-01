@@ -22,6 +22,7 @@ SELECT COUNT(*) FROM workspaces;
 -- name: ListWorkspacesWithStats :many
 SELECT w.*,
     (SELECT COUNT(*) FROM documents d WHERE d.workspace_hash = w.hash) AS document_count,
+    (SELECT COUNT(*) FROM chunks c WHERE c.workspace_hash = w.hash) AS chunk_count,
     (SELECT MAX(d.updated_at) FROM documents d WHERE d.workspace_hash = w.hash) AS last_document_updated
 FROM workspaces w
 ORDER BY w.name;

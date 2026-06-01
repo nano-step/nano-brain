@@ -195,6 +195,7 @@ func (q *Queries) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 const listWorkspacesWithStats = `-- name: ListWorkspacesWithStats :many
 SELECT w.id, w.hash, w.name, w.path, w.created_at, w.updated_at,
     (SELECT COUNT(*) FROM documents d WHERE d.workspace_hash = w.hash) AS document_count,
+    (SELECT COUNT(*) FROM chunks c WHERE c.workspace_hash = w.hash) AS chunk_count,
     (SELECT MAX(d.updated_at) FROM documents d WHERE d.workspace_hash = w.hash) AS last_document_updated
 FROM workspaces w
 ORDER BY w.name
@@ -208,6 +209,7 @@ type ListWorkspacesWithStatsRow struct {
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 	DocumentCount       int64
+	ChunkCount          int64
 	LastDocumentUpdated interface{}
 }
 
@@ -228,6 +230,7 @@ func (q *Queries) ListWorkspacesWithStats(ctx context.Context) ([]ListWorkspaces
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DocumentCount,
+			&i.ChunkCount,
 			&i.LastDocumentUpdated,
 		); err != nil {
 			return nil, err

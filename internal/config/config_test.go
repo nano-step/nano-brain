@@ -947,3 +947,51 @@ func TestConfig_JSONUsesSnakeCase(t *testing.T) {
 		}
 	}
 }
+
+func TestServeOnlyConfigFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	t.Run("default is false", func(t *testing.T) {
+		yaml := "server:\n  host: localhost\n  port: 3100\n"
+		if err := os.WriteFile(configPath, []byte(yaml), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Server.ServeOnly {
+			t.Errorf("ServeOnly default should be false, got true")
+		}
+	})
+
+	t.Run("yaml serve_only: true is honored", func(t *testing.T) {
+		yaml := "server:\n  host: localhost\n  port: 3100\n  serve_only: true\n"
+		if err := os.WriteFile(configPath, []byte(yaml), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cfg.Server.ServeOnly {
+			t.Errorf("ServeOnly should be true from YAML, got false")
+		}
+	})
+
+	t.Run("env NANO_BRAIN_SERVER_SERVE_ONLY overrides yaml", func(t *testing.T) {
+		yaml := "server:\n  host: localhost\n  port: 3100\n  serve_only: false\n"
+		if err := os.WriteFile(configPath, []byte(yaml), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("NANO_BRAIN_SERVER_SERVE_ONLY", "true")
+		cfg, err := Load(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cfg.Server.ServeOnly {
+			t.Errorf("ServeOnly should be true from env, got false")
+		}
+	})
+}

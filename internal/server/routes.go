@@ -80,10 +80,13 @@ func registerRoutes(s *Server) {
 	data.DELETE("/collections/:name", handlers.RemoveCollection(s.queries, s.watcher, s.logger))
 
 	data.GET("/tags", handlers.ListTags(s.queries, s.logger))
+	data.GET("/documents", handlers.ListDocuments(s.queries, s.logger))
+	data.DELETE("/documents/:id", handlers.DeleteDocument(s.queries, s.logger))
 	data.POST("/get", handlers.GetDocument(s.queries, s.logger))
 	data.POST("/multi-get", handlers.MultiGet(s.queries, s.logger))
 	data.GET("/symbols", handlers.ListSymbols(s.queries, s.logger))
 	data.POST("/graph/query", handlers.GraphQuery(s.queries, s.logger))
+	data.POST("/graph/overview", handlers.GraphOverview(s.queries, s.logger))
 	data.POST("/graph/impact", handlers.GraphImpact(s.queries, s.logger))
 	data.POST("/graph/trace", handlers.GraphTrace(s.queries, s.logger))
 
@@ -94,7 +97,10 @@ func registerRoutes(s *Server) {
 		data.POST("/query", handlers.Query(s.searchService, s.logger, s.recorder))
 	}
 
-	data.GET("/stats", handlers.Stats(s.queries, s.logger))
+	statsH := handlers.NewStatsHandler(s.queries, s.logger, s.version, s.startTime, s.embedCfg, s.migrationVersion, s.getHealthCfg, s.currentConfig().Watcher, s.watcher)
+	statsH.SetHarvestStatus(s.harvestStatus)
+	s.statsHandler = statsH
+	data.GET("/stats", statsH.Handle)
 	write.POST("/graph/neighborhood", handlers.GraphNeighborhood(s.queries, s.logger))
 	data.GET("/links/:doc_id/backlinks", handlers.Backlinks(s.queries, s.logger))
 	if s.concreteLinkRes != nil {

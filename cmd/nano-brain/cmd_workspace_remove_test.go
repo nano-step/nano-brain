@@ -16,8 +16,10 @@ func newRemoveServer(t *testing.T, hash string, respPayload interface{}, status 
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workspaces":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
-				{"workspace_hash": hash, "document_count": 5},
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"workspaces": []map[string]interface{}{
+					{"hash": hash, "doc_count": 5},
+				},
 			})
 		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/workspaces/"+hash:
 			w.Header().Set("Content-Type", "application/json")

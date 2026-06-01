@@ -45,6 +45,8 @@ func main() {
 	var daemonChild bool
 	flag.StringVar(&configPath, "config", "", "path to config file (default: ~/.nano-brain/config.yml)")
 	flag.BoolVar(&daemonChild, "daemon-child", false, "")
+	flag.BoolVar(&unsafeNoAuth, "unsafe-no-auth", false, "allow binding to non-loopback without auth")
+	flag.BoolVar(&serveOnlyFlag, "serve-only", false, "disable background workers (embed queue, watcher, harvester) — issue #282")
 	flag.IntVar(&verbose, "v", 0, "verbosity: 0=info, 1=debug, 2=trace")
 	flag.IntVar(&verbose, "verbose", 0, "")
 	flag.Parse()
@@ -217,6 +219,10 @@ func startServer(configPath string) {
 
 	applyVerbose(&cfg.Logging)
 
+	if serveOnlyFlag {
+		cfg.Server.ServeOnly = true
+	}
+
 	if err := checkBindSafety(cfg.Server.Host, cfg.Server.Auth.Enabled); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
@@ -230,6 +236,10 @@ func startServer(configPath string) {
 
 	if unsafeNoAuth && !isLoopback(cfg.Server.Host) && !cfg.Server.Auth.Enabled {
 		logger.Warn().Str("host", cfg.Server.Host).Msg("bound to non-loopback without auth (--unsafe-no-auth set)")
+	}
+
+	if cfg.Server.ServeOnly {
+		logger.Info().Msg("serve_only mode enabled — embed queue + file watcher + harvester will NOT start (issue #282)")
 	}
 
 	logger.Info().
@@ -327,10 +337,13 @@ func startServer(configPath string) {
 			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", cfg.Embedding.URL).Msg("embedding provider init failed")
 		} else {
 			embedder = e
-			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency).
-				WithMaxChars(cfg.Embedding.MaxChars)
-			fw.WithEmbedQueue(eq)
-			// Publisher is wired after bus creation below.
+			if cfg.Server.ServeOnly {
+				logger.Info().Msg("serve_only mode — embedder constructed but queue skipped (write handler will be no-op for enqueue)")
+			} else {
+				eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency).
+					WithMaxChars(cfg.Embedding.MaxChars)
+				fw.WithEmbedQueue(eq)
+			}
 		}
 	}
 
@@ -343,7 +356,9 @@ func startServer(configPath string) {
 
 	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, bus, logger, Version, migrationVersion)
 
-	if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
+	if cfg.Server.ServeOnly {
+		logger.Info().Msg("serve_only mode — skipping collection watcher registration")
+	} else if workspaces, err := queries.ListWorkspaces(ctx); err == nil {
 		for _, ws := range workspaces {
 			collections, err := queries.ListCollections(ctx, ws.Hash)
 			if err != nil {
@@ -377,87 +392,97 @@ func startServer(configPath string) {
 		return nil
 	})
 
-	g.Go(func() error {
-		return fw.Run(gctx)
-	})
+	if cfg.Server.ServeOnly {
+		logger.Info().Msg("serve_only mode — file watcher goroutine disabled")
+	} else {
+		g.Go(func() error {
+			return fw.Run(gctx)
+		})
+	}
 
-	if eq != nil {
+	if cfg.Server.ServeOnly {
+		logger.Info().Msg("serve_only mode — embed queue worker disabled")
+	} else if eq != nil {
 		g.Go(func() error {
 			return eq.Run(gctx)
 		})
 	}
 
-	var hr *harvest.Runner
-	interval := time.Duration(cfg.Intervals.SessionPoll) * time.Second
+	if cfg.Server.ServeOnly {
+		logger.Info().Msg("serve_only mode — harvester + summarizer disabled")
+	} else {
+		var hr *harvest.Runner
+		interval := time.Duration(cfg.Intervals.SessionPoll) * time.Second
 
-	if cfg.Harvester.OpenCode.SessionDir == "" {
-		if detected := detectOpenCodeStorageDir(); detected != "" {
-			cfg.Harvester.OpenCode.SessionDir = detected
-			logger.Info().Str("path", detected).Msg("auto-detected opencode storage dir")
-		}
-	}
-
-	if cfg.Harvester.OpenCode.DBPath == "" {
-		if detected := detectOpenCodeDBPath(); detected != "" {
-			cfg.Harvester.OpenCode.DBPath = detected
-			logger.Info().Str("path", detected).Msg("auto-detected opencode sqlite db")
-		}
-	}
-
-	if cfg.Harvester.OpenCode.DBRoot == "" {
-		if detected := detectOpenCodeDBRoot(); detected != "" {
-			cfg.Harvester.OpenCode.DBRoot = detected
-			logger.Info().Str("path", detected).Msg("auto-detected opencode db root")
-		}
-	}
-
-	var harvestSummarizer *summarize.HarvestSummarizer
-	if cfg.Summarization.Enabled {
-		harvestSummarizer = buildHarvestSummarizer(cfg, db, eq, logger)
-		if harvestSummarizer == nil {
-			logger.Warn().Msg("summarization enabled but init failed — falling back to raw harvest")
-		} else {
-			logger.Info().Str("model", cfg.Summarization.Model).Msg("session summarization enabled")
-		}
-	}
-
-	ocHarvesters, ocMode := buildOpenCodeHarvesters(ctx, cfg, db, queries, logger)
-	for i, oh := range ocHarvesters {
-		if i == 0 {
-			hr = harvest.NewRunner(oh, eq, interval, logger)
-		} else {
-			hr.AddHarvester(oh)
-		}
-	}
-	srv.SetHarvestStatus(ocMode, cfg.Harvester.OpenCode.DBRoot, cfg.Harvester.OpenCode.DBPath, cfg.Harvester.OpenCode.SessionDir, len(ocHarvesters))
-
-	if ch, ccErr := initClaudeCodeHarvester(ctx, cfg.Harvester.ClaudeCode, db, logger); ccErr != nil {
-		logger.Error().Err(ccErr).Msg("claude code harvester init failed")
-	} else if ch != nil {
-		if hr == nil {
-			hr = harvest.NewRunner(ch, eq, interval, logger)
-		} else {
-			hr.AddHarvester(ch)
-		}
-		logger.Info().
-			Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
-			Dur("interval", interval).
-			Msg("claude code session harvester started")
-	}
-
-	if hr != nil {
-		hr.WithPublisher(bus)
-		if harvestSummarizer != nil {
-			hr.WithSummarizer(harvestSummarizer)
-			srv.SetSummarizer(harvestSummarizer)
-			if res, ext := srv.LinkDeps(); res != nil && ext != nil {
-				harvestSummarizer.SetLinkExtractor(res, ext)
+		if cfg.Harvester.OpenCode.SessionDir == "" {
+			if detected := detectOpenCodeStorageDir(); detected != "" {
+				cfg.Harvester.OpenCode.SessionDir = detected
+				logger.Info().Str("path", detected).Msg("auto-detected opencode storage dir")
 			}
 		}
-		srv.SetHarvestRunner(hr)
-		g.Go(func() error {
-			return hr.Run(gctx)
-		})
+
+		if cfg.Harvester.OpenCode.DBPath == "" {
+			if detected := detectOpenCodeDBPath(); detected != "" {
+				cfg.Harvester.OpenCode.DBPath = detected
+				logger.Info().Str("path", detected).Msg("auto-detected opencode sqlite db")
+			}
+		}
+
+		if cfg.Harvester.OpenCode.DBRoot == "" {
+			if detected := detectOpenCodeDBRoot(); detected != "" {
+				cfg.Harvester.OpenCode.DBRoot = detected
+				logger.Info().Str("path", detected).Msg("auto-detected opencode db root")
+			}
+		}
+
+		var harvestSummarizer *summarize.HarvestSummarizer
+		if cfg.Summarization.Enabled {
+			harvestSummarizer = buildHarvestSummarizer(cfg, db, eq, logger)
+			if harvestSummarizer == nil {
+				logger.Warn().Msg("summarization enabled but init failed — falling back to raw harvest")
+			} else {
+				logger.Info().Str("model", cfg.Summarization.Model).Msg("session summarization enabled")
+			}
+		}
+
+		ocHarvesters, ocMode := buildOpenCodeHarvesters(ctx, cfg, db, queries, logger)
+		for i, oh := range ocHarvesters {
+			if i == 0 {
+				hr = harvest.NewRunner(oh, eq, interval, logger)
+			} else {
+				hr.AddHarvester(oh)
+			}
+		}
+		srv.SetHarvestStatus(ocMode, cfg.Harvester.OpenCode.DBRoot, cfg.Harvester.OpenCode.DBPath, cfg.Harvester.OpenCode.SessionDir, len(ocHarvesters))
+
+		if ch, ccErr := initClaudeCodeHarvester(ctx, cfg.Harvester.ClaudeCode, db, logger); ccErr != nil {
+			logger.Error().Err(ccErr).Msg("claude code harvester init failed")
+		} else if ch != nil {
+			if hr == nil {
+				hr = harvest.NewRunner(ch, eq, interval, logger)
+			} else {
+				hr.AddHarvester(ch)
+			}
+			logger.Info().
+				Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+				Dur("interval", interval).
+				Msg("claude code session harvester started")
+		}
+
+		if hr != nil {
+			hr.WithPublisher(bus)
+			if harvestSummarizer != nil {
+				hr.WithSummarizer(harvestSummarizer)
+				srv.SetSummarizer(harvestSummarizer)
+				if res, ext := srv.LinkDeps(); res != nil && ext != nil {
+					harvestSummarizer.SetLinkExtractor(res, ext)
+				}
+			}
+			srv.SetHarvestRunner(hr)
+			g.Go(func() error {
+				return hr.Run(gctx)
+			})
+		}
 	}
 
 	g.Go(func() error {
