@@ -254,17 +254,43 @@ smoke:e2e   (normal + high-risk, for user-feature and bug-fix change types)
   6. Kill server
   Agent performs these steps manually (no script required), pastes evidence.
 
+smoke:ui   (any PR touching web/src, internal/server/handlers, internal/server/webui,
+            internal/server/routes.go, or web/package.json — issue #285)
+  Verify embedded UI assets serve correctly via HTTP. Catches the class of
+  bugs from #275 (missing JS asset), #277 (workspaces shape), #278/#279
+  (stats shape), #281 (documents endpoint missing).
+
+  ```bash
+  ./scripts/smoke-ui.sh > docs/evidence/<change-slug>/smoke-ui-output.log 2>&1
+  ```
+
+  The script:
+  1. Builds dev binary at /tmp/nano-brain-smoke/nano-brain
+  2. Starts it on port 3199 with --serve-only --unsafe-no-auth
+  3. Waits for /health → ready: true
+  4. Fetches /ui/ and asserts DOCTYPE + <script> tag present
+  5. Parses asset URLs from HTML
+  6. For each /ui/assets/*.js: asserts HTTP 200 + body NOT starting with
+     <!DOCTYPE html> + size > 1024 bytes
+  7. For each /ui/assets/*.css: asserts HTTP 200 + size > 100 bytes
+  8. Tears down server
+  Final line of log MUST contain "smoke:ui PASS" for the pre-merge gate.
+
 test:release   (before deploy)
   ./nano-brain status
 ```
 
 **Lane → required layers:**
 
-| Lane | validate:quick | test:integration | smoke:e2e |
-|------|:-:|:-:|:-:|
-| tiny | ✓ | — | — |
-| normal | ✓ | ✓ | ✓ (if user-feature or bug-fix) |
-| high-risk | ✓ | ✓ | ✓ |
+| Lane | validate:quick | test:integration | smoke:e2e | smoke:ui |
+|------|:-:|:-:|:-:|:-:|
+| tiny | ✓ | — | — | ✓ (if web-touching) |
+| normal | ✓ | ✓ | ✓ (if user-feature or bug-fix) | ✓ (if web-touching) |
+| high-risk | ✓ | ✓ | ✓ | ✓ (if web-touching) |
+
+A PR is "web-touching" if its diff includes any of: `web/src/**`,
+`web/package.json`, `internal/server/handlers/**`, `internal/server/webui/**`,
+or `internal/server/routes.go`. The pre-merge gate enforces this via check 3.8.
 
 Agents must not claim a layer passes until it has been run and output verified.
 
@@ -273,14 +299,14 @@ Agents must not claim a layer passes until it has been run and output verified.
 The validation ladder is necessary but not sufficient. The **change type**
 determines whether user-flow testing and review gate apply.
 
-| Change type | smoke:e2e required? | Review gate? | Example |
-|-------------|:-:|:-:|---|
-| **user-feature** (new behavior, new surface) | ✅ build+start+curl | ✅ | new endpoint, new UI page |
-| **bug-fix** (user-visible defect) | ✅ build+start+curl | ✅ | nil panic, broken response |
-| **infrastructure** (migrations, config, deploy) | ❌ validate:quick sufficient | ⚠️ self-verify | DB migration, env var change |
-| **refactor** (same I/O) | ❌ existing tests pass | ⚠️ self-verify | extract helper, rename internal symbol |
-| **docs** (markdown / comments only) | ❌ | ❌ | README, ADR write-up |
-| **dependency-bump** | ❌ validate:quick | ⚠️ self-verify | upgrade library version |
+| Change type | smoke:e2e required? | smoke:ui required? | Review gate? | Example |
+|-------------|:-:|:-:|:-:|---|
+| **user-feature** (new behavior, new surface) | ✅ build+start+curl | ✅ if web-touching | ✅ | new endpoint, new UI page |
+| **bug-fix** (user-visible defect) | ✅ build+start+curl | ✅ if web-touching | ✅ | nil panic, broken response |
+| **infrastructure** (migrations, config, deploy) | ❌ validate:quick sufficient | ✅ if web-touching | ⚠️ self-verify | DB migration, env var change |
+| **refactor** (same I/O) | ❌ existing tests pass | ✅ if web-touching | ⚠️ self-verify | extract helper, rename internal symbol |
+| **docs** (markdown / comments only) | ❌ | ❌ | ❌ | README, ADR write-up |
+| **dependency-bump** | ❌ validate:quick | ✅ if web/package.json changed | ⚠️ self-verify | upgrade library version |
 
 **Combined gate:** Lane × Change Type. Both must pass to proceed.
 
