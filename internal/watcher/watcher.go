@@ -68,8 +68,12 @@ type Watcher struct {
 	mu          sync.Mutex
 	collections map[string]watchedCollection
 	dirty       map[string]bool
-	pub         eventbus.Publisher
-	rateLimiters map[string]*rate.Limiter
+	// hotRegisterCh signals Run() that a workspace was registered at runtime so
+	// the dirty map should be processed without waiting for fsnotify events.
+	// Buffered=1 so WatchWithFilter never blocks. See issue #308.
+	hotRegisterCh chan struct{}
+	pub           eventbus.Publisher
+	rateLimiters  map[string]*rate.Limiter
 
 	globalIgnore *gitignore.GitIgnore
 }
@@ -92,14 +96,15 @@ func (w *Watcher) CollectionsWatched() int {
 
 func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.Config) *Watcher {
 	return &Watcher{
-		db:           db,
-		queries:      queries,
-		logger:       logger.With().Str("component", "watcher").Logger(),
-		debounceMs:   cfg.Watcher.DebounceMs,
-		pollInterval: cfg.Watcher.ReindexInterval,
-		maxFileSize:  cfg.Storage.MaxFileSize,
-		collections:  make(map[string]watchedCollection),
-		dirty:        make(map[string]bool),
+		db:            db,
+		queries:       queries,
+		logger:        logger.With().Str("component", "watcher").Logger(),
+		debounceMs:    cfg.Watcher.DebounceMs,
+		pollInterval:  cfg.Watcher.ReindexInterval,
+		maxFileSize:   cfg.Storage.MaxFileSize,
+		collections:   make(map[string]watchedCollection),
+		dirty:         make(map[string]bool),
+		hotRegisterCh: make(chan struct{}, 1),
 	}
 }
 
@@ -156,6 +161,15 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 		}
 		if err := w.fsw.Add(absPath); err != nil {
 			return fmt.Errorf("watch dir %s: %w", absPath, err)
+		}
+		// Mark dirty + nudge Run() so processDirty runs an immediate scan.
+		// Without this, fsnotify only fires on FUTURE changes — existing files in a
+		// freshly-registered workspace never get queued for embedding until server
+		// restart (issue #308).
+		w.dirty[absPath] = true
+		select {
+		case w.hotRegisterCh <- struct{}{}:
+		default:
 		}
 		w.logger.Info().Str("dir", absPath).Str("collection", collectionName).Msg("watching directory")
 	}
@@ -261,6 +275,9 @@ func (w *Watcher) Run(ctx context.Context) error {
 
 		case <-pollTicker.C:
 			w.processAll(ctx)
+
+		case <-w.hotRegisterCh:
+			w.processDirty(ctx)
 		}
 	}
 }
