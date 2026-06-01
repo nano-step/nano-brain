@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
@@ -41,6 +42,9 @@ func GraphOverview(q OverviewQuerier, logger zerolog.Logger) echo.HandlerFunc {
 		}
 
 		workspace, _ := c.Get("workspace").(string)
+		if workspace == "" {
+			workspace = req.Workspace
+		}
 		if workspace == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "workspace is required")
 		}
@@ -122,6 +126,38 @@ func GraphOverview(q OverviewQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			if _, ok := seen[e.TargetNode]; !ok {
 				seen[e.TargetNode] = struct{}{}
 				nodes = append(nodes, neighborhoodNode{ID: e.TargetNode})
+			}
+		}
+
+		if mode == "knowledge" && len(nodes) > 0 {
+			var docIDs []uuid.UUID
+			for _, n := range nodes {
+				if uid, err := uuid.Parse(n.ID); err == nil {
+					docIDs = append(docIDs, uid)
+				}
+			}
+			if len(docIDs) > 0 {
+				docRows, err := q.ListDocumentsByIDs(ctx, sqlc.ListDocumentsByIDsParams{
+					WorkspaceHash: workspace,
+					Column2:       docIDs,
+				})
+				if err != nil {
+					logger.Warn().Err(err).Msg("graph_overview: doc enrichment failed")
+				} else {
+					docMap := make(map[string]sqlc.ListDocumentsByIDsRow, len(docRows))
+					for _, d := range docRows {
+						docMap[d.ID.String()] = d
+					}
+					for i, n := range nodes {
+						if d, ok := docMap[n.ID]; ok {
+							nodes[i].Title = d.Title
+							nodes[i].Collection = d.Collection
+							t := d.UpdatedAt
+							nodes[i].UpdatedAt = &t
+							nodes[i].Tags = d.Tags
+						}
+					}
+				}
 			}
 		}
 
