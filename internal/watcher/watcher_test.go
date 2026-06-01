@@ -396,3 +396,48 @@ func TestProcessFile_AcceptsValidUTF8(t *testing.T) {
 		t.Fatalf("expected valid UTF-8 markdown to be indexed, got %d upserts", mq.upsertDocCalls.Load())
 	}
 }
+
+func TestHotRegister_WatchAfterRunScansExistingFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping timing-sensitive test in short mode")
+	}
+
+	// Start the watcher with no collections, then "hot-register" a new
+	// workspace by calling Watch after Run is already going. The pre-existing
+	// files in that directory MUST be picked up via the dirty-mark mechanism
+	// (issue #308 regression guard).
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 100, 3600)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+
+	time.Sleep(50 * time.Millisecond)
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("# A\nbody"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.md"), []byte("# B\nbody"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Watch("hotreg", dir, "ws-hotreg", "*.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	calls := mq.upsertDocCalls.Load()
+	if calls < 2 {
+		t.Fatalf("expected at least 2 upserts for pre-existing files after hot-register, got %d", calls)
+	}
+}
