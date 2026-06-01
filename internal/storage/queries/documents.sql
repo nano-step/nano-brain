@@ -36,8 +36,15 @@ SELECT * FROM documents WHERE id = $1 AND workspace_hash = $2;
 SELECT * FROM documents WHERE source_path = $1 AND workspace_hash = $2;
 
 -- name: ListDocumentsByWorkspace :many
-SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, created_at, updated_at
-FROM documents WHERE workspace_hash = $1 ORDER BY updated_at DESC;
+SELECT d.id, d.workspace_hash, d.content_hash, d.title, d.source_path, d.collection, d.tags, d.created_at, d.updated_at,
+       d.supersedes_id,
+       (SELECT s.id FROM documents s WHERE s.supersedes_id = d.id LIMIT 1) AS superseded_by_id
+FROM documents d
+WHERE d.workspace_hash = $1
+ORDER BY d.updated_at DESC;
+
+-- name: DeleteDocumentByIDAndWorkspace :execrows
+DELETE FROM documents WHERE id = $1 AND workspace_hash = $2;
 
 -- name: UpdateDocumentsCollection :exec
 UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = $3;

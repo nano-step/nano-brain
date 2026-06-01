@@ -80,6 +80,8 @@ func registerRoutes(s *Server) {
 	data.DELETE("/collections/:name", handlers.RemoveCollection(s.queries, s.watcher, s.logger))
 
 	data.GET("/tags", handlers.ListTags(s.queries, s.logger))
+	data.GET("/documents", handlers.ListDocuments(s.queries, s.logger))
+	data.DELETE("/documents/:id", handlers.DeleteDocument(s.queries, s.logger))
 	data.POST("/get", handlers.GetDocument(s.queries, s.logger))
 	data.POST("/multi-get", handlers.MultiGet(s.queries, s.logger))
 	data.GET("/symbols", handlers.ListSymbols(s.queries, s.logger))
