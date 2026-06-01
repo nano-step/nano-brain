@@ -49,13 +49,14 @@ build_binary() {
 }
 start_server() {
     local cfg_path="${BUILD_DIR}/config.yml"
+    local db_url="${NANO_BRAIN_DATABASE_URL:-postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev}"
     cat > "${cfg_path}" <<EOF
 server:
     host: 0.0.0.0
     port: ${PORT}
     serve_only: true
 database:
-    url: postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev
+    url: ${db_url}
 embedding:
     provider: ""
 harvester:
@@ -81,6 +82,13 @@ EOF
 wait_for_health() {
     local i
     for i in $(seq 1 ${HEALTH_TIMEOUT}); do
+        if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+            log_fail "Server process (PID=${SERVER_PID}) died before /health became ready"
+            log_info "Server log tail:"
+            tail -20 "${BUILD_DIR}/server.log" || true
+            finalize
+            exit 1
+        fi
         if curl -sf "http://localhost:${PORT}/health" > /dev/null 2>&1; then
             local status
             status=$(curl -sf "http://localhost:${PORT}/health")
@@ -97,15 +105,27 @@ wait_for_health() {
 }
 check_ui_root() {
     UI_HTML_BODY=""
-    local body status
-    status=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/ui/")
-    body=$(curl -s "http://localhost:${PORT}/ui/" 2>/dev/null || true)
+    local tmp status content_type body
+    tmp=$(mktemp)
+    local meta
+    meta=$(curl -so "${tmp}" -w "%{http_code} %{content_type}" "http://localhost:${PORT}/ui/")
+    status="${meta%% *}"
+    content_type="${meta#* }"
+    body=$(cat "${tmp}")
+    rm -f "${tmp}"
+
     if [[ "${status}" != "200" ]]; then
         log_fail "/ui/ HTTP status=${status} (expected 200)"
         return
     fi
     if [[ -z "${body}" ]]; then
         log_fail "/ui/ returned empty body"
+        return
+    fi
+    if echo "${content_type}" | grep -qi '^text/html'; then
+        log_pass "/ui/ Content-Type=${content_type}"
+    else
+        log_fail "/ui/ wrong Content-Type=${content_type} (expected text/html)"
         return
     fi
     if echo "${body}" | grep -qi '<!DOCTYPE html>'; then
@@ -146,19 +166,37 @@ check_assets() {
 check_one_asset() {
     local url="$1"
     local full="http://localhost:${PORT}${url}"
-    local status size min_size body_head
-    status=$(curl -so /dev/null -w "%{http_code}" "${full}")
-    size=$(curl -s "${full}" 2>/dev/null | wc -c)
-    body_head=$(curl -s "${full}" 2>/dev/null | head -c 100 || true)
+    local tmp status content_type size min_size expected_ct body_head meta
+    tmp=$(mktemp)
+    meta=$(curl -so "${tmp}" -w "%{http_code} %{content_type} %{size_download}" "${full}")
+    status="${meta%% *}"
+    rest="${meta#* }"
+    content_type="${rest%% *}"
+    size="${rest##* }"
+    body_head=$(head -c 100 "${tmp}")
+    rm -f "${tmp}"
 
     case "${url}" in
-        *.js)  min_size=${MIN_JS_SIZE}  ;;
-        *.css) min_size=${MIN_CSS_SIZE} ;;
-        *)     min_size=0               ;;
+        *.js)
+            min_size=${MIN_JS_SIZE}
+            expected_ct="application/javascript"
+            ;;
+        *.css)
+            min_size=${MIN_CSS_SIZE}
+            expected_ct="text/css"
+            ;;
+        *)
+            min_size=0
+            expected_ct=""
+            ;;
     esac
 
     if [[ "${status}" != "200" ]]; then
         log_fail "${url} status=${status} (expected 200)"
+        return 1
+    fi
+    if [[ -n "${expected_ct}" ]] && ! echo "${content_type}" | grep -qi "${expected_ct}"; then
+        log_fail "${url} Content-Type=${content_type} (expected ${expected_ct})"
         return 1
     fi
     if echo "${body_head}" | grep -qi '<!DOCTYPE html>'; then
@@ -169,7 +207,7 @@ check_one_asset() {
         log_fail "${url} body size=${size} bytes (expected > ${min_size}); likely HTML fallback (#275 regression)"
         return 1
     fi
-    log_pass "${url} → 200 size=${size}"
+    log_pass "${url} → 200 ${content_type} size=${size}"
 }
 finalize() {
     if [[ ${FAIL_COUNT} -eq 0 ]]; then
