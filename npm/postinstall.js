@@ -55,6 +55,58 @@ function download(url, dest) {
   });
 }
 
+// npm normalizes leading zeros in semver numeric identifiers (e.g. tag
+// v2026.6.0101 publishes as 2026.6.101). Auto-tag uses a fixed-width 4-digit
+// patch {DD}{NN} for new tags, but older history has 1-3 digit patches. Try
+// the canonical form first, then a zero-padded reconstruction, then API.
+function candidateTagsForVersion(version) {
+  const parts = version.split(".");
+  const candidates = [`v${version}`];
+  if (parts.length === 3) {
+    const patch = parts[2];
+    if (/^\d+$/.test(patch) && patch.length < 4) {
+      const padded = patch.padStart(4, "0");
+      candidates.push(`v${parts[0]}.${parts[1]}.${padded}`);
+    }
+  }
+  return candidates;
+}
+
+function normalizeVersion(v) {
+  return v.replace(/^v/, "").split(".").map((p) => p.replace(/^0+/, "") || "0").join(".");
+}
+
+function httpGetJSON(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { "User-Agent": "nano-brain-postinstall" } }, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`API ${url} returned HTTP ${res.statusCode}`));
+      }
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => {
+        try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+      });
+    }).on("error", reject);
+  });
+}
+
+async function resolveTagFromAPI(version, assetName) {
+  const api = `https://api.github.com/repos/${REPO}/releases`;
+  const releases = await httpGetJSON(`${api}?per_page=30`);
+  const normalizedTarget = normalizeVersion(version);
+  for (const r of releases) {
+    if (!r.tag_name) continue;
+    if (normalizeVersion(r.tag_name) === normalizedTarget) {
+      if (r.assets && r.assets.some((a) => a.name === assetName)) {
+        return r.tag_name;
+      }
+    }
+  }
+  return null;
+}
+
 async function main() {
   const platformKey = getPlatformKey();
   const binName = os.platform() === "win32" ? "nano-brain.exe" : "nano-brain";
@@ -72,18 +124,38 @@ async function main() {
     }
   }
 
-  const url = `https://github.com/${REPO}/releases/download/v${VERSION}/nano-brain-${platformKey}`;
   console.log(`Downloading nano-brain v${VERSION} for ${platformKey}...`);
 
-  try {
-    await download(url, binPath);
-    fs.chmodSync(binPath, 0o755);
-    console.log(`nano-brain v${VERSION} installed successfully.`);
-  } catch (err) {
-    console.error(`Failed to download binary: ${err.message}`);
-    console.error("Build from source: CGO_ENABLED=0 go build -o npm/nano-brain ./cmd/nano-brain");
-    process.exit(0);
+  const assetName = `nano-brain-${platformKey}`;
+  let lastErr;
+  for (const tag of candidateTagsForVersion(VERSION)) {
+    const url = `https://github.com/${REPO}/releases/download/${tag}/${assetName}`;
+    try {
+      await download(url, binPath);
+      fs.chmodSync(binPath, 0o755);
+      console.log(`nano-brain v${VERSION} installed successfully from ${tag}.`);
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
   }
+
+  try {
+    const tag = await resolveTagFromAPI(VERSION, assetName);
+    if (tag) {
+      const url = `https://github.com/${REPO}/releases/download/${tag}/${assetName}`;
+      await download(url, binPath);
+      fs.chmodSync(binPath, 0o755);
+      console.log(`nano-brain v${VERSION} installed successfully from ${tag} (API fallback).`);
+      return;
+    }
+  } catch (err) {
+    lastErr = err;
+  }
+
+  console.error(`Failed to download binary: ${lastErr && lastErr.message}`);
+  console.error("Build from source: CGO_ENABLED=0 go build -o npm/nano-brain ./cmd/nano-brain");
+  process.exit(0);
 }
 
 main();
