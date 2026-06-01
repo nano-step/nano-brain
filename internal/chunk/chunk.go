@@ -17,16 +17,36 @@ type Chunk struct {
 	Hash      string // SHA-256 hex of chunk content
 }
 
+// DefaultMaxChunkBytes is the maximum allowed size of a chunk produced by
+// DefaultConfig, in bytes. Set to 3000 to match internal/embed/queue.go's
+// defaultMaxEmbedChars exactly — chunks at this budget never need truncation.
+//
+// Note on units: this package measures size via Go's len(string), which counts
+// BYTES, not runes. Doc strings say "in bytes" rather than "in chars" to make
+// the distinction explicit for non-ASCII content (CJK, emoji are multi-byte).
+const DefaultMaxChunkBytes = 3000
+
 // Config controls the chunking behaviour.
+//
+// Invariant for DefaultConfig: TargetSize + searchWindow/2 == DefaultMaxChunkBytes.
+// With defaults (2600 + 400) this gives 3000 bytes, matching the embed budget
+// so chunks never need truncation downstream. Changing one of these constants
+// without updating the other reintroduces the silent-truncate bug (issue #300).
 type Config struct {
-	TargetSize int // target chunk size in chars (default 3600)
-	Overlap    int // overlap between consecutive chunks in chars (default 200)
-	MinSize    int // minimum chunk size; shorter trailing chunks are merged (default 200)
+	TargetSize int // target chunk size in bytes (default 2600)
+	Overlap    int // overlap between consecutive chunks in bytes (default 200)
+	MinSize    int // minimum chunk size in bytes; shorter trailing chunks are merged (default 200)
 }
 
-// DefaultConfig returns the standard chunking configuration.
+// DefaultConfig returns the standard chunking configuration. TargetSize is
+// derived from DefaultMaxChunkBytes so the contract holds by construction —
+// future maintainers cannot drift one without the other.
 func DefaultConfig() Config {
-	return Config{TargetSize: 3600, Overlap: 200, MinSize: 200}
+	return Config{
+		TargetSize: DefaultMaxChunkBytes - searchWindow/2,
+		Overlap:    200,
+		MinSize:    200,
+	}
 }
 
 // lineInfo holds metadata about a single line in the source document.
