@@ -1,0 +1,12 @@
+{
+  "scale": 50,
+  "workspace_hash": "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
+  "timestamp": "2026-06-01T17:04:46Z",
+  "version": "dev",
+  "precision_at_5": 0.008,
+  "recall_at_10": 0.06,
+  "mrr": 0.032,
+  "query_p50_ms": 31.752333,
+  "query_p95_ms": 120.061875,
+  "query_count": 50
+}
