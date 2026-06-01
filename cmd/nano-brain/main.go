@@ -45,6 +45,8 @@ func main() {
 	var daemonChild bool
 	flag.StringVar(&configPath, "config", "", "path to config file (default: ~/.nano-brain/config.yml)")
 	flag.BoolVar(&daemonChild, "daemon-child", false, "")
+	flag.BoolVar(&unsafeNoAuth, "unsafe-no-auth", false, "allow binding to non-loopback without auth")
+	flag.BoolVar(&serveOnlyFlag, "serve-only", false, "disable background workers (embed queue, watcher, harvester) — issue #282")
 	flag.IntVar(&verbose, "v", 0, "verbosity: 0=info, 1=debug, 2=trace")
 	flag.IntVar(&verbose, "verbose", 0, "")
 	flag.Parse()
@@ -335,10 +337,13 @@ func startServer(configPath string) {
 			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", cfg.Embedding.URL).Msg("embedding provider init failed")
 		} else {
 			embedder = e
-			eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency).
-				WithMaxChars(cfg.Embedding.MaxChars)
-			fw.WithEmbedQueue(eq)
-			// Publisher is wired after bus creation below.
+			if cfg.Server.ServeOnly {
+				logger.Info().Msg("serve_only mode — embedder constructed but queue skipped (write handler will be no-op for enqueue)")
+			} else {
+				eq = embed.NewQueue(embedder, queries, logger, cfg.Embedding.Provider, cfg.Embedding.Model, cfg.Embedding.Concurrency).
+					WithMaxChars(cfg.Embedding.MaxChars)
+				fw.WithEmbedQueue(eq)
+			}
 		}
 	}
 

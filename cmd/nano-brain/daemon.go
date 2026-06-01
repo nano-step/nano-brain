@@ -95,6 +95,12 @@ func runServeDaemon(configPath string) {
 	if configPath != "" {
 		childArgs = append(childArgs, "--config", configPath)
 	}
+	if unsafeNoAuth {
+		childArgs = append(childArgs, "--unsafe-no-auth")
+	}
+	if serveOnlyFlag {
+		childArgs = append(childArgs, "--serve-only")
+	}
 
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
