@@ -18,8 +18,6 @@ type StatsQuerier interface {
 	CountGraphEdgesByType(ctx context.Context, workspaceHash string) ([]sqlc.CountGraphEdgesByTypeRow, error)
 	ListTopTags(ctx context.Context, workspaceHash string) ([]sqlc.ListTopTagsRow, error)
 	ListRecentDocuments(ctx context.Context, workspaceHash string) ([]sqlc.ListRecentDocumentsRow, error)
-	CountDocumentsByWorkspace(ctx context.Context, workspaceHash string) (int64, error)
-	CountChunksByWorkspace(ctx context.Context, workspaceHash string) (int64, error)
 	CountEmbeddingsByWorkspace(ctx context.Context, workspaceHash string) (int64, error)
 }
 
@@ -132,7 +130,10 @@ func (h *StatsHandler) SetHarvestStatus(s HarvestStatusSnapshot) {
 }
 
 func (h *StatsHandler) Handle(c echo.Context) error {
-	workspace := c.Get("workspace").(string)
+	workspace, _ := c.Get("workspace").(string)
+	if workspace == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "workspace is required")
+	}
 	ctx := c.Request().Context()
 
 	cols, err := h.queries.CountDocsByCollectionGrouped(ctx, workspace)
@@ -160,20 +161,19 @@ func (h *StatsHandler) Handle(c echo.Context) error {
 		h.logger.Error().Err(err).Msg("stats: recent docs query failed")
 		return echo.NewHTTPError(http.StatusInternalServerError, "stats query failed")
 	}
-	docsTotal, err := h.queries.CountDocumentsByWorkspace(ctx, workspace)
-	if err != nil {
-		h.logger.Error().Err(err).Msg("stats: docs total failed")
-		return echo.NewHTTPError(http.StatusInternalServerError, "stats query failed")
-	}
-	chunksTotal, err := h.queries.CountChunksByWorkspace(ctx, workspace)
-	if err != nil {
-		h.logger.Error().Err(err).Msg("stats: chunks total failed")
-		return echo.NewHTTPError(http.StatusInternalServerError, "stats query failed")
-	}
 	embeddingsTotal, err := h.queries.CountEmbeddingsByWorkspace(ctx, workspace)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("stats: embeddings total failed")
 		return echo.NewHTTPError(http.StatusInternalServerError, "stats query failed")
+	}
+
+	var docsTotal int64
+	for _, c := range cols {
+		docsTotal += c.DocCount
+	}
+	var chunksTotal int64
+	for _, c := range chunks {
+		chunksTotal += c.ChunkCount
 	}
 
 	resp := statsResponse{

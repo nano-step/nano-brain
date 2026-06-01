@@ -30,17 +30,6 @@ func (q *Queries) CountChunksByDocumentID(ctx context.Context, arg CountChunksBy
 	return count, err
 }
 
-const countChunksByWorkspace = `-- name: CountChunksByWorkspace :one
-SELECT count(*) FROM chunks WHERE workspace_hash = $1
-`
-
-func (q *Queries) CountChunksByWorkspace(ctx context.Context, workspaceHash string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countChunksByWorkspace, workspaceHash)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const deleteChunksByDocumentID = `-- name: DeleteChunksByDocumentID :exec
 DELETE FROM chunks WHERE document_id = $1 AND workspace_hash = $2
 `

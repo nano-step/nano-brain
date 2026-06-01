@@ -17,9 +17,6 @@ DELETE FROM chunks WHERE document_id = $1 AND workspace_hash = $2;
 -- name: CountChunksByDocumentID :one
 SELECT count(*) FROM chunks WHERE document_id = $1 AND workspace_hash = $2;
 
--- name: CountChunksByWorkspace :one
-SELECT count(*) FROM chunks WHERE workspace_hash = $1;
-
 -- name: GetChunkByID :one
 SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.embed_status, c.created_at,
        COALESCE(d.source_path, '') AS source_path

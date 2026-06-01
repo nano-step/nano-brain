@@ -16,8 +16,6 @@ import (
 )
 
 type mockStatsQuerier struct {
-	docsTotal       int64
-	chunksTotal     int64
 	embeddingsTotal int64
 }
 
@@ -46,12 +44,6 @@ func (m *mockStatsQuerier) ListRecentDocuments(_ context.Context, _ string) ([]s
 		UpdatedAt: time.Now(), Tags: []string{"test"},
 	}}, nil
 }
-func (m *mockStatsQuerier) CountDocumentsByWorkspace(_ context.Context, _ string) (int64, error) {
-	return m.docsTotal, nil
-}
-func (m *mockStatsQuerier) CountChunksByWorkspace(_ context.Context, _ string) (int64, error) {
-	return m.chunksTotal, nil
-}
 func (m *mockStatsQuerier) CountEmbeddingsByWorkspace(_ context.Context, _ string) (int64, error) {
 	return m.embeddingsTotal, nil
 }
@@ -77,7 +69,7 @@ func newTestStatsHandler(q handlers.StatsQuerier) *handlers.StatsHandler {
 }
 
 func TestStats_ResponseShape(t *testing.T) {
-	q := &mockStatsQuerier{docsTotal: 5, chunksTotal: 13, embeddingsTotal: 11}
+	q := &mockStatsQuerier{embeddingsTotal: 11}
 	h := newTestStatsHandler(q)
 
 	e := echo.New()
@@ -188,8 +180,6 @@ func TestStats_ResponseShape(t *testing.T) {
 }
 
 func TestStats_EmptyWorkspace(t *testing.T) {
-	q := &mockStatsQuerier{docsTotal: 0, chunksTotal: 0, embeddingsTotal: 0}
-	q.docsTotal = 0
 	h := handlers.NewStatsHandler(
 		&emptyStatsQuerier{}, nopLogger(),
 		"v0.0.0",
@@ -240,12 +230,6 @@ func (e *emptyStatsQuerier) ListTopTags(_ context.Context, _ string) ([]sqlc.Lis
 }
 func (e *emptyStatsQuerier) ListRecentDocuments(_ context.Context, _ string) ([]sqlc.ListRecentDocumentsRow, error) {
 	return nil, nil
-}
-func (e *emptyStatsQuerier) CountDocumentsByWorkspace(_ context.Context, _ string) (int64, error) {
-	return 0, nil
-}
-func (e *emptyStatsQuerier) CountChunksByWorkspace(_ context.Context, _ string) (int64, error) {
-	return 0, nil
 }
 func (e *emptyStatsQuerier) CountEmbeddingsByWorkspace(_ context.Context, _ string) (int64, error) {
 	return 0, nil
