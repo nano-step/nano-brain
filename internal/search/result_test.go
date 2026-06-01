@@ -2,7 +2,6 @@ package search
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 )
@@ -26,23 +25,32 @@ func TestResult_JSONFieldsUseSnakeCase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := string(raw)
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	wantKeys := []string{
-		`"id"`, `"document_id"`, `"workspace_hash"`, `"title"`, `"snippet"`,
-		`"content"`, `"score"`, `"tags"`, `"collection"`, `"source_path"`,
-		`"created_at"`, `"updated_at"`,
+		"id", "document_id", "workspace_hash", "title", "snippet",
+		"content", "score", "tags", "collection", "source_path",
+		"created_at", "updated_at",
 	}
 	for _, k := range wantKeys {
-		if !strings.Contains(s, k) {
-			t.Errorf("expected snake_case key %s in JSON, got: %s", k, s)
+		if _, ok := m[k]; !ok {
+			t.Errorf("expected snake_case key %q in JSON map, got keys: %v", k, mapKeys(m))
 		}
 	}
-	forbiddenKeys := []string{
-		`"ID"`, `"DocumentID"`, `"WorkspaceHash"`, `"Title"`,
-	}
+	forbiddenKeys := []string{"ID", "DocumentID", "WorkspaceHash", "Title", "Snippet", "Content", "Score", "Tags", "Collection", "SourcePath", "CreatedAt", "UpdatedAt"}
 	for _, k := range forbiddenKeys {
-		if strings.Contains(s, k) {
-			t.Errorf("forbidden PascalCase key %s present in JSON (issue #303 regression): %s", k, s)
+		if _, ok := m[k]; ok {
+			t.Errorf("forbidden PascalCase key %q present in JSON map (issue #303 regression)", k)
 		}
 	}
+}
+
+func mapKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
