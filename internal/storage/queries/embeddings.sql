@@ -136,3 +136,6 @@ JOIN documents d ON c.document_id = d.id
 WHERE d.tags && sqlc.arg(tags)::text[]
 ORDER BY e.embedding <=> sqlc.arg(query_embedding)::vector
 LIMIT sqlc.arg(max_results);
+
+-- name: CountEmbeddingsByWorkspace :one
+SELECT count(*) FROM embeddings WHERE workspace_hash = $1;

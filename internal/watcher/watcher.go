@@ -84,6 +84,12 @@ func (w *Watcher) SetGlobalIgnore(gi *gitignore.GitIgnore) {
 	w.globalIgnore = gi
 }
 
+func (w *Watcher) CollectionsWatched() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.collections)
+}
+
 func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.Config) *Watcher {
 	return &Watcher{
 		db:           db,
