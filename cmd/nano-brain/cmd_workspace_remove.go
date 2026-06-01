@@ -122,16 +122,18 @@ func fetchDocCount(hash string, stderr io.Writer) (int64, bool) {
 		fmt.Fprintf(stderr, "Error: server returned status %d\n", statusCode)
 		return 0, false
 	}
-	var items []struct {
-		WorkspaceHash string `json:"workspace_hash"`
-		DocumentCount int64  `json:"document_count"`
+	var parsed struct {
+		Workspaces []struct {
+			Hash          string `json:"hash"`
+			DocumentCount int64  `json:"doc_count"`
+		} `json:"workspaces"`
 	}
-	if err := json.Unmarshal(resp, &items); err != nil {
+	if err := json.Unmarshal(resp, &parsed); err != nil {
 		fmt.Fprintf(stderr, "Error: could not parse workspaces list: %v\n", err)
 		return 0, false
 	}
-	for _, it := range items {
-		if it.WorkspaceHash == hash {
+	for _, it := range parsed.Workspaces {
+		if it.Hash == hash {
 			return it.DocumentCount, true
 		}
 	}
