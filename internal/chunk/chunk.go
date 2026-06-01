@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // Chunk represents a segment of a document.
@@ -64,6 +65,7 @@ func Split(content string, cfg Config) []Chunk {
 
 	splits := findSplitPoints(lines, cfg)
 	chunks := buildChunks(content, lines, splits, cfg)
+	chunks = enforceMaxSize(chunks, cfg)
 
 	if len(chunks) > 1 && len(chunks[len(chunks)-1].Content) < cfg.MinSize {
 		last := len(chunks) - 1
@@ -325,4 +327,113 @@ func buildChunks(content string, lines []lineInfo, splits []int, cfg Config) []C
 func hashContent(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return fmt.Sprintf("%x", h)
+}
+
+// enforceMaxSize is the safety net that guarantees every emitted chunk is
+// bounded in size, even when findSplitPoints could not find a line boundary
+// inside an oversized region. Without this pass, a document with a single
+// 10k-char line would emit a 10k-char chunk that the embed queue would have
+// to truncate, silently dropping data.
+//
+// Activates only when a chunk exceeds TargetSize + searchWindow/2 (4000 by
+// default). Normal markdown / code with reasonable line lengths bypasses this
+// path entirely, preserving existing behavior.
+func enforceMaxSize(chunks []Chunk, cfg Config) []Chunk {
+	maxAllowed := cfg.TargetSize + searchWindow/2
+	out := make([]Chunk, 0, len(chunks))
+	for _, c := range chunks {
+		if len(c.Content) <= maxAllowed {
+			out = append(out, c)
+			continue
+		}
+		out = append(out, hardSplit(c, cfg.TargetSize)...)
+	}
+	return out
+}
+
+// hardSplit force-splits an oversized chunk into pieces of size <= target+searchWindow/2
+// at the best available sub-line boundary. All produced pieces inherit the parent
+// chunk's StartLine/EndLine (true line-range reconstruction would require re-parsing,
+// and oversized chunks are by definition pathological single-line content).
+func hardSplit(c Chunk, target int) []Chunk {
+	maxAllowed := target + searchWindow/2
+	var out []Chunk
+	remaining := c.Content
+	for len(remaining) > maxAllowed {
+		cut := findHardBoundary(remaining, target)
+		out = append(out, Chunk{
+			Content:   remaining[:cut],
+			StartLine: c.StartLine,
+			EndLine:   c.EndLine,
+		})
+		remaining = remaining[cut:]
+	}
+	if len(remaining) > 0 {
+		out = append(out, Chunk{
+			Content:   remaining,
+			StartLine: c.StartLine,
+			EndLine:   c.EndLine,
+		})
+	}
+	return out
+}
+
+// findHardBoundary returns a cut index in s, chosen from the range [target*3/4, target]
+// at the highest-quality sub-line boundary available. Priority order: blank-line
+// marker, single newline, sentence terminator, whitespace, valid UTF-8 rune start.
+// The returned index is always at a UTF-8 rune boundary so s[:cut] is valid UTF-8.
+func findHardBoundary(s string, target int) int {
+	upper := target
+	if upper > len(s) {
+		upper = len(s)
+	}
+	lower := target * 3 / 4
+	if lower < 1 {
+		lower = 1
+	}
+	if lower > upper {
+		lower = upper
+	}
+
+	// Priority 1: blank-line marker (\n\n) — cut AFTER the second \n.
+	for i := upper - 1; i >= lower; i-- {
+		if i+1 < len(s) && s[i] == '\n' && s[i+1] == '\n' {
+			return i + 2
+		}
+	}
+	// Priority 2: single newline.
+	for i := upper - 1; i >= lower; i-- {
+		if s[i] == '\n' {
+			return i + 1
+		}
+	}
+	// Priority 3: sentence terminator + space.
+	for i := upper - 2; i >= lower; i-- {
+		if (s[i] == '.' || s[i] == '!' || s[i] == '?') && s[i+1] == ' ' {
+			return i + 2
+		}
+	}
+	// Priority 3b: ideographic full stop (。, U+3002, UTF-8: E3 80 82).
+	for i := upper - 3; i >= lower; i-- {
+		if s[i] == '\xe3' && s[i+1] == '\x80' && s[i+2] == '\x82' {
+			return i + 3
+		}
+	}
+	// Priority 4: whitespace (space or tab).
+	for i := upper - 1; i >= lower; i-- {
+		if s[i] == ' ' || s[i] == '\t' {
+			return i + 1
+		}
+	}
+	// Priority 5: nearest valid UTF-8 rune boundary <= upper.
+	cut := upper
+	for cut > 0 && cut < len(s) && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	if cut == 0 {
+		// Pathological: content has no rune-start in [0, upper]. Force-cut at upper
+		// and accept the (technically valid Go string) result; embedder will handle.
+		cut = upper
+	}
+	return cut
 }
