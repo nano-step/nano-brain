@@ -419,10 +419,9 @@ func TestFindHardBoundary_RuneBoundaryFallback(t *testing.T) {
 
 func TestSplit_DefaultConfig_MatchesEmbedBudget(t *testing.T) {
 	cfg := DefaultConfig()
-	const defaultMaxEmbedChars = 3000
 	got := cfg.TargetSize + searchWindow/2
-	if got != defaultMaxEmbedChars {
-		t.Errorf("contract violation: DefaultConfig max output is %d, but embed queue's defaultMaxEmbedChars is %d. These MUST match — see issue #300.", got, defaultMaxEmbedChars)
+	if got != DefaultMaxChunkBytes {
+		t.Errorf("contract violation: DefaultConfig max output is %d, but DefaultMaxChunkBytes is %d. These MUST match — see issue #300.", got, DefaultMaxChunkBytes)
 	}
 }
 
@@ -435,10 +434,9 @@ func TestSplit_TraceJSON_NoOversize(t *testing.T) {
 	b.WriteString(`]}`)
 	input := b.String()
 	chunks := Split(input, DefaultConfig())
-	const embedMaxChars = 3000
 	for i, c := range chunks {
-		if len(c.Content) > embedMaxChars {
-			t.Errorf("chunk %d would trigger embed-queue truncation: len=%d > %d", i, len(c.Content), embedMaxChars)
+		if len(c.Content) > DefaultMaxChunkBytes {
+			t.Errorf("chunk %d would trigger embed-queue truncation: len=%d > %d", i, len(c.Content), DefaultMaxChunkBytes)
 		}
 	}
 	if len(chunks) < 2 {
