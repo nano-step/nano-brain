@@ -12,6 +12,7 @@ import { MemoryPanel } from '../panels/MemoryPanel'
 import { SymbolsPanel } from '../panels/SymbolsPanel'
 import { HarvestPanel } from '../panels/HarvestPanel'
 import { SettingsPanel } from '../panels/SettingsPanel'
+import { WorkspacesPanel } from '../panels/WorkspacesPanel'
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -67,6 +68,12 @@ const settingsRoute = createRoute({
   component: SettingsPanel,
 })
 
+const workspacesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/workspaces',
+  component: WorkspacesPanel,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   dashboardRoute,
@@ -75,6 +82,7 @@ const routeTree = rootRoute.addChildren([
   symbolsRoute,
   harvestRoute,
   settingsRoute,
+  workspacesRoute,
 ])
 
 export const router = createRouter({
