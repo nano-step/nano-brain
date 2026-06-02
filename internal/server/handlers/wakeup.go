@@ -85,11 +85,12 @@ func WakeUpHandler(q WakeUpQuerier, logger zerolog.Logger) echo.HandlerFunc {
 
 		ctx := c.Request().Context()
 
-		docs, err := q.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
-			WorkspaceHash: workspace,
-			Limit:         int32(limit),
-		})
-		if err != nil {
+	docs, err := q.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
+		WorkspaceHash: workspace,
+		Limit:         int32(limit),
+		Collections:   []string{"memory", "session-summary"},
+	})
+	if err != nil {
 			logger.Error().Err(err).Str("workspace", workspace).Msg("wake-up: recent documents failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch recent documents")
 		}
