@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -21,7 +22,12 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-const wsRegTestDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
+func wsRegTestDSN() string {
+	if v := os.Getenv("NANO_BRAIN_TEST_DATABASE_URL"); v != "" {
+		return v
+	}
+	return "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"
+}
 
 func setupWsRegTestPG(t *testing.T) *sql.DB {
 	t.Helper()
@@ -30,7 +36,7 @@ func setupWsRegTestPG(t *testing.T) *sql.DB {
 	}
 
 	ctx := context.Background()
-	poolCfg, err := pgxpool.ParseConfig(wsRegTestDSN)
+	poolCfg, err := pgxpool.ParseConfig(wsRegTestDSN())
 	if err != nil {
 		t.Skip("postgres not available: " + err.Error())
 	}

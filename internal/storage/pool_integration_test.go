@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/testutil"
 	"github.com/rs/zerolog"
 )
 
 func TestPoolConnects(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.DatabaseConfig{URL: "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"}
+	cfg := config.DatabaseConfig{URL: testutil.TestDSN()}
 	logger := zerolog.Nop()
 
 	pool, err := NewPool(ctx, cfg, logger)
@@ -24,7 +25,7 @@ func TestPoolConnects(t *testing.T) {
 
 func TestPoolPing(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.DatabaseConfig{URL: "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"}
+	cfg := config.DatabaseConfig{URL: testutil.TestDSN()}
 	logger := zerolog.Nop()
 
 	pool, err := NewPool(ctx, cfg, logger)

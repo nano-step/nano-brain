@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -642,7 +643,12 @@ func (s *stubSummarizer) SummarizeAndPersist(ctx context.Context, md string, met
 	return s.fn(ctx, md, meta)
 }
 
-const testDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
+func testDSN() string {
+	if v := os.Getenv("NANO_BRAIN_TEST_DATABASE_URL"); v != "" {
+		return v
+	}
+	return "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"
+}
 
 func setupTestPG(t *testing.T) *sql.DB {
 	t.Helper()
@@ -651,7 +657,7 @@ func setupTestPG(t *testing.T) *sql.DB {
 	}
 
 	ctx := context.Background()
-	poolCfg, err := pgxpool.ParseConfig(testDSN)
+	poolCfg, err := pgxpool.ParseConfig(testDSN())
 	if err != nil {
 		t.Skip("postgres not available: parse config: " + err.Error())
 	}
