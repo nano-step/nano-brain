@@ -226,6 +226,13 @@ func TestIncrementalReindex_DeletedFile(t *testing.T) {
 	docID := uuid.New()
 	ghostPath := filepath.Join(dir, "ghost.txt")
 
+	// Create a valid file in the directory so diskFiles is non-empty.
+	// This ensures the orphan deletion guard (Fix 1) doesn't skip deletion.
+	validPath := filepath.Join(dir, "keep.txt")
+	if err := os.WriteFile(validPath, []byte("data"), 0644); err != nil {
+		t.Fatalf("failed to create valid file: %v", err)
+	}
+
 	e := echo.New()
 	body := `{"workspace":"ws123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/reindex", strings.NewReader(body))

@@ -163,6 +163,18 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 			indexed[row.SourcePath] = indexedEntry{id: row.ID, contentHash: row.ContentHash}
 		}
 
+		// Guard: if disk walk returned nothing but DB has indexed docs, skip orphan
+		// deletion — files may all exceed maxIncrementalFileSize or be temporarily
+		// unreadable. Deleting everything would be catastrophic data loss.
+		if len(diskFiles) == 0 && len(indexedRows) > 0 {
+			reqLog := LoggerFromCtx(c, logger)
+			reqLog.Warn().
+				Str("collection", col.Name).
+				Int("indexed", len(indexedRows)).
+				Msg("disk walk returned empty for non-empty collection — skipping orphan deletion")
+			continue
+		}
+
 		var colHasChanges bool
 		for path, diskHash := range diskFiles {
 			scanned++
@@ -192,6 +204,10 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 
 		for path, entry := range indexed {
 			if _, onDisk := diskFiles[path]; !onDisk {
+				if _, statErr := os.Stat(path); statErr == nil {
+					// File still exists on disk — was likely filtered (e.g., too large). Skip.
+					continue
+				}
 				chunksErr := queries.DeleteChunksByDocumentID(c.Request().Context(), sqlc.DeleteChunksByDocumentIDParams{
 					DocumentID:    entry.id,
 					WorkspaceHash: workspace,
@@ -214,10 +230,12 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 			}
 		}
 
-		_ = queries.DeleteSymbolDocumentsByCollection(c.Request().Context(), sqlc.DeleteSymbolDocumentsByCollectionParams{
-			WorkspaceHash: workspace,
-			Collection:    col.Name,
-		})
+		if colHasChanges {
+			_ = queries.DeleteSymbolDocumentsByCollection(c.Request().Context(), sqlc.DeleteSymbolDocumentsByCollectionParams{
+				WorkspaceHash: workspace,
+				Collection:    col.Name,
+			})
+		}
 	}
 
 	publishReindex(pub, workspace, "completed", embedded, embedded, deleted, skipped, "")
