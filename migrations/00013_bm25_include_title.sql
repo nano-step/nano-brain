@@ -30,6 +30,9 @@ FROM documents d
 WHERE c.document_id = d.id;
 
 -- Trigger to re-rank chunks when document title changes.
+-- Uses pg_trigger_depth() check inside chunks_search_vector_update (below) to
+-- skip the per-row SELECT when called via this propagate path — avoids N+1
+-- title lookups when a document has many chunks.
 -- +goose StatementBegin
 CREATE OR REPLACE FUNCTION documents_title_propagate() RETURNS trigger AS $$
 BEGIN
@@ -40,6 +43,28 @@ BEGIN
             setweight(to_tsvector('english', coalesce(content, '')), 'B')
         WHERE document_id = NEW.id;
     END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+-- +goose StatementEnd
+
+-- Re-redefine chunks_search_vector_update to skip when called via the
+-- propagate path (which has already computed search_vector). Detection: when
+-- pg_trigger_depth() > 1 AND NEW.search_vector is already non-null with the
+-- right shape, this is a propagate-cascade update — accept NEW as-is. For
+-- normal direct inserts/updates (depth=1) recompute with title JOIN.
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION chunks_search_vector_update() RETURNS trigger AS $$
+DECLARE
+    doc_title text;
+BEGIN
+    IF pg_trigger_depth() > 1 AND NEW.search_vector IS NOT NULL THEN
+        RETURN NEW;
+    END IF;
+    SELECT title INTO doc_title FROM documents WHERE id = NEW.document_id;
+    NEW.search_vector :=
+        setweight(to_tsvector('english', coalesce(doc_title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(NEW.content, '')), 'B');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
