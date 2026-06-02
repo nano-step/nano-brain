@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -164,9 +165,33 @@ func TestRouteRegistration(t *testing.T) {
 		paths[r.Path] = true
 	}
 
-	for _, path := range []string{"/health", "/api/status", "/api/v1/init", "/api/v1/workspaces", "/api/v1/embed", "/api/v1/collections", "/api/v1/collections/:name"} {
+	for _, path := range []string{"/health", "/api/status", "/api/v1/init", "/api/v1/workspaces", "/api/v1/workspaces/resolve", "/api/v1/embed", "/api/v1/collections", "/api/v1/collections/:name"} {
 		if !paths[path] {
 			t.Errorf("route %s not registered", path)
 		}
+	}
+}
+
+// TestResolveWorkspaceRouteSkipsWorkspaceMiddleware confirms that
+// POST /api/v1/workspaces/resolve is NOT subject to workspaceMiddleware:
+// it must reject empty path with "path is required" (handler), not with
+// "workspace_required" (middleware). See issue #316.
+func TestResolveWorkspaceRouteSkipsWorkspaceMiddleware(t *testing.T) {
+	s := newTestServer(&mockPool{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workspaces/resolve", strings.NewReader(`{"path":""}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "workspace_required") {
+		t.Errorf("workspace middleware leaked onto resolve route — body should mention 'path is required', got: %s", body)
+	}
+	if !strings.Contains(body, "path is required") {
+		t.Errorf("expected 'path is required' from handler, got: %s", body)
 	}
 }

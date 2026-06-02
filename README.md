@@ -311,6 +311,7 @@ docker run -d \
 | GET | `/api/status` | Server status with version, uptime, workspace stats |
 | POST | `/api/v1/init` | Register workspace |
 | GET | `/api/v1/workspaces` | List all workspaces (with doc counts) |
+| POST | `/api/v1/workspaces/resolve` | Resolve path → workspace hash + `registered` status (read-only) |
 | DELETE | `/api/v1/workspaces/:hash` | Permanently delete a workspace + cascade docs/chunks/embeddings |
 | GET | `/api/v1/wake-up` | Workspace briefing |
 | POST | `/api/harvest` | Trigger session harvesting |
@@ -353,6 +354,7 @@ Workspace is passed in the JSON body for POST, query param for GET.
 | `nano-brain` (no args) | Start HTTP server (default: port 3100) |
 | `nano-brain init --root=<path>` | Register workspace |
 | `nano-brain workspaces list` | List registered workspaces with doc counts |
+| `nano-brain workspaces current [--path=<p>] [--export\|--json\|--check]` | Resolve current/path workspace hash. `--export` prints `export NANO_BRAIN_WORKSPACE=<hash>` for `eval`; `--check` exits 2 if not registered |
 | `nano-brain workspaces remove --workspace=<hash> [--dry-run\|--force]` | Permanently delete a workspace + all its documents/chunks/embeddings |
 | `nano-brain write` | Write document via CLI |
 | `nano-brain query [--scope=all] [--tags=t1,t2]` | Hybrid search (BM25 + vector + RRF + recency) |
@@ -379,7 +381,7 @@ Workspace is passed in the JSON body for POST, query param for GET.
 
 ## MCP Tools
 
-nano-brain exposes 13 tools via MCP (Model Context Protocol):
+nano-brain exposes 14 tools via MCP (Model Context Protocol):
 
 | Tool | Description |
 |------|-------------|
@@ -396,6 +398,7 @@ nano-brain exposes 13 tools via MCP (Model Context Protocol):
 | `memory_trace` | Call chain trace from entry point |
 | `memory_impact` | Cross-file change impact analysis |
 | `memory_symbols` | Symbol search (functions, types, constants) |
+| `memory_workspaces_resolve` | Resolve filesystem path → workspace hash + registered status (read-only) |
 
 ### MCP Configuration
 

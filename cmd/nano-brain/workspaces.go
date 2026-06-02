@@ -12,7 +12,7 @@ import (
 )
 
 func workspacesUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: nano-brain workspaces [list|ls|remove] [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: nano-brain workspaces [list|ls|current|remove] [flags]")
 	os.Exit(1)
 }
 
@@ -24,6 +24,8 @@ func runWorkspacesCmd(args []string) {
 	switch args[0] {
 	case "list", "ls":
 		runWorkspacesList(args[1:])
+	case "current":
+		runWorkspacesCurrent(args[1:])
 	case "remove", "rm":
 		runWorkspacesRemove(args[1:])
 	default:
@@ -149,4 +151,84 @@ func truncateLeft(s string, max int) string {
 		return s
 	}
 	return ".." + s[len(s)-(max-2):]
+}
+
+func runWorkspacesCurrent(args []string) {
+	exit := runWorkspacesCurrentWithIO(args, os.Stdout, os.Stderr)
+	if exit != 0 {
+		os.Exit(exit)
+	}
+}
+
+func runWorkspacesCurrentWithIO(args []string, stdout, stderr io.Writer) int {
+	var (
+		pathFlag   string
+		exportFlag bool
+		jsonFlag   bool
+		checkFlag  bool
+	)
+	for _, a := range args {
+		switch {
+		case a == "--export":
+			exportFlag = true
+		case a == "--json":
+			jsonFlag = true
+		case a == "--check":
+			checkFlag = true
+		case strings.HasPrefix(a, "--path="):
+			pathFlag = strings.TrimPrefix(a, "--path=")
+		default:
+			fmt.Fprintf(stderr, "unknown flag: %s\n", a)
+			return 1
+		}
+	}
+
+	path := pathFlag
+	if path == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "failed to detect current directory: %v\n", err)
+			return 1
+		}
+		path = cwd
+	}
+
+	reqBody, _ := json.Marshal(map[string]string{"path": path})
+	body, _, err := doRequest("POST", getBaseURL()+"/api/v1/workspaces/resolve", bytes.NewReader(reqBody))
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+
+	if jsonFlag {
+		trimmed := bytes.TrimRight(body, "\n")
+		_, _ = stdout.Write(trimmed)
+		fmt.Fprintln(stdout)
+	}
+
+	var resp struct {
+		WorkspaceHash string `json:"workspace_hash"`
+		RootPath      string `json:"root_path"`
+		Name          string `json:"name"`
+		Registered    bool   `json:"registered"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		fmt.Fprintf(stderr, "failed to parse server response: %v\n", err)
+		return 1
+	}
+
+	if !jsonFlag {
+		switch {
+		case exportFlag:
+			fmt.Fprintf(stdout, "export NANO_BRAIN_WORKSPACE=%s\n", resp.WorkspaceHash)
+		default:
+			fmt.Fprintln(stdout, resp.WorkspaceHash)
+		}
+	}
+
+	if checkFlag && !resp.Registered {
+		fmt.Fprintf(stderr, "workspace not registered: %s\n", resp.RootPath)
+		return 2
+	}
+	return 0
 }

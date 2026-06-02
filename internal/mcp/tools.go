@@ -8,12 +8,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	pgvector_go "github.com/pgvector/pgvector-go"
 	"github.com/sqlc-dev/pqtype"
@@ -33,6 +35,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryGraph(server, a)
 	registerMemoryImpact(server, a)
 	registerMemoryTrace(server, a)
+	registerMemoryWorkspacesResolve(server, a)
 }
 
 func toolSchema(props map[string]map[string]any, required []string) json.RawMessage {
@@ -1218,6 +1221,55 @@ func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 				"symbols": results,
 				"count":   len(results),
 			})
+		},
+	)
+}
+
+func registerMemoryWorkspacesResolve(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_workspaces_resolve",
+			Description: "Resolve a filesystem path to a deterministic workspace hash and report whether it is registered. Read-only — does not register the workspace; use POST /api/v1/init for that.",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"path": {"type": "string", "description": "Absolute filesystem path to the project root"},
+			}, []string{"path"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			path, _ := args["path"].(string)
+			if path == "" {
+				return errResult("path is required"), nil
+			}
+			absPath, err := filepath.Abs(path)
+			if err != nil {
+				return errResult("invalid path"), nil
+			}
+			hash, err := storage.WorkspaceHash(absPath)
+			if err != nil {
+				return errResult("invalid path"), nil
+			}
+
+			ws, err := a.queries.GetWorkspaceByHash(ctx, hash)
+			if err == nil {
+				return textResult(map[string]any{
+					"workspace_hash": ws.Hash,
+					"root_path":      ws.Path,
+					"name":           ws.Name,
+					"registered":     true,
+				})
+			}
+			if errors.Is(err, sql.ErrNoRows) {
+				return textResult(map[string]any{
+					"workspace_hash": hash,
+					"root_path":      absPath,
+					"name":           filepath.Base(absPath),
+					"registered":     false,
+				})
+			}
+			return errResult(fmt.Sprintf("resolve workspace failed: %v", err)), nil
 		},
 	)
 }
