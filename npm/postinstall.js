@@ -5,6 +5,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
 const { execSync } = require("child_process");
 
 const VERSION = require("../package.json").version;
@@ -53,6 +54,82 @@ function download(url, dest) {
       reject(err);
     });
   });
+}
+
+function downloadWithHash(url, dest) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    const hash = crypto.createHash("sha256");
+    https.get(url, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        file.close();
+        fs.unlinkSync(dest);
+        return downloadWithHash(res.headers.location, dest).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        file.close();
+        fs.unlinkSync(dest);
+        return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+      }
+      res.on("data", (chunk) => hash.update(chunk));
+      res.pipe(file);
+      file.on("finish", () => {
+        file.close(() => resolve(hash.digest("hex")));
+      });
+      res.on("error", (err) => {
+        file.close();
+        if (fs.existsSync(dest)) fs.unlinkSync(dest);
+        reject(err);
+      });
+    }).on("error", (err) => {
+      if (fs.existsSync(dest)) fs.unlinkSync(dest);
+      reject(err);
+    });
+  });
+}
+
+function parseSHA256Line(content, targetFilename) {
+  if (typeof content !== "string" || !content) return null;
+  const lines = content.split(/\r?\n/);
+  const re = /^([a-f0-9]{64})\s+(.+?)\s*$/;
+  for (const line of lines) {
+    const m = line.match(re);
+    if (m && m[2] === targetFilename) return m[1];
+  }
+  return null;
+}
+
+async function verifySHA256(tag, assetName, binPath, computedHex) {
+  const sumsUrl = `https://github.com/${REPO}/releases/download/${tag}/SHA256SUMS`;
+  const sumsPath = `${binPath}.SHA256SUMS.tmp`;
+  let sumsContent;
+  try {
+    await download(sumsUrl, sumsPath);
+    sumsContent = fs.readFileSync(sumsPath, "utf8");
+  } catch (err) {
+    console.warn(`⚠ SHA256SUMS not available for ${tag} (${err.message}); skipping integrity verification.`);
+    return;
+  } finally {
+    if (fs.existsSync(sumsPath)) {
+      try { fs.unlinkSync(sumsPath); } catch (_) {}
+    }
+  }
+
+  const expectedHex = parseSHA256Line(sumsContent, assetName);
+  if (!expectedHex) {
+    console.warn(`⚠ ${assetName} not listed in SHA256SUMS for ${tag}; skipping integrity verification.`);
+    return;
+  }
+
+  if (expectedHex.toLowerCase() !== computedHex.toLowerCase()) {
+    if (fs.existsSync(binPath)) fs.unlinkSync(binPath);
+    throw new Error(
+      `SECURITY: SHA-256 mismatch for ${assetName}\n` +
+      `  expected: ${expectedHex}\n` +
+      `  computed: ${computedHex}\n` +
+      `Binary has been deleted. Build from source: CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain`
+    );
+  }
 }
 
 // npm normalizes leading zeros in semver numeric identifiers (e.g. tag
@@ -112,6 +189,11 @@ async function main() {
   const binName = os.platform() === "win32" ? "nano-brain.exe" : "nano-brain";
   const binPath = path.join(__dirname, binName);
 
+  const skipVerify = !!process.env.NANO_BRAIN_SKIP_SHA_VERIFY;
+  if (skipVerify) {
+    console.warn("⚠ NANO_BRAIN_SKIP_SHA_VERIFY is set; binary integrity check will be skipped.");
+  }
+
   if (fs.existsSync(binPath)) {
     try {
       const output = execSync(`"${binPath}" version --json`, { timeout: 5000 }).toString();
@@ -131,11 +213,20 @@ async function main() {
   for (const tag of candidateTagsForVersion(VERSION)) {
     const url = `https://github.com/${REPO}/releases/download/${tag}/${assetName}`;
     try {
-      await download(url, binPath);
+      if (skipVerify) {
+        await download(url, binPath);
+      } else {
+        const computedHex = await downloadWithHash(url, binPath);
+        await verifySHA256(tag, assetName, binPath, computedHex);
+      }
       fs.chmodSync(binPath, 0o755);
       console.log(`nano-brain v${VERSION} installed successfully from ${tag}.`);
       return;
     } catch (err) {
+      if (err && typeof err.message === "string" && err.message.startsWith("SECURITY:")) {
+        console.error(err.message);
+        process.exit(1);
+      }
       lastErr = err;
     }
   }
@@ -144,12 +235,21 @@ async function main() {
     const tag = await resolveTagFromAPI(VERSION, assetName);
     if (tag) {
       const url = `https://github.com/${REPO}/releases/download/${tag}/${assetName}`;
-      await download(url, binPath);
+      if (skipVerify) {
+        await download(url, binPath);
+      } else {
+        const computedHex = await downloadWithHash(url, binPath);
+        await verifySHA256(tag, assetName, binPath, computedHex);
+      }
       fs.chmodSync(binPath, 0o755);
       console.log(`nano-brain v${VERSION} installed successfully from ${tag} (API fallback).`);
       return;
     }
   } catch (err) {
+    if (err && typeof err.message === "string" && err.message.startsWith("SECURITY:")) {
+      console.error(err.message);
+      process.exit(1);
+    }
     lastErr = err;
   }
 
@@ -158,4 +258,8 @@ async function main() {
   process.exit(0);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { parseSHA256Line, downloadWithHash, verifySHA256 };
