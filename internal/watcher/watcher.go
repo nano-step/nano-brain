@@ -144,6 +144,12 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 		return fmt.Errorf("resolve path %s: %w", dirPath, err)
 	}
 
+	filter, ferr := newFileFilter(absPath, excludePatterns, allowedExtensions, w.globalIgnore)
+	if ferr != nil {
+		w.logger.Warn().Err(ferr).Str("dir", absPath).Str("collection", collectionName).Msg("workspace .nano-brainignore failed to load, continuing without local matcher")
+	} else if filter.localIgnore != nil {
+		w.logger.Debug().Str("dir", absPath).Str("collection", collectionName).Msg("loaded workspace .nano-brainignore")
+	}
 	w.collections[absPath] = watchedCollection{
 		name:              collectionName,
 		dirPath:           absPath,
@@ -151,7 +157,7 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 		globPattern:       globPattern,
 		excludePatterns:   excludePatterns,
 		allowedExtensions: allowedExtensions,
-		filter:            newFileFilter(absPath, excludePatterns, allowedExtensions, w.globalIgnore),
+		filter:            filter,
 	}
 
 	if w.fsw != nil {

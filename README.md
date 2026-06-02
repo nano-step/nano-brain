@@ -122,8 +122,8 @@ watcher:
   debounce_ms: 2000
   reindex_interval: 300
   # Per-collection exclude_patterns and allowed_extensions are also supported
-  # via the workspaces map. See "Global ignore patterns" section below for
-  # the cross-collection .nano-brainignore file.
+  # via the workspaces map. See "Ignore patterns" section below for the
+  # global and workspace-local .nano-brainignore files.
 
 storage:
   max_file_size: 314572800      # 300MB
@@ -188,15 +188,17 @@ curl -H "Authorization: Bearer nbt_..." http://host:3100/api/v1/query -d '{"quer
 # url: http://admin:mypassword@host:3100/mcp
 ```
 
-### Global ignore patterns (`~/.nano-brain/.nano-brainignore`)
+### Ignore patterns
 
-The watcher loads a global gitignore-style file at `~/.nano-brain/.nano-brainignore`
-on startup. Patterns in this file apply to **all** registered collections, removing
-the need to repeat the same exclusions in each `watcher.workspaces` block.
+Two layers of `.nano-brainignore` files control what the watcher indexes,
+both using standard `.gitignore` syntax (one pattern per line, supports `**`,
+`!negation`, blank lines, `#` comments).
 
-**Format**: standard `.gitignore` syntax (one pattern per line, supports `**`, `!negation`, blank lines, `#` comments).
+#### Global — `~/.nano-brain/.nano-brainignore`
 
-**Example** `~/.nano-brain/.nano-brainignore`:
+Loaded once at server startup. Patterns apply to **every** registered
+collection across **every** workspace. Use this for rules that are personal
+to your machine and span all your projects (e.g. always skip `*.png`).
 
 ```
 # Skip generated files everywhere
@@ -211,15 +213,52 @@ node_modules/
 !icons/important.png
 ```
 
-**Order of evaluation** (most aggressive first):
+#### Workspace-local — `<workspace_root>/.nano-brainignore`
+
+Loaded once per collection when the watcher starts watching it (server
+startup, `POST /api/v1/init`, or `POST /api/v1/collections`). Patterns
+apply **only** to that one workspace. Use this for project-specific rules
+you want to **share with your team via version control** — e.g. skip
+generated code that you commit to git but don't want indexed.
+
+```
+# nano-brain-specific rules for this repo (commit me)
+*.generated.go
+fixtures/large/
+*.snap
+```
+
+Workspace-local rules layer **additively** on top of global rules and
+per-collection `.gitignore`. There is no cross-file negation: a `!pattern`
+in workspace-local cannot un-exclude a path matched by global.
+
+The file at the workspace root is loaded for the `code` collection. The
+sibling `memory` and `sessions` collections are rooted under `~/.nano-brain/`
+and do not normally need their own ignore files.
+
+#### Order of evaluation (most aggressive first)
 
 1. Hardcoded default exclude dirs (`node_modules`, `.git`, `dist`, `build`, `target`, etc.)
-2. **Global `.nano-brainignore`** (this feature)
-3. Per-collection `.gitignore` (in collection root)
-4. Per-collection `exclude_patterns` (config-level)
-5. Per-collection `allowed_extensions` (whitelist)
+2. Global `~/.nano-brain/.nano-brainignore`
+3. Workspace-local `<workspace_root>/.nano-brainignore`
+4. Per-collection `.gitignore` (in collection root)
+5. Per-collection `exclude_patterns` (config-level)
+6. Per-collection `allowed_extensions` (whitelist)
 
-**Restart required**: changes to `.nano-brainignore` take effect on next server start (hot-reload deferred to a follow-up). Issue #263.
+#### Reloading
+
+Both global and workspace-local files are loaded at collection registration
+time. To pick up edits:
+
+- **Global**: restart the server.
+- **Workspace-local**: restart the server, OR re-register the workspace
+  with `POST /api/v1/init` (this rebuilds the collection's filter and
+  re-reads the file).
+
+`POST /api/reload-config` does **not** re-read ignore files — only search
+config and log level are reloaded by that endpoint.
+
+Issues: #263 (global), #317 (workspace-local).
 
 ### Session Summarization
 
