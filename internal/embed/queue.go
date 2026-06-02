@@ -64,6 +64,7 @@ type Queue struct {
 	backoff     backoffState
 	mu          sync.Mutex
 	pending        atomic.Int64
+	inflight       sync.Map
 	retries        map[uuid.UUID]int
 	retriesMu      sync.Mutex
 	lastCapacityLog time.Time
@@ -113,6 +114,10 @@ func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
 			Msg("backpressure: rejecting enqueue")
 		return false
 	}
+	if _, loaded := q.inflight.LoadOrStore(chunkID, struct{}{}); loaded {
+		q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("skip enqueue: chunk already in-flight")
+		return false
+	}
 	select {
 	case q.ch <- chunkID:
 		q.pending.Add(1)
@@ -120,6 +125,7 @@ func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
 		q.publishStatus()
 		return true
 	default:
+		q.inflight.Delete(chunkID)
 		q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("queue full, chunk dropped")
 		return false
 	}
@@ -204,16 +210,19 @@ func (q *Queue) scanByStatus(ctx context.Context, failed bool) int {
 			q.logger.Error().Err(err).Bool("failed", failed).Msg("failed to scan chunks")
 			return total
 		}
-		for _, id := range ids {
-			if failed {
-				q.clearRetries(id)
-			}
-			if !q.Enqueue(id) {
+	for _, id := range ids {
+		if failed {
+			q.clearRetries(id)
+		}
+		if !q.Enqueue(id) {
+			if q.pending.Load() >= rejectionThreshold || len(q.ch) >= channelCapacity {
 				q.logger.Info().Int("total", total).Bool("failed", failed).Msg("scan stopped (queue full)")
 				return total
 			}
-			total++
+			continue
 		}
+		total++
+	}
 		if len(ids) < scanBatchSize {
 			break
 		}
@@ -222,6 +231,12 @@ func (q *Queue) scanByStatus(ctx context.Context, failed bool) int {
 }
 
 func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
+	requeued := false
+	defer func() {
+		if !requeued {
+			q.inflight.Delete(chunkID)
+		}
+	}()
 	if ctx.Err() != nil {
 		q.pending.Add(-1)
 		return
@@ -289,7 +304,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 			return
 		}
 		q.increaseBackoff()
-		q.handleRetry(ctx, chunkID, chunk.WorkspaceHash)
+		requeued = q.handleRetry(ctx, chunkID, chunk.WorkspaceHash)
 		return
 	}
 
@@ -351,7 +366,7 @@ func (q *Queue) resetBackoff() {
 	q.backoff.current = 0
 }
 
-func (q *Queue) handleRetry(ctx context.Context, chunkID uuid.UUID, workspaceHash string) {
+func (q *Queue) handleRetry(ctx context.Context, chunkID uuid.UUID, workspaceHash string) bool {
 	q.retriesMu.Lock()
 	q.retries[chunkID]++
 	count := q.retries[chunkID]
@@ -368,15 +383,17 @@ func (q *Queue) handleRetry(ctx context.Context, chunkID uuid.UUID, workspaceHas
 		q.clearRetries(chunkID)
 		q.logger.Warn().Str("chunk_id", chunkID.String()).Int("retries", count).
 			Msg("chunk marked embed_failed after max retries")
-		return
+		return false
 	}
 
 	select {
 	case q.ch <- chunkID:
 		q.logger.Debug().Str("chunk_id", chunkID.String()).Int("retry", count).Msg("chunk re-enqueued for retry")
+		return true
 	default:
 		q.pending.Add(-1)
 		q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("retry re-enqueue failed, will be picked up on scan")
+		return false
 	}
 }
 

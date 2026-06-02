@@ -871,3 +871,214 @@ func TestProcessChunk_TransientErrorRetries(t *testing.T) {
 		t.Errorf("retry counter not incremented for transient error (present=%v count=%d)", retryPresent, count)
 	}
 }
+
+func TestQueue_Enqueue_DedupSameID(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	id := uuid.New()
+
+	first := eq.Enqueue(id)
+	second := eq.Enqueue(id)
+
+	if !first {
+		t.Fatal("first Enqueue should return true")
+	}
+	if second {
+		t.Fatal("second Enqueue of same ID should return false")
+	}
+	if len(eq.ch) != 1 {
+		t.Errorf("channel len = %d, want 1", len(eq.ch))
+	}
+	if eq.pending.Load() != 1 {
+		t.Errorf("pending = %d, want 1", eq.pending.Load())
+	}
+}
+
+func TestQueue_Enqueue_DifferentIDsBothEnqueued(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	id1 := uuid.New()
+	id2 := uuid.New()
+
+	if !eq.Enqueue(id1) {
+		t.Fatal("first Enqueue should succeed")
+	}
+	if !eq.Enqueue(id2) {
+		t.Fatal("second Enqueue (different ID) should succeed")
+	}
+	if len(eq.ch) != 2 {
+		t.Errorf("channel len = %d, want 2", len(eq.ch))
+	}
+}
+
+func TestQueue_ProcessChunk_PanicCleansInflight(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{
+		embedFn: func(ctx context.Context, text string) ([]float32, error) {
+			panic("simulated panic in embedder")
+		},
+	}
+	mq := &mockQuerier{}
+	eq := newTestQueue(me, mq)
+	eq.pending.Store(1)
+	eq.inflight.Store(chunkID, struct{}{})
+
+	func() {
+		defer func() { _ = recover() }()
+		eq.processChunk(context.Background(), chunkID)
+	}()
+
+	if _, ok := eq.inflight.Load(chunkID); ok {
+		t.Error("inflight should be cleaned after panic")
+	}
+}
+
+func TestQueue_ChannelFull_DeletesInflight(t *testing.T) {
+	me := &mockEmbedder{}
+	mq := &mockQuerier{}
+	eq := NewQueue(me, mq, zerolog.Nop(), "test", "test", 1)
+
+	for i := 0; i < channelCapacity; i++ {
+		eq.ch <- uuid.New()
+	}
+
+	overflowID := uuid.New()
+	result := eq.Enqueue(overflowID)
+
+	if result {
+		t.Fatal("Enqueue should return false when channel is full")
+	}
+	if _, ok := eq.inflight.Load(overflowID); ok {
+		t.Error("inflight should not contain the rejected ID")
+	}
+}
+
+func TestQueue_Enqueue_AfterProcessChunkDone_AllowsReEnqueue(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{}
+	mq := &mockQuerier{}
+	eq := newTestQueue(me, mq)
+
+	if !eq.Enqueue(chunkID) {
+		t.Fatal("first Enqueue should succeed")
+	}
+	<-eq.ch
+	eq.processChunk(context.Background(), chunkID)
+
+	if _, ok := eq.inflight.Load(chunkID); ok {
+		t.Fatal("inflight should be empty after processChunk completes")
+	}
+
+	if !eq.Enqueue(chunkID) {
+		t.Fatal("re-enqueue after processChunk should succeed")
+	}
+	if len(eq.ch) != 1 {
+		t.Errorf("channel len = %d, want 1", len(eq.ch))
+	}
+}
+
+func TestQueue_BackpressureRejects_DoesNotAddToInflight(t *testing.T) {
+	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
+	eq.pending.Store(rejectionThreshold)
+
+	id := uuid.New()
+	result := eq.Enqueue(id)
+
+	if result {
+		t.Fatal("Enqueue should return false under backpressure")
+	}
+	if _, ok := eq.inflight.Load(id); ok {
+		t.Error("backpressure-rejected ID should not be in inflight")
+	}
+}
+
+func TestQueue_HandleRetry_KeepsInflightOnSuccessfulReenqueue(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{
+		embedFn: func(ctx context.Context, text string) ([]float32, error) {
+			return nil, fmt.Errorf("provider down")
+		},
+	}
+	mq := &mockQuerier{}
+	eq := newTestQueue(me, mq)
+	eq.pending.Store(1)
+	eq.inflight.Store(chunkID, struct{}{})
+	eq.resetBackoff()
+
+	eq.processChunk(context.Background(), chunkID)
+
+	if _, ok := eq.inflight.Load(chunkID); !ok {
+		t.Error("inflight should still contain chunkID after successful re-enqueue")
+	}
+
+	found := false
+	for i := 0; i < len(eq.ch); i++ {
+		id := <-eq.ch
+		if id == chunkID {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("chunkID should be in the channel after successful re-enqueue")
+	}
+}
+
+func TestQueue_HandleRetry_DeletesInflightOnChannelFull(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{
+		embedFn: func(ctx context.Context, text string) ([]float32, error) {
+			return nil, fmt.Errorf("provider down")
+		},
+	}
+	mq := &mockQuerier{}
+	eq := NewQueue(me, mq, zerolog.Nop(), "test", "test", 1)
+
+	for i := 0; i < channelCapacity; i++ {
+		eq.ch <- uuid.New()
+	}
+
+	eq.pending.Store(1)
+	eq.inflight.Store(chunkID, struct{}{})
+	eq.resetBackoff()
+
+	eq.processChunk(context.Background(), chunkID)
+
+	if _, ok := eq.inflight.Load(chunkID); ok {
+		t.Error("inflight should not contain chunkID after channel-full retry failure")
+	}
+	if eq.pending.Load() != 0 {
+		t.Errorf("pending = %d, want 0 after channel-full retry", eq.pending.Load())
+	}
+}
+
+func TestQueue_HandleRetry_DeletesInflightOnMaxRetries(t *testing.T) {
+	chunkID := uuid.New()
+	me := &mockEmbedder{
+		embedFn: func(ctx context.Context, text string) ([]float32, error) {
+			return nil, fmt.Errorf("provider down")
+		},
+	}
+	mq := &mockQuerier{}
+	eq := newTestQueue(me, mq)
+	eq.pending.Store(1)
+	eq.inflight.Store(chunkID, struct{}{})
+	eq.resetBackoff()
+
+	eq.retriesMu.Lock()
+	eq.retries[chunkID] = maxRetries - 1
+	eq.retriesMu.Unlock()
+
+	eq.processChunk(context.Background(), chunkID)
+
+	if _, ok := eq.inflight.Load(chunkID); ok {
+		t.Error("inflight should not contain chunkID after max retries")
+	}
+
+	mq.mu.Lock()
+	failedCalls := mq.markChunkEmbedFailedCalls
+	mq.mu.Unlock()
+	if failedCalls != 1 {
+		t.Errorf("MarkChunkEmbedFailed calls = %d, want 1", failedCalls)
+	}
+	if eq.pending.Load() != 0 {
+		t.Errorf("pending = %d, want 0 after max retries", eq.pending.Load())
+	}
+}
