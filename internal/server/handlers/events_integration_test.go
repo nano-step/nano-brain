@@ -88,20 +88,28 @@ func TestEventsIntegration_ReindexPublishesSequence(t *testing.T) {
 		Payload:   json.RawMessage(`{"state":"completed","enqueued":5}`),
 	})
 
-	evType, payload := readEvent(2 * time.Second)
+	evType, ev := readEvent(2 * time.Second)
 	if evType != "reindex" {
 		t.Fatalf("expected reindex event, got %q", evType)
 	}
-	if state, ok := payload["state"].(string); !ok || state != "started" {
-		t.Fatalf("expected state=started, got %v", payload)
+	innerPayload, ok := ev["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested payload object, got %v", ev)
+	}
+	if state, ok := innerPayload["state"].(string); !ok || state != "started" {
+		t.Fatalf("expected state=started, got %v", innerPayload)
 	}
 
-	evType, payload = readEvent(2 * time.Second)
+	evType, ev = readEvent(2 * time.Second)
 	if evType != "reindex" {
 		t.Fatalf("expected reindex event, got %q", evType)
 	}
-	if state, ok := payload["state"].(string); !ok || state != "completed" {
-		t.Fatalf("expected state=completed, got %v", payload)
+	innerPayload, ok = ev["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested payload object, got %v", ev)
+	}
+	if state, ok := innerPayload["state"].(string); !ok || state != "completed" {
+		t.Fatalf("expected state=completed, got %v", innerPayload)
 	}
 
 	cancel()

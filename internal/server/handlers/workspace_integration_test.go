@@ -122,12 +122,14 @@ func TestListWorkspacesE2E(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	var items []map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&items); err != nil {
+	var resp struct {
+		Workspaces []map[string]interface{} `json:"workspaces"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if len(items) == 0 {
+	if len(resp.Workspaces) == 0 {
 		t.Error("expected at least one workspace in list")
 	}
 
@@ -136,8 +138,8 @@ func TestListWorkspacesE2E(t *testing.T) {
 		t.Fatalf("WorkspaceHash: %v", err)
 	}
 	found := false
-	for _, item := range items {
-		if item["workspace_hash"] == expectedHash {
+	for _, item := range resp.Workspaces {
+		if item["hash"] == expectedHash {
 			found = true
 			break
 		}
