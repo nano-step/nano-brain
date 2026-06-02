@@ -3,6 +3,7 @@ SELECT id, title, tags, updated_at,
        LEFT(content, 200) AS snippet
 FROM documents
 WHERE workspace_hash = $1
+  AND collection = ANY($3::text[])
 ORDER BY updated_at DESC
 LIMIT $2;
 

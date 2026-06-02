@@ -62,6 +62,7 @@ SELECT id, title, tags, updated_at,
        LEFT(content, 200) AS snippet
 FROM documents
 WHERE workspace_hash = $1
+  AND collection = ANY($3::text[])
 ORDER BY updated_at DESC
 LIMIT $2
 `
@@ -69,6 +70,7 @@ LIMIT $2
 type RecentDocumentsParams struct {
 	WorkspaceHash string
 	Limit         int32
+	Collections   []string
 }
 
 type RecentDocumentsRow struct {
@@ -80,7 +82,7 @@ type RecentDocumentsRow struct {
 }
 
 func (q *Queries) RecentDocuments(ctx context.Context, arg RecentDocumentsParams) ([]RecentDocumentsRow, error) {
-	rows, err := q.db.QueryContext(ctx, recentDocuments, arg.WorkspaceHash, arg.Limit)
+	rows, err := q.db.QueryContext(ctx, recentDocuments, arg.WorkspaceHash, arg.Limit, pq.Array(arg.Collections))
 	if err != nil {
 		return nil, err
 	}
