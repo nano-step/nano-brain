@@ -23,7 +23,7 @@ $ NANO_BRAIN_CONFIG=/tmp/smoke317-cfg/config.yml /tmp/nb317
 {"level":"info","addr":"127.0.0.1:4199","message":"HTTP server listening"}
 {"level":"info","component":"watcher","debounce_ms":500,"poll_interval_s":60,"message":"file watcher started"}
 
-$ curl -sf http://127.0.0.1:4199/health
+curl -sf http://127.0.0.1:4199/health
 {"status":"ok","ready":true,"version":"dev","uptime_s":17}
 ```
 
@@ -34,7 +34,7 @@ $ printf '*.snap\n' > /tmp/smoke317-ws/.nano-brainignore
 $ ls /tmp/smoke317-ws/
 .nano-brainignore  foo.go  skip.snap
 
-$ curl -sX POST http://127.0.0.1:4199/api/v1/init -H 'Content-Type: application/json' \
+curl -sX POST http://127.0.0.1:4199/api/v1/init -H 'Content-Type: application/json' \
     -d '{"root_path":"/tmp/smoke317-ws","name":"smoke317"}'
 {"workspace_hash":"1becbe9262c966f9cec8c1c4392e3b818300b44327fa1e5302c86a3766d46c1b","root_path":"/tmp/smoke317-ws", ...}
 ```
@@ -55,7 +55,7 @@ Searching the full server log, `skip.snap` appears in zero `"processing file"` o
 ```
 $ WS=1becbe9262c966f9cec8c1c4392e3b818300b44327fa1e5302c86a3766d46c1b
 
-$ curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
+curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
     -d "{\"workspace\":\"$WS\",\"query\":\"snapshot\"}"
 {"results":[],"total":0,"query_ms":11}
 ```
@@ -63,7 +63,7 @@ $ curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: applicatio
 ✅ PASS — `skip.snap` filtered out (would otherwise match the BM25 query "snapshot" since its content is "snapshot data").
 
 ```
-$ curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
+curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
     -d "{\"workspace\":\"$WS\",\"query\":\"package main\"}"
 {"results":[{"id":"da7bfd2c-2b39-...","title":"foo.go","snippet":"package main\n","score":0.40,
   "collection":"code","source_path":"/tmp/smoke317-ws/foo.go", ...}],"total":1,"query_ms":2}
@@ -78,7 +78,7 @@ $ echo 'noise data' > /tmp/smoke317-ws/skip.junk
 $ echo 'normal data' > /tmp/smoke317-ws/keep.txt
 $ printf '*.snap\n*.junk\n' > /tmp/smoke317-ws/.nano-brainignore
 
-$ curl -sX POST http://127.0.0.1:4199/api/v1/init -H 'Content-Type: application/json' \
+curl -sX POST http://127.0.0.1:4199/api/v1/init -H 'Content-Type: application/json' \
     -d '{"root_path":"/tmp/smoke317-ws","name":"smoke317"}'
 {"workspace_hash":"1becbe92...", ...}
 ```
@@ -93,7 +93,7 @@ $ curl -sX POST http://127.0.0.1:4199/api/v1/init -H 'Content-Type: application/
 ### Evidence: New pattern takes effect immediately
 
 ```
-$ curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
+curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
     -d "{\"workspace\":\"$WS\",\"query\":\"noise\"}"
 {"results":[],"total":0,"query_ms":19}
 ```
@@ -101,7 +101,7 @@ $ curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: applicatio
 ✅ PASS — `skip.junk` filtered by newly-added `*.junk` rule, no server restart needed.
 
 ```
-$ curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
+curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
     -d "{\"workspace\":\"$WS\",\"query\":\"normal data\"}"
 {"results":[{"title":"keep.txt","snippet":"normal data\n", ...}],"total":1}
 ```
@@ -114,7 +114,7 @@ $ curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: applicatio
 $ mkdir -p /tmp/smoke317-bad/.nano-brainignore   # path is a directory, os.ReadFile will fail
 $ echo 'data' > /tmp/smoke317-bad/main.go
 
-$ curl -sX POST http://127.0.0.1:4199/api/v1/init -H 'Content-Type: application/json' \
+curl -sX POST http://127.0.0.1:4199/api/v1/init -H 'Content-Type: application/json' \
     -d '{"root_path":"/tmp/smoke317-bad","name":"smoke317-bad"}'
 {"workspace_hash":"3c2d7862...", ...}
 ```
@@ -132,7 +132,7 @@ $ curl -sX POST http://127.0.0.1:4199/api/v1/init -H 'Content-Type: application/
 ### Evidence: Server did NOT crash; collection works normally
 
 ```
-$ curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
+curl -sX POST http://127.0.0.1:4199/api/v1/search -H 'Content-Type: application/json' \
     -d "{\"workspace\":\"3c2d7862...\",\"query\":\"data\"}"
 {"results":[{"title":"main.go","snippet":"data\n", ...}],"total":1}
 ```
