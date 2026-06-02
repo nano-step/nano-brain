@@ -1,0 +1,25 @@
+=== Live verification of #305 fix on dev port 3199 ===
+
+migration_version: 13 (applied automatically on server start)
+
+Test: write a doc whose title contains a unique magic word that does NOT
+appear anywhere in content, then BM25-search for that title-only word.
+
+BEFORE (master pre-fix): zero results — BM25 tsvector only indexed
+chunks.content, so title-only words produced silent empty results.
+
+AFTER (this PR): score=1.000, correct doc returned.
+
+Reproducer:
+  TS=$(date +%s)
+  curl -sX POST /api/v1/write \
+    -d "{\"title\":\"UNIQUEWORD-$TS smoke test alpha\",
+         \"content\":\"This content has NO trace of the magic word ...\",
+         ...}"
+  curl -sX POST /api/v1/search \
+    -d "{\"query\":\"UNIQUEWORD-$TS\", \"max_results\":3}"
+
+Result:
+  results: 1
+    score=1.000  title=UNIQUEWORD-1780362879 smoke test alpha
+  VERDICT: PASS — title-only search hits the right doc
