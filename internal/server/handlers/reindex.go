@@ -163,13 +163,12 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 			indexed[row.SourcePath] = indexedEntry{id: row.ID, contentHash: row.ContentHash}
 		}
 
+		var colHasChanges bool
 		for path, diskHash := range diskFiles {
 			scanned++
 			entry, exists := indexed[path]
 			if !exists {
-				if w.TriggerRescanByName(col.Name, workspace) {
-					watcherTriggered = true
-				}
+				colHasChanges = true
 				embedded++
 			} else if entry.contentHash == diskHash {
 				skipped++
@@ -181,30 +180,37 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 					reqLog := LoggerFromCtx(c, logger)
 					reqLog.Warn().Err(err).Str("path", path).Msg("delete chunks failed")
 				}
-				if w.TriggerRescanByName(col.Name, workspace) {
-					watcherTriggered = true
-				}
+				colHasChanges = true
 				embedded++
+			}
+		}
+		if colHasChanges {
+			if w.TriggerRescanByName(col.Name, workspace) {
+				watcherTriggered = true
 			}
 		}
 
 		for path, entry := range indexed {
 			if _, onDisk := diskFiles[path]; !onDisk {
-				if err := queries.DeleteChunksByDocumentID(c.Request().Context(), sqlc.DeleteChunksByDocumentIDParams{
+				chunksErr := queries.DeleteChunksByDocumentID(c.Request().Context(), sqlc.DeleteChunksByDocumentIDParams{
 					DocumentID:    entry.id,
 					WorkspaceHash: workspace,
-				}); err != nil {
+				})
+				if chunksErr != nil {
 					reqLog := LoggerFromCtx(c, logger)
-					reqLog.Warn().Err(err).Str("path", path).Msg("delete chunks for deleted doc failed")
+					reqLog.Warn().Err(chunksErr).Str("path", path).Msg("delete chunks for deleted doc failed")
 				}
-				if _, err := queries.DeleteDocumentByIDAndWorkspace(c.Request().Context(), sqlc.DeleteDocumentByIDAndWorkspaceParams{
+				_, docErr := queries.DeleteDocumentByIDAndWorkspace(c.Request().Context(), sqlc.DeleteDocumentByIDAndWorkspaceParams{
 					ID:            entry.id,
 					WorkspaceHash: workspace,
-				}); err != nil {
+				})
+				if docErr != nil {
 					reqLog := LoggerFromCtx(c, logger)
-					reqLog.Warn().Err(err).Str("path", path).Msg("delete document failed")
+					reqLog.Warn().Err(docErr).Str("path", path).Msg("delete document failed")
 				}
-				deleted++
+				if chunksErr == nil && docErr == nil {
+					deleted++
+				}
 			}
 		}
 
@@ -245,8 +251,18 @@ func walkCollectionFiles(col sqlc.Collection) (map[string]string, error) {
 	if col.Path == "" {
 		return result, nil
 	}
+	// Verify root is accessible before walking — an inaccessible root would
+	// return an empty map which triggerIncremental would interpret as "all files
+	// deleted", causing catastrophic data loss.
+	if _, err := os.Stat(col.Path); err != nil {
+		return nil, fmt.Errorf("walk collection %q: root path inaccessible: %w", col.Name, err)
+	}
 	err := filepath.WalkDir(col.Path, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			// Propagate root-level errors; skip inaccessible subdirectories/files.
+			if path == col.Path {
+				return walkErr
+			}
 			return nil
 		}
 		if d.IsDir() {
