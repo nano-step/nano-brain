@@ -4,7 +4,7 @@ description: Persistent memory + code intelligence for AI coding agents. Hybrid 
 compatibility: OpenCode, Claude Code, any MCP-aware agent
 metadata:
   author: nano-step
-  version: 3.1.0
+  version: 3.1.1
   repo: nano-step/nano-brain
 ---
 
@@ -98,7 +98,7 @@ Map the user's intent to the right call:
 | "Filter by tag (e.g. decisions)" | tagged search | `query --tags=decision "X"` | body adds `"tags":["decision"]` |
 | "Save a decision/summary" | persist | `write` | `POST /api/v1/write` |
 | "What does my workspace contain?" | briefing | `wake-up` | `GET /api/v1/wake-up?workspace=$NANO_BRAIN_WORKSPACE` |
-| "Find function/type definition" | symbol lookup | `get` + code-intelligence | `POST /api/v1/symbols` |
+| "Find function/type definition" | symbol lookup | `get` + code-intelligence | `GET /api/v1/symbols?workspace=...&query=...` |
 | "Who calls FunctionName?" | graph traversal | (HTTP/MCP) | `POST /api/v1/graph/query` |
 | "What breaks if I change Y?" | impact analysis | (HTTP/MCP) | `POST /api/v1/graph/impact` |
 | "Trace call chain from entry" | call trace | (HTTP/MCP) | `POST /api/v1/graph/trace` |
@@ -186,13 +186,13 @@ Use at start of a new task to summarize what's in the workspace.
 npx nano-brain wake-up
 ```
 
-Returns: collections, recent docs, doc/chunk counts, last update times.
+Returns `{summary, recent_memories}` — `summary` is a natural-language string with doc/collection counts and last-activity timestamp; `recent_memories` is an array of `{id, title, snippet, tags, date}` for the most recently written documents.
 
 ### 3.7 Code intelligence — graph / trace / impact / symbols
 
 For deep code analysis, see [`references/code-intelligence.md`](references/code-intelligence.md). Three patterns:
 
-- **Symbol lookup:** `POST /api/v1/symbols` body `{workspace, query, kind, limit}` — find a function/type definition.
+- **Symbol lookup:** `GET /api/v1/symbols?workspace=...&query=...&kind=...&limit=...` — find a function/type definition. Returns `{count, symbols: [{name, kind, language, signature, source_path}]}`.
 - **Impact analysis:** `POST /api/v1/graph/impact` body `{workspace, node, max_depth, edge_type}` — who depends on this symbol, transitively.
 - **Call trace:** `POST /api/v1/graph/trace` body `{workspace, node, max_depth}` — what does this entry function call.
 
@@ -202,7 +202,7 @@ For deep code analysis, see [`references/code-intelligence.md`](references/code-
 npx nano-brain tags
 ```
 
-Returns `[{name, count}, ...]` sorted by count desc.
+Returns `[{tag, count}, ...]` sorted by count desc.
 
 ---
 
