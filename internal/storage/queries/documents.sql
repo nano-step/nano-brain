@@ -114,3 +114,11 @@ WHERE collection = 'session-summary'
   AND ($1::text = '' OR workspace_hash = $1)
   AND ($2::timestamptz IS NULL OR created_at >= $2)
 ORDER BY created_at ASC;
+
+-- name: ListDocumentSourcePathsAndHashes :many
+SELECT id, source_path, content_hash
+FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND source_path != ''
+ORDER BY source_path;
