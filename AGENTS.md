@@ -239,33 +239,6 @@ git worktree move ../nano-brain-foo .opencode/worktrees/feat-NNN-short-name
 - **Quick:** `go build ./... && go test -race -short ./...`
 - **Full:** `go test -race -tags=integration ./...`
 
-#### Test database
-
-Integration tests run against **`nanobrain_test`** (not `nanobrain_dev`) to avoid dirtying the dev database.
-
-| What | Value |
-|------|-------|
-| Database | `nanobrain_test` |
-| Default DSN | `postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable` |
-| Override | `NANO_BRAIN_TEST_DATABASE_URL=<dsn>` env var |
-| Config file | `config.test.yml` in repo root (server port 3199) |
-| Server port | **3199** (test) vs 3100 (dev) |
-
-Run integration tests:
-```bash
-# default — uses nanobrain_test via NANO_BRAIN_TEST_DATABASE_URL or built-in default
-go test -race -tags=integration ./...
-
-# explicit override
-NANO_BRAIN_TEST_DATABASE_URL="postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable" \
-  go test -race -tags=integration ./...
-
-# start a test server instance
-NANO_BRAIN_CONFIG=config.test.yml ./nano-brain
-```
-
-Each test gets an **isolated schema** (`test_<hash>`) created and dropped automatically by `testutil.SetupTestDB(t)` — tests never share state even when run in parallel.
-
 ### Key Directories
 
 | Path | Contents | Child docs |

@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -19,12 +18,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func persistTestDSN() string {
-	if v := os.Getenv("NANO_BRAIN_TEST_DATABASE_URL"); v != "" {
-		return v
-	}
-	return "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"
-}
+const persistTestDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
 
 func setupPersistTestPG(t *testing.T) *sql.DB {
 	t.Helper()
@@ -33,7 +27,7 @@ func setupPersistTestPG(t *testing.T) *sql.DB {
 	}
 
 	ctx := context.Background()
-	poolCfg, err := pgxpool.ParseConfig(persistTestDSN())
+	poolCfg, err := pgxpool.ParseConfig(persistTestDSN)
 	if err != nil {
 		t.Skip("postgres not available: parse config: " + err.Error())
 	}

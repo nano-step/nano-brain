@@ -20,12 +20,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func claudeInitTestDSN() string {
-	if v := os.Getenv("NANO_BRAIN_TEST_DATABASE_URL"); v != "" {
-		return v
-	}
-	return "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"
-}
+const claudeInitTestDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
 
 func setupClaudeInitTestPG(t *testing.T) *sql.DB {
 	t.Helper()
@@ -34,7 +29,7 @@ func setupClaudeInitTestPG(t *testing.T) *sql.DB {
 	}
 
 	ctx := context.Background()
-	poolCfg, err := pgxpool.ParseConfig(claudeInitTestDSN())
+	poolCfg, err := pgxpool.ParseConfig(claudeInitTestDSN)
 	if err != nil {
 		t.Skip("postgres not available: parse config: " + err.Error())
 	}
