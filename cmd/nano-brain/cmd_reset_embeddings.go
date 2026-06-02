@@ -76,7 +76,7 @@ func runResetEmbeddingsCmd(args []string) {
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, cfg.Database.URL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error connecting to database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error connecting to database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 	defer pool.Close()

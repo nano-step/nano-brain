@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/migrations"
 	"github.com/pressly/goose/v3"
 )
@@ -482,7 +483,7 @@ func runGooseMigrateCmd(jsonFlag bool) {
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, cfg.Database.URL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error connecting to database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error connecting to database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 	defer pool.Close()

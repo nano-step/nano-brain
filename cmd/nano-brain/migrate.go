@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/migrate"
+	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/sqlc-dev/pqtype"
 )
@@ -69,7 +70,7 @@ func runDBMigrateCmd(args []string) {
 
 	pool, err := pgxpool.New(ctx, cfg.Database.URL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error connecting to database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error connecting to database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 	defer pool.Close()
@@ -82,7 +83,7 @@ func runDBMigrateCmd(args []string) {
 
 	m, err := migrate.NewV1Migrator(fromV1, writer)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening v1 database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error opening v1 database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 	defer m.Close()

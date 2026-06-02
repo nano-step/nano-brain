@@ -15,6 +15,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/search"
+	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog"
@@ -142,13 +143,13 @@ func runBenchGenerate(args []string) {
 
 	db, err := sql.Open("pgx", cfg.Database.URL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to open database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 	defer db.Close()
 
 	if err := db.PingContext(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to connect to database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to connect to database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 	queries := sqlc.New(db)
@@ -236,13 +237,13 @@ func runBenchRun(args []string) {
 
 	db, err := sql.Open("pgx", cfg.Database.URL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to open database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 	defer db.Close()
 
 	if err := db.PingContext(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to connect to database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to connect to database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 
@@ -446,13 +447,13 @@ func runBenchStress(args []string) {
 
 	db, err := sql.Open("pgx", cfg.Database.URL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to open database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 	defer db.Close()
 
 	if err := db.PingContext(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to connect to database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to connect to database: %s\n", storage.RedactError(err))
 		os.Exit(1)
 	}
 
