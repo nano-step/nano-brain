@@ -84,6 +84,33 @@ curl -X POST http://localhost:3100/api/v1/query \
   -d '{"workspace":"<hash>","query":"database decision"}'
 ```
 
+## Verifying Downloads
+
+Every release ships a `SHA256SUMS` asset alongside the four platform binaries.
+You can verify a downloaded binary against the published checksums using
+standard tooling:
+
+```bash
+TAG=v2026.6.2.1   # any release tag
+curl -fLO https://github.com/nano-step/nano-brain/releases/download/$TAG/SHA256SUMS
+curl -fLO https://github.com/nano-step/nano-brain/releases/download/$TAG/nano-brain-linux-amd64
+sha256sum -c SHA256SUMS --ignore-missing
+# nano-brain-linux-amd64: OK
+```
+
+`npm install @nano-step/nano-brain` (and the unscoped `nano-brain` alias)
+performs this verification **automatically** during postinstall — a SHA-256
+mismatch aborts the install with exit code 1 and removes the partial binary.
+
+For air-gapped installs or environments where a corporate proxy modifies the
+download stream, set `NANO_BRAIN_SKIP_SHA_VERIFY=1` before running `npm install`
+to bypass the check (a warning is printed so the bypass is visible in CI logs).
+
+Releases tagged before this feature shipped do not have a `SHA256SUMS` asset;
+installs of those versions succeed with a single WARN line and no verification.
+See issue [#320](https://github.com/nano-step/nano-brain/issues/320) for the
+threat model and rationale.
+
 ## Configuration
 
 Config file: `~/.nano-brain/config.yml`

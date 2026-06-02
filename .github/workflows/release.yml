@@ -52,6 +52,9 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Compute SHA-256 checksums
+        run: cd artifacts && sha256sum nano-brain-* > SHA256SUMS
+
       - name: Create Release with binaries
         uses: softprops/action-gh-release@v2
         with:
