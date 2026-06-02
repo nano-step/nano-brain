@@ -922,7 +922,7 @@ func TestQueue_ProcessChunk_PanicCleansInflight(t *testing.T) {
 	eq.inflight.Store(chunkID, struct{}{})
 
 	func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		eq.processChunk(context.Background(), chunkID)
 	}()
 
