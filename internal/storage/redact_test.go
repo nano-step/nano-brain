@@ -41,6 +41,16 @@ func TestRedactString_ScrubsPasswordInPostgresURL(t *testing.T) {
 			`error: "postgres://u:p@h/db"`,
 			`error: "postgres://u:REDACTED@h/db"`,
 		},
+		{
+			"malformed URL fallback path — raw brace in password",
+			`failed: postgres://user:p{ass}word@host/db oops`,
+			`failed: postgres://user:REDACTED@host/db oops`,
+		},
+		{
+			"malformed URL fallback path — backslash in password",
+			`postgres://nb:back\\slash@host:5432/db`,
+			`postgres://nb:REDACTED@host:5432/db`,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
