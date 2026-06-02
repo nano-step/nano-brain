@@ -274,3 +274,201 @@ func TestWorkspacesFlagOnlyDefaultsToList(t *testing.T) {
 		t.Errorf("expected JSON object output; got:\n%s", out.String())
 	}
 }
+
+func newResolveServer(t *testing.T, response map[string]interface{}, status int) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/workspaces/resolve" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+func TestWorkspacesCurrent_Default_PrintsHash(t *testing.T) {
+	resp := map[string]interface{}{
+		"workspace_hash": "abc123",
+		"root_path":      "/tmp/x",
+		"name":           "x",
+		"registered":     true,
+	}
+	ts := newResolveServer(t, resp, http.StatusOK)
+	setHostPort(t, ts)
+
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--path=/tmp/x"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, errOut.String())
+	}
+	if strings.TrimSpace(out.String()) != "abc123" {
+		t.Errorf("stdout: got %q want %q", out.String(), "abc123\n")
+	}
+}
+
+func TestWorkspacesCurrent_Export_PrintsExportLine(t *testing.T) {
+	resp := map[string]interface{}{
+		"workspace_hash": "deadbeef",
+		"root_path":      "/tmp/y",
+		"name":           "y",
+		"registered":     true,
+	}
+	ts := newResolveServer(t, resp, http.StatusOK)
+	setHostPort(t, ts)
+
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--export", "--path=/tmp/y"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, errOut.String())
+	}
+	if strings.TrimSpace(out.String()) != "export NANO_BRAIN_WORKSPACE=deadbeef" {
+		t.Errorf("stdout: got %q", out.String())
+	}
+}
+
+func TestWorkspacesCurrent_JSON_PrintsFullBody(t *testing.T) {
+	resp := map[string]interface{}{
+		"workspace_hash": "h",
+		"root_path":      "/p",
+		"name":           "n",
+		"registered":     true,
+	}
+	ts := newResolveServer(t, resp, http.StatusOK)
+	setHostPort(t, ts)
+
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--json", "--path=/p"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, errOut.String())
+	}
+	if !strings.HasPrefix(out.String(), "{") {
+		t.Errorf("expected JSON output, got %q", out.String())
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(out.String()), &parsed); err != nil {
+		t.Fatalf("decode: %v output=%q", err, out.String())
+	}
+	if parsed["workspace_hash"] != "h" {
+		t.Errorf("workspace_hash: got %v want h", parsed["workspace_hash"])
+	}
+}
+
+func TestWorkspacesCurrent_Check_Registered_ExitsZero(t *testing.T) {
+	resp := map[string]interface{}{
+		"workspace_hash": "h",
+		"root_path":      "/p",
+		"name":           "n",
+		"registered":     true,
+	}
+	ts := newResolveServer(t, resp, http.StatusOK)
+	setHostPort(t, ts)
+
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--check", "--path=/p"}, &out, &errOut)
+	if code != 0 {
+		t.Errorf("exit=%d want 0; stderr=%q", code, errOut.String())
+	}
+}
+
+func TestWorkspacesCurrent_Check_NotRegistered_ExitsTwo(t *testing.T) {
+	resp := map[string]interface{}{
+		"workspace_hash": "h",
+		"root_path":      "/p",
+		"name":           "n",
+		"registered":     false,
+	}
+	ts := newResolveServer(t, resp, http.StatusOK)
+	setHostPort(t, ts)
+
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--check", "--path=/p"}, &out, &errOut)
+	if code != 2 {
+		t.Errorf("exit=%d want 2; stderr=%q", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "not registered") {
+		t.Errorf("stderr should mention 'not registered', got %q", errOut.String())
+	}
+}
+
+func TestWorkspacesCurrent_CombinedExportCheck(t *testing.T) {
+	resp := map[string]interface{}{
+		"workspace_hash": "x",
+		"root_path":      "/p",
+		"name":           "n",
+		"registered":     true,
+	}
+	ts := newResolveServer(t, resp, http.StatusOK)
+	setHostPort(t, ts)
+
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--export", "--check", "--path=/p"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "export NANO_BRAIN_WORKSPACE=x") {
+		t.Errorf("stdout should contain export line; got %q", out.String())
+	}
+}
+
+func TestWorkspacesCurrent_ServerUnreachable_ExitsOne(t *testing.T) {
+	t.Setenv("NANO_BRAIN_HOST", "127.0.0.1")
+	t.Setenv("NANO_BRAIN_PORT", "1")
+
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--path=/p"}, &out, &errOut)
+	if code != 1 {
+		t.Errorf("exit=%d want 1; stderr=%q", code, errOut.String())
+	}
+}
+
+func TestWorkspacesCurrent_UnknownFlag_ExitsOne(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--bogus"}, &out, &errOut)
+	if code != 1 {
+		t.Errorf("exit=%d want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "unknown flag") {
+		t.Errorf("stderr should mention unknown flag; got %q", errOut.String())
+	}
+}
+
+func TestWorkspacesCurrent_RelativePathNormalized_ClientSide(t *testing.T) {
+	var receivedPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/workspaces/resolve" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		receivedPath = body.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"workspace_hash": "h",
+			"root_path":      body.Path,
+			"name":           "x",
+			"registered":     false,
+		})
+	}))
+	t.Cleanup(ts.Close)
+	setHostPort(t, ts)
+
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--path=./relative/subdir"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, errOut.String())
+	}
+	if !strings.HasPrefix(receivedPath, "/") {
+		t.Errorf("server received non-absolute path %q — CLI must normalize relative paths client-side (Gemini review F2)", receivedPath)
+	}
+	if strings.Contains(receivedPath, "./") {
+		t.Errorf("server received unresolved path components %q — filepath.Abs should clean dots", receivedPath)
+	}
+}

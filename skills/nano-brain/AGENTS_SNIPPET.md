@@ -3,46 +3,74 @@
 
 ## Memory System (nano-brain)
 
-This project uses **nano-brain** for persistent context across sessions.
+This project uses **nano-brain** for persistent context across sessions. Server runs on the host at port 3100; agents inside containers reach it at `host.docker.internal:3100`.
 
-### Quick Reference
+### Bootstrap (once per shell session)
 
-All commands use the nano-brain CLI:
+```bash
+eval "$(npx @nano-step/nano-brain workspaces current --export)"
+```
 
-| I want to... | CLI |
-|--------------|-----|
-| Recall past work on a topic | `npx @nano-step/nano-brain query "topic"` |
-| Find exact error/function name | `npx @nano-step/nano-brain search "exact term"` |
-| Explore a concept semantically | `npx @nano-step/nano-brain vsearch "concept"` |
-| Save a decision for future sessions | `npx @nano-step/nano-brain write "decision context" --tags=decision` |
-| Check index health | `npx @nano-step/nano-brain status` |
+This exports `NANO_BRAIN_WORKSPACE` so subsequent CLI calls do not need `--workspace=...`. If the workspace is not yet registered:
+
+```bash
+npx @nano-step/nano-brain workspaces current --check 2>/dev/null \
+  || npx @nano-step/nano-brain init --root="$PWD"
+```
+
+### Quick Reference (CLI)
+
+| I want to... | Command |
+|---|---|
+| Recall past work | `npx @nano-step/nano-brain query "topic"` |
+| Find exact term/identifier | `npx @nano-step/nano-brain search "FunctionName"` |
+| Semantic search | `npx @nano-step/nano-brain vsearch "concept"` |
+| Save a decision | `npx @nano-step/nano-brain write --tags=decision --title="..." --content="..."` |
+| Workspace briefing | `npx @nano-step/nano-brain wake-up` |
+| Cross-workspace search | `npx @nano-step/nano-brain query --scope=all "topic"` |
+| Tag-filtered search | `npx @nano-step/nano-brain query --tags=decision "topic"` |
+| Server health | `npx @nano-step/nano-brain status` |
+
+### HTTP API (for non-CLI agents)
+
+Base URL inside containers: `http://host.docker.internal:3100`. On the host: `http://localhost:3100`.
+
+All `POST /api/v1/*` workspace-scoped endpoints require a `workspace` field in the JSON body. Get the hash via:
+
+```bash
+curl -fsS -X POST $BASE/api/v1/workspaces/resolve \
+  -H 'Content-Type: application/json' \
+  -d "{\"path\":\"$PWD\"}" | jq -r .workspace_hash
+```
+
+Endpoint contract: `POST /api/v1/workspaces/resolve` body `{"path":"<abs>"}` → `{"workspace_hash","root_path","name","registered"}`. Read-only — never auto-registers; use `POST /api/v1/init` for that.
+
+Example query:
+
+```bash
+curl -fsS -X POST $BASE/api/v1/query \
+  -H 'Content-Type: application/json' \
+  -d "{\"workspace\":\"$NANO_BRAIN_WORKSPACE\",\"query\":\"topic\",\"max_results\":10}"
+```
 
 ### Session Workflow
 
-**End of session:** Save key decisions, patterns discovered, and debugging insights.
+- **Start of session:** `npx @nano-step/nano-brain query "what have we done about <task>"` before exploring the codebase.
+- **End of session:** Persist key decisions and learnings:
+
+```bash
+npx @nano-step/nano-brain write --tags=summary,decision \
+  --title="Session: <topic>" \
+  --content="## Summary\n- Decision: ...\n- Why: ...\n- Files: ..."
 ```
-npx @nano-step/nano-brain write "## Summary\n- Decision: ...\n- Why: ...\n- Files: ..." --tags=summary
-```
 
-### Code Intelligence Tools
+### When to Search Memory vs Codebase
 
-nano-brain also provides symbol-level code analysis (requires `npx @nano-step/nano-brain reindex` with `workdir` set to the workspace — the `--root` flag is silently ignored):
+- **"Have we done this before?"** → `npx @nano-step/nano-brain query "..."` (past sessions)
+- **"Where is this in the code right now?"** → grep / ast-grep
+- **"How does this concept work here?"** → both
+- **"What calls this function / what breaks if I change Y?"** → `nano-brain` code intelligence (`POST /api/v1/graph/query`, `/api/v1/graph/impact`, `/api/v1/graph/trace`)
 
-| I want to... | CLI |
-|--------------|-----|
-| Understand a symbol's callers/callees/flows | `npx @nano-step/nano-brain context functionName` |
-| Assess risk of changing a symbol | `npx @nano-step/nano-brain code-impact className --direction=upstream` |
-| Map my git changes to affected symbols | `npx @nano-step/nano-brain detect-changes --scope=all` |
-
-Use `file_path` parameter to disambiguate when multiple symbols share the same name.
-
-### When to Search Memory vs Codebase vs Code Intelligence
-
-- **"Have we done this before?"** → `npx @nano-step/nano-brain query "..."` (searches past sessions)
-- **"Where is this in the code?"** → grep / ast-grep (searches current files)
-- **"How does this concept work here?"** → Both (memory for past context + grep for current code)
-- **"What calls this function?"** → `npx @nano-step/nano-brain context <name>` (symbol graph relationships)
-- **"What breaks if I change X?"** → `npx @nano-step/nano-brain code-impact <name> --direction=...` (dependency + flow analysis)
-- **"What did my changes affect?"** → `npx @nano-step/nano-brain detect-changes --scope=...` (git diff to symbol mapping)
+See `skills/nano-brain/SKILL.md` for the full reference (phases, error recovery, all endpoints).
 
 <!-- OPENCODE-MEMORY:END -->

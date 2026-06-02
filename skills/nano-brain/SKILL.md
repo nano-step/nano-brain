@@ -1,381 +1,278 @@
 ---
 name: nano-brain
-description: Persistent memory + code intelligence for AI coding agents. Hybrid search (BM25 + vector + LLM rerank), cross-session recall, symbol analysis, impact checks, OpenCode/Claude Code session harvesting. Use this skill when you need to recall prior decisions, search across sessions/codebase, trace symbol callers/callees, or persist long-term context.
+description: Persistent memory + code intelligence for AI coding agents. Hybrid search (BM25 + vector + RRF + recency), cross-session recall, symbol analysis, impact checks, knowledge graph, OpenCode/Claude Code session harvesting. Use this skill when you need to recall prior decisions across sessions, search across multiple codebases, trace symbol callers/callees, analyze code impact (what breaks if X changes), persist long-term context, or query the knowledge graph. Triggers — "remember what we did about X", "search across sessions", "find references to X", "what breaks if I change Y", "save this decision", "wake-up briefing".
 compatibility: OpenCode, Claude Code, any MCP-aware agent
 metadata:
   author: nano-step
-  version: 3.0.0
+  version: 3.1.0
   repo: nano-step/nano-brain
 ---
 
-# nano-brain
 
-Persistent memory + code intelligence service for AI coding agents. This skill teaches an agent **when** to use nano-brain and **how** to call its three API layers correctly.
+# nano-brain — Persistent Memory + Code Intelligence
 
-## Install this skill
+A read-mostly knowledge graph + vector DB. Three call surfaces: HTTP, CLI (`npx nano-brain ...`), MCP tools. All operations require a `workspace_hash` that maps to one project root path.
 
-This skill lives at `skills/nano-brain/` in the [nano-brain repo](https://github.com/nano-step/nano-brain). Drop it into your agent's skills root:
-
-```bash
-# OpenCode — user-level (any project)
-mkdir -p ~/.config/opencode/skills
-cp -r /path/to/nano-brain/skills/nano-brain ~/.config/opencode/skills/
-
-# OpenCode — project-level (current project only)
-mkdir -p ./.opencode/skills
-cp -r /path/to/nano-brain/skills/nano-brain ./.opencode/skills/
-
-# Claude Code
-mkdir -p ~/.claude/skills
-cp -r /path/to/nano-brain/skills/nano-brain ~/.claude/skills/
-```
-
-Or one-liner (no clone needed) — fetch the skill directly from GitHub:
+## TL;DR
 
 ```bash
-curl -sL https://github.com/nano-step/nano-brain/archive/refs/heads/master.tar.gz \
-  | tar -xz --strip-components=2 -C ~/.config/opencode/skills nano-brain-master/skills/nano-brain
+# Bootstrap once per shell:
+eval "$(npx nano-brain workspaces current --export)"
+
+# Then query:
+npx nano-brain query "how did we solve auth caching"
 ```
 
-The skill auto-loads on next agent session. To update, repeat the copy (`--delete` if using rsync) — files are idempotent.
+All CLI commands read `$NANO_BRAIN_WORKSPACE` so you do not need to pass `--workspace=...` after bootstrap. For HTTP/MCP direct calls, see Phase 3.
 
 ---
 
-## How to talk to nano-brain
+## Phase 1 — DISCOVER (bootstrap)
 
-| Layer | When | How |
+Run these steps once per shell session. They are idempotent — safe to re-run.
+
+### 1.1 Verify server is reachable
+
+**From a container** (most agents):
+
+```bash
+curl -fsS http://host.docker.internal:3100/api/status | jq -r .pg_status
+```
+
+**From the host directly:**
+
+```bash
+curl -fsS http://localhost:3100/api/status | jq -r .pg_status
+```
+
+**Success criterion:** prints `healthy`.
+
+**Failure recovery:** If `curl` fails, the server is not running. Recovery in order:
+1. On host: `npx nano-brain docker start`
+2. Ask the user to start the server. **Do not** try to start the server yourself inside a container — see "nano-brain Server Rule" in the project AGENTS.md.
+
+### 1.2 Resolve the current workspace hash
+
+**Recommended — CLI bootstrap one-liner:**
+
+```bash
+eval "$(npx nano-brain workspaces current --export)"
+```
+
+This sets `NANO_BRAIN_WORKSPACE` for the rest of the shell. All subsequent `npx nano-brain ...` commands pick it up implicitly.
+
+**HTTP fallback** (for non-CLI agents):
+
+```bash
+HASH=$(curl -fsS -X POST http://host.docker.internal:3100/api/v1/workspaces/resolve \
+  -H 'Content-Type: application/json' \
+  -d "{\"path\":\"$PWD\"}" | jq -r .workspace_hash)
+export NANO_BRAIN_WORKSPACE="$HASH"
+```
+
+The `/api/v1/workspaces/resolve` endpoint is **read-only**: it computes the deterministic SHA-256 hash from your absolute path and reports `registered: true|false`. It does NOT create the workspace.
+
+### 1.3 Ensure the workspace is registered
+
+```bash
+npx nano-brain workspaces current --check 2>/dev/null \
+  || npx nano-brain init --root="$PWD"
+```
+
+`workspaces current --check` exits **2** if the workspace is not yet registered. `init` is idempotent — safe to run multiple times.
+
+**Success criterion:** `$NANO_BRAIN_WORKSPACE` is set AND `npx nano-brain workspaces current --check` exits 0.
+
+---
+
+## Phase 2 — SELECT (decision tree)
+
+Map the user's intent to the right call:
+
+| User intent | Operation | CLI | HTTP endpoint |
+|---|---|---|---|
+| "What did we decide about X?" | hybrid recall | `query "X"` | `POST /api/v1/query` |
+| "Find exact term/identifier" | BM25 only | `search "X"` | `POST /api/v1/search` |
+| "Semantic concept (no exact words)" | vector only | `vsearch "X"` | `POST /api/v1/vsearch` |
+| "Across all my projects" | cross-workspace | `query --scope=all "X"` | `POST /api/v1/query` body `{"workspace":"all", ...}` |
+| "Filter by tag (e.g. decisions)" | tagged search | `query --tags=decision "X"` | body adds `"tags":["decision"]` |
+| "Save a decision/summary" | persist | `write` | `POST /api/v1/write` |
+| "What does my workspace contain?" | briefing | `wake-up` | `GET /api/v1/wake-up?workspace=$NANO_BRAIN_WORKSPACE` |
+| "Find function/type definition" | symbol lookup | `get` + code-intelligence | `POST /api/v1/symbols` |
+| "Who calls FunctionName?" | graph traversal | (HTTP/MCP) | `POST /api/v1/graph/query` |
+| "What breaks if I change Y?" | impact analysis | (HTTP/MCP) | `POST /api/v1/graph/impact` |
+| "Trace call chain from entry" | call trace | (HTTP/MCP) | `POST /api/v1/graph/trace` |
+| "List all tags with counts" | tag inventory | `tags` | `GET /api/v1/tags?workspace=...` |
+
+**Default for ambiguous "find X":** use `query` (hybrid). It combines BM25 + vector + RRF + recency decay and gives the best results.
+
+---
+
+## Phase 3 — EXECUTE
+
+Every example below assumes Phase 1 has set `$NANO_BRAIN_WORKSPACE`.
+
+### 3.1 Hybrid query — `POST /api/v1/query`
+
+```bash
+# CLI:
+npx nano-brain query "redis caching for inv compression" --json
+
+# HTTP:
+curl -fsS -X POST http://host.docker.internal:3100/api/v1/query \
+  -H 'Content-Type: application/json' \
+  -d "{\"workspace\":\"$NANO_BRAIN_WORKSPACE\",\"query\":\"redis caching\",\"max_results\":10}"
+```
+
+Response: `{"results":[{"source_path","excerpt","score","tags",...}, ...]}`.
+
+| Error | Meaning | Recovery |
 |---|---|---|
-| **MCP tools** (`memory_*`) | Preferred. Streamable HTTP at `/mcp`. | Agent auto-discovers; no shell needed |
-| **CLI** (`npx @nano-step/nano-brain ...`) | When MCP not configured, or for one-off shell scripts | Wraps the HTTP API |
-| **HTTP API** directly | Scripts, integration tests, dashboards | `POST /api/v1/*` |
+| 400 `workspace_required` | Missing `workspace` in body | Re-run Phase 1.2 |
+| 400 `workspace_not_registered` | Hash valid but not in DB | Re-run Phase 1.3 (`init`) |
+| 500 | Server error | Read `nano-brain logs -n 50`, retry once |
 
-All three target the same daemon at `http://localhost:3100` (default; container agents auto-set `NANO_BRAIN_HOST=host.docker.internal`).
+### 3.2 BM25 keyword search — `POST /api/v1/search`
 
-> **CLI invocation**: always use the scoped package `@nano-step/nano-brain` for clarity and to avoid name collisions:
-> ```bash
-> npx @nano-step/nano-brain <subcommand> ...
-> ```
-> An unscoped alias `nano-brain` is also published (e.g. `npx nano-brain ...`), but the scoped form is canonical and stable.
+Use when the query is an exact identifier / error message / function name.
 
-## Quick decision matrix
-
-| You need to... | Use |
-|---|---|
-| Recall past work on a topic | `memory_query` / `query "topic"` |
-| Find an exact string (error msg, fn name) | `memory_search` / `search "term"` |
-| Explore a fuzzy concept | `memory_vsearch` / `vsearch "concept"` |
-| Save a decision for future sessions | `memory_write` / `write "..." --tags=decision` |
-| Check daemon health, queue depth, migration | `memory_status` / `status` |
-| Catch up at session start | `memory_wake_up` / `wake-up` |
-| Trace symbol callers/callees | `memory_graph` (CLI: `context <name>`) |
-| Risk-check before refactor | `memory_impact` (CLI: `code-impact <name>`) |
-| Map git diff → affected symbols | CLI: `detect-changes --scope=staged` |
-| List all tags / collections / symbols | `memory_tags` / `memory_symbols` |
-| Reindex after major code changes | CLI: `reindex` (in workspace dir) |
-
-## Endpoint reference
-
-All `POST /api/v1/*` endpoints require a `workspace` field in the JSON body OR an `X-Workspace` header. The workspace hash is returned by `POST /api/v1/init`.
-
-### Health + status
-
-| Method | Path | Body | Returns |
-|---|---|---|---|
-| `GET` | `/health` | — | `{status, ready}` — for liveness/readiness probes |
-| `GET` | `/api/status` | — | `{pg_status, migration_version, queue_*, workspace_count, harvester_status}` — operator dashboard data |
-
-### Workspace lifecycle
-
-| Method | Path | Body | Returns |
-|---|---|---|---|
-| `POST` | `/api/v1/init` | `{"root_path":"/abs/path"}` | `{workspace_hash, root_path, agents_snippet}` — registers a workspace, deterministic SHA-256 hash of normalized path |
-| `GET` | `/api/v1/workspaces` | — | `[{workspace_hash, root_path, document_count, last_indexed_at}]` |
-| `POST` | `/api/v1/reset-workspace` | `{"workspace":"<hash>"}` | `{deleted_documents, workspace}` — wipes all docs+chunks+embeddings for the workspace |
-
-### Search (3 modes — choose by use case)
-
-| Method | Path | Body | Notes |
-|---|---|---|---|
-| `POST` | `/api/v1/search` | `{"workspace":"<hash>","query":"...","max_results":10,"tags":["bug"]}` | **BM25 full-text** — exact keywords/symbols, fastest, free-text English |
-| `POST` | `/api/v1/vsearch` | `{"workspace":"<hash>","query":"...","max_results":10}` | **Vector semantic** — fuzzy concepts, embedding cosine, slower |
-| `POST` | `/api/v1/query` | `{"workspace":"<hash>","query":"...","max_results":10}` | **Hybrid** — BM25 + vector + RRF fusion. Default for most questions. |
-
-Response shape (all three):
-```json
-{"results": [{"id","title","snippet","score","tags","collection","source_path","created_at"}], "took_ms": 42}
+```bash
+npx nano-brain search "EmbedQueue.PendingCount"
 ```
 
-### Document I/O
+### 3.3 Vector semantic search — `POST /api/v1/vsearch`
 
-| Method | Path | Body | Notes |
-|---|---|---|---|
-| `POST` | `/api/v1/write` | `{"workspace":"<hash>","content":"...","tags":["..."],"collection":"memory","title":"...","source_path":"memory://...","metadata":{}}` | Upsert by content-hash; chunks + enqueues for embedding async |
-| `POST` | `/api/v1/wake-up` | `{"workspace":"<hash>","limit":10}` | Returns the N most-recent updated documents — for session start briefing |
-| `POST` | `/api/v1/reindex` | `{"workspace":"<hash>","root":"/abs/path"}` | Reindex workspace from disk; respects `.gitignore` |
-| `POST` | `/api/v1/embed` | `{"workspace":"<hash>","chunk_id":"<uuid>"}` | Force-embed a specific chunk (debugging) |
-| `POST` | `/api/v1/summarize` | `{"workspace":"<hash>","source":"opencode://session/<id>","limit":1,"force":false}` | Run LLM summarizer on a session |
+Use when the user describes a concept without exact terms.
 
-### Collections + tags + symbols
+```bash
+npx nano-brain vsearch "ways to keep the embedding queue from overflowing"
+```
 
-| Method | Path | Body | Notes |
-|---|---|---|---|
-| `GET` | `/api/v1/collections?workspace=<hash>` | — | List collections with doc counts |
-| `POST` | `/api/v1/collections` | `{"workspace":"<hash>","name":"my-col"}` | Create |
-| `PUT` | `/api/v1/collections/:name` | `{"workspace":"<hash>","new_name":"..."}` | Rename |
-| `DELETE` | `/api/v1/collections/:name` | `{"workspace":"<hash>"}` | Remove (and all its docs) |
-| `GET` | `/api/v1/tags?workspace=<hash>` | — | All tags with usage counts |
-| `GET` | `/api/v1/symbols?workspace=<hash>&type=function&name=foo` | — | Symbol search by type+name pattern |
+### 3.4 Cross-workspace search
 
-### Code intelligence (graph)
+```bash
+# CLI:
+npx nano-brain query --scope=all "rate limiter pattern"
 
-Powered by Tree-sitter AST parsing. **Requires** a prior `reindex` to populate the symbol graph.
+# HTTP:
+curl -fsS -X POST http://host.docker.internal:3100/api/v1/query \
+  -H 'Content-Type: application/json' \
+  -d '{"workspace":"all","query":"rate limiter pattern"}'
+```
 
-| Method | Path | Body | Returns |
-|---|---|---|---|
-| `POST` | `/api/v1/graph/query` | `{"workspace":"<hash>","node":"funcName","direction":"out","edge_type":"calls"}` | Symbol's neighbors (callers/callees) |
-| `POST` | `/api/v1/graph/impact` | `{"workspace":"<hash>","node":"funcName","edge_type":"calls","max_depth":2}` | BFS upstream/downstream — risk = LOW/MEDIUM/HIGH/CRITICAL |
-| `POST` | `/api/v1/graph/trace` | `{"workspace":"<hash>","node":"funcName","max_depth":3}` | Outgoing-edge walk for flow detection |
+The literal string `"all"` is allowed for read-only endpoints (query/search/vsearch). It is **rejected** by write endpoints (`/api/v1/write`, `/api/v1/update`) — those require a specific registered hash.
 
-`direction`: `in` (callers) or `out` (callees). `edge_type`: `calls`, `imports`, `references`, etc.
+### 3.5 Persist a decision — `POST /api/v1/write`
 
-### Harvest + ops
+```bash
+# CLI:
+npx nano-brain write \
+  --title="Decision: use RRF k=60 for hybrid search" \
+  --tags=decision,search \
+  --content='## Context\n...\n## Decision\n...'
 
-| Method | Path | Body | Notes |
-|---|---|---|---|
-| `POST` | `/api/harvest` | — | Force-run all configured harvesters (OpenCode SQLite, Claude Code JSONL). Returns `{harvested, skipped, errors}`. |
-| `POST` | `/api/reload-config` | — | Reload `~/.nano-brain/config.yml` without restart |
+# HTTP:
+curl -fsS -X POST http://host.docker.internal:3100/api/v1/write \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg ws "$NANO_BRAIN_WORKSPACE" \
+        '{workspace:$ws, source_path:"notes/decision-rrf.md", content:"# Decision\nUse k=60.", tags:["decision"]}')"
+```
 
-### MCP (Streamable HTTP)
+### 3.6 Workspace briefing — `wake-up`
 
-| Method | Path | Notes |
+Use at start of a new task to summarize what's in the workspace.
+
+```bash
+npx nano-brain wake-up
+```
+
+Returns: collections, recent docs, doc/chunk counts, last update times.
+
+### 3.7 Code intelligence — graph / trace / impact / symbols
+
+For deep code analysis, see [`references/code-intelligence.md`](references/code-intelligence.md). Three patterns:
+
+- **Symbol lookup:** `POST /api/v1/symbols` body `{workspace, query, kind, limit}` — find a function/type definition.
+- **Impact analysis:** `POST /api/v1/graph/impact` body `{workspace, node, max_depth, edge_type}` — who depends on this symbol, transitively.
+- **Call trace:** `POST /api/v1/graph/trace` body `{workspace, node, max_depth}` — what does this entry function call.
+
+### 3.8 Tags — `GET /api/v1/tags`
+
+```bash
+npx nano-brain tags
+```
+
+Returns `[{name, count}, ...]` sorted by count desc.
+
+---
+
+## Phase 4 — RECOVER
+
+Error catalog with deterministic recovery actions. Never retry more than 2 times. Never silently fall back without telling the user.
+
+| Symptom | Most likely cause | Recovery |
 |---|---|---|
-| `POST` | `/mcp` | JSON-RPC 2.0 MCP protocol |
-| `GET`/`POST` | `/sse` | SSE transport (legacy) |
+| `curl: (7) connection refused` | Server not running | Phase 1.1 recovery |
+| HTTP 400 `workspace_required` | Missing `workspace` field in body | Re-run Phase 1.2; verify `$NANO_BRAIN_WORKSPACE` is set |
+| HTTP 400 `workspace_not_registered` | Path valid but never `init`'d | `npx nano-brain init --root="$PWD"` |
+| HTTP 400 `path is required` | `/resolve` called with empty `path` | Pass an absolute path; default to `$PWD` |
+| HTTP 400 `invalid path` | Path could not be normalized | Check path exists and is absolute |
+| HTTP 503 | Server restarting / overload | Sleep 5s, retry **once** |
+| HTTP 500 | Server bug | `nano-brain logs -n 100`; report stack to user |
+| `workspace_all_not_supported` on write | Wrote with `workspace:"all"` | Use a specific registered hash |
+| Empty `results: []` | Topic not in memory | Try broader query OR `search` (exact) OR fall back to grep/ast-grep over the codebase |
 
-13 tools exposed: `memory_query`, `memory_search`, `memory_vsearch`, `memory_get`, `memory_write`, `memory_tags`, `memory_status`, `memory_update`, `memory_wake_up`, `memory_graph`, `memory_trace`, `memory_impact`, `memory_symbols`.
+**Last resort fallback:** If nano-brain is unreachable for >2 retries, switch to native tools (grep / ast-grep / Read) and tell the user the limitation.
 
-## CLI cheatsheet
+---
 
-Every CLI subcommand is a thin client over the HTTP API. Connection defaults to `localhost:3100`; container agents auto-route to host.
+## CLI flags reference
 
-| Command | Endpoint |
-|---|---|
-| `npx @nano-step/nano-brain query "..." --workspace <h>` | `POST /api/v1/query` |
-| `npx @nano-step/nano-brain search "..." --workspace <h>` | `POST /api/v1/search` |
-| `npx @nano-step/nano-brain vsearch "..." --workspace <h>` | `POST /api/v1/vsearch` |
-| `npx @nano-step/nano-brain write "..." --workspace <h> --tags=foo,bar` | `POST /api/v1/write` |
-| `npx @nano-step/nano-brain status` | `GET /api/status` |
-| `npx @nano-step/nano-brain workspaces` | `GET /api/v1/workspaces` |
-| `npx @nano-step/nano-brain wake-up --workspace <h>` | `POST /api/v1/wake-up` |
-| `npx @nano-step/nano-brain reindex` (in workspace dir) | `POST /api/v1/reindex` |
-| `npx @nano-step/nano-brain context <symbol>` | `POST /api/v1/graph/query` |
-| `npx @nano-step/nano-brain code-impact <symbol> --direction=upstream` | `POST /api/v1/graph/impact` |
-| `npx @nano-step/nano-brain detect-changes --scope=staged` | (computes git diff client-side, calls graph endpoints) |
-| `npx @nano-step/nano-brain harvest` | `POST /api/harvest` |
-| `npx @nano-step/nano-brain cleanup-stale-raw [--dry-run]` | Direct PG — wipes pre-PR-#192 orphan raw session docs |
-| `npx @nano-step/nano-brain doctor` | Probes daemon + PG + ollama + model availability |
-
-**Critical CLI gotcha**: `reindex` IGNORES the `--root` flag silently. Always run with `workdir`:
-```bash
-# ✅ Correct
-bash(command="npx @nano-step/nano-brain reindex", workdir="/path/to/workspace")
-
-# ❌ Wrong (silently reindexes CWD instead of /path)
-npx @nano-step/nano-brain reindex --root=/path/to/workspace
-```
-
-## Recipes — best-practice flows
-
-### Recipe 1: Session start (wake-up + recall)
-
-When you start a coding session in a project, run wake-up + a targeted query before exploring. This costs ~500 tokens but prevents you from redoing work or re-discovering the same lessons.
-
-```bash
-# 1. Register workspace once per project (idempotent)
-WS=$(npx @nano-step/nano-brain init --root="$PWD" --json | jq -r .workspace_hash)
-
-# 2. Catch up — N most-recent updates across all collections
-npx @nano-step/nano-brain wake-up --workspace="$WS" --limit=8
-
-# 3. Targeted: anything you've learned about today's task?
-npx @nano-step/nano-brain query "<current task topic>" --workspace="$WS" --compact
-```
-
-For agents inside OpenCode: use MCP `memory_wake_up` then `memory_query`.
-
-### Recipe 2: Recall before grep
-
-Native grep finds exact strings in CURRENT files. nano-brain finds them in past sessions, prior commits, and documentation. The two are complementary — always recall first (cheap, ~200 tokens) then grep if you need exact code locations.
-
-```bash
-# Did we ever debug this before?
-npx @nano-step/nano-brain search "ECONNREFUSED redis" --workspace="$WS"
-
-# Concept-level — fuzzy match
-npx @nano-step/nano-brain vsearch "rate limiting strategy" --workspace="$WS"
-
-# Complex question — hybrid (default)
-npx @nano-step/nano-brain query "how did we handle session invalidation" --workspace="$WS"
-```
-
-### Recipe 3: Pre-refactor impact check
-
-Before touching a symbol that's referenced widely, check impact. This catches "I only need to fix this one place" tunnel-vision.
-
-```bash
-# What calls DatabaseClient?
-npx @nano-step/nano-brain code-impact DatabaseClient --workspace="$WS" --direction=upstream
-
-# What does processOrder depend on?
-npx @nano-step/nano-brain code-impact processOrder --workspace="$WS" --direction=downstream --max-depth=3
-
-# Map current git changes to symbols
-npx @nano-step/nano-brain detect-changes --scope=staged --workspace="$WS"
-```
-
-Risk levels in response: `LOW` (≤3 callers), `MEDIUM` (4-15), `HIGH` (16-50), `CRITICAL` (>50). Treat HIGH/CRITICAL as "needs PR review from someone else."
-
-### Recipe 4: Persist a decision
-
-End every meaningful session with a write. The schema doesn't matter — content is freeform markdown. What matters is consistent tags so future you can filter.
-
-```bash
-npx @nano-step/nano-brain write "## Decision: Use Redis Streams over Bull
-- **Why:** ordered replay needed for retry
-- **Trade-off:** lose Bull's UI; built our own metrics dashboard instead
-- **Files:** internal/queue/*.go, see PR #142" \
-  --workspace="$WS" \
-  --tags=decision,architecture,queue
-```
-
-Conventional tag patterns: `decision`, `lesson`, `architecture`, `bug`, `gotcha`, `summary`, `<area>` (e.g. `auth`, `queue`).
-
-### Recipe 5: Triage many results (compact mode)
-
-For broad queries that return 10+ results, fetch compact first (1-line summaries, ~70% fewer tokens), pick the relevant ones, expand only those.
-
-```bash
-# Stage 1: scan
-npx @nano-step/nano-brain query "auth middleware" --workspace="$WS" --compact
-
-# Stage 2: expand specific result by ID
-npx @nano-step/nano-brain get "<doc-id>" --workspace="$WS"
-```
-
-### Recipe 6: Cross-workspace knowledge transfer
-
-Same `memory_query` but with `scope=all`. Searches every registered workspace, useful for "have I solved this in another project?"
-
-```bash
-# Aggregate across all workspaces
-npx @nano-step/nano-brain query "stripe webhook signature verification" --scope=all
-```
-
-(Equivalent MCP: `memory_query` with `workspace` omitted or `scope=all` arg.)
-
-### Recipe 7: Filter by collection or tag
-
-Both search modes accept `--collection` and `--tags`. Combine when you know the slice you want.
-
-```bash
-# Only past session summaries about bugs
-npx @nano-step/nano-brain query "..." --workspace="$WS" --collection=session-summary --tags=bug
-
-# Only your curated notes
-npx @nano-step/nano-brain query "..." --workspace="$WS" --collection=memory
-```
-
-Collections in a typical setup:
-- `codebase` — source-file chunks
-- `session-summary` — LLM-summarized AI sessions (OpenCode, Claude Code)
-- `sessions` — raw session content (pre-PR-#192 only; run `cleanup-stale-raw` to purge if you've migrated)
-- `memory` — agent-written notes via `write`
-- `auto-memory` — auto-extracted `DECISION:` / `LESSON:` lines
-
-### Recipe 8: Multi-DB OpenCode harvest (advanced)
-
-If you use the `ai-sandbox-wrapper` which splits OpenCode sessions into per-project SQLite databases at `~/.ai-sandbox/opencode-dbs/<slug>-<8hex>/opencode.db`, configure nano-brain to discover them:
-
-```yaml
-# ~/.nano-brain/config.yml
-harvester:
-  opencode:
-    db_root: ~/.ai-sandbox/opencode-dbs   # auto-detected on macOS/Linux
-```
-
-The daemon scans the directory, opens each DB read-only, reads `project.worktree`, and only harvests sessions whose worktree matches a registered nano-brain workspace. Verify via `GET /api/status`:
-
-```bash
-curl -s http://localhost:3100/api/status | jq '.harvester_status.opencode'
-# {"enabled":true, "mode":"db_root", "db_root":"/Users/.../opencode-dbs", "db_count":1, ...}
-```
-
-`mode` values: `db_root` (new multi-DB), `db_path` (single SQLite), `session_dir` (legacy JSON), `disabled`.
-
-## Common errors + fixes
-
-| Symptom | Diagnosis | Fix |
+| Flag | On | Effect |
 |---|---|---|
-| `cannot connect to nano-brain server` | Daemon not running | `npx @nano-step/nano-brain serve -d` (background) |
-| `workspace not found` | Workspace not registered | `npx @nano-step/nano-brain init --root=.` first |
-| `ollama: input length exceeds context length` (pre-2026.5.30.1) | Char-budget too high for token limit | Upgrade to ≥2026.5.30.1; configure `embedding.max_chars` if still hits |
-| Search returns 0 results despite content | Embedding queue still working | `npx @nano-step/nano-brain status` → check `queue_pending` and `embedding_queue_depth` |
-| Chunk stuck in `embed_failed` retry loop (pre-fix) | Deterministic ollama error | Upgrade ≥2026.5.30.1; new `embed_permanently_failed` state breaks the loop |
-| `bin/sh: gh: not found` in workflow | gh CLI not installed in container | Use HTTPS+token URL: `git push https://kokorolx:$TOKEN@github.com/...` |
+| `--workspace=<hash>` | query, search, vsearch, write, get, tags, wake-up, multi-get | Override `$NANO_BRAIN_WORKSPACE` |
+| `--scope=all` | query, search, vsearch | Cross-workspace |
+| `--tags=t1,t2` | query, search, vsearch | Filter to docs with any of these tags |
+| `--json` | most commands | Print raw JSON response |
+| `--path=<p>` | workspaces current | Override `$PWD` for resolution |
+| `--export` | workspaces current | Print `export NANO_BRAIN_WORKSPACE=<hash>` |
+| `--check` | workspaces current | Exit 2 if workspace not registered |
+| `--root=<p>` | init | Path to register; required |
+| `--force` | init, workspaces remove | Skip confirmation |
 
-## Daemon config — key fields
+---
 
-```yaml
-# ~/.nano-brain/config.yml — see ${PROJECT}/README.md for the canonical example
-database:
-  url: postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev
+## Anti-patterns (do not do)
 
-embedding:
-  provider: ollama
-  url: http://localhost:11434
-  model: nomic-embed-text   # 2048-token context
-  concurrency: 3
-  max_chars: 3000           # safety budget per embed call; lower if ollama still 400s on dense CSV
-                            # override via NANO_BRAIN_EMBED_MAX_CHARS
+- **Do not** hardcode a workspace hash. Always resolve from `$PWD` via Phase 1.
+- **Do not** call `init` on every query. It is idempotent but wasteful; `resolve` is the read-only check.
+- **Do not** swallow connection errors. If nano-brain is down, tell the user.
+- **Do not** call write endpoints with `workspace:"all"`. They will reject with `workspace_all_not_supported`.
+- **Do not** use `/api/query` or `/api/write` (no `/v1`). Those paths return 404. Always use `/api/v1/*`.
+- **Do not** retry indefinitely. Cap retries at 2 per call.
 
-harvester:
-  opencode:
-    db_root: ""             # ~/.ai-sandbox/opencode-dbs (multi-DB)
-    db_path: ""             # ~/.local/share/opencode/opencode.db (single SQLite)
-    session_dir: ""         # legacy JSON
-  claudecode:
-    enabled: false
-    session_dir: ""         # ~/.claude/sessions
+---
 
-intervals:
-  session_poll: 120         # harvest tick interval (seconds)
+## When to use nano-brain vs native tools
 
-summarization:
-  enabled: false            # LLM-generated session summaries
-  provider_url: ""
-  api_key: ""               # or NANO_BRAIN_SUMMARIZE_API_KEY env
-  model: "claude-sonnet-4-5"
-  max_tokens: 8000          # bumped from 4096 — issue #191
-```
-
-Reload without restart: `curl -X POST http://localhost:3100/api/reload-config`.
-
-## Memory vs native tools
-
-| Question | Tool |
+| Goal | Tool |
 |---|---|
-| "What did we decide about X?" | nano-brain (memory) |
-| "Where exactly is `processPayment` defined?" | grep / Glob (native) |
-| "What calls `processPayment`?" | nano-brain (code intel) → `memory_graph` |
-| "What's the AST structure of this function?" | ast-grep (native) |
-| "Have I solved this error before across all my projects?" | nano-brain (cross-workspace) |
-| "Show me line 142 of foo.go" | Read tool (native) |
+| "Have we discussed X before?" | nano-brain (cross-session memory) |
+| "Where is X defined in this repo right now?" | grep / ast-grep / Read |
+| "What did we decide about X back in March?" | nano-brain (recall) |
+| "Show me line 142 of foo.go" | Read |
+| "What's the AST shape of this function?" | ast-grep |
+| "Has this error appeared in any project before?" | nano-brain `--scope=all` |
+| "Who imports this module across my repos?" | nano-brain `graph/impact` (cross-repo) |
 
-**They are complementary. Always recall first (cheap), then use native tools for precise current-state.**
+**Order:** recall from memory first (cheap, gives context). Then use native tools for precise current-state inspection.
 
-## Further reading
+---
 
-- **Code intelligence deep-dive**: `references/code-intelligence.md`
-- **Full HTTP API contract**: nano-brain repo `internal/server/routes.go` + per-handler request/response structs in `internal/server/handlers/`
-- **MCP tool schemas**: `internal/mcp/tools.go` `RegisterTools`
-- **Migration history**: `nano-step/nano-brain` `CHANGELOG.md` + `openspec/changes/archive/`
+## Reference docs (load on demand)
+
+- [`references/http-api.md`](references/http-api.md) — full HTTP schema, all endpoints, performance budgets
+- [`references/cli-cheatsheet.md`](references/cli-cheatsheet.md) — every CLI command + flag combo
+- [`references/code-intelligence.md`](references/code-intelligence.md) — graph / trace / impact / symbols deep-dive
+- [`references/config-reference.md`](references/config-reference.md) — `config.yml` fields
+- Source contracts: `internal/server/routes.go` (HTTP) + `internal/mcp/tools.go::RegisterTools` (MCP) in the `nano-step/nano-brain` repo

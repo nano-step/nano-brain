@@ -1,51 +1,77 @@
 <!-- OPENCODE-MEMORY:START -->
-<!-- Managed block - do not edit manually. Updated by: npx nano-brain init -->
+<!-- Managed block - do not edit manually. Updated by: npx @nano-step/nano-brain init -->
 
 ## Memory System (nano-brain)
 
-This project uses **nano-brain** for persistent context across sessions.
+This project uses **nano-brain** for persistent context across sessions. Server runs on the host at port 3100; agents inside containers reach it at `host.docker.internal:3100`.
 
-> **Container setup required:** Each agent container must install the wrapper script to avoid
-> SQLite conflicts. See your project's nano-brain setup guide.
+### Bootstrap (once per shell session)
 
-### Quick Reference
+```bash
+eval "$(npx @nano-step/nano-brain workspaces current --export)"
+```
 
-All commands use HTTP API (nano-brain runs as Docker service on port 3100):
+This exports `NANO_BRAIN_WORKSPACE` so subsequent CLI calls do not need `--workspace=...`. If the workspace is not yet registered:
 
-> **Container agents:** server is on the HOST — always use `http://host.docker.internal:3100` inside containers. `localhost:3100` only works on the host itself.
+```bash
+npx @nano-step/nano-brain workspaces current --check 2>/dev/null \
+  || npx @nano-step/nano-brain init --root="$PWD"
+```
+
+### Quick Reference (CLI)
 
 | I want to... | Command |
-|--------------|---------|
-| Recall past work on a topic | `curl -s http://host.docker.internal:3100/api/query -d '{"query":"topic"}'` |
-| Find exact error/function name | `curl -s http://host.docker.internal:3100/api/search -d '{"query":"exact term"}'` |
-| Explore a concept semantically | `curl -s http://host.docker.internal:3100/api/query -d '{"query":"concept"}'` |
-| Save a decision for future sessions | `curl -s http://host.docker.internal:3100/api/write -d '{"content":"...","tags":"decision"}'` |
-| Check index health | `curl -s http://host.docker.internal:3100/api/status` |
-| Write a note with tags | `curl -s http://host.docker.internal:3100/api/write -d '{"content":"...","tags":"decision,auth"}'` |
-| Supersede old info | `curl -s http://host.docker.internal:3100/api/write -d '{"content":"new info","supersedes":"<path>"}'` |
-| See file dependencies | Use MCP tool: `memory_focus` with `{"filePath":"src/server.ts"}` |
-| Find cross-repo Redis usage | Use MCP tool: `memory_symbols` with `{"type":"redis_key","pattern":"sinv:*"}` |
-| Analyze cross-repo impact | Use MCP tool: `memory_impact` with `{"type":"redis_key","pattern":"sinv:*:compressed"}` |
-| Search across all workspaces | `curl -s http://host.docker.internal:3100/api/query -d '{"query":"topic","scope":"all"}'` |
-| Filter by tags | `curl -s http://host.docker.internal:3100/api/query -d '{"query":"topic","tags":"decision"}'` |
+|---|---|
+| Recall past work | `npx @nano-step/nano-brain query "topic"` |
+| Find exact term/identifier | `npx @nano-step/nano-brain search "FunctionName"` |
+| Semantic search | `npx @nano-step/nano-brain vsearch "concept"` |
+| Save a decision | `npx @nano-step/nano-brain write --tags=decision --title="..." --content="..."` |
+| Workspace briefing | `npx @nano-step/nano-brain wake-up` |
+| Cross-workspace search | `npx @nano-step/nano-brain query --scope=all "topic"` |
+| Tag-filtered search | `npx @nano-step/nano-brain query --tags=decision "topic"` |
+| Server health | `npx @nano-step/nano-brain status` |
+
+### HTTP API (for non-CLI agents)
+
+Base URL inside containers: `http://host.docker.internal:3100`. On the host: `http://localhost:3100`.
+
+All `POST /api/v1/*` workspace-scoped endpoints require a `workspace` field in the JSON body. Get the hash via:
+
+```bash
+curl -fsS -X POST $BASE/api/v1/workspaces/resolve \
+  -H 'Content-Type: application/json' \
+  -d "{\"path\":\"$PWD\"}" | jq -r .workspace_hash
+```
+
+Endpoint contract: `POST /api/v1/workspaces/resolve` body `{"path":"<abs>"}` → `{"workspace_hash","root_path","name","registered"}`. Read-only — never auto-registers; use `POST /api/v1/init` for that.
+
+Example query:
+
+```bash
+curl -fsS -X POST $BASE/api/v1/query \
+  -H 'Content-Type: application/json' \
+  -d "{\"workspace\":\"$NANO_BRAIN_WORKSPACE\",\"query\":\"topic\",\"max_results\":10}"
+```
 
 ### Session Workflow
 
-**Start of session:** Check memory for relevant past context before exploring the codebase.
-```
-curl -s http://host.docker.internal:3100/api/query -d '{"query":"what have we done regarding {current task topic}"}'
-```
+- **Start of session:** `npx @nano-step/nano-brain query "what have we done about <task>"` before exploring the codebase.
+- **End of session:** Persist key decisions and learnings:
 
-**End of session:** Save key decisions, patterns discovered, and debugging insights.
 ```bash
-curl -s http://host.docker.internal:3100/api/write -d '{"content":"## Summary\n- Decision: ...\n- Why: ...\n- Files: ...","tags":"summary"}'
+npx @nano-step/nano-brain write --tags=summary,decision \
+  --title="Session: <topic>" \
+  --content="## Summary\n- Decision: ...\n- Why: ...\n- Files: ..."
 ```
 
 ### When to Search Memory vs Codebase
 
-- **"Have we done this before?"** → `curl -s http://host.docker.internal:3100/api/query` (searches past sessions)
-- **"Where is this in the code?"** → grep / ast-grep (searches current files)
-- **"How does this concept work here?"** → Both (memory for past context + grep for current code)
+- **"Have we done this before?"** → `npx @nano-step/nano-brain query "..."` (past sessions)
+- **"Where is this in the code right now?"** → grep / ast-grep
+- **"How does this concept work here?"** → both
+- **"What calls this function / what breaks if I change Y?"** → `nano-brain` code intelligence (`POST /api/v1/graph/query`, `/api/v1/graph/impact`, `/api/v1/graph/trace`)
+
+See `skills/nano-brain/SKILL.md` for the full reference (phases, error recovery, all endpoints).
 
 <!-- OPENCODE-MEMORY:END -->
 

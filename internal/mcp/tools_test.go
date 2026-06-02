@@ -35,8 +35,8 @@ func TestRegisterTools_CountAndNames(t *testing.T) {
 		t.Fatalf("ListTools: %v", err)
 	}
 
-	if len(result.Tools) != 13 {
-		t.Errorf("expected 13 tools, got %d", len(result.Tools))
+	if len(result.Tools) != 14 {
+		t.Errorf("expected 14 tools, got %d", len(result.Tools))
 		for _, tool := range result.Tools {
 			t.Logf("  - %s", tool.Name)
 		}
@@ -56,6 +56,7 @@ func TestRegisterTools_CountAndNames(t *testing.T) {
 		"memory_graph",
 		"memory_impact",
 		"memory_trace",
+		"memory_workspaces_resolve",
 	}
 	sort.Strings(expected)
 
@@ -368,4 +369,55 @@ func TestKeepAliveInterval_Is30Seconds(t *testing.T) {
 	if internalmcp.KeepAliveInterval != 30*time.Second {
 		t.Errorf("KeepAliveInterval = %v, want 30s", internalmcp.KeepAliveInterval)
 	}
+}
+
+func TestMemoryWorkspacesResolve_EmptyPath(t *testing.T) {
+	session, ctx := setupTestClient(t)
+
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name: "memory_workspaces_resolve",
+		Arguments: map[string]any{
+			"path": "",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for empty path")
+	}
+	text := result.Content[0].(*mcpsdk.TextContent).Text
+	if !strings.Contains(text, "path is required") {
+		t.Errorf("expected 'path is required' in error, got: %s", text)
+	}
+}
+
+func TestMemoryWorkspacesResolve_MissingPath(t *testing.T) {
+	session, ctx := setupTestClient(t)
+
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name:      "memory_workspaces_resolve",
+		Arguments: map[string]any{},
+	})
+	if err == nil && !result.IsError {
+		t.Fatal("expected error for missing path argument")
+	}
+}
+
+func TestMemoryWorkspacesResolve_ToolRegistered(t *testing.T) {
+	session, ctx := setupTestClient(t)
+
+	list, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	for _, tool := range list.Tools {
+		if tool.Name == "memory_workspaces_resolve" {
+			if tool.Description == "" {
+				t.Error("memory_workspaces_resolve has empty description")
+			}
+			return
+		}
+	}
+	t.Fatal("memory_workspaces_resolve not found in tool list")
 }
