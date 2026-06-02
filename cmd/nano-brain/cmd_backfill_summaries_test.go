@@ -27,7 +27,7 @@ func setupBackfillTestPG(t *testing.T) *sqlc.Queries {
 	}
 
 	ctx := context.Background()
-	poolCfg, err := pgxpool.ParseConfig(cleanupTestDSN)
+	poolCfg, err := pgxpool.ParseConfig(testDSNValue())
 	if err != nil {
 		t.Skip("postgres not available: " + err.Error())
 	}

@@ -485,6 +485,46 @@ func (q *Queries) UpdateDocumentsCollection(ctx context.Context, arg UpdateDocum
 	return err
 }
 
+const listDocumentSourcePathsAndHashes = `-- name: ListDocumentSourcePathsAndHashes :many
+SELECT id, source_path, content_hash
+FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND source_path != ''
+ORDER BY source_path
+`
+
+type ListDocumentSourcePathsAndHashesParams struct {
+	WorkspaceHash string
+	Collection    string
+}
+
+type ListDocumentSourcePathsAndHashesRow struct {
+	ID          uuid.UUID
+	SourcePath  string
+	ContentHash string
+}
+
+func (q *Queries) ListDocumentSourcePathsAndHashes(ctx context.Context, arg ListDocumentSourcePathsAndHashesParams) ([]ListDocumentSourcePathsAndHashesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDocumentSourcePathsAndHashes, arg.WorkspaceHash, arg.Collection)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDocumentSourcePathsAndHashesRow
+	for rows.Next() {
+		var i ListDocumentSourcePathsAndHashesRow
+		if err := rows.Scan(&i.ID, &i.SourcePath, &i.ContentHash); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return items, rows.Err()
+}
+
 const upsertDocument = `-- name: UpsertDocument :one
 INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)

@@ -411,7 +411,7 @@ func runHarvestCmd(args []string) {
 func runReindexCmd(args []string) {
 	cliLog.Info().Str("cmd", "reindex").Msg("cli command started")
 	var root, workspace string
-	var jsonFlag bool
+	var jsonFlag, forceWipe bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -431,6 +431,8 @@ func runReindexCmd(args []string) {
 			workspace = args[i]
 		case "--json":
 			jsonFlag = true
+		case "--force-wipe":
+			forceWipe = true
 		default:
 			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
 			os.Exit(1)
@@ -438,7 +440,7 @@ func runReindexCmd(args []string) {
 	}
 
 	if root == "" {
-		fmt.Fprintf(os.Stderr, "--root is required\n")
+		fmt.Fprintf(os.Stderr, "Usage: nano-brain reindex --root <path> [--workspace <hash>] [--force-wipe] [--json]\n")
 		os.Exit(1)
 	}
 
@@ -452,7 +454,7 @@ func runReindexCmd(args []string) {
 		workspace = h
 	}
 
-	reqBody := map[string]string{"root": root, "workspace": workspace}
+	reqBody := map[string]interface{}{"root": root, "workspace": workspace, "force_wipe": forceWipe}
 
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
@@ -475,7 +477,7 @@ func runReindexCmd(args []string) {
 	}
 
 	fmt.Printf("Reindex queued for collection '%s'\n", root)
-	cliLog.Info().Str("cmd", "reindex").Str("root", root).Msg("cli command completed")
+	cliLog.Info().Str("cmd", "reindex").Str("root", root).Bool("force_wipe", forceWipe).Msg("cli command completed")
 }
 
 func runQueryCmd(args []string) {
