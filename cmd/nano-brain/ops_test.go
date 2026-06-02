@@ -14,6 +14,9 @@ import (
 func TestResolveHostPort_Defaults(t *testing.T) {
 	t.Setenv("NANO_BRAIN_HOST", "")
 	t.Setenv("NANO_BRAIN_PORT", "")
+	orig := isContainerFn
+	isContainerFn = func() bool { return false }
+	t.Cleanup(func() { isContainerFn = orig })
 	host, port := resolveHostPort()
 	if host != "localhost" {
 		t.Errorf("host = %q, want %q", host, "localhost")

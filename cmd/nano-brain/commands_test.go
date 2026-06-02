@@ -17,9 +17,43 @@ import (
 func TestGetBaseURL_Defaults(t *testing.T) {
 	t.Setenv("NANO_BRAIN_HOST", "")
 	t.Setenv("NANO_BRAIN_PORT", "")
+	orig := isContainerFn
+	isContainerFn = func() bool { return false }
+	t.Cleanup(func() { isContainerFn = orig })
 	got := getBaseURL()
 	if got != "http://localhost:3100" {
 		t.Errorf("getBaseURL() = %q, want %q", got, "http://localhost:3100")
+	}
+}
+
+func TestGetBaseURL_ContainerAutoDetect(t *testing.T) {
+	t.Setenv("NANO_BRAIN_HOST", "")
+	t.Setenv("NANO_BRAIN_PORT", "")
+	orig := isContainerFn
+	isContainerFn = func() bool { return true }
+	t.Cleanup(func() { isContainerFn = orig })
+	got := getBaseURL()
+	if got != "http://host.docker.internal:3100" {
+		t.Errorf("getBaseURL() in container = %q, want %q", got, "http://host.docker.internal:3100")
+	}
+}
+
+func TestGetBaseURL_ExplicitHostBeatsContainerAutoDetect(t *testing.T) {
+	t.Setenv("NANO_BRAIN_HOST", "explicit-host")
+	t.Setenv("NANO_BRAIN_PORT", "")
+	orig := isContainerFn
+	isContainerFn = func() bool { return true }
+	t.Cleanup(func() { isContainerFn = orig })
+	got := getBaseURL()
+	if got != "http://explicit-host:3100" {
+		t.Errorf("getBaseURL() with explicit host in container = %q, want %q", got, "http://explicit-host:3100")
+	}
+}
+
+func TestIsContainer_KubernetesEnv(t *testing.T) {
+	t.Setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
+	if !isContainer() {
+		t.Error("isContainer() = false with KUBERNETES_SERVICE_HOST set, want true")
 	}
 }
 

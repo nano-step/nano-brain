@@ -28,12 +28,20 @@ var (
 // isTTYFn is the TTY detector hook. Tests override it.
 var isTTYFn = isTTY
 
+// isContainerFn is the container-environment detector hook. Tests override it.
+// Default delegates to isContainer() in guard.go.
+var isContainerFn = isContainer
+
 const serverHealthTimeout = 10 * time.Second
 
 func resolveHostPort() (string, int) {
 	host := os.Getenv("NANO_BRAIN_HOST")
 	if host == "" {
-		host = "localhost"
+		if isContainerFn() {
+			host = "host.docker.internal"
+		} else {
+			host = "localhost"
+		}
 	}
 	port := 3100
 	if p := os.Getenv("NANO_BRAIN_PORT"); p != "" {
