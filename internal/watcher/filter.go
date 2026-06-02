@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,12 +36,17 @@ var defaultExcludeDirs = map[string]bool{
 type fileFilter struct {
 	gitignoreMatcher  *gitignore.GitIgnore
 	globalIgnore      *gitignore.GitIgnore
+	localIgnore       *gitignore.GitIgnore
 	excludePatterns   []string
 	allowedExtensions map[string]bool
 	rootDir           string
 }
 
-func newFileFilter(rootDir string, excludePatterns, allowedExtensions []string, globalIgnore *gitignore.GitIgnore) *fileFilter {
+// newFileFilter returns a filter for rootDir. The error reports IO failures
+// while loading <rootDir>/.nano-brainignore (permission denied, is-a-directory,
+// etc.). The returned *fileFilter is always valid; callers should log the
+// error and continue with localIgnore unset.
+func newFileFilter(rootDir string, excludePatterns, allowedExtensions []string, globalIgnore *gitignore.GitIgnore) (*fileFilter, error) {
 	f := &fileFilter{
 		rootDir:         rootDir,
 		excludePatterns: excludePatterns,
@@ -64,7 +70,16 @@ func newFileFilter(rootDir string, excludePatterns, allowedExtensions []string, 
 		}
 	}
 
-	return f
+	localIgnPath := filepath.Join(rootDir, ".nano-brainignore")
+	if _, err := os.Stat(localIgnPath); err == nil {
+		gi, err := gitignore.CompileIgnoreFile(localIgnPath)
+		if err != nil {
+			return f, fmt.Errorf("load workspace .nano-brainignore at %s: %w", localIgnPath, err)
+		}
+		f.localIgnore = gi
+	}
+
+	return f, nil
 }
 
 func (f *fileFilter) shouldSkip(absPath string, isDir bool) bool {
@@ -86,6 +101,10 @@ func (f *fileFilter) shouldSkip(absPath string, isDir bool) bool {
 	}
 
 	if f.globalIgnore != nil && f.globalIgnore.MatchesPath(matchRel) {
+		return true
+	}
+
+	if f.localIgnore != nil && f.localIgnore.MatchesPath(matchRel) {
 		return true
 	}
 

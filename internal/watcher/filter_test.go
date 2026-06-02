@@ -8,7 +8,7 @@ import (
 
 func TestShouldSkip_DefaultExcludeDirs(t *testing.T) {
 	root := t.TempDir()
-	f := newFileFilter(root, nil, nil, nil)
+	f, _ := newFileFilter(root, nil, nil, nil)
 
 	cases := []struct {
 		path string
@@ -32,7 +32,7 @@ func TestShouldSkip_DefaultExcludeDirs(t *testing.T) {
 
 func TestShouldSkip_ExcludePatterns(t *testing.T) {
 	root := t.TempDir()
-	f := newFileFilter(root, []string{"*.lock", "*.log"}, nil, nil)
+	f, _ := newFileFilter(root, []string{"*.lock", "*.log"}, nil, nil)
 
 	cases := []struct {
 		path string
@@ -54,7 +54,7 @@ func TestShouldSkip_ExcludePatterns(t *testing.T) {
 
 func TestShouldSkip_AllowedExtensions(t *testing.T) {
 	root := t.TempDir()
-	f := newFileFilter(root, nil, []string{".go", ".md"}, nil)
+	f, _ := newFileFilter(root, nil, []string{".go", ".md"}, nil)
 
 	cases := []struct {
 		path string
@@ -77,7 +77,7 @@ func TestShouldSkip_AllowedExtensions(t *testing.T) {
 
 func TestShouldSkip_AllowedExtensionsNoDot(t *testing.T) {
 	root := t.TempDir()
-	f := newFileFilter(root, nil, []string{"go", "ts"}, nil)
+	f, _ := newFileFilter(root, nil, []string{"go", "ts"}, nil)
 
 	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should not be skipped when go is allowed")
@@ -94,7 +94,7 @@ func TestShouldSkip_Gitignore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f := newFileFilter(root, nil, nil, nil)
+	f, _ := newFileFilter(root, nil, nil, nil)
 
 	cases := []struct {
 		path string
@@ -115,7 +115,7 @@ func TestShouldSkip_Gitignore(t *testing.T) {
 
 func TestShouldSkip_NoGitignore(t *testing.T) {
 	root := t.TempDir()
-	f := newFileFilter(root, nil, nil, nil)
+	f, _ := newFileFilter(root, nil, nil, nil)
 
 	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should not be skipped when no .gitignore")
@@ -183,7 +183,7 @@ func TestFileFilter_GlobalIgnoreApplies(t *testing.T) {
 		t.Fatalf("setup: %v, gi=%v", err, gi)
 	}
 
-	f := newFileFilter(root, nil, nil, gi)
+	f, _ := newFileFilter(root, nil, nil, gi)
 	if !f.shouldSkip(filepath.Join(root, "screenshot.png"), false) {
 		t.Error("screenshot.png should be skipped via global ignore")
 	}
@@ -208,7 +208,7 @@ func TestFileFilter_GlobalIgnoreMatchesDirectoryWithTrailingSlash(t *testing.T) 
 		t.Fatalf("setup: %v", err)
 	}
 
-	f := newFileFilter(root, nil, nil, gi)
+	f, _ := newFileFilter(root, nil, nil, gi)
 	if !f.shouldSkip(filepath.Join(root, "custom_build"), true) {
 		t.Error("custom_build directory must be skipped (gitignore 'custom_build/' pattern requires trailing slash)")
 	}
@@ -238,7 +238,7 @@ func TestFileFilter_GlobalIgnoreCombinesWithPerCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f := newFileFilter(root, nil, nil, gi)
+	f, _ := newFileFilter(root, nil, nil, gi)
 	if !f.shouldSkip(filepath.Join(root, "app.log"), false) {
 		t.Error("app.log should be skipped via global ignore")
 	}
@@ -247,5 +247,119 @@ func TestFileFilter_GlobalIgnoreCombinesWithPerCollection(t *testing.T) {
 	}
 	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should NOT be skipped")
+	}
+}
+
+func TestFileFilter_LocalNanoBrainIgnoreApplies(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".nano-brainignore"), []byte("*.tmp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := newFileFilter(root, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.localIgnore == nil {
+		t.Fatal("expected non-nil localIgnore matcher")
+	}
+	if !f.shouldSkip(filepath.Join(root, "foo.tmp"), false) {
+		t.Error("foo.tmp should be skipped via workspace .nano-brainignore")
+	}
+	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+		t.Error("main.go should NOT be skipped")
+	}
+}
+
+func TestFileFilter_LocalNanoBrainIgnoreMissing(t *testing.T) {
+	root := t.TempDir()
+
+	f, err := newFileFilter(root, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error when file absent: %v", err)
+	}
+	if f.localIgnore != nil {
+		t.Error("expected nil localIgnore matcher when file missing")
+	}
+	if f.shouldSkip(filepath.Join(root, "anything.tmp"), false) {
+		t.Error("anything.tmp must NOT be skipped without a local matcher")
+	}
+}
+
+func TestFileFilter_LocalNanoBrainIgnoreCombinesWithGlobal(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+	gdir := filepath.Join(home, ".nano-brain")
+	if err := os.MkdirAll(gdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gdir, ".nano-brainignore"), []byte("*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gi, _, err := LoadGlobalIgnore(home)
+	if err != nil || gi == nil {
+		t.Fatalf("setup global: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".nano-brainignore"), []byte("*.tmp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := newFileFilter(root, nil, nil, gi)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !f.shouldSkip(filepath.Join(root, "app.log"), false) {
+		t.Error("app.log should be skipped via global ignore")
+	}
+	if !f.shouldSkip(filepath.Join(root, "scratch.tmp"), false) {
+		t.Error("scratch.tmp should be skipped via local ignore")
+	}
+	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+		t.Error("main.go should NOT be skipped")
+	}
+}
+
+func TestFileFilter_LocalNanoBrainIgnoreCombinesWithGitignore(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("tmp/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".nano-brainignore"), []byte("*.snap\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := newFileFilter(root, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !f.shouldSkip(filepath.Join(root, "tmp", "x.go"), false) {
+		t.Error("tmp/x.go should be skipped via .gitignore")
+	}
+	if !f.shouldSkip(filepath.Join(root, "fixture.snap"), false) {
+		t.Error("fixture.snap should be skipped via workspace .nano-brainignore")
+	}
+	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+		t.Error("main.go should NOT be skipped")
+	}
+}
+
+func TestFileFilter_LocalNanoBrainIgnoreUnreadable(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".nano-brainignore"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := newFileFilter(root, nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected IO error when .nano-brainignore is a directory")
+	}
+	if f == nil {
+		t.Fatal("expected non-nil *fileFilter even on error (callers continue with localIgnore nil)")
+	}
+	if f.localIgnore != nil {
+		t.Error("localIgnore must be nil when file load failed")
+	}
+	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+		t.Error("main.go should NOT be skipped — other filter layers still operate")
 	}
 }
