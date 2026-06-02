@@ -60,7 +60,7 @@ jobs:
                   | sed -E "s|^${PREFIX}||" \
                   | sort -n \
                   | tail -1 || true)
-          NEXT_NN=$(printf '%02d' $(( ${MAX_NN:-0} + 1 )))
+          NEXT_NN=$(printf '%02d' $(( 10#${MAX_NN:-0} + 1 )))
           TAG="${PREFIX}${NEXT_NN}"
 
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
@@ -132,7 +132,7 @@ jobs:
                   | sed -E "s|^${PREFIX}||" \
                   | sort -n \
                   | tail -1 || true)
-          NEXT_NN=$(printf '%02d' $(( ${MAX_NN:-0} + 1 )))
+          NEXT_NN=$(printf '%02d' $(( 10#${MAX_NN:-0} + 1 )))
           TAG="${PREFIX}${NEXT_NN}"
 
           echo "Computed tag: ${TAG}"
