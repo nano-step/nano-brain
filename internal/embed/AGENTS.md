@@ -24,7 +24,7 @@ Both providers implement `Embedder`. Ollama is local, no key required. VoyageAI 
 
 - Semaphore limits concurrent embed calls to `concurrency` (default 4).
 - Backpressure: enqueues rejected when pending backlog >= 50,000.
-- Embed timeout: 2 min per chunk. Content truncated to 4,000 chars (fits 2k-token model window).
+- Embed timeout: 2 min per chunk. Content truncated to 3,000 chars (fits 2k-token model window).
 - Retry limit: 3; then `MarkChunkEmbedFailed`. Backoff: 60 s base, 1.5x multiplier, 300 s cap.
 - FK violation on `InsertEmbedding` (chunk deleted mid-flight) is silently skipped.
 
