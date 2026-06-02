@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/nano-brain/nano-brain/internal/harvest"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/testutil"
 	"github.com/nano-brain/nano-brain/migrations"
 	"github.com/pressly/goose/v3"
 	"github.com/sqlc-dev/pqtype"
@@ -26,7 +27,7 @@ func setupIntegrationPG(t *testing.T) *sql.DB {
 	t.Helper()
 
 	ctx := context.Background()
-	dsn := "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
+	dsn := testutil.TestDSN()
 	poolCfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		t.Skip("postgres not available: " + err.Error())

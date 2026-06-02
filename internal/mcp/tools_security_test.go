@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -21,7 +22,12 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const mcpSecTestDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
+func mcpSecTestDSN() string {
+	if v := os.Getenv("NANO_BRAIN_TEST_DATABASE_URL"); v != "" {
+		return v
+	}
+	return "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"
+}
 
 func setupMCPSecTestPG(t *testing.T) *sql.DB {
 	t.Helper()
@@ -30,7 +36,7 @@ func setupMCPSecTestPG(t *testing.T) *sql.DB {
 	}
 
 	ctx := context.Background()
-	poolCfg, err := pgxpool.ParseConfig(mcpSecTestDSN)
+	poolCfg, err := pgxpool.ParseConfig(mcpSecTestDSN())
 	if err != nil {
 		t.Skip("postgres not available: " + err.Error())
 	}

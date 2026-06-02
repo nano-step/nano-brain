@@ -1,0 +1,11 @@
+database:
+  url: "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"
+
+server:
+  host: "localhost"
+  port: 3199
+
+embedding:
+  provider: "ollama"
+  url: "http://host.docker.internal:11434"
+  model: "nomic-embed-text"

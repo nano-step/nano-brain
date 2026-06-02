@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,7 +18,16 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-const testDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
+const defaultTestDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"
+
+// TestDSN returns the integration test database URL.
+// Override with NANO_BRAIN_TEST_DATABASE_URL to use a different target.
+func TestDSN() string {
+	if v := os.Getenv("NANO_BRAIN_TEST_DATABASE_URL"); v != "" {
+		return v
+	}
+	return defaultTestDSN
+}
 
 // SetupTestDB connects to the test PG, creates an isolated schema, runs
 // migrations, and registers cleanup. No import of internal/storage to avoid
@@ -27,7 +37,7 @@ func SetupTestDB(t *testing.T) *pgxpool.Pool {
 
 	ctx := context.Background()
 
-	poolCfg, err := pgxpool.ParseConfig(testDSN)
+	poolCfg, err := pgxpool.ParseConfig(TestDSN())
 	if err != nil {
 		t.Fatalf("SetupTestDB: parse config: %v", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -19,7 +20,12 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
-const cleanupTestDSN = "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable"
+func testDSNValue() string {
+	if v := os.Getenv("NANO_BRAIN_TEST_DATABASE_URL"); v != "" {
+		return v
+	}
+	return "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"
+}
 
 // preMigration00011Version pins the schema to before FK enforcement so cleanup
 // tests can insert orphan rows directly. Matches the production sequence
@@ -33,7 +39,7 @@ func setupCleanupTestPG(t *testing.T) *sql.DB {
 	}
 
 	ctx := context.Background()
-	poolCfg, err := pgxpool.ParseConfig(cleanupTestDSN)
+	poolCfg, err := pgxpool.ParseConfig(testDSNValue())
 	if err != nil {
 		t.Skip("postgres not available: " + err.Error())
 	}
