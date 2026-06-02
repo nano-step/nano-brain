@@ -1,0 +1,13 @@
+EXPLAIN ANALYZE SELECT id FROM chunks WHERE embed_status='pending' ORDER BY created_at LIMIT 1000;
+
+Limit  (cost=25.90..25.91 rows=5 width=24) (actual time=0.368..0.369 rows=5 loops=1)
+  ->  Sort  (cost=25.90..25.91 rows=5 width=24) (actual time=0.367..0.368 rows=5 loops=1)
+        Sort Key: created_at
+        Sort Method: quicksort  Memory: 25kB
+        ->  Bitmap Heap Scan on chunks  (cost=8.17..25.84 rows=5 width=24) (actual time=0.148..0.292 rows=5 loops=1)
+              Recheck Cond: (embed_status = 'pending'::text)
+              Heap Blocks: exact=7
+              ->  Bitmap Index Scan on idx_chunks_embed_status  (cost=0.00..8.17 rows=5 width=0) (actual time=0.048..0.048 rows=21 loops=1)
+                    Index Cond: (embed_status = 'pending'::text)
+Planning Time: 1.538 ms
+Execution Time: 0.528 ms

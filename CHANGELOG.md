@@ -476,6 +476,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Performance
+- Add partial index on chunks.embed_status (pending/embed_failed) for embed queue worker hot path (#322)
+- Add in-flight dedup set in embed queue to prevent re-embedding of chunks already being processed by a worker (#322)
+
 ### Breaking changes (operator action required)
 
 - **fix(security): close 7 workspace-registration leak points in summary + write paths (#238).** Every write path now enforces that the target `workspace_hash` is registered in the `workspaces` table. Five layers of defense-in-depth: HTTP middleware, MCP tool handlers, harvester init, `Persister.Save`, and a new PostgreSQL FK constraint with `ON DELETE CASCADE` (migration 00011).

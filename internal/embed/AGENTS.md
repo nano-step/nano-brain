@@ -40,5 +40,9 @@ Both providers implement `Embedder`. Ollama is local, no key required. VoyageAI 
 
 ## Key Types
 
-- `Queue` — owns channel, workers, backoff state (`Queue.mu`), retry map (`retriesMu`).
+- `Queue` — owns channel, workers, backoff state (`Queue.mu`), retry map (`retriesMu`), `inflight sync.Map`.
 - `QueueQuerier` — narrow 6-method DB interface injected into `Queue`.
+
+## In-Flight Dedup Invariant
+
+`Queue.inflight` (`sync.Map`) tracks chunk IDs currently in the channel buffer or being processed. `Enqueue` uses `LoadOrStore` to skip duplicates; `processChunk` uses a conditional `defer` to clean up — skipping cleanup only when `handleRetry` successfully re-enqueues the chunk (the next `processChunk` invocation owns that cleanup).
