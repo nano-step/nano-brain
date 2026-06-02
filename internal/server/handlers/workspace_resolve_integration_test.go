@@ -75,8 +75,7 @@ func TestResolveWorkspaceE2E_RegisteredAfterInit(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		if _, _ = doResolve(t, resolveHandler, projectPath); false {
-		}
+		_, _ = doResolve(t, resolveHandler, projectPath)
 	}
 	rowsAfterResolve, err := q.ListWorkspacesWithStats(ctx)
 	if err != nil {

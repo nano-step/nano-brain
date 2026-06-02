@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -191,6 +192,13 @@ func runWorkspacesCurrentWithIO(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		path = cwd
+	} else if !filepath.IsAbs(path) {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			fmt.Fprintf(stderr, "failed to resolve path %q: %v\n", path, err)
+			return 1
+		}
+		path = abs
 	}
 
 	reqBody, _ := json.Marshal(map[string]string{"path": path})

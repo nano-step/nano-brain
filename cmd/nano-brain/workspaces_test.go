@@ -435,3 +435,40 @@ func TestWorkspacesCurrent_UnknownFlag_ExitsOne(t *testing.T) {
 		t.Errorf("stderr should mention unknown flag; got %q", errOut.String())
 	}
 }
+
+func TestWorkspacesCurrent_RelativePathNormalized_ClientSide(t *testing.T) {
+	var receivedPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/workspaces/resolve" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		receivedPath = body.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"workspace_hash": "h",
+			"root_path":      body.Path,
+			"name":           "x",
+			"registered":     false,
+		})
+	}))
+	t.Cleanup(ts.Close)
+	setHostPort(t, ts)
+
+	var out, errOut bytes.Buffer
+	code := runWorkspacesCurrentWithIO([]string{"--path=./relative/subdir"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, errOut.String())
+	}
+	if !strings.HasPrefix(receivedPath, "/") {
+		t.Errorf("server received non-absolute path %q — CLI must normalize relative paths client-side (Gemini review F2)", receivedPath)
+	}
+	if strings.Contains(receivedPath, "./") {
+		t.Errorf("server received unresolved path components %q — filepath.Abs should clean dots", receivedPath)
+	}
+}
