@@ -71,11 +71,12 @@ func newFileFilter(rootDir string, excludePatterns, allowedExtensions []string, 
 	}
 
 	localIgnPath := filepath.Join(rootDir, ".nano-brainignore")
-	if _, err := os.Stat(localIgnPath); err == nil {
-		gi, err := gitignore.CompileIgnoreFile(localIgnPath)
-		if err != nil {
+	gi, err := gitignore.CompileIgnoreFile(localIgnPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
 			return f, fmt.Errorf("load workspace .nano-brainignore at %s: %w", localIgnPath, err)
 		}
+	} else {
 		f.localIgnore = gi
 	}
 

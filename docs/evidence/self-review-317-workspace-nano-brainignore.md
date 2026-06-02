@@ -106,11 +106,22 @@ Confirmed by re-running the same commands against `origin/master` HEAD (`7d2b12f
 
 These are **out of scope** for this PR per the "don't fix pre-existing issues unless asked" rule. Will note them in the PR body for triage as separate issues.
 
+## Gemini Verification Triage
+
+Per R31 in `docs/HARNESS.md`: every Gemini PR comment must be triaged using the closed verdict vocabulary.
+
+| Comment ref                | Agent verdict   | Reasoning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Action                       |
+| -------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| PR#318 filter.go L73-80    | VALID:high      | Gemini correctly identified that the original `os.Stat` + `CompileIgnoreFile` pattern silently swallowed non-`IsNotExist` errors. This violated AC #5 in proposal.md (which explicitly named "permission denied" as a case that MUST log WARN). My `TestFileFilter_LocalNanoBrainIgnoreUnreadable` test passed only because `os.Stat` on a directory succeeds — `chmod 0000` on a regular file would have failed `Stat` and been silently skipped, never reaching the WARN path. Momus full review did not catch this. Replaced with direct `CompileIgnoreFile` + `os.IsNotExist` check. Added `TestFileFilter_LocalNanoBrainIgnorePermissionDenied` regression test (chmod 0000 the file, runtime+euid guards). | fixed in commit `<see push>` |
+
+**Loop count**: 1 of 3 (max per R31 before human escalation).
+
 ## Verdict
 
-**APPROVED for merge** (subject to standard PR bot review on push).
+**APPROVED for merge** (subject to next PR bot review on the fix commit).
 
 - Implementation matches the design brief exactly (no scope creep).
 - All 8 acceptance criteria verified with reproducible evidence (unit tests + smoke logs + curl outputs).
 - Validation ladder passes on all layers under my control (watcher package). Pre-existing failures elsewhere are documented and noted as out of scope.
 - Production memory was not touched (smoke ran on isolated DB `nanobrain_smoke317`, cleaned up after).
+- Gemini review feedback triaged + fixed per R31.

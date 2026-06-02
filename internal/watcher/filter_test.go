@@ -3,6 +3,7 @@ package watcher
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -355,6 +356,39 @@ func TestFileFilter_LocalNanoBrainIgnoreUnreadable(t *testing.T) {
 	}
 	if f == nil {
 		t.Fatal("expected non-nil *fileFilter even on error (callers continue with localIgnore nil)")
+	}
+	if f.localIgnore != nil {
+		t.Error("localIgnore must be nil when file load failed")
+	}
+	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+		t.Error("main.go should NOT be skipped — other filter layers still operate")
+	}
+}
+
+func TestFileFilter_LocalNanoBrainIgnorePermissionDenied(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod 0000 semantics differ on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses file mode permissions")
+	}
+
+	root := t.TempDir()
+	ignPath := filepath.Join(root, ".nano-brainignore")
+	if err := os.WriteFile(ignPath, []byte("*.tmp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(ignPath, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(ignPath, 0o644) })
+
+	f, err := newFileFilter(root, nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected IO error when .nano-brainignore is unreadable (chmod 0000)")
+	}
+	if f == nil {
+		t.Fatal("expected non-nil *fileFilter even on error")
 	}
 	if f.localIgnore != nil {
 		t.Error("localIgnore must be nil when file load failed")
