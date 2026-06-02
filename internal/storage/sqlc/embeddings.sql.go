@@ -292,20 +292,6 @@ func (q *Queries) MarkChunkEmbedFailed(ctx context.Context, arg MarkChunkEmbedFa
 	return err
 }
 
-const markChunkEmbedPermanentlyFailed = `-- name: MarkChunkEmbedPermanentlyFailed :exec
-UPDATE chunks SET embed_status = 'embed_permanently_failed' WHERE id = $1 AND workspace_hash = $2
-`
-
-type MarkChunkEmbedPermanentlyFailedParams struct {
-	ID            uuid.UUID
-	WorkspaceHash string
-}
-
-func (q *Queries) MarkChunkEmbedPermanentlyFailed(ctx context.Context, arg MarkChunkEmbedPermanentlyFailedParams) error {
-	_, err := q.db.ExecContext(ctx, markChunkEmbedPermanentlyFailed, arg.ID, arg.WorkspaceHash)
-	return err
-}
-
 const markChunkEmbedded = `-- name: MarkChunkEmbedded :exec
 UPDATE chunks SET embed_status = 'embedded' WHERE id = $1 AND workspace_hash = $2
 `

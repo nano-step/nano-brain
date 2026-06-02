@@ -49,7 +49,6 @@ type QueueQuerier interface {
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
-	MarkChunkEmbedPermanentlyFailed(ctx context.Context, arg sqlc.MarkChunkEmbedPermanentlyFailedParams) error
 }
 
 type Queue struct {

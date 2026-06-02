@@ -48,11 +48,9 @@ type mockQuerier struct {
 	insertEmbeddingFn                     func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	markChunkEmbeddedFn                   func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	markChunkEmbedFailedFn                func(ctx context.Context, arg sqlc.MarkChunkEmbedFailedParams) error
-	markChunkEmbedPermanentlyFailedFn     func(ctx context.Context, arg sqlc.MarkChunkEmbedPermanentlyFailedParams) error
 	insertEmbeddingCalls                  int
 	markChunkEmbeddedCalls                int
 	markChunkEmbedFailedCalls             int
-	markChunkEmbedPermanentlyFailedCalls  int
 }
 
 func (m *mockQuerier) GetChunkByID(ctx context.Context, id uuid.UUID) (sqlc.GetChunkByIDRow, error) {
@@ -106,16 +104,6 @@ func (m *mockQuerier) MarkChunkEmbedFailed(ctx context.Context, arg sqlc.MarkChu
 	m.mu.Unlock()
 	if m.markChunkEmbedFailedFn != nil {
 		return m.markChunkEmbedFailedFn(ctx, arg)
-	}
-	return nil
-}
-
-func (m *mockQuerier) MarkChunkEmbedPermanentlyFailed(ctx context.Context, arg sqlc.MarkChunkEmbedPermanentlyFailedParams) error {
-	m.mu.Lock()
-	m.markChunkEmbedPermanentlyFailedCalls++
-	m.mu.Unlock()
-	if m.markChunkEmbedPermanentlyFailedFn != nil {
-		return m.markChunkEmbedPermanentlyFailedFn(ctx, arg)
 	}
 	return nil
 }
