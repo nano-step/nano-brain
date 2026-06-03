@@ -114,7 +114,7 @@ func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
 		return false
 	}
 	if _, loaded := q.inflight.LoadOrStore(chunkID, struct{}{}); loaded {
-		q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("skip enqueue: chunk already in-flight")
+		q.logger.Trace().Str("chunk_id", chunkID.String()).Msg("skip enqueue: chunk already in-flight")
 		return false
 	}
 	select {
@@ -190,13 +190,16 @@ func (q *Queue) Run(ctx context.Context) error {
 }
 
 func (q *Queue) scanPending(ctx context.Context) {
-	total := q.scanByStatus(ctx, false)
-	recovered := q.scanByStatus(ctx, true)
-	q.logger.Info().Int("pending", total).Int("recovered", recovered).Msg("scan complete")
+	total, skipped := q.scanByStatus(ctx, false)
+	recovered, skippedFailed := q.scanByStatus(ctx, true)
+	q.logger.Info().
+		Int("pending", total).
+		Int("recovered", recovered).
+		Int("skipped_inflight", skipped+skippedFailed).
+		Msg("scan complete")
 }
 
-func (q *Queue) scanByStatus(ctx context.Context, failed bool) int {
-	total := 0
+func (q *Queue) scanByStatus(ctx context.Context, failed bool) (enqueued int, skipped int) {
 	for {
 		var ids []uuid.UUID
 		var err error
@@ -207,26 +210,27 @@ func (q *Queue) scanByStatus(ctx context.Context, failed bool) int {
 		}
 		if err != nil {
 			q.logger.Error().Err(err).Bool("failed", failed).Msg("failed to scan chunks")
-			return total
+			return enqueued, skipped
 		}
-	for _, id := range ids {
-		if failed {
-			q.clearRetries(id)
-		}
-		if !q.Enqueue(id) {
-			if q.pending.Load() >= rejectionThreshold || len(q.ch) >= channelCapacity {
-				q.logger.Info().Int("total", total).Bool("failed", failed).Msg("scan stopped (queue full)")
-				return total
+		for _, id := range ids {
+			if failed {
+				q.clearRetries(id)
 			}
-			continue
+			if !q.Enqueue(id) {
+				if q.pending.Load() >= rejectionThreshold || len(q.ch) >= channelCapacity {
+					q.logger.Info().Int("total", enqueued).Bool("failed", failed).Msg("scan stopped (queue full)")
+					return enqueued, skipped
+				}
+				skipped++
+				continue
+			}
+			enqueued++
 		}
-		total++
-	}
 		if len(ids) < scanBatchSize {
 			break
 		}
 	}
-	return total
+	return enqueued, skipped
 }
 
 func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
