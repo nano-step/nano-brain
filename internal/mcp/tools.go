@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -557,6 +558,16 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 					})
 				}
 			}
+
+			// Stable secondary sort by id ASC on tied scores. Keeps cursor
+			// pagination deterministic without forcing PostgreSQL to satisfy
+			// a multi-column ORDER BY through the HNSW index (#358).
+			sort.SliceStable(allRows, func(i, j int) bool {
+				if allRows[i].Score != allRows[j].Score {
+					return allRows[i].Score > allRows[j].Score
+				}
+				return allRows[i].ID < allRows[j].ID
+			})
 
 			total := len(allRows)
 			hasMore := total > offset+maxResults
