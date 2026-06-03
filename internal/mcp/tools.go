@@ -815,9 +815,11 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 			}
 			limit := argInt(args, "limit", 10, 50)
 
+			// Required since #338/PR #340 — nil makes ANY('{}'::text[]) always false. See #356.
 			docs, err := a.queries.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
 				WorkspaceHash: ws,
 				Limit:         int32(limit),
+				Collections:   []string{"memory", "session-summary"},
 			})
 			if err != nil {
 				return errResult(fmt.Sprintf("recent documents failed: %v", err)), nil
