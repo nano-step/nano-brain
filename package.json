@@ -29,5 +29,8 @@
     "npm/",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "dependencies": {
+    "oh-my-harness-loop": "^2026.6.301"
+  }
 }
