@@ -275,7 +275,7 @@ Then re-run this gate."
             BEGIN { in_triage=0; count=0 }
             /^##+[[:space:]]+(Gemini|Bot|Triage)/ { in_triage=1; next }
             /^##[[:space:]]/ && in_triage { in_triage=0 }
-            in_triage {
+            in_triage && /^\|/ {
                 line = tolower($0)
                 if (line ~ /valid:(critical|high)/) {
                     if (line !~ /fixed in commit [a-f0-9]{6,}/ && line !~ /resolved in commit [a-f0-9]{6,}/) count++
