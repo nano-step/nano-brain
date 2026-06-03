@@ -87,7 +87,7 @@ func WakeUpHandler(q WakeUpQuerier, logger zerolog.Logger) echo.HandlerFunc {
 
 	docs, err := q.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
 		WorkspaceHash: workspace,
-		Limit:         int32(limit),
+		MaxResults:    int32(limit),
 		Collections:   []string{"memory", "session-summary"},
 	})
 	if err != nil {

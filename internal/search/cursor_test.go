@@ -83,8 +83,8 @@ func TestEncodeDecodeRoundtrip(t *testing.T) {
 			queryHash: search.QueryHash("hello world"),
 		},
 		{
-			name:      "large offset",
-			offset:    99999,
+			name:      "large offset (at MaxCursorOffset boundary)",
+			offset:    9999,
 			queryHash: search.QueryHash("test query"),
 		},
 		{
@@ -164,6 +164,16 @@ func TestDecodeCursorInvalid(t *testing.T) {
 			name:        "negative offset",
 			token:       encodeTestCursor(t, -1, "abc123"),
 			shouldError: true,
+		},
+		{
+			name:        "offset above MaxCursorOffset",
+			token:       encodeTestCursor(t, search.MaxCursorOffset+1, "abc123"),
+			shouldError: true,
+		},
+		{
+			name:        "offset exactly at MaxCursorOffset is accepted",
+			token:       encodeTestCursor(t, search.MaxCursorOffset, "abc123"),
+			shouldError: false,
 		},
 	}
 

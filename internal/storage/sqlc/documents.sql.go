@@ -184,6 +184,49 @@ func (q *Queries) GetDocumentBySourcePath(ctx context.Context, arg GetDocumentBy
 	return i, err
 }
 
+const listDocumentSourcePathsAndHashes = `-- name: ListDocumentSourcePathsAndHashes :many
+SELECT id, source_path, content_hash
+FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND source_path != ''
+ORDER BY source_path
+`
+
+type ListDocumentSourcePathsAndHashesParams struct {
+	WorkspaceHash string
+	Collection    string
+}
+
+type ListDocumentSourcePathsAndHashesRow struct {
+	ID          uuid.UUID
+	SourcePath  string
+	ContentHash string
+}
+
+func (q *Queries) ListDocumentSourcePathsAndHashes(ctx context.Context, arg ListDocumentSourcePathsAndHashesParams) ([]ListDocumentSourcePathsAndHashesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDocumentSourcePathsAndHashes, arg.WorkspaceHash, arg.Collection)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDocumentSourcePathsAndHashesRow
+	for rows.Next() {
+		var i ListDocumentSourcePathsAndHashesRow
+		if err := rows.Scan(&i.ID, &i.SourcePath, &i.ContentHash); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDocumentsByWorkspace = `-- name: ListDocumentsByWorkspace :many
 SELECT d.id, d.workspace_hash, d.content_hash, d.title, d.source_path, d.collection, d.tags, d.created_at, d.updated_at,
        d.supersedes_id,
@@ -483,46 +526,6 @@ type UpdateDocumentsCollectionParams struct {
 func (q *Queries) UpdateDocumentsCollection(ctx context.Context, arg UpdateDocumentsCollectionParams) error {
 	_, err := q.db.ExecContext(ctx, updateDocumentsCollection, arg.Collection, arg.Collection_2, arg.WorkspaceHash)
 	return err
-}
-
-const listDocumentSourcePathsAndHashes = `-- name: ListDocumentSourcePathsAndHashes :many
-SELECT id, source_path, content_hash
-FROM documents
-WHERE workspace_hash = $1
-  AND collection = $2
-  AND source_path != ''
-ORDER BY source_path
-`
-
-type ListDocumentSourcePathsAndHashesParams struct {
-	WorkspaceHash string
-	Collection    string
-}
-
-type ListDocumentSourcePathsAndHashesRow struct {
-	ID          uuid.UUID
-	SourcePath  string
-	ContentHash string
-}
-
-func (q *Queries) ListDocumentSourcePathsAndHashes(ctx context.Context, arg ListDocumentSourcePathsAndHashesParams) ([]ListDocumentSourcePathsAndHashesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listDocumentSourcePathsAndHashes, arg.WorkspaceHash, arg.Collection)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListDocumentSourcePathsAndHashesRow
-	for rows.Next() {
-		var i ListDocumentSourcePathsAndHashesRow
-		if err := rows.Scan(&i.ID, &i.SourcePath, &i.ContentHash); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	return items, rows.Err()
 }
 
 const upsertDocument = `-- name: UpsertDocument :one

@@ -388,7 +388,7 @@ FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE e.workspace_hash = $2
-ORDER BY e.embedding <=> $1::vector
+ORDER BY e.embedding <=> $1::vector, c.id ASC
 LIMIT $3
 `
 
@@ -460,7 +460,7 @@ SELECT e.id, e.chunk_id, e.workspace_hash,
 FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
-ORDER BY e.embedding <=> $1::vector
+ORDER BY e.embedding <=> $1::vector, c.id ASC
 LIMIT $2
 `
 
@@ -532,7 +532,7 @@ FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE d.tags && $2::text[]
-ORDER BY e.embedding <=> $1::vector
+ORDER BY e.embedding <=> $1::vector, c.id ASC
 LIMIT $3
 `
 
@@ -606,7 +606,7 @@ JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE e.workspace_hash = $2
   AND d.tags && $3::text[]
-ORDER BY e.embedding <=> $1::vector
+ORDER BY e.embedding <=> $1::vector, c.id ASC
 LIMIT $4
 `
 

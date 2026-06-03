@@ -16,6 +16,12 @@ var ErrInvalidCursor = errors.New("invalid cursor")
 // embedded query hash does not match the current request's query.
 var ErrCursorQueryMismatch = errors.New("cursor query mismatch")
 
+// MaxCursorOffset caps how deep a cursor may page. Bounds the SQL LIMIT
+// derived from `offset + max_results + 1` so it cannot trigger int32
+// overflow (#358 review) or unbounded server work. 10k offset × 100 per
+// page = 1M results — well past any realistic agent workflow.
+const MaxCursorOffset = 10_000
+
 // cursorPayload is the internal JSON structure encoded in a cursor token.
 type cursorPayload struct {
 	Offset int    `json:"o"`
@@ -67,6 +73,9 @@ func DecodeCursor(token string) (offset int, queryHash string, err error) {
 
 	if p.Offset < 0 {
 		return 0, "", fmt.Errorf("%w: negative offset %d", ErrInvalidCursor, p.Offset)
+	}
+	if p.Offset > MaxCursorOffset {
+		return 0, "", fmt.Errorf("%w: offset %d exceeds maximum %d", ErrInvalidCursor, p.Offset, MaxCursorOffset)
 	}
 
 	return p.Offset, p.QueryHash, nil

@@ -2,10 +2,10 @@
 SELECT id, title, tags, updated_at,
        LEFT(content, 200) AS snippet
 FROM documents
-WHERE workspace_hash = $1
-  AND collection = ANY($3::text[])
+WHERE workspace_hash = sqlc.arg(workspace_hash)
+  AND collection = ANY(sqlc.arg(collections)::text[])
 ORDER BY updated_at DESC
-LIMIT $2;
+LIMIT sqlc.arg(max_results);
 
 -- name: WorkspaceDocStats :one
 SELECT count(*)::bigint AS total_documents,

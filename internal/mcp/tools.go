@@ -1004,7 +1004,7 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 			// Required since #338/PR #340 — nil makes ANY('{}'::text[]) always false. See #356.
 			docs, err := a.queries.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
 				WorkspaceHash: ws,
-				Limit:         int32(limit),
+				MaxResults:    int32(limit),
 				Collections:   []string{"memory", "session-summary"},
 			})
 			if err != nil {
