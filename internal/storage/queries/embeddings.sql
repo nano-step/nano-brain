@@ -75,6 +75,10 @@ FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE e.workspace_hash = sqlc.arg(workspace_hash)
+  AND (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
+  AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR d.created_at <= sqlc.narg('created_before'))
 ORDER BY e.embedding <=> sqlc.arg(query_embedding)::vector
 LIMIT sqlc.arg(max_results);
 
@@ -104,6 +108,10 @@ SELECT e.id, e.chunk_id, e.workspace_hash,
 FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
+WHERE (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
+  AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR d.created_at <= sqlc.narg('created_before'))
 ORDER BY e.embedding <=> sqlc.arg(query_embedding)::vector
 LIMIT sqlc.arg(max_results);
 
@@ -118,6 +126,10 @@ JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE e.workspace_hash = sqlc.arg(workspace_hash)
   AND d.tags && sqlc.arg(tags)::text[]
+  AND (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
+  AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR d.created_at <= sqlc.narg('created_before'))
 ORDER BY e.embedding <=> sqlc.arg(query_embedding)::vector
 LIMIT sqlc.arg(max_results);
 
@@ -131,6 +143,10 @@ FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE d.tags && sqlc.arg(tags)::text[]
+  AND (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
+  AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR d.created_at <= sqlc.narg('created_before'))
 ORDER BY e.embedding <=> sqlc.arg(query_embedding)::vector
 LIMIT sqlc.arg(max_results);
 

@@ -140,7 +140,7 @@ func TestUpdateConfig_ConcurrentReadersAndWriters(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := service.HybridSearch(ctx, "test", "workspace", 10, nil)
+			_, err := service.HybridSearch(ctx, "test", "workspace", 10, nil, nil)
 			if err != nil {
 				errors <- err
 			}
@@ -161,7 +161,7 @@ func TestHybridSearch_WithTags_DispatchesToWithTagsQueries(t *testing.T) {
 	q := &mockQuerier{}
 	service := NewSearchService(q, &mockEmbedder{}, cfg, logger)
 
-	_, err := service.HybridSearch(context.Background(), "test", "ws1", 10, []string{"decision", "auth"})
+	_, err := service.HybridSearch(context.Background(), "test", "ws1", 10, []string{"decision", "auth"}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestHybridSearch_WithTags_ScopeAll_DispatchesToAllWithTagsQueries(t *testin
 	q := &mockQuerier{}
 	service := NewSearchService(q, &mockEmbedder{}, cfg, logger)
 
-	_, err := service.HybridSearch(context.Background(), "test", "all", 10, []string{"decision"})
+	_, err := service.HybridSearch(context.Background(), "test", "all", 10, []string{"decision"}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestHybridSearch_NoTags_DispatchesToBaseQueries(t *testing.T) {
 	q := &mockQuerier{}
 	service := NewSearchService(q, &mockEmbedder{}, cfg, logger)
 
-	_, err := service.HybridSearch(context.Background(), "test", "ws1", 10, nil)
+	_, err := service.HybridSearch(context.Background(), "test", "ws1", 10, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

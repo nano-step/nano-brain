@@ -85,6 +85,77 @@ memory_search(workspace=ws, query="fix bug", max_results=5, cursor="eyJv...")
 
 Need the FULL text of one specific hit? Call `memory_get(workspace, path="#<id-from-result>")` — that tool is the canonical full-content fetch and supports `start_line`/`end_line` slicing. Pass `include_content: true` to a search tool only when you genuinely need full text for ALL results in one shot (rare; inflates response 5–50×).
 
+### Time-range filters (since #360)
+
+Agents asking time-bounded questions ("what bugs have we fixed in the last 30 days?") can push the filter directly to the database — no client-side `updated_at` filtering, no extra pagination loops.
+
+All three search tools (`memory_query`, `memory_search`, `memory_vsearch`) accept four optional parameters:
+
+| Parameter | Type | Description | Example |
+|---|---|---|---|
+| `created_after` | string | Restrict to docs created after this point | `"30d"`, `"2026-05-01T00:00:00Z"` |
+| `created_before` | string | Restrict to docs created before this point | `"7d"`, `"2026-06-01T00:00:00Z"` |
+| `updated_after` | string | Restrict to docs updated after this point | `"1w"`, `"720h"` |
+| `updated_before` | string | Restrict to docs updated before this point | `"2mo"`, `"2026-04-01T00:00:00Z"` |
+
+Multiple filters combine with AND semantics. Omitting all four leaves behavior identical to pre-#360.
+
+#### Accepted formats
+
+**Preferred for LLM agents: compute the absolute date client-side and pass RFC3339.** You already know today's date from your system context — do the subtraction yourself (`2026-06-03 minus 30 days = 2026-05-04T00:00:00Z`) and pass the result. This avoids the 30-day-month / 365-day-year approximation in relative durations and produces stable, auditable queries. Relative durations exist primarily for human-typed CLI use (`nano-brain search --updated-after=30d`).
+
+- **RFC3339 absolute** (preferred): `"2026-05-04T12:00:00Z"` — timezone required; future timestamps accepted (explicit agent choice)
+- **Go-style duration**: `"720h"`, `"30m"`, `"1h30m"` — subtracted from now
+- **Humanish relative**: `"30d"`, `"1w"`, `"2mo"`, `"1y"` — units: `s`, `m`, `h`, `d`, `w`, `mo`, `y` (approximate — see caveat below)
+
+#### Rejected inputs (with error messages)
+
+```
+"2026-05-04"      → invalid timestamp or duration "2026-05-04": not a valid RFC3339 timestamp...
+                    (fix: "2026-05-04T00:00:00Z")
+
+"-30d"            → invalid timestamp or duration "-30d": duration must be positive, got -720h0m0s
+"0d"              → invalid timestamp or duration "0d": duration must be positive, got 0s
+"-720h"           → invalid timestamp or duration "-720h": duration must be positive, got -720h0m0s
+
+"banana"          → invalid timestamp or duration "banana": not a valid RFC3339 timestamp, Go duration,
+                    or humanish duration (e.g., '30d', '1w')
+"30x"             → same (unknown unit)
+```
+
+Validation runs before any database call. The error names the offending parameter and the rejected value.
+
+#### Rough-relative caveat
+
+`1mo` = 30 days exactly. `1y` = 365 days exactly. These are approximate — not calendar-aware month/year arithmetic. For queries that require calendar precision ("since the start of April"), pass an RFC3339 timestamp instead.
+
+#### Worked examples
+
+```
+# memory_search — find bug-fix discussions from the last 30 days
+# Preferred (LLM computes the cutoff):
+memory_search(workspace=<hash>, query="bug fix", updated_after="2026-05-04T00:00:00Z")
+# Or relative (works but less precise):
+memory_search(workspace=<hash>, query="bug fix", updated_after="30d")
+
+# memory_query — hybrid search for design docs created since May 1, 2026
+memory_query(workspace=<hash>, query="design", created_after="2026-05-01T00:00:00Z")
+
+# memory_vsearch — semantic similarity, only documents from the last week
+memory_vsearch(workspace=<hash>, query="rate limiting strategy", updated_after="2026-05-27T00:00:00Z")
+```
+
+#### Pagination interaction
+
+The cursor encodes ALL filter values (query + tags + time-range raw strings). Paginating with different filter values returns `"cursor invalidated, restart pagination"`. To page through a filtered result set, pass the SAME filter values on every subsequent call:
+
+```
+memory_search(workspace=<hash>, query="bug fix", updated_after="30d", max_results=5)
+  → next_cursor: "eyJv..."
+memory_search(workspace=<hash>, query="bug fix", updated_after="30d", max_results=5, cursor="eyJv...")
+  → next page, same filtered window
+```
+
 ### memory_get — fetch one doc
 ```
 required: workspace, path

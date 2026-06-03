@@ -235,11 +235,15 @@ func runWriteCmd(args []string) {
 }
 
 type stubFlags struct {
-	query     string
-	workspace string
-	scope     string
-	tags      []string
-	jsonFlag  bool
+	query           string
+	workspace       string
+	scope           string
+	tags            []string
+	jsonFlag        bool
+	createdAfter    string
+	createdBefore   string
+	updatedAfter    string
+	updatedBefore   string
 }
 
 func parseTagList(raw string) []string {
@@ -288,6 +292,38 @@ func parseStubFlags(args []string) (stubFlags, string) {
 			f.tags = parseTagList(args[i])
 		case strings.HasPrefix(arg, "--tags="):
 			f.tags = parseTagList(strings.TrimPrefix(arg, "--tags="))
+		case arg == "--created-after":
+			if i+1 >= len(args) {
+				return f, "--created-after requires a value"
+			}
+			i++
+			f.createdAfter = args[i]
+		case strings.HasPrefix(arg, "--created-after="):
+			f.createdAfter = strings.TrimPrefix(arg, "--created-after=")
+		case arg == "--created-before":
+			if i+1 >= len(args) {
+				return f, "--created-before requires a value"
+			}
+			i++
+			f.createdBefore = args[i]
+		case strings.HasPrefix(arg, "--created-before="):
+			f.createdBefore = strings.TrimPrefix(arg, "--created-before=")
+		case arg == "--updated-after":
+			if i+1 >= len(args) {
+				return f, "--updated-after requires a value"
+			}
+			i++
+			f.updatedAfter = args[i]
+		case strings.HasPrefix(arg, "--updated-after="):
+			f.updatedAfter = strings.TrimPrefix(arg, "--updated-after=")
+		case arg == "--updated-before":
+			if i+1 >= len(args) {
+				return f, "--updated-before requires a value"
+			}
+			i++
+			f.updatedBefore = args[i]
+		case strings.HasPrefix(arg, "--updated-before="):
+			f.updatedBefore = strings.TrimPrefix(arg, "--updated-before=")
 		case arg == "--json":
 			f.jsonFlag = true
 		case strings.HasPrefix(arg, "--"):
@@ -334,6 +370,18 @@ func runStubCmd(endpoint string, args []string) {
 	}
 	if len(f.tags) > 0 {
 		bodyMap["tags"] = f.tags
+	}
+	if f.createdAfter != "" {
+		bodyMap["created_after"] = f.createdAfter
+	}
+	if f.createdBefore != "" {
+		bodyMap["created_before"] = f.createdBefore
+	}
+	if f.updatedAfter != "" {
+		bodyMap["updated_after"] = f.updatedAfter
+	}
+	if f.updatedBefore != "" {
+		bodyMap["updated_before"] = f.updatedBefore
 	}
 	data, err := json.Marshal(bodyMap)
 	if err != nil {

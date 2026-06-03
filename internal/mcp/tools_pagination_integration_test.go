@@ -374,7 +374,7 @@ func TestMemorySearch_FirstPageWithoutCursorReturnsResults(t *testing.T) {
 func TestMemorySearch_CursorQueryMismatch(t *testing.T) {
 	_, _, _, wsHash, callTool := setupSearchMCP(t)
 
-	cursor := search.EncodeCursor(5, search.QueryHash("alpha"))
+	cursor := search.EncodeCursor(5, search.QueryHash(search.QueryHashInput{Query: "alpha"}))
 	result := callTool("memory_search", map[string]any{
 		"workspace": wsHash, "query": "beta", "cursor": cursor,
 	})
