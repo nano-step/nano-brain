@@ -32,7 +32,42 @@ nano-brain is a persistent memory server for AI coding agents that solves sessio
 
 ## Quick Start
 
-### Option A: Via npx (no Go required)
+### Option A: Via MCP (recommended for AI agents)
+
+Add to your MCP client config — no install required if the server is already running:
+
+```json
+{
+  "mcp": {
+    "nano-brain": {
+      "type": "remote",
+      "url": "http://localhost:3100/mcp"
+    }
+  }
+}
+```
+
+### Option B: Install globally (fast, no cold-start overhead)
+
+```bash
+npm install -g @nano-step/nano-brain
+
+# Start PostgreSQL + pgvector
+docker run -d --name nanobrain-pg -p 5432:5432 \
+  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
+  pgvector/pgvector:pg17
+
+# Start Ollama + pull embedding model
+ollama pull nomic-embed-text
+
+# Check prerequisites
+nano-brain doctor
+
+# Start server
+nano-brain serve -d
+```
+
+### Option C: Via npx (no install, slower cold-start)
 
 ```bash
 # Start PostgreSQL + pgvector
@@ -44,17 +79,17 @@ docker run -d --name nanobrain-pg -p 5432:5432 \
 ollama pull nomic-embed-text
 
 # Check prerequisites
-npx @nano-step/nano-brain@beta doctor
+npx @nano-step/nano-brain@latest doctor
 
 # Start server
-npx @nano-step/nano-brain@beta
+npx @nano-step/nano-brain@latest
 ```
 
-> **Also available as:** `npx nano-brain@beta` (unscoped alias)
+> **Also available as:** `npx nano-brain@latest` (unscoped alias)
 >
 > **Note:** Do NOT run `npx nano-brain` from the nano-brain source directory — npm will resolve the local package instead of the registry. Run from any other directory.
 
-### Option B: Build from source
+### Option D: Build from source
 
 ```bash
 # Build
