@@ -23,6 +23,8 @@ compatibility: OpenCode with bash + git + go. Optional: gh CLI, openspec CLI, go
 
 Enforce the harness gate specification defined in `docs/HARNESS_GATES.md`.
 
+> **Tip:** For autonomous development, use the `/harness-on` slash command — it runs this script automatically and injects fix instructions. See `.opencode/plugin/harness-loop/README.md`.
+
 ## Core Rules
 
 - **1 feature = 1 PR = 1 GitHub issue**

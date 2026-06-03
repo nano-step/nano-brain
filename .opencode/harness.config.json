@@ -1,0 +1,42 @@
+{
+  "runner_path": "./scripts/harness-check.sh",
+  "gates": ["pre-work", "in-progress", "pre-merge", "post-merge", "post-merge-npm-release", "next-ready"],
+  "rule_id_format": "R{id}",
+  "fail_policy": "hybrid",
+  "max_total_iterations": 100,
+  "max_iterations_per_gate": 10,
+  "auto_fix_attempts": 3,
+  "cache_ttl_minutes": 30,
+  "runner_timeout_seconds": 300,
+  "ultrawork_verify_gates": ["pre-merge"],
+  "gate_instructions": {
+    "pre-work": {
+      "doc": "docs/harness/gates/pre-work.md",
+      "skills": []
+    },
+    "in-progress": {
+      "doc": "docs/harness/gates/in-progress.md",
+      "skills": ["code-review"]
+    },
+    "pre-merge": {
+      "doc": "docs/harness/gates/pre-merge.md",
+      "skills": ["review-work"]
+    },
+    "post-merge": {
+      "doc": "docs/harness/gates/post-merge.md",
+      "skills": []
+    },
+    "post-merge-npm-release": {
+      "doc": "docs/harness/gates/post-merge-npm-release.md",
+      "skills": [],
+      "async": true,
+      "async_max_wait_seconds": 1800,
+      "async_poll_interval_seconds": 60,
+      "async_subagent_type": "quick"
+    },
+    "next-ready": {
+      "doc": "docs/harness/gates/next-ready.md",
+      "skills": []
+    }
+  }
+}

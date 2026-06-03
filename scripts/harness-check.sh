@@ -63,8 +63,11 @@ colorize() {
 add_check() {
     local status=$1
     local desc=$2
+    local rule_id="${3:-}"
     
-    colorize "$status" "$desc"
+    if [[ "$JSON_OUTPUT" != true ]]; then
+        colorize "$status" "$desc"
+    fi
     
     case "$status" in
         PASS) PASS_COUNT=$((PASS_COUNT + 1)) ;;
@@ -72,7 +75,39 @@ add_check() {
         SKIP) SKIP_COUNT=$((SKIP_COUNT + 1)) ;;
     esac
     
-    CHECKS+=("$status|$desc")
+    CHECKS+=("$status|$desc|$rule_id")
+}
+
+# Run phase_hooks.<gate>.before from .opencode/harness.config.json if configured.
+# Emits a PASS/FAIL check and returns 1 on hook failure so callers can abort early.
+run_phase_hook_before() {
+    local gate="$1"
+    local config_file=".opencode/harness.config.json"
+    [[ ! -f "$config_file" ]] && return 0
+    if ! command -v python3 &>/dev/null; then return 0; fi
+
+    local hook_cmd
+    hook_cmd=$(python3 -c "
+import sys, json
+try:
+    d = json.load(open('$config_file'))
+    print(d.get('phase_hooks', {}).get('$gate', {}).get('before', ''))
+except Exception:
+    print('')
+" 2>/dev/null)
+
+    [[ -z "$hook_cmd" ]] && return 0
+
+    local hook_out hook_exit
+    hook_out=$(eval "$hook_cmd" 2>&1)
+    hook_exit=$?
+    if [[ $hook_exit -eq 0 ]]; then
+        add_check "PASS" "0.0 phase_hooks.$gate.before: OK"
+    else
+        add_check "FAIL" "0.0 phase_hooks.$gate.before: hook failed (exit $hook_exit)" "phase-hook"
+        return 1
+    fi
+    return 0
 }
 
 summary() {
@@ -89,23 +124,110 @@ summary() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
+get_next_gate() {
+    local current="$1"
+    case "$current" in
+        pre-work) echo "in-progress" ;;
+        in-progress) echo "pre-merge" ;;
+        pre-merge) echo "post-merge" ;;
+        post-merge) echo "post-merge-npm-release" ;;
+        post-merge-npm-release) echo "next-ready" ;;
+        next-ready) echo "null" ;;
+        retro) echo "null" ;;
+        *) echo "null" ;;
+    esac
+}
+
+build_instructions_for_agent() {
+    local failed_checks=()
+    for check in "${CHECKS[@]}"; do
+        IFS='|' read -r status desc rule_id <<< "$check"
+        if [[ "$status" == "FAIL" ]]; then
+            if [[ -n "$rule_id" ]]; then
+                failed_checks+=("[$rule_id] $desc")
+            else
+                failed_checks+=("$desc")
+            fi
+        fi
+    done
+    
+    if [[ ${#failed_checks[@]} -eq 0 ]]; then
+        echo ""
+        return
+    fi
+    
+    echo "Fix the following issues before proceeding:"
+    printf '%s\n' "${failed_checks[@]}"
+}
+
 json_output() {
+    local status
+    local next_gate
+    local rule_ids_json="[]"
+    
+    if [[ $FAIL_COUNT -eq 0 ]]; then
+        if [[ $SKIP_COUNT -gt 0 && $PASS_COUNT -eq 0 ]]; then
+            status="SKIP"
+        else
+            status="PASS"
+        fi
+    else
+        status="FAIL"
+    fi
+    
+    next_gate=$(get_next_gate "$PHASE")
+    
+    local rule_ids=()
+    for check in "${CHECKS[@]}"; do
+        IFS='|' read -r chk_status desc rule_id <<< "$check"
+        if [[ "$chk_status" == "FAIL" && -n "$rule_id" ]]; then
+            rule_ids+=("\"$rule_id\"")
+        fi
+    done
+    
+    if [[ ${#rule_ids[@]} -gt 0 ]]; then
+        rule_ids_json="[$(IFS=,; echo "${rule_ids[*]}")]"
+    fi
+    
     echo "{"
-    echo "  \"phase\": \"$PHASE\","
-    echo "  \"pass\": $PASS_COUNT,"
-    echo "  \"fail\": $FAIL_COUNT,"
-    echo "  \"skip\": $SKIP_COUNT,"
+    echo "  \"gate\": \"$PHASE\","
+    echo "  \"status\": \"$status\","
     echo "  \"checks\": ["
     
     local i=0
     for check in "${CHECKS[@]}"; do
-        IFS='|' read -r status desc <<< "$check"
-        ((i++))
-        echo "    {\"status\": \"$status\", \"description\": \"$desc\"}$([ $i -lt ${#CHECKS[@]} ] && echo ',' || echo '')"
+        IFS='|' read -r chk_status desc rule_id <<< "$check"
+        i=$((i + 1))
+        local id_field=""
+        local name_field="$desc"
+        if [[ "$desc" =~ ^([0-9]+\.[0-9]+)\ (.*)$ ]]; then
+            id_field="${BASH_REMATCH[1]}"
+            name_field="${BASH_REMATCH[2]}"
+        fi
+        local rule_field=""
+        if [[ -n "$rule_id" ]]; then
+            rule_field=", \"rule_id\": \"$rule_id\""
+        fi
+        echo "    {\"id\": \"$id_field\", \"name\": \"$name_field\", \"status\": \"$chk_status\"$rule_field}$([ $i -lt ${#CHECKS[@]} ] && echo ',' || echo '')"
     done
     
     echo "  ],"
-    echo "  \"verdict\": \"$([ $FAIL_COUNT -eq 0 ] && echo 'PASS' || echo 'FAIL')\""
+    
+    if [[ "$next_gate" == "null" ]]; then
+        echo "  \"next_gate\": null,"
+    else
+        echo "  \"next_gate\": \"$next_gate\","
+    fi
+    
+    if [[ "$status" == "FAIL" ]]; then
+        local instructions
+        instructions=$(build_instructions_for_agent)
+        instructions="${instructions//\"/\\\"}"
+        instructions="${instructions//$'\n'/\\n}"
+        echo "  \"instructions_for_agent\": \"$instructions\","
+    fi
+    
+    echo "  \"rule_ids_violated\": $rule_ids_json"
     echo "}"
 }
 
@@ -118,8 +240,9 @@ cmd_exists() {
 # ============================================================================
 
 phase_pre_work() {
-    echo "─ PRE-WORK checks"
-    
+    [[ "$JSON_OUTPUT" != true ]] && echo "─ PRE-WORK checks"
+    run_phase_hook_before "pre-work" || return 0
+
     # 1.1 Previous feature PR merged & issue closed
     if cmd_exists gh; then
         open_prs=$(gh pr list --state open --json number 2>/dev/null || echo "[]")
@@ -161,7 +284,7 @@ phase_pre_work() {
         # R89: --issue omitted → verify zero file changes in last commit
         changed=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | wc -l | tr -d ' ' || echo "0")
         if [[ "$changed" -gt 0 ]]; then
-            add_check "FAIL" "1.3 $changed file(s) changed in HEAD but no --issue provided (R89)"
+            add_check "FAIL" "1.3 $changed file(s) changed in HEAD but no --issue provided" "R89"
         else
             add_check "PASS" "1.3 No file changes detected; issue not required (R89)"
         fi
@@ -205,8 +328,9 @@ phase_pre_work() {
 }
 
 phase_in_progress() {
-    echo "─ IN-PROGRESS checks"
-    
+    [[ "$JSON_OUTPUT" != true ]] && echo "─ IN-PROGRESS checks"
+    run_phase_hook_before "in-progress" || return 0
+
     # 2.1 On feature branch, not master
     current_branch=$(git branch --show-current 2>/dev/null || echo "unknown")
     if [[ "$current_branch" != "master" ]]; then
@@ -267,8 +391,9 @@ phase_in_progress() {
 }
 
 phase_pre_merge() {
-    echo "─ PRE-MERGE checks"
-    
+    [[ "$JSON_OUTPUT" != true ]] && echo "─ PRE-MERGE checks"
+    run_phase_hook_before "pre-merge" || return 0
+
     # 3.1 go build
     if cmd_exists go; then
         if go build ./... &>/dev/null; then
@@ -322,9 +447,9 @@ phase_pre_merge() {
         if grep -qE '^Review Verdict: PASS' "$latest_review"; then
             add_check "PASS" "3.5 Review Verdict: PASS in $latest_review (R27)"
         elif grep -qE '^Review Verdict: FAIL' "$latest_review"; then
-            add_check "FAIL" "3.5 Review Verdict: FAIL in $latest_review — fix before merge (R27)"
+            add_check "FAIL" "3.5 Review Verdict: FAIL in $latest_review — fix before merge" "R27"
         else
-            add_check "FAIL" "3.5 $latest_review missing 'Review Verdict: PASS|FAIL' line (R27)"
+            add_check "FAIL" "3.5 $latest_review missing 'Review Verdict: PASS|FAIL' line" "R27"
         fi
     fi
     
@@ -400,9 +525,9 @@ phase_pre_merge() {
             if [[ "$closes_count" -eq 1 ]]; then
                 add_check "PASS" "3.8 PR closes exactly 1 issue (R1)"
             elif [[ "$closes_count" -eq 0 ]]; then
-                add_check "FAIL" "3.8 PR body missing 'Closes #N' reference (R1)"
+                add_check "FAIL" "3.8 PR body missing 'Closes #N' reference" "R1"
             else
-                add_check "FAIL" "3.8 PR closes $closes_count issues (R1: must be exactly 1; split PR)"
+                add_check "FAIL" "3.8 PR closes $closes_count issues (must be exactly 1; split PR)" "R1"
             fi
         fi
     else
@@ -448,7 +573,7 @@ phase_pre_merge() {
             commit_count=$(gh pr view "$pr_number" --json commits \
                 --jq '.commits | length' 2>/dev/null || echo "0")
             if [[ "$commit_count" -gt 3 ]]; then
-                add_check "FAIL" "3.11 PR has $commit_count commits (R29: max 3 push cycles; escalate to human)"
+                add_check "FAIL" "3.11 PR has $commit_count commits (max 3 push cycles; escalate to human)" "R29"
             else
                 add_check "PASS" "3.11 PR commit count: $commit_count (R29: ≤ 3)"
             fi
@@ -469,7 +594,7 @@ phase_pre_merge() {
             if grep -qE '^(curl|HTTP/[12])' "$smoke_file"; then
                 add_check "PASS" "3.12 smoke:e2e evidence with curl/HTTP found (R19, R20)"
             else
-                add_check "FAIL" "3.12 $smoke_file has no curl command or HTTP response (R20)"
+                add_check "FAIL" "3.12 $smoke_file has no curl command or HTTP response" "R20"
             fi
         else
             add_check "SKIP" "3.12 No smoke-e2e-${branch_slug}*.{md,txt} (R19: required if change-type ∈ {user-feature, bug-fix})"
@@ -515,8 +640,9 @@ phase_pre_merge() {
 }
 
 phase_post_merge() {
-    echo "─ POST-MERGE checks"
-    
+    [[ "$JSON_OUTPUT" != true ]] && echo "─ POST-MERGE checks"
+    run_phase_hook_before "post-merge" || return 0
+
     # 4.1 PR merged
     if [[ -n "$PR" && $(cmd_exists gh) == *"true"* ]] || cmd_exists gh; then
         if [[ -n "$PR" ]]; then
@@ -595,8 +721,9 @@ phase_post_merge() {
 }
 
 phase_next_ready() {
-    echo "─ NEXT-READY checks"
-    
+    [[ "$JSON_OUTPUT" != true ]] && echo "─ NEXT-READY checks"
+    run_phase_hook_before "next-ready" || return 0
+
     # 5.1 Aggregate pre-work
     add_check "PASS" "5.1 Pre-work phase criteria met"
     
@@ -623,7 +750,8 @@ phase_next_ready() {
 }
 
 phase_retro() {
-    echo "─ RETRO (computed metrics — W1.2)"
+    [[ "$JSON_OUTPUT" != true ]] && echo "─ RETRO (computed metrics — W1.2)"
+    run_phase_hook_before "retro" || return 0
 
     if ! cmd_exists gh; then
         add_check "SKIP" "6.x gh CLI not installed"
@@ -696,6 +824,61 @@ phase_retro() {
     fi
 }
 
+validate_runner_contract() {
+    local gates=("pre-work" "in-progress" "pre-merge" "post-merge" "post-merge-npm-release" "next-ready")
+    local required_fields=("gate" "status" "checks" "rule_ids_violated")
+    local all_ok=true
+
+    if [[ ! -x "$0" ]]; then
+        echo "[FAIL] Runner not executable: $0" >&2
+        exit 1
+    fi
+
+    for gate in "${gates[@]}"; do
+        local output gate_ok=true
+        output="$(timeout 10 "$0" "$gate" --json 2>/dev/null)" || true
+
+        if [[ -z "$output" ]]; then
+            echo "[FAIL] Gate '$gate': no JSON output (or timed out after 10s)" >&2
+            all_ok=false
+            continue
+        fi
+
+        if ! echo "$output" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+            echo "[FAIL] Gate '$gate': output is not valid JSON" >&2
+            all_ok=false
+            continue
+        fi
+
+        for field in "${required_fields[@]}"; do
+            if ! echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); assert '$field' in d" 2>/dev/null; then
+                echo "[FAIL] Gate '$gate': missing required field '$field'" >&2
+                gate_ok=false
+                all_ok=false
+            fi
+        done
+
+        local gate_in_output
+        gate_in_output=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin).get('gate',''))" 2>/dev/null || echo "")
+        if [[ "$gate_in_output" != "$gate" ]]; then
+            echo "[FAIL] Gate '$gate': response gate='$gate_in_output' does not match request" >&2
+            gate_ok=false
+            all_ok=false
+        fi
+
+        if [[ "$gate_ok" == true ]]; then
+            local status_val
+            status_val=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null || echo "?")
+            echo "[PASS] Gate '$gate': contract valid (status=$status_val)"
+        fi
+    done
+
+    if [[ "$all_ok" == false ]]; then
+        exit 1
+    fi
+    exit 0
+}
+
 # ============================================================================
 # Main
 # ============================================================================
@@ -755,6 +938,12 @@ main() {
         post-merge)
             phase_post_merge
             ;;
+        post-merge-npm-release)
+            extra_flags=()
+            [[ "$JSON_OUTPUT" == true ]] && extra_flags+=("--json")
+            [[ "$NO_COLOR" == true ]] && extra_flags+=("--no-color")
+            exec "$(dirname "$0")/check-npm-release.sh" post-merge-npm-release "${extra_flags[@]+"${extra_flags[@]}"}"
+            ;;
         next-ready)
             phase_next_ready
             ;;
@@ -774,6 +963,9 @@ main() {
             echo ""
             phase_retro
             ;;
+        validate)
+            validate_runner_contract
+            ;;
         *)
             colorize "FAIL" "Unknown phase: $PHASE"
             print_help
@@ -788,8 +980,17 @@ main() {
         summary
     fi
     
-    # Exit with appropriate code
-    [[ $FAIL_COUNT -eq 0 ]] && exit 0 || exit 1
+    # Exit with appropriate code per runner contract:
+    # 0=PASS, 1=FAIL, 2=SKIP, 3=WAITING, 4=BLOCKED, 5=ERROR
+    if [[ $FAIL_COUNT -eq 0 ]]; then
+        if [[ $SKIP_COUNT -gt 0 && $PASS_COUNT -eq 0 ]]; then
+            exit 2  # SKIP
+        else
+            exit 0  # PASS
+        fi
+    else
+        exit 1  # FAIL
+    fi
 }
 
 main "$@"

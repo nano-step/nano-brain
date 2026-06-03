@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "plugin": [".opencode/plugin/harness-loop/index.ts"],
   "mcp": {
     "open-design": {
       "type": "local",
