@@ -66,7 +66,7 @@ func isNpxLaunched() bool {
 // nano-brain server, tailored to how this binary was launched.
 func suggestStartCommand() string {
 	if isNpxLaunched() {
-		return "npx @nano-step/nano-brain@beta serve -d"
+		return "npx @nano-step/nano-brain@latest serve -d"
 	}
 	return "nano-brain serve -d"
 }

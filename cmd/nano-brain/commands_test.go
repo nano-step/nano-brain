@@ -289,8 +289,8 @@ func TestSuggestStartCommand(t *testing.T) {
 		want        string
 	}{
 		{"binary", "", "", "nano-brain serve -d"},
-		{"npx via execpath", "/path/to/npx-cli.js", "", "npx @nano-step/nano-brain@beta serve -d"},
-		{"npx via package_name", "", "@nano-step/nano-brain", "npx @nano-step/nano-brain@beta serve -d"},
+		{"npx via execpath", "/path/to/npx-cli.js", "", "npx @nano-step/nano-brain@latest serve -d"},
+		{"npx via package_name", "", "@nano-step/nano-brain", "npx @nano-step/nano-brain@latest serve -d"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -337,7 +337,7 @@ func TestFormatConnectError_NpxSuggestion(t *testing.T) {
 	t.Setenv("npm_execpath", "/path/to/npx-cli.js")
 
 	got := formatConnectError("localhost", 3100)
-	if !strings.Contains(got, "npx @nano-step/nano-brain@beta serve -d") {
+	if !strings.Contains(got, "npx @nano-step/nano-brain@latest serve -d") {
 		t.Errorf("expected npx suggestion, got %q", got)
 	}
 }
