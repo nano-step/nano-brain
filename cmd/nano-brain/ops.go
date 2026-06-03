@@ -572,6 +572,7 @@ Commands:
    tags               List all tags with counts
    multi-get          Fetch multiple documents in one round-trip
    logs               View log file (-f to follow, -n <count>)
+  mcp-url            Print the resolved MCP server URL
   docker             Manage Docker Compose (start/stop/status)
   db:migrate         Run database migrations
   bench              Benchmarking suite (generate/run/compare/stress)
@@ -585,11 +586,40 @@ Global flags:
 
 func runVersionCmd(args []string) {
 	jsonFlag := false
+	whichFlag := false
 	for _, a := range args {
-		if a == "--json" {
+		switch a {
+		case "--json":
 			jsonFlag = true
+		case "--which":
+			whichFlag = true
 		}
 	}
+
+	if whichFlag {
+		exe, err := os.Executable()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error resolving binary path: %v\n", err)
+			os.Exit(1)
+		}
+		absPath, source, err := resolveBinarySource(exe)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error resolving binary source: %v\n", err)
+			os.Exit(1)
+		}
+		if jsonFlag {
+			j, _ := json.Marshal(map[string]string{
+				"path":    absPath,
+				"version": Version,
+				"source":  source,
+			})
+			fmt.Println(string(j))
+			return
+		}
+		fmt.Printf("path: %s\nversion: %s\nsource: %s\n", absPath, Version, source)
+		return
+	}
+
 	if jsonFlag {
 		j, _ := json.Marshal(map[string]string{"version": Version})
 		fmt.Println(string(j))

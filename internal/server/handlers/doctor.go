@@ -12,6 +12,7 @@ import (
 // DoctorDeps provides the dependencies for the doctor handler.
 type DoctorDeps struct {
 	ConfigPath string
+	BinaryPath string
 	LoadConfig func() (*config.Config, error)
 }
 
@@ -19,7 +20,7 @@ type DoctorDeps struct {
 func Doctor(deps DoctorDeps, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		cfg, cfgErr := deps.LoadConfig()
-		checks := doctor.RunAll(deps.ConfigPath, cfg, cfgErr)
+		checks := doctor.RunAll(deps.ConfigPath, cfg, cfgErr, deps.BinaryPath)
 
 		allPassed := true
 		for _, ch := range checks {

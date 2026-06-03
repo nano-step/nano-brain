@@ -13,9 +13,13 @@ import (
 func runDoctorCmd(args []string, configPath string) {
 	cliLog.Debug().Str("cmd", "doctor").Msg("cli command started")
 	var jsonFlag bool
+	var onlineFlag bool
 	for _, a := range args {
-		if a == "--json" {
+		switch a {
+		case "--json":
 			jsonFlag = true
+		case "--online":
+			onlineFlag = true
 		}
 	}
 
@@ -24,7 +28,23 @@ func runDoctorCmd(args []string, configPath string) {
 	}
 
 	cfg, cfgErr := config.Load(configPath)
-	results := doctor.RunAll(configPath, cfg, cfgErr)
+	results := doctor.RunAll(configPath, cfg, cfgErr, resolveBinaryPath())
+
+	if onlineFlag {
+		baseURL := getBaseURL()
+		serverCheck, status := doctor.CheckServerRunning(baseURL)
+		results = append(results, serverCheck)
+		if status == nil {
+			results = append(results, doctor.Check{Name: "Queue health", Status: "skip", Detail: "server unreachable"})
+			results = append(results, doctor.Check{Name: "Version skew", Status: "skip", Detail: "server unreachable"})
+			results = append(results, doctor.Check{Name: "MCP reachable", Status: "skip", Detail: "server unreachable"})
+		} else {
+			results = append(results, doctor.CheckQueueHealth(*status))
+			results = append(results, doctor.CheckVersionSkew(Version, status.Version))
+			mcpURL := resolveMCPURL("/.dockerenv")
+			results = append(results, doctor.CheckMCPReachable(mcpURL))
+		}
+	}
 
 	allPassed := true
 	for _, r := range results {
@@ -52,9 +72,11 @@ func runDoctorCmd(args []string, configPath string) {
 				status = "FAIL"
 			} else if r.Status == "skip" {
 				status = "SKIP"
+			} else if r.Status == "warn" {
+				status = "WARN"
 			}
 			fmt.Printf("  %s %s %s\n", label, detail, status)
-			if r.Status == "fail" && r.Hint != "" {
+			if (r.Status == "fail" || r.Status == "warn") && r.Hint != "" {
 				for _, line := range strings.Split(r.Hint, "\n") {
 					fmt.Printf("    → %s\n", line)
 				}
