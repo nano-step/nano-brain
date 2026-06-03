@@ -184,6 +184,47 @@ async function resolveTagFromAPI(version, assetName) {
   return null;
 }
 
+// --- Opt-in auto-link ---
+function tryAutoLink(srcBinPath, platform) {
+  platform = platform || process.platform;
+
+  const optIn = process.env.NANO_BRAIN_AUTO_LINK === "1" ||
+    fs.existsSync(path.join(os.homedir(), ".nano-brain", "auto-link"));
+
+  if (!optIn) return;
+
+  if (platform === "win32") {
+    console.log(`INFO: Auto-link is not supported on Windows; nano-brain binary remains at ${srcBinPath}.`);
+    return;
+  }
+
+  let targetDir, targetPath;
+  if (platform === "linux") {
+    targetDir = path.join(os.homedir(), ".local", "bin");
+    targetPath = path.join(targetDir, "nano-brain");
+  } else if (platform === "darwin") {
+    targetDir = path.join(os.homedir(), "Library", "nano-brain", "bin");
+    targetPath = path.join(targetDir, "nano-brain");
+  } else {
+    console.log(`INFO: Auto-link is not supported on ${platform}; nano-brain binary remains at ${srcBinPath}.`);
+    return;
+  }
+
+  if (fs.existsSync(targetPath)) {
+    console.log(`WARN: ${targetPath} already exists; skipping auto-link to preserve your existing file.`);
+    return;
+  }
+
+  try {
+    fs.mkdirSync(targetDir, { recursive: true, mode: 0o755 });
+    fs.copyFileSync(srcBinPath, targetPath);
+    fs.chmodSync(targetPath, 0o755);
+    console.log(`Copied nano-brain to ${targetPath}. Ensure ${targetDir} is in your PATH.`);
+  } catch (e) {
+    console.log(`WARN: failed to auto-link binary: ${e.message}. Binary remains at ${srcBinPath}.`);
+  }
+}
+
 async function main() {
   const platformKey = getPlatformKey();
   const binName = os.platform() === "win32" ? "nano-brain.exe" : "nano-brain";
@@ -221,6 +262,7 @@ async function main() {
       }
       fs.chmodSync(binPath, 0o755);
       console.log(`nano-brain v${VERSION} installed successfully from ${tag}.`);
+      tryAutoLink(binPath);
       return;
     } catch (err) {
       if (err && typeof err.message === "string" && err.message.startsWith("SECURITY:")) {
@@ -243,6 +285,7 @@ async function main() {
       }
       fs.chmodSync(binPath, 0o755);
       console.log(`nano-brain v${VERSION} installed successfully from ${tag} (API fallback).`);
+      tryAutoLink(binPath);
       return;
     }
   } catch (err) {
@@ -262,4 +305,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parseSHA256Line, downloadWithHash, verifySHA256 };
+module.exports = { parseSHA256Line, downloadWithHash, verifySHA256, tryAutoLink };

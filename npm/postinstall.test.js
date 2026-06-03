@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
-const { parseSHA256Line } = require("./postinstall");
+const { parseSHA256Line, tryAutoLink } = require("./postinstall");
 
 test("parseSHA256Line: returns hash for matching filename in single-line content", () => {
   const content = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789  nano-brain-linux-amd64\n";
@@ -109,4 +109,237 @@ test("end-to-end: full integrity flow with mocked content matches expected hash"
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+test("TestAutoLink_OptIn_Linux_HappyPath", (t) => {
+  process.env.NANO_BRAIN_AUTO_LINK = "1";
+  t.after(() => { delete process.env.NANO_BRAIN_AUTO_LINK; });
+
+  const HOME = os.homedir();
+  const targetDir = path.join(HOME, ".local", "bin");
+  const targetPath = path.join(targetDir, "nano-brain");
+  const calls = [];
+
+  const origExists = fs.existsSync;
+  const origMkdir = fs.mkdirSync;
+  const origCopy = fs.copyFileSync;
+  const origChmod = fs.chmodSync;
+
+  fs.existsSync = (p) => {
+    if (p === path.join(HOME, ".nano-brain", "auto-link")) return false;
+    if (p === targetPath) return false;
+    return origExists(p);
+  };
+  fs.mkdirSync = (dir, opts) => { calls.push({ fn: "mkdirSync", dir, opts }); };
+  fs.copyFileSync = (src, dst) => { calls.push({ fn: "copyFileSync", src, dst }); };
+  fs.chmodSync = (p, mode) => { calls.push({ fn: "chmodSync", p, mode }); };
+
+  const output = [];
+  const origLog = console.log;
+  console.log = (...args) => output.push(args.join(" "));
+  try {
+    tryAutoLink("/fake/nano-brain", "linux");
+  } finally {
+    console.log = origLog;
+    fs.existsSync = origExists;
+    fs.mkdirSync = origMkdir;
+    fs.copyFileSync = origCopy;
+    fs.chmodSync = origChmod;
+  }
+
+  assert.ok(calls.some((c) => c.fn === "copyFileSync" && c.src === "/fake/nano-brain" && c.dst === targetPath), "should copy binary to ~/.local/bin/nano-brain");
+  assert.ok(calls.some((c) => c.fn === "chmodSync" && c.p === targetPath && c.mode === 0o755), "should chmod 0755");
+  assert.ok(output.some((line) => line.includes(targetPath) && line.includes("PATH")), "should print PATH guidance");
+});
+
+test("TestAutoLink_OptIn_MarkerFile_Linux", () => {
+  delete process.env.NANO_BRAIN_AUTO_LINK;
+
+  const HOME = os.homedir();
+  const markerPath = path.join(HOME, ".nano-brain", "auto-link");
+  const targetDir = path.join(HOME, ".local", "bin");
+  const targetPath = path.join(targetDir, "nano-brain");
+  const calls = [];
+
+  const origExists = fs.existsSync;
+  const origMkdir = fs.mkdirSync;
+  const origCopy = fs.copyFileSync;
+  const origChmod = fs.chmodSync;
+
+  fs.existsSync = (p) => {
+    if (p === markerPath) return true;
+    if (p === targetPath) return false;
+    return origExists(p);
+  };
+  fs.mkdirSync = (dir, opts) => { calls.push({ fn: "mkdirSync", dir }); };
+  fs.copyFileSync = (src, dst) => { calls.push({ fn: "copyFileSync", src, dst }); };
+  fs.chmodSync = (p, mode) => { calls.push({ fn: "chmodSync", p, mode }); };
+
+  try {
+    tryAutoLink("/fake/nano-brain", "linux");
+  } finally {
+    fs.existsSync = origExists;
+    fs.mkdirSync = origMkdir;
+    fs.copyFileSync = origCopy;
+    fs.chmodSync = origChmod;
+  }
+
+  assert.ok(calls.some((c) => c.fn === "copyFileSync" && c.dst === targetPath), "marker file should trigger copy to " + targetPath);
+});
+
+test("TestAutoLink_ExistingTarget_Skipped", (t) => {
+  process.env.NANO_BRAIN_AUTO_LINK = "1";
+  t.after(() => { delete process.env.NANO_BRAIN_AUTO_LINK; });
+
+  const HOME = os.homedir();
+  const targetDir = path.join(HOME, ".local", "bin");
+  const targetPath = path.join(targetDir, "nano-brain");
+
+  const origExists = fs.existsSync;
+  const origCopy = fs.copyFileSync;
+
+  let copied = false;
+  fs.existsSync = (p) => {
+    if (p === path.join(HOME, ".nano-brain", "auto-link")) return false;
+    if (p === targetPath) return true;
+    return origExists(p);
+  };
+  fs.copyFileSync = () => { copied = true; };
+
+  const output = [];
+  const origLog = console.log;
+  console.log = (...args) => output.push(args.join(" "));
+  try {
+    tryAutoLink("/fake/nano-brain", "linux");
+  } finally {
+    console.log = origLog;
+    fs.existsSync = origExists;
+    fs.copyFileSync = origCopy;
+  }
+
+  assert.strictEqual(copied, false, "should not copy when target exists");
+  assert.ok(output.some((line) => line.includes("WARN") && line.includes("already exists")), "should warn about existing file");
+});
+
+test("TestAutoLink_Windows_Skipped", (t) => {
+  process.env.NANO_BRAIN_AUTO_LINK = "1";
+  t.after(() => { delete process.env.NANO_BRAIN_AUTO_LINK; });
+
+  const origCopy = fs.copyFileSync;
+  let copied = false;
+  fs.copyFileSync = () => { copied = true; };
+
+  const output = [];
+  const origLog = console.log;
+  console.log = (...args) => output.push(args.join(" "));
+  try {
+    tryAutoLink("/fake/nano-brain", "win32");
+  } finally {
+    console.log = origLog;
+    fs.copyFileSync = origCopy;
+  }
+
+  assert.strictEqual(copied, false, "should not copy on Windows");
+  assert.ok(output.some((line) => line.includes("INFO") && line.includes("Windows")), "should print INFO for Windows");
+});
+
+test("TestAutoLink_OptOut_Default", () => {
+  delete process.env.NANO_BRAIN_AUTO_LINK;
+
+  const HOME = os.homedir();
+  const origExists = fs.existsSync;
+  const origCopy = fs.copyFileSync;
+
+  let copied = false;
+  fs.existsSync = (p) => {
+    if (p === path.join(HOME, ".nano-brain", "auto-link")) return false;
+    return origExists(p);
+  };
+  fs.copyFileSync = () => { copied = true; };
+
+  const output = [];
+  const origLog = console.log;
+  console.log = (...args) => output.push(args.join(" "));
+  try {
+    tryAutoLink("/fake/nano-brain", "linux");
+  } finally {
+    console.log = origLog;
+    fs.existsSync = origExists;
+    fs.copyFileSync = origCopy;
+  }
+
+  assert.strictEqual(copied, false, "should not copy when opt-out");
+  assert.strictEqual(output.length, 0, "should produce no output when opted out");
+});
+
+test("TestAutoLink_CopyFailure_NonFatal", (t) => {
+  process.env.NANO_BRAIN_AUTO_LINK = "1";
+  t.after(() => { delete process.env.NANO_BRAIN_AUTO_LINK; });
+
+  const HOME = os.homedir();
+  const targetDir = path.join(HOME, ".local", "bin");
+  const targetPath = path.join(targetDir, "nano-brain");
+
+  const origExists = fs.existsSync;
+  const origMkdir = fs.mkdirSync;
+  const origCopy = fs.copyFileSync;
+
+  fs.existsSync = (p) => {
+    if (p === path.join(HOME, ".nano-brain", "auto-link")) return false;
+    if (p === targetPath) return false;
+    return origExists(p);
+  };
+  fs.mkdirSync = () => {};
+  fs.copyFileSync = () => { throw new Error("EACCES: permission denied"); };
+
+  const output = [];
+  const origLog = console.log;
+  console.log = (...args) => output.push(args.join(" "));
+
+  assert.doesNotThrow(() => {
+    tryAutoLink("/fake/nano-brain", "linux");
+  }, "should not throw on copy failure");
+
+  console.log = origLog;
+  fs.existsSync = origExists;
+  fs.mkdirSync = origMkdir;
+  fs.copyFileSync = origCopy;
+
+  assert.ok(output.some((line) => line.includes("WARN") && line.includes("failed to auto-link")), "should warn on failure");
+});
+
+test("TestAutoLink_MacOS_TargetPath", (t) => {
+  process.env.NANO_BRAIN_AUTO_LINK = "1";
+  t.after(() => { delete process.env.NANO_BRAIN_AUTO_LINK; });
+
+  const HOME = os.homedir();
+  const targetDir = path.join(HOME, "Library", "nano-brain", "bin");
+  const targetPath = path.join(targetDir, "nano-brain");
+  const calls = [];
+
+  const origExists = fs.existsSync;
+  const origMkdir = fs.mkdirSync;
+  const origCopy = fs.copyFileSync;
+  const origChmod = fs.chmodSync;
+
+  fs.existsSync = (p) => {
+    if (p === path.join(HOME, ".nano-brain", "auto-link")) return false;
+    if (p === targetPath) return false;
+    return origExists(p);
+  };
+  fs.mkdirSync = (dir, opts) => { calls.push({ fn: "mkdirSync", dir }); };
+  fs.copyFileSync = (src, dst) => { calls.push({ fn: "copyFileSync", src, dst }); };
+  fs.chmodSync = (p, mode) => { calls.push({ fn: "chmodSync", p, mode }); };
+
+  try {
+    tryAutoLink("/fake/nano-brain", "darwin");
+  } finally {
+    fs.existsSync = origExists;
+    fs.mkdirSync = origMkdir;
+    fs.copyFileSync = origCopy;
+    fs.chmodSync = origChmod;
+  }
+
+  assert.ok(calls.some((c) => c.fn === "copyFileSync" && c.dst === targetPath), "should copy to ~/Library/nano-brain/bin/nano-brain");
+  assert.ok(calls.some((c) => c.fn === "mkdirSync" && c.dir === targetDir), "should mkdir ~/Library/nano-brain/bin");
 });
