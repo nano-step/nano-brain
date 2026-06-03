@@ -34,3 +34,9 @@ npm/nano-brain.exe
 # Sisyphus agent runtime state
 .sisyphus/
 ai/test-case/
+
+# Harness loop plugin
+.opencode/harness-loop.local.json
+.opencode/harness.override.json
+.opencode/plugin/harness-loop/node_modules/
+.opencode/plugin/harness-loop/dist/

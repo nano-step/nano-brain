@@ -216,6 +216,17 @@ When an agent is confused, repeats manual reasoning, needs a new validation
 command, discovers a missing rule, or sees a recurring failure pattern, it must
 either improve the harness directly or add a proposal to `HARNESS_BACKLOG.md`.
 
+## Recommended Workflow: `/harness-on`
+
+For autonomous feature development, use the `/harness-on` slash command in OpenCode. It drives the agent through all gates automatically, injecting fix instructions on failure and stopping when all gates PASS.
+
+```
+/harness-on          # Start the loop
+/harness-off         # Cancel at any time
+```
+
+Manual invocation (`./scripts/harness-check.sh <gate> --json`) remains available for ad-hoc checks and CI scripts.
+
 ## Validation Ladder
 
 Run the layers appropriate to the lane. Never claim a layer passes without
