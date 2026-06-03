@@ -391,7 +391,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		return
 	}
 
-	w.logger.Info().
+	w.logger.Debug().
 		Str("path", filePath).
 		Str("collection", col.name).
 		Msg("processing file")
