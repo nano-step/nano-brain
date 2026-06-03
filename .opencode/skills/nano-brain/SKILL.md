@@ -190,27 +190,27 @@ Source: `internal/mcp/tools.go:731-763`, `internal/server/handlers/health.go:111
 
 ### memory_graph — 1-hop symbol neighbors
 ```
-required: workspace, node ("/abs/path.go" OR "/abs/path.go::FunctionName")
-optional: direction ("out" | "in" | "both", default "out"), edge_type ("calls" | "imports" | "contains" | empty for all)
+required: workspace, node ("internal/x.go" OR "internal/x.go::F" OR absolute equivalent)
+optional: direction ("out" | "in" | "both", default "out"), edge_type ("calls" | "imports" | "contains" | empty for all), paths ("absolute" default | "relative" to save tokens)
 returns:  {node, direction, edges: [{source, target, edge_type}]}
 ```
-Source: `internal/mcp/tools.go:916-1007`. Requires prior `reindex` to populate the graph.
+Source: `internal/mcp/tools.go:1214-1308`. Requires prior `reindex` to populate the graph. Node accepts workspace-relative or absolute paths (resolved server-side). Set `paths: "relative"` to receive workspace-stripped paths in the response — saves ~55 chars × N edges per call.
 
 ### memory_impact — reverse impact BFS
 ```
 required: workspace, node
-optional: edge_type, max_depth (1-3, server-clamped, default 1)
+optional: edge_type, max_depth (1-3, server-clamped, default 1), paths ("absolute" default | "relative")
 returns:  {node, impacted: [{node, depth, edge_type}]}
 ```
-Source: `internal/mcp/tools.go:1087-1157`. Use before refactor — `impacted` is the set of nodes that would break if `node` changes.
+Source: `internal/mcp/tools.go:1395-1469`. Use before refactor — `impacted` is the set of nodes that would break if `node` changes. Same relative/absolute path support as `memory_graph`.
 
 ### memory_trace — forward call chain
 ```
 required: workspace, node
-optional: max_depth (1-10, server-clamped, default 5)
+optional: max_depth (1-10, server-clamped, default 5), paths ("absolute" default | "relative")
 returns:  {entry, chain: [{node, depth, via}]}
 ```
-Source: `internal/mcp/tools.go:1009-1085`. Walks outgoing edges with cycle detection. Use to understand "what does this entry point eventually call?".
+Source: `internal/mcp/tools.go:1316-1393`. Walks outgoing edges with cycle detection. Use to understand "what does this entry point eventually call?". Same relative/absolute path support as `memory_graph`.
 
 ### memory_symbols — symbol search
 ```
