@@ -476,6 +476,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- fix(mcp): `memory_wake_up` MCP tool was returning empty `recent_memories` because the MCP handler passed `Collections: nil` to `RecentDocuments`, making the post-#338 collection filter (`collection = ANY('{}')`) always false. Now matches the HTTP `/api/v1/wake-up` behaviour. (#356)
+
 ### Performance
 - Add partial index on chunks.embed_status (pending/embed_failed) for embed queue worker hot path (#322)
 - Add in-flight dedup set in embed queue to prevent re-embedding of chunks already being processed by a worker (#322)
