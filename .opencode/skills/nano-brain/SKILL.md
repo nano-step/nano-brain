@@ -48,25 +48,42 @@ Every tool takes a `workspace` string (the SHA-256 hash returned by `POST /api/v
 ```
 required: workspace, query
 optional: max_results (int, default 10, capped at 100)
-returns:  {results: [{id, title, snippet, score, tags, collection, source_path, workspace_hash, document_id, created_at, updated_at}], total, query_ms}
+          include_content (bool, default false) — opt-in full chunk text
+          cursor (string) — pagination token from previous response.next_cursor
+returns:  {results: [{id, title, snippet, score, tags, collection, source_path, workspace_hash, document_id, created_at, updated_at}], total, query_ms, next_cursor?}
 ```
-Source: `internal/mcp/tools.go:161-195`, `internal/search/search.go:35-67`.
+Each result includes a `snippet` (≤500 chars, UTF-8 safe). The full `content` field is OMITTED by default — pass `include_content: true` to include it, or call `memory_get` for one full document. `next_cursor` is present only when more results exist beyond the current page.
 
 ### memory_search — BM25 keyword
 ```
 required: workspace, query
 optional: max_results (capped 100), tags (array of strings — AND filter)
-returns:  same shape as memory_query
+          include_content (bool, default false), cursor (string)
+returns:  same shape as memory_query (snippet-only by default)
 ```
-Source: `internal/mcp/tools.go:198-321`. Note: tags filter is conjunctive (chunk must have ALL listed tags).
+Note: tags filter is conjunctive (chunk must have ALL listed tags).
 
 ### memory_vsearch — vector semantic
 ```
 required: workspace, query
-optional: max_results (capped 100)
-returns:  same shape as memory_query
+optional: max_results (capped 100), include_content (bool), cursor (string)
+returns:  same shape as memory_query (snippet-only by default)
 ```
-Source: `internal/mcp/tools.go:323-415`. Slower than BM25 (embedding round-trip); best for "concept similar to…" queries where exact words don't match.
+Slower than BM25 (embedding round-trip); best for "concept similar to…" queries where exact words don't match.
+
+### Pagination & include_content (since #358 / v2026.6.x)
+
+All three search tools share one response envelope. Paginate with the opaque `cursor` returned in `next_cursor` — pass the SAME `query` text on every page (server validates a hash to prevent cross-query cursor reuse → error `"cursor query mismatch"`).
+
+```
+# Browse 30 days of bug fixes incrementally — no payload bombs
+memory_search(workspace=ws, query="fix bug", max_results=5)
+  → {results: [...5...], total: 47, query_ms: 12, next_cursor: "eyJv..."}
+memory_search(workspace=ws, query="fix bug", max_results=5, cursor="eyJv...")
+  → next 5 results...
+```
+
+Need the FULL text of one specific hit? Call `memory_get(workspace, path="#<id-from-result>")` — that tool is the canonical full-content fetch and supports `start_line`/`end_line` slicing. Pass `include_content: true` to a search tool only when you genuinely need full text for ALL results in one shot (rare; inflates response 5–50×).
 
 ### memory_get — fetch one doc
 ```

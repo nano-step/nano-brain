@@ -3,6 +3,23 @@
 All notable changes to nano-brain are documented here.
 
 
+## [Unreleased]
+
+### Changed (MCP only — breaking for agents parsing `content` from search results)
+
+- **`memory_query` / `memory_search` / `memory_vsearch`** now return a 500-char `snippet` by default and OMIT the full `content` field. Agents needing full text must either pass `include_content: true` or call `memory_get` for one full document. HTTP API (`/api/v1/search`, `/api/v1/query`, `/api/v1/vsearch`) is unchanged. (#358)
+
+### Added
+
+- Stateless cursor-based pagination for all three MCP search tools. Each response includes a `next_cursor` field when more results exist; pass it back in the next call's `cursor` parameter. Cursors are opaque base64url(JSON) and bound to the query text (server returns `"cursor query mismatch"` if the query changes mid-pagination). (#358)
+- New `include_content` boolean parameter on all three search tools (default `false`). Set to `true` to include full chunk content alongside the snippet. (#358)
+- New top-level response fields `total` (count of fused results) and `query_ms` (server-measured latency) on all three search tools. (#358)
+- Stable result-ordering tiebreaker (`id ASC`) in RRF fusion and recency boost. Equal-score results now have deterministic order across paginated calls. (#358)
+
+### Internal
+
+- Extracted `TruncateSnippet` helper from `internal/server/handlers/search.go` to `internal/search/snippet.go` so HTTP and MCP layers share the same rune-aware truncation.
+
 ## [2026.6.0] — 2026-05-30
 
 ### Added

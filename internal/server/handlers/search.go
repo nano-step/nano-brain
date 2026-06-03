@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/search"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/telemetry"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -47,17 +48,7 @@ type SearchResult struct {
 }
 
 func truncateSnippet(content string, maxLen int) string {
-	if len(content) <= maxLen {
-		return content
-	}
-	var count int
-	for i := range content {
-		if count == maxLen {
-			return content[:i]
-		}
-		count++
-	}
-	return content
+	return search.TruncateSnippet(content, maxLen)
 }
 
 type SearchResponse struct {

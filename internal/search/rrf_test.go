@@ -68,6 +68,102 @@ func TestRRFMerge_CustomK(t *testing.T) {
 	}
 }
 
+func TestRRFMerge_StableTiebreaker(t *testing.T) {
+	// Two chunks with mathematically identical RRF scores: both at rank 0 in their respective lists.
+	// With k=60, score = 1.0 / (60 + 0 + 1) = 1/61 ≈ 0.016393...
+	// Chunk A: "uuid-a-zzz" (sorts first lexicographically)
+	// Chunk B: "uuid-b-aaa" (sorts second lexicographically)
+	// Expected: tied scores broken by ID, so "uuid-a-zzz" should be first.
+	bm25 := []Result{{ID: "uuid-b-aaa"}}
+	vec := []Result{{ID: "uuid-a-zzz"}}
+	k := 60.0
+
+	got := RRFMerge(bm25, vec, k)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(got))
+	}
+
+	expectedScore := 1.0 / (k + 0 + 1)
+	if !approxEqual(got[0].Score, expectedScore, 1e-9) {
+		t.Errorf("first result score = %f, want %f", got[0].Score, expectedScore)
+	}
+	if !approxEqual(got[1].Score, expectedScore, 1e-9) {
+		t.Errorf("second result score = %f, want %f", got[1].Score, expectedScore)
+	}
+
+	// Tiebreaker: smaller ID wins
+	if got[0].ID != "uuid-a-zzz" {
+		t.Errorf("tiebreaker: expected first ID='uuid-a-zzz', got '%s'", got[0].ID)
+	}
+	if got[1].ID != "uuid-b-aaa" {
+		t.Errorf("tiebreaker: expected second ID='uuid-b-aaa', got '%s'", got[1].ID)
+	}
+
+	// Determinism check: run 10 times with same input, verify identical order
+	for iter := 0; iter < 10; iter++ {
+		result := RRFMerge(bm25, vec, k)
+		if len(result) != 2 {
+			t.Fatalf("iteration %d: expected 2 results, got %d", iter, len(result))
+		}
+		if result[0].ID != "uuid-a-zzz" || result[1].ID != "uuid-b-aaa" {
+			t.Errorf("iteration %d: order changed; got %s, %s", iter, result[0].ID, result[1].ID)
+		}
+	}
+}
+
+func TestRRFMerge_PaginationConsistency(t *testing.T) {
+	// Build a list with 12 results, 3 of which have tied scores (to test tiebreaker across pagination boundary).
+	// Input: mix of scores such that we can slice [0:5] and [5:10] consistently.
+	bm25 := []Result{
+		{ID: "chunk-score-1-rank0"},
+		{ID: "chunk-score-1-rank1"},
+		{ID: "chunk-score-2-rank0"},
+		{ID: "chunk-score-2-rank1"},
+		{ID: "chunk-score-3-rank0"},
+		{ID: "chunk-score-3-rank1"},
+	}
+	vec := []Result{
+		{ID: "chunk-score-4-rank0"},
+		{ID: "chunk-score-4-rank1"},
+		{ID: "chunk-score-tied-vec0"}, // Will have tied score with some bm25
+		{ID: "chunk-score-tied-vec1"},
+		{ID: "chunk-score-tied-vec2"},
+	}
+	k := 60.0
+
+	// Merge once, get full sorted result
+	full := RRFMerge(bm25, vec, k)
+
+	// Slice as if paginating: page 1 = [0:5], page 2 = [5:10]
+	page1 := full[0:5]
+	page2 := full[5:10]
+
+	// Collect all IDs from both pages
+	pageIDs := make(map[string]int)
+	for i, r := range page1 {
+		pageIDs[r.ID] = i
+	}
+	for i, r := range page2 {
+		if _, exists := pageIDs[r.ID]; exists {
+			t.Errorf("duplicate result across pages: %s", r.ID)
+		}
+		pageIDs[r.ID] = 5 + i
+	}
+
+	// Verify union of pages == full result (no skips, no duplicates)
+	if len(pageIDs) != 10 {
+		t.Errorf("pagination union: expected 10 unique results, got %d", len(pageIDs))
+	}
+
+	// Re-merge same input and verify page slices are identical
+	full2 := RRFMerge(bm25, vec, k)
+	for i := 0; i < len(full); i++ {
+		if full[i].ID != full2[i].ID || !approxEqual(full[i].Score, full2[i].Score, 1e-12) {
+			t.Errorf("re-merge changed result at index %d: %s vs %s", i, full[i].ID, full2[i].ID)
+		}
+	}
+}
+
 func approxEqual(a, b, epsilon float64) bool {
 	return math.Abs(a-b) < epsilon
 }
