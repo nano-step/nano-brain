@@ -1215,12 +1215,13 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_graph",
-			Description: "Query the knowledge graph: find imports, calls, and symbol containment relationships for a node",
+			Description: "Query the knowledge graph: find imports, calls, and symbol containment relationships for a node. Node accepts workspace-relative or absolute paths (e.g. \"internal/x.go::F\" or \"/abs/path/internal/x.go::F\").",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace hash"},
-				"node":      {"type": "string", "description": "Source node (file path or file::symbol)"},
+				"node":      {"type": "string", "description": "Source node (file path or file::symbol). Accepts workspace-relative or absolute."},
 				"direction": {"type": "string", "description": "Edge direction: out (default), in, both"},
 				"edge_type": {"type": "string", "description": "Filter by edge type: contains, imports, calls (empty = all)"},
+				"paths":     {"type": "string", "description": "Output path style: \"absolute\" (default, current behavior) or \"relative\" (strip workspace prefix from edge source/target where present)"},
 			}, []string{"workspace", "node"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -1236,11 +1237,16 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
+			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
+			if err != nil {
+				return errResult(err.Error()), nil
+			}
 			direction := argString(args, "direction")
 			if direction == "" {
 				direction = "out"
 			}
 			edgeType := argString(args, "edge_type")
+			pathStyle := argString(args, "paths")
 
 			type edgeResult struct {
 				Source   string `json:"source"`
@@ -1286,16 +1292,20 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 				return errResult(fmt.Sprintf("graph query failed: %v", err)), nil
 			}
 
+			var wsRoot string
+			if pathStyle == "relative" {
+				wsRoot = lookupWorkspaceRoot(ctx, a.queries, ws)
+			}
 			results := make([]edgeResult, 0, len(rows))
 			for _, r := range rows {
 				results = append(results, edgeResult{
-					Source:   r.SourceNode,
-					Target:   r.TargetNode,
+					Source:   stripWorkspacePrefix(wsRoot, r.SourceNode),
+					Target:   stripWorkspacePrefix(wsRoot, r.TargetNode),
 					EdgeType: r.EdgeType,
 				})
 			}
 			return textResult(map[string]any{
-				"node":      node,
+				"node":      stripWorkspacePrefix(wsRoot, node),
 				"direction": direction,
 				"edges":     results,
 				"count":     len(results),
@@ -1308,11 +1318,12 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_trace",
-			Description: "Trace the call chain from an entry symbol — shows what a function calls, transitively, with cycle detection",
+			Description: "Trace the call chain from an entry symbol — shows what a function calls, transitively, with cycle detection. Node accepts workspace-relative or absolute paths.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace hash"},
-				"node":      {"type": "string", "description": "Entry symbol (e.g. file::FunctionName)"},
+				"node":      {"type": "string", "description": "Entry symbol (e.g. file::FunctionName). Accepts workspace-relative or absolute."},
 				"max_depth": {"type": "number", "description": "Max traversal depth 1-10 (default 5)"},
+				"paths":     {"type": "string", "description": "Output path style: \"absolute\" (default) or \"relative\""},
 			}, []string{"workspace", "node"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -1328,7 +1339,12 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
+			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
+			if err != nil {
+				return errResult(err.Error()), nil
+			}
 			maxDepth := argInt(args, "max_depth", 5, 10)
+			pathStyle := argString(args, "paths")
 
 			seen := map[string]bool{node: true}
 			type traceItem struct {
@@ -1373,8 +1389,17 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 				}
 			}
 
+			var wsRoot string
+			if pathStyle == "relative" {
+				wsRoot = lookupWorkspaceRoot(ctx, a.queries, ws)
+				for i := range chain {
+					chain[i].Node = stripWorkspacePrefix(wsRoot, chain[i].Node)
+					chain[i].Via = stripWorkspacePrefix(wsRoot, chain[i].Via)
+				}
+			}
+
 			return textResult(map[string]any{
-				"entry": node,
+				"entry": stripWorkspacePrefix(wsRoot, node),
 				"chain": chain,
 				"count": len(chain),
 			})
@@ -1386,12 +1411,13 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_impact",
-			Description: "Find what would be affected if a node (file or symbol) changes — reverse import/call lookup with optional depth traversal",
+			Description: "Find what would be affected if a node (file or symbol) changes — reverse import/call lookup with optional depth traversal. Node accepts workspace-relative or absolute paths.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace hash"},
-				"node":      {"type": "string", "description": "The node to analyze (file path or file::symbol)"},
+				"node":      {"type": "string", "description": "The node to analyze (file path or file::symbol). Accepts workspace-relative or absolute."},
 				"edge_type": {"type": "string", "description": "Filter by edge type: imports, calls (empty = all)"},
 				"max_depth": {"type": "number", "description": "Traversal depth 1-3 (default 1)"},
+				"paths":     {"type": "string", "description": "Output path style: \"absolute\" (default) or \"relative\""},
 			}, []string{"workspace", "node"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -1407,8 +1433,13 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
+			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
+			if err != nil {
+				return errResult(err.Error()), nil
+			}
 			edgeType := argString(args, "edge_type")
 			maxDepth := argInt(args, "max_depth", 1, 3)
+			pathStyle := argString(args, "paths")
 
 			frontier := []string{node}
 			seen := map[string]bool{node: true}
@@ -1445,8 +1476,16 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 				frontier = next
 			}
 
+			var wsRoot string
+			if pathStyle == "relative" {
+				wsRoot = lookupWorkspaceRoot(ctx, a.queries, ws)
+				for i := range impacted {
+					impacted[i].Node = stripWorkspacePrefix(wsRoot, impacted[i].Node)
+				}
+			}
+
 			return textResult(map[string]any{
-				"node":     node,
+				"node":     stripWorkspacePrefix(wsRoot, node),
 				"impacted": impacted,
 				"count":    len(impacted),
 			})
