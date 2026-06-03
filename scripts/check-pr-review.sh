@@ -125,10 +125,11 @@ check_pr_state() {
         return 2
     fi
 
-    local pr_json
-    pr_json=$(gh pr view --json state,isDraft,number 2>/dev/null) || pr_json=""
+    local pr_info
+    pr_info=$(gh pr view --json state,isDraft,number \
+        --jq '"\(.state) \(.isDraft) \(.number)"' 2>/dev/null) || pr_info=""
 
-    if [[ -z "$pr_json" ]]; then
+    if [[ -z "$pr_info" ]]; then
         add_check "FAIL" "3.5.1 No open PR found on current branch"
         GATE_STATUS="FAIL"
         INSTRUCTIONS="No PR found on current branch. Push the branch and open a PR:
@@ -137,9 +138,7 @@ check_pr_state() {
     fi
 
     local state is_draft pr_num
-    state=$(echo "$pr_json" | python3 -c "import sys,json; print(json.load(sys.stdin)['state'])" 2>/dev/null || echo "UNKNOWN")
-    is_draft=$(echo "$pr_json" | python3 -c "import sys,json; print(json.load(sys.stdin)['isDraft'])" 2>/dev/null || echo "False")
-    pr_num=$(echo "$pr_json" | python3 -c "import sys,json; print(json.load(sys.stdin)['number'])" 2>/dev/null || echo "")
+    read -r state is_draft pr_num <<< "$pr_info" || true
 
     PR_NUMBER="$pr_num"
 
@@ -157,7 +156,7 @@ check_pr_state() {
         return 1
     fi
 
-    if [[ "$is_draft" == "True" ]]; then
+    if [[ "$is_draft" == "true" ]]; then
         add_check "FAIL" "3.5.1 PR #$pr_num is DRAFT"
         GATE_STATUS="BLOCKED"
         INSTRUCTIONS="PR is in DRAFT state. Mark ready for review:
@@ -276,8 +275,11 @@ Then re-run this gate."
             BEGIN { in_triage=0; count=0 }
             /^##+[[:space:]]+(Gemini|Bot|Triage)/ { in_triage=1; next }
             /^##[[:space:]]/ && in_triage { in_triage=0 }
-            in_triage && /VALID:(critical|high)/ {
-                if (! /fixed in commit [a-f0-9]{6,}/ && ! /resolved in commit [a-f0-9]{6,}/) count++
+            in_triage {
+                line = tolower($0)
+                if (line ~ /valid:(critical|high)/) {
+                    if (line !~ /fixed in commit [a-f0-9]{6,}/ && line !~ /resolved in commit [a-f0-9]{6,}/) count++
+                }
             }
             END { print count }
         ' "$triage_file")
@@ -296,45 +298,24 @@ Then re-run this gate."
     return 0
 }
 check_ci_status() {
-    local check_json
-    check_json=$(gh pr view "$PR_NUMBER" --json statusCheckRollup 2>/dev/null || echo "")
-
-    if [[ -z "$check_json" ]] || [[ "$check_json" == "null" ]]; then
-        add_check "SKIP" "3.5.5 No CI checks configured on PR"
-        return 0
-    fi
+    local ci_info
+    ci_info=$(gh pr view "$PR_NUMBER" --json statusCheckRollup --jq '
+        if .statusCheckRollup == null then "0 0 0"
+        else
+          (.statusCheckRollup | length) as $total |
+          ([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "CANCELLED" or .conclusion == "TIMED_OUT" or .conclusion == "ACTION_REQUIRED")] | length) as $fail |
+          ([.statusCheckRollup[]? | select(.status == "QUEUED" or .status == "IN_PROGRESS" or .status == "PENDING" or .status == "WAITING")] | length) as $pending |
+          "\($total) \($fail) \($pending)"
+        end
+    ' 2>/dev/null || echo "0 0 0")
 
     local total fail_count pending_count
-    total=$(echo "$check_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('statusCheckRollup') or []))" 2>/dev/null || echo "0")
+    read -r total fail_count pending_count <<< "$ci_info" || true
 
     if [[ "$total" -eq 0 ]]; then
         add_check "SKIP" "3.5.5 No CI checks configured on PR"
         return 0
     fi
-
-    fail_count=$(echo "$check_json" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-checks = d.get('statusCheckRollup') or []
-fail = 0
-for c in checks:
-    concl = (c.get('conclusion') or '').upper()
-    if concl in ('FAILURE', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED'):
-        fail += 1
-print(fail)
-" 2>/dev/null || echo "0")
-
-    pending_count=$(echo "$check_json" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-checks = d.get('statusCheckRollup') or []
-pending = 0
-for c in checks:
-    status = (c.get('status') or '').upper()
-    if status in ('QUEUED', 'IN_PROGRESS', 'PENDING', 'WAITING'):
-        pending += 1
-print(pending)
-" 2>/dev/null || echo "0")
 
     if [[ "$fail_count" -gt 0 ]]; then
         add_check "FAIL" "3.5.5 ${fail_count}/${total} CI check(s) failed"
