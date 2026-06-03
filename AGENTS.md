@@ -339,11 +339,12 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 ### Gate lifecycle
 
 ```
-① PRE-WORK → ② IN-PROGRESS → ③ PRE-MERGE → ④ POST-MERGE → ⑤ NEXT-READY → ⑥ RETRO-GATE
+① PRE-WORK → ② IN-PROGRESS → ③ PRE-MERGE → ③.5 ASYNC-PR-REVIEW → ④ POST-MERGE → ④.5 POST-MERGE-NPM-RELEASE → ⑤ NEXT-READY → ⑥ RETRO-GATE
 ```
 
 - All gates must PASS before proceeding. FAIL = BLOCK.
 - Agent MUST NOT start next feature until ⑤ NEXT-READY passes.
+- Gates ③.5 (async-pr-review) and ④.5 (post-merge-npm-release) are async — the harness loop spawns a background watcher that polls until terminal status.
 - Run via: `./scripts/harness-check.sh <phase>`
 
 ### Key forbidden practices
