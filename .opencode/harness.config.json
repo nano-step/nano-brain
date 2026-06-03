@@ -1,6 +1,6 @@
 {
   "runner_path": "./scripts/harness-check.sh",
-  "gates": ["pre-work", "in-progress", "pre-merge", "post-merge", "post-merge-npm-release", "next-ready"],
+  "gates": ["pre-work", "in-progress", "pre-merge", "async-pr-review", "post-merge", "post-merge-npm-release", "next-ready"],
   "rule_id_format": "R{id}",
   "fail_policy": "hybrid",
   "max_total_iterations": 100,
@@ -21,6 +21,14 @@
     "pre-merge": {
       "doc": "docs/harness/gates/pre-merge.md",
       "skills": ["review-work"]
+    },
+    "async-pr-review": {
+      "doc": "docs/harness/gates/async-pr-review.md",
+      "skills": ["code-review"],
+      "async": true,
+      "async_max_wait_seconds": 900,
+      "async_poll_interval_seconds": 30,
+      "async_subagent_type": "quick"
     },
     "post-merge": {
       "doc": "docs/harness/gates/post-merge.md",

@@ -129,7 +129,8 @@ get_next_gate() {
     case "$current" in
         pre-work) echo "in-progress" ;;
         in-progress) echo "pre-merge" ;;
-        pre-merge) echo "post-merge" ;;
+        pre-merge) echo "async-pr-review" ;;
+        async-pr-review) echo "post-merge" ;;
         post-merge) echo "post-merge-npm-release" ;;
         post-merge-npm-release) echo "next-ready" ;;
         next-ready) echo "null" ;;
@@ -825,7 +826,7 @@ phase_retro() {
 }
 
 validate_runner_contract() {
-    local gates=("pre-work" "in-progress" "pre-merge" "post-merge" "post-merge-npm-release" "next-ready")
+    local gates=("pre-work" "in-progress" "pre-merge" "async-pr-review" "post-merge" "post-merge-npm-release" "next-ready")
     local required_fields=("gate" "status" "checks" "rule_ids_violated")
     local all_ok=true
 
@@ -934,6 +935,12 @@ main() {
             ;;
         pre-merge)
             phase_pre_merge
+            ;;
+        async-pr-review)
+            extra_flags=()
+            [[ "$JSON_OUTPUT" == true ]] && extra_flags+=("--json")
+            [[ "$NO_COLOR" == true ]] && extra_flags+=("--no-color")
+            exec "$(dirname "$0")/check-pr-review.sh" async-pr-review "${extra_flags[@]+"${extra_flags[@]}"}"
             ;;
         post-merge)
             phase_post_merge

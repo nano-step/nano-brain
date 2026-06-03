@@ -13,13 +13,15 @@ The agent should read the instruction doc first to understand the project-specif
 
 ## Gate Documents
 
-| Gate | Purpose |
-|------|---------|
-| [pre-work.md](pre-work.md) | Ready to start a new feature |
-| [in-progress.md](in-progress.md) | Development is on track |
-| [pre-merge.md](pre-merge.md) | Final checks before merge |
-| [post-merge.md](post-merge.md) | Post-merge cleanup |
-| [next-ready.md](next-ready.md) | Ready to start next feature |
+| Gate | Purpose | Async? |
+|------|---------|--------|
+| [pre-work.md](pre-work.md) | Ready to start a new feature | — |
+| [in-progress.md](in-progress.md) | Development is on track | — |
+| [pre-merge.md](pre-merge.md) | Final local checks before merge | — |
+| [async-pr-review.md](async-pr-review.md) | Wait for bot review + findings resolved + CI green | ✓ |
+| [post-merge.md](post-merge.md) | Post-merge cleanup | — |
+| [post-merge-npm-release.md](post-merge-npm-release.md) | Wait for npm publish workflow | ✓ |
+| [next-ready.md](next-ready.md) | Ready to start next feature | — |
 
 ## Document Structure
 
