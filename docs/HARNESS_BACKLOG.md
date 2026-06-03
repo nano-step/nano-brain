@@ -249,3 +249,64 @@ real metrics, vocabulary closed-set defined. Token budget for tasks reduced
 
 Tracking: in-session harness update (no GitHub issue per R89 — this work
 was the harness rule update itself; the agent's task IS the rule fix).
+
+---
+
+## Missing Harness Capability
+
+### Title
+
+Pre-existing-failure exemption for docs-only PRs (gates 3.3 + 3.4)
+
+### Discovered While
+
+`chore/openspec-cli-ux-overhaul-proposal` PR #344 (issue #343). Diff is 8 spec
+markdown files, 0 `.go` files. Pre-merge gate FAILed on 3.3 (integration tests
+in `internal/harvest` + build-failed in `internal/server/handlers`) and 3.4
+(golangci-lint violations in `_test.go` files). Both failures reproduce on
+master HEAD `23b5afa` — the PR cannot have caused or fixed them.
+
+Same pattern previously hit by PR #332 (issue #331) — see
+`docs/evidence/331-pre-merge-override.md` for prior precedent of overriding
+pre-existing 3.3 + 3.4 failures on a docs-only PR.
+
+### Current Pain
+
+Currently, every docs-only PR has to:
+1. Manually verify the failures are pre-existing (run on master HEAD).
+2. Write a custom `<issue>-pre-merge-override.md` evidence file.
+3. Ask the user to post a `[HARNESS-OVERRIDE]` comment (R7 mechanism, which is
+   technically scoped to Gemini comments only).
+
+This is friction every docs PR pays. R7 was not designed for this case.
+
+### Suggested Improvement
+
+Add a new check before gates 3.3 and 3.4 that auto-SKIP'd them when the diff
+contains zero `.go` files:
+
+```bash
+# Pseudocode for harness-check.sh
+diff_files=$(git diff --name-only "$(git merge-base master HEAD)" HEAD)
+has_go=$(echo "$diff_files" | grep -cE '\.go$|go\.(mod|sum)$' || echo 0)
+if [[ "$has_go" -eq 0 ]]; then
+    add_check "SKIP" "3.3 PR has no Go files; integration tests not relevant to diff"
+    add_check "SKIP" "3.4 PR has no Go files; lint not relevant to diff"
+else
+    # existing 3.3 + 3.4 logic
+fi
+```
+
+Alternative: rename R7 to be more general ("pre-existing failure override"),
+not Gemini-specific.
+
+### Risk
+
+Tiny — change is local to `scripts/harness-check.sh`, additive guard before
+existing logic.
+
+### Status
+
+proposed — awaiting user approval per Forbidden Practice #13 ("No modifying
+harness rules without user approval"). Tracking: in this PR's
+`docs/evidence/343-pre-merge-override.md`.
