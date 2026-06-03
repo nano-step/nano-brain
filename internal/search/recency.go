@@ -42,7 +42,11 @@ func ApplyRecencyBoost(results []Result, weight float64, halfLifeDays int, now t
 	}
 
 	sort.Slice(boosted, func(i, j int) bool {
-		return boosted[i].Score > boosted[j].Score
+		if boosted[i].Score != boosted[j].Score {
+			return boosted[i].Score > boosted[j].Score
+		}
+		// Stable tiebreaker for deterministic cursor pagination (#358).
+		return boosted[i].ID < boosted[j].ID
 	})
 
 	return boosted

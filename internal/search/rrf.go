@@ -38,7 +38,11 @@ func RRFMerge(bm25Results, vectorResults []Result, k float64) []Result {
 	}
 
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].Score > out[j].Score
+		if out[i].Score != out[j].Score {
+			return out[i].Score > out[j].Score
+		}
+		// Stable tiebreaker for deterministic cursor pagination (#358).
+		return out[i].ID < out[j].ID
 	})
 
 	return out

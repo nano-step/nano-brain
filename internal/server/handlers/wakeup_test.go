@@ -180,8 +180,8 @@ func TestWakeUp_RecentMemoriesOrdering(t *testing.T) {
 
 	q := &mockWakeUpQuerier{
 		recentDocsFn: func(_ context.Context, arg sqlc.RecentDocumentsParams) ([]sqlc.RecentDocumentsRow, error) {
-			if arg.Limit != 10 {
-				t.Errorf("expected default limit 10, got %d", arg.Limit)
+			if arg.MaxResults != 10 {
+				t.Errorf("expected default limit 10, got %d", arg.MaxResults)
 			}
 			return []sqlc.RecentDocumentsRow{
 				{ID: id1, Title: "Recent", Tags: []string{"tag1"}, UpdatedAt: now, Snippet: "first doc content"},
@@ -240,7 +240,7 @@ func TestWakeUp_LimitParam_GET(t *testing.T) {
 	var capturedLimit int32
 	q := &mockWakeUpQuerier{
 		recentDocsFn: func(_ context.Context, arg sqlc.RecentDocumentsParams) ([]sqlc.RecentDocumentsRow, error) {
-			capturedLimit = arg.Limit
+			capturedLimit = arg.MaxResults
 			return []sqlc.RecentDocumentsRow{
 				{ID: uuid.New(), Title: "Doc1", Tags: []string{}, UpdatedAt: now, Snippet: "a"},
 				{ID: uuid.New(), Title: "Doc2", Tags: []string{}, UpdatedAt: now, Snippet: "b"},
@@ -279,7 +279,7 @@ func TestWakeUp_LimitCapped(t *testing.T) {
 	var capturedLimit int32
 	q := &mockWakeUpQuerier{
 		recentDocsFn: func(_ context.Context, arg sqlc.RecentDocumentsParams) ([]sqlc.RecentDocumentsRow, error) {
-			capturedLimit = arg.Limit
+			capturedLimit = arg.MaxResults
 			return []sqlc.RecentDocumentsRow{}, nil
 		},
 		docStatsFn: func(_ context.Context, _ string) (sqlc.WorkspaceDocStatsRow, error) {

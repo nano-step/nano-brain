@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/search"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -120,6 +122,13 @@ func argStringSlice(args map[string]any, key string) []string {
 	return out
 }
 
+func argBool(args map[string]any, key string) bool {
+	if v, ok := args[key].(bool); ok {
+		return v
+	}
+	return false
+}
+
 func parseArgs(raw json.RawMessage) (map[string]any, error) {
 	var args map[string]any
 	if len(raw) == 0 {
@@ -161,18 +170,49 @@ func requireRegisteredWorkspace(ctx context.Context, a *Adapter, args map[string
 	return ws, nil
 }
 
+const mcpSnippetLen = 500
+
+// mcpSearchResultItem is the per-result payload returned by memory_query,
+// memory_search, and memory_vsearch over MCP. By default content is omitted;
+// agents set include_content=true (or call memory_get) to obtain full text.
+type mcpSearchResultItem struct {
+	ID            string    `json:"id"`
+	DocumentID    string    `json:"document_id"`
+	WorkspaceHash string    `json:"workspace_hash"`
+	Title         string    `json:"title"`
+	Snippet       string    `json:"snippet"`
+	Content       string    `json:"content,omitempty"`
+	Score         float64   `json:"score"`
+	Tags          []string  `json:"tags"`
+	Collection    string    `json:"collection"`
+	SourcePath    string    `json:"source_path"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// mcpSearchResponse is the response envelope for all three search tools.
+type mcpSearchResponse struct {
+	Results    []mcpSearchResultItem `json:"results"`
+	Total      int                   `json:"total"`
+	QueryMs    int64                 `json:"query_ms"`
+	NextCursor string                `json:"next_cursor,omitempty"`
+}
+
 func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_query",
-			Description: "Hybrid search combining BM25 text and vector similarity",
+			Description: "Hybrid search (BM25 + vector + RRF + recency). Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"query":       {"type": "string", "description": "Search query"},
-				"workspace":   {"type": "string", "description": "Workspace hash"},
-				"max_results": {"type": "number", "description": "Max results (default 10, max 100)"},
+				"query":           {"type": "string", "description": "Search query"},
+				"workspace":       {"type": "string", "description": "Workspace hash"},
+				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
+				"cursor":          {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
+				"include_content": {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			start := time.Now()
 			args, err := parseArgs(req.Params.Arguments)
 			if err != nil {
 				return errResult("invalid arguments"), nil
@@ -189,11 +229,64 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 				return errResult("hybrid search not available (no embedding provider)"), nil
 			}
 			maxResults := argInt(args, "max_results", 10, 100)
-			results, err := a.searchService.HybridSearch(ctx, query, ws, maxResults, nil)
+			includeContent := argBool(args, "include_content")
+
+			cursorToken := argString(args, "cursor")
+			offset, cursorErr := search.VerifyCursor(cursorToken, query)
+			if cursorErr != nil {
+				if errors.Is(cursorErr, search.ErrCursorQueryMismatch) {
+					return errResult("cursor query mismatch: pass the same query when paginating"), nil
+				}
+				return errResult(fmt.Sprintf("invalid cursor: %v", cursorErr)), nil
+			}
+
+			fetchLimit := offset + maxResults + 1
+			results, err := a.searchService.HybridSearch(ctx, query, ws, fetchLimit, nil)
 			if err != nil {
 				return errResult(fmt.Sprintf("hybrid search failed: %v", err)), nil
 			}
-			return textResult(results)
+
+			total := len(results)
+			hasMore := total > offset+maxResults
+			pageEnd := offset + maxResults
+			if pageEnd > total {
+				pageEnd = total
+			}
+			pageStart := offset
+			if pageStart > total {
+				pageStart = total
+			}
+			page := results[pageStart:pageEnd]
+
+			items := make([]mcpSearchResultItem, len(page))
+			for i, r := range page {
+				item := mcpSearchResultItem{
+					ID: r.ID, DocumentID: r.DocumentID,
+					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+					Snippet:    search.TruncateSnippet(r.Content, mcpSnippetLen),
+					Score:      r.Score,
+					Tags:       r.Tags,
+					Collection: r.Collection, SourcePath: r.SourcePath,
+					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+				}
+				if item.Tags == nil {
+					item.Tags = []string{}
+				}
+				if includeContent {
+					item.Content = r.Content
+				}
+				items[i] = item
+			}
+
+			resp := mcpSearchResponse{
+				Results: items,
+				Total:   total,
+				QueryMs: time.Since(start).Milliseconds(),
+			}
+			if hasMore {
+				resp.NextCursor = search.EncodeCursor(pageEnd, search.QueryHash(query))
+			}
+			return textResult(resp)
 		},
 	)
 }
@@ -202,15 +295,18 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_search",
-			Description: "BM25 text search across memory documents",
+			Description: "BM25 text search. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"query":       {"type": "string", "description": "Search query"},
-				"workspace":   {"type": "string", "description": "Workspace hash"},
-				"max_results": {"type": "number", "description": "Max results (default 10, max 100)"},
-				"tags":        {"type": "array", "description": "Filter by tags", "items": map[string]any{"type": "string"}},
+				"query":           {"type": "string", "description": "Search query"},
+				"workspace":       {"type": "string", "description": "Workspace hash"},
+				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
+				"tags":            {"type": "array", "description": "Filter by tags", "items": map[string]any{"type": "string"}},
+				"cursor":          {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
+				"include_content": {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			start := time.Now()
 			args, err := parseArgs(req.Params.Arguments)
 			if err != nil {
 				return errResult("invalid arguments"), nil
@@ -225,36 +321,40 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			}
 			maxResults := argInt(args, "max_results", 10, 100)
 			tags := argStringSlice(args, "tags")
+			includeContent := argBool(args, "include_content")
 
-			type resultRow struct {
-				ID            string    `json:"id"`
-				DocumentID    string    `json:"document_id"`
-				WorkspaceHash string    `json:"workspace_hash"`
-				Title         string    `json:"title"`
-				Content       string    `json:"content"`
-				SourcePath    string    `json:"source_path"`
-				Collection    string    `json:"collection"`
-				Tags          []string  `json:"tags"`
-				Score         float64   `json:"score"`
-				CreatedAt     time.Time `json:"created_at"`
-				UpdatedAt     time.Time `json:"updated_at"`
+			cursorToken := argString(args, "cursor")
+			offset, cursorErr := search.VerifyCursor(cursorToken, query)
+			if cursorErr != nil {
+				if errors.Is(cursorErr, search.ErrCursorQueryMismatch) {
+					return errResult("cursor query mismatch: pass the same query when paginating"), nil
+				}
+				return errResult(fmt.Sprintf("invalid cursor: %v", cursorErr)), nil
 			}
 
-			var results []resultRow
-			limit := int32(maxResults)
+			fetchLimit := int32(offset + maxResults + 1)
+
+			type bm25Row struct {
+				ID, DocumentID             string
+				WorkspaceHash, Title       string
+				Content, SourcePath        string
+				Collection                 string
+				Tags                       []string
+				Score                      float64
+				CreatedAt, UpdatedAt       time.Time
+			}
+			var allRows []bm25Row
 
 			if ws == "all" {
 				if len(tags) > 0 {
 					rows, err := a.queries.BM25SearchAllWithTags(ctx, sqlc.BM25SearchAllWithTagsParams{
-						Query:      query,
-						Tags:       tags,
-						MaxResults: limit,
+						Query: query, Tags: tags, MaxResults: fetchLimit,
 					})
 					if err != nil {
 						return errResult(fmt.Sprintf("bm25 search failed: %v", err)), nil
 					}
 					for _, r := range rows {
-						results = append(results, resultRow{
+						allRows = append(allRows, bm25Row{
 							ID: r.ID.String(), DocumentID: r.DocumentID.String(),
 							WorkspaceHash: r.WorkspaceHash, Title: r.Title,
 							Content: r.Content, SourcePath: r.SourcePath,
@@ -264,14 +364,13 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 					}
 				} else {
 					rows, err := a.queries.BM25SearchAll(ctx, sqlc.BM25SearchAllParams{
-						Query:      query,
-						MaxResults: limit,
+						Query: query, MaxResults: fetchLimit,
 					})
 					if err != nil {
 						return errResult(fmt.Sprintf("bm25 search failed: %v", err)), nil
 					}
 					for _, r := range rows {
-						results = append(results, resultRow{
+						allRows = append(allRows, bm25Row{
 							ID: r.ID.String(), DocumentID: r.DocumentID.String(),
 							WorkspaceHash: r.WorkspaceHash, Title: r.Title,
 							Content: r.Content, SourcePath: r.SourcePath,
@@ -282,16 +381,13 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				}
 			} else if len(tags) > 0 {
 				rows, err := a.queries.BM25SearchWithTags(ctx, sqlc.BM25SearchWithTagsParams{
-					Query:         query,
-					WorkspaceHash: ws,
-					Tags:          tags,
-					MaxResults:    limit,
+					Query: query, WorkspaceHash: ws, Tags: tags, MaxResults: fetchLimit,
 				})
 				if err != nil {
 					return errResult(fmt.Sprintf("bm25 search failed: %v", err)), nil
 				}
 				for _, r := range rows {
-					results = append(results, resultRow{
+					allRows = append(allRows, bm25Row{
 						ID: r.ID.String(), DocumentID: r.DocumentID.String(),
 						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
 						Content: r.Content, SourcePath: r.SourcePath,
@@ -301,15 +397,13 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				}
 			} else {
 				rows, err := a.queries.BM25Search(ctx, sqlc.BM25SearchParams{
-					Query:         query,
-					WorkspaceHash: ws,
-					MaxResults:    limit,
+					Query: query, WorkspaceHash: ws, MaxResults: fetchLimit,
 				})
 				if err != nil {
 					return errResult(fmt.Sprintf("bm25 search failed: %v", err)), nil
 				}
 				for _, r := range rows {
-					results = append(results, resultRow{
+					allRows = append(allRows, bm25Row{
 						ID: r.ID.String(), DocumentID: r.DocumentID.String(),
 						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
 						Content: r.Content, SourcePath: r.SourcePath,
@@ -318,7 +412,48 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 					})
 				}
 			}
-			return textResult(results)
+
+			total := len(allRows)
+			hasMore := total > offset+maxResults
+			pageEnd := offset + maxResults
+			if pageEnd > total {
+				pageEnd = total
+			}
+			pageStart := offset
+			if pageStart > total {
+				pageStart = total
+			}
+			page := allRows[pageStart:pageEnd]
+
+			items := make([]mcpSearchResultItem, len(page))
+			for i, r := range page {
+				item := mcpSearchResultItem{
+					ID: r.ID, DocumentID: r.DocumentID,
+					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+					Snippet:    search.TruncateSnippet(r.Content, mcpSnippetLen),
+					Score:      r.Score,
+					Tags:       r.Tags,
+					Collection: r.Collection, SourcePath: r.SourcePath,
+					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+				}
+				if item.Tags == nil {
+					item.Tags = []string{}
+				}
+				if includeContent {
+					item.Content = r.Content
+				}
+				items[i] = item
+			}
+
+			resp := mcpSearchResponse{
+				Results: items,
+				Total:   total,
+				QueryMs: time.Since(start).Milliseconds(),
+			}
+			if hasMore {
+				resp.NextCursor = search.EncodeCursor(pageEnd, search.QueryHash(query))
+			}
+			return textResult(resp)
 		},
 	)
 }
@@ -327,14 +462,17 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_vsearch",
-			Description: "Vector similarity search using embeddings",
+			Description: "Vector similarity search using embeddings. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"query":       {"type": "string", "description": "Search query"},
-				"workspace":   {"type": "string", "description": "Workspace hash"},
-				"max_results": {"type": "number", "description": "Max results (default 10, max 100)"},
+				"query":           {"type": "string", "description": "Search query"},
+				"workspace":       {"type": "string", "description": "Workspace hash"},
+				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
+				"cursor":          {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
+				"include_content": {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			start := time.Now()
 			args, err := parseArgs(req.Params.Arguments)
 			if err != nil {
 				return errResult("invalid arguments"), nil
@@ -351,6 +489,16 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				return errResult("vector search requires embedding provider"), nil
 			}
 			maxResults := argInt(args, "max_results", 10, 100)
+			includeContent := argBool(args, "include_content")
+
+			cursorToken := argString(args, "cursor")
+			offset, cursorErr := search.VerifyCursor(cursorToken, query)
+			if cursorErr != nil {
+				if errors.Is(cursorErr, search.ErrCursorQueryMismatch) {
+					return errResult("cursor query mismatch: pass the same query when paginating"), nil
+				}
+				return errResult(fmt.Sprintf("invalid cursor: %v", cursorErr)), nil
+			}
 
 			embedCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
@@ -359,32 +507,30 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				return errResult(fmt.Sprintf("embedding query failed: %v", err)), nil
 			}
 
-			type vsearchRow struct {
-				ID            string    `json:"id"`
-				DocumentID    string    `json:"document_id"`
-				WorkspaceHash string    `json:"workspace_hash"`
-				Title         string    `json:"title"`
-				Content       string    `json:"content"`
-				SourcePath    string    `json:"source_path"`
-				Collection    string    `json:"collection"`
-				Tags          []string  `json:"tags"`
-				Score         float64   `json:"score"`
-				CreatedAt     time.Time `json:"created_at"`
-				UpdatedAt     time.Time `json:"updated_at"`
-			}
+			fetchLimit := int32(offset + maxResults + 1)
 
-			var results []vsearchRow
+			type vsRow struct {
+				ID, DocumentID             string
+				WorkspaceHash, Title       string
+				Content, SourcePath        string
+				Collection                 string
+				Tags                       []string
+				Score                      float64
+				CreatedAt, UpdatedAt       time.Time
+			}
+			var allRows []vsRow
+
 			if ws == "all" {
 				rows, err := a.queries.VectorSearchAll(ctx, sqlc.VectorSearchAllParams{
 					QueryEmbedding: pgvector_go.NewVector(vec),
-					MaxResults:     int32(maxResults),
+					MaxResults:     fetchLimit,
 				})
 				if err != nil {
 					return errResult(fmt.Sprintf("vector search failed: %v", err)), nil
 				}
-				results = make([]vsearchRow, 0, len(rows))
+				allRows = make([]vsRow, 0, len(rows))
 				for _, r := range rows {
-					results = append(results, vsearchRow{
+					allRows = append(allRows, vsRow{
 						ID: r.ChunkID.String(), DocumentID: r.DocumentID.String(),
 						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
 						Content: r.Content, SourcePath: r.SourcePath,
@@ -396,14 +542,14 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				rows, err := a.queries.VectorSearch(ctx, sqlc.VectorSearchParams{
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					WorkspaceHash:  ws,
-					MaxResults:     int32(maxResults),
+					MaxResults:     fetchLimit,
 				})
 				if err != nil {
 					return errResult(fmt.Sprintf("vector search failed: %v", err)), nil
 				}
-				results = make([]vsearchRow, 0, len(rows))
+				allRows = make([]vsRow, 0, len(rows))
 				for _, r := range rows {
-					results = append(results, vsearchRow{
+					allRows = append(allRows, vsRow{
 						ID: r.ChunkID.String(), DocumentID: r.DocumentID.String(),
 						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
 						Content: r.Content, SourcePath: r.SourcePath,
@@ -412,7 +558,58 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 					})
 				}
 			}
-			return textResult(results)
+
+			// Stable secondary sort by id ASC on tied scores. Keeps cursor
+			// pagination deterministic without forcing PostgreSQL to satisfy
+			// a multi-column ORDER BY through the HNSW index (#358).
+			sort.SliceStable(allRows, func(i, j int) bool {
+				if allRows[i].Score != allRows[j].Score {
+					return allRows[i].Score > allRows[j].Score
+				}
+				return allRows[i].ID < allRows[j].ID
+			})
+
+			total := len(allRows)
+			hasMore := total > offset+maxResults
+			pageEnd := offset + maxResults
+			if pageEnd > total {
+				pageEnd = total
+			}
+			pageStart := offset
+			if pageStart > total {
+				pageStart = total
+			}
+			page := allRows[pageStart:pageEnd]
+
+			items := make([]mcpSearchResultItem, len(page))
+			for i, r := range page {
+				item := mcpSearchResultItem{
+					ID: r.ID, DocumentID: r.DocumentID,
+					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+					Snippet:    search.TruncateSnippet(r.Content, mcpSnippetLen),
+					Score:      r.Score,
+					Tags:       r.Tags,
+					Collection: r.Collection, SourcePath: r.SourcePath,
+					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+				}
+				if item.Tags == nil {
+					item.Tags = []string{}
+				}
+				if includeContent {
+					item.Content = r.Content
+				}
+				items[i] = item
+			}
+
+			resp := mcpSearchResponse{
+				Results: items,
+				Total:   total,
+				QueryMs: time.Since(start).Milliseconds(),
+			}
+			if hasMore {
+				resp.NextCursor = search.EncodeCursor(pageEnd, search.QueryHash(query))
+			}
+			return textResult(resp)
 		},
 	)
 }
@@ -818,7 +1015,7 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 			// Required since #338/PR #340 — nil makes ANY('{}'::text[]) always false. See #356.
 			docs, err := a.queries.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
 				WorkspaceHash: ws,
-				Limit:         int32(limit),
+				MaxResults:    int32(limit),
 				Collections:   []string{"memory", "session-summary"},
 			})
 			if err != nil {

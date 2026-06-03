@@ -89,3 +89,41 @@ func TestRecencyBoost_VeryOldDoc(t *testing.T) {
 		t.Errorf("1000-day multiplier should be near zero, got %f", multiplier)
 	}
 }
+
+func TestApplyRecencyBoost_StableTiebreaker(t *testing.T) {
+	// Two results with identical Score and identical UpdatedAt timestamp.
+	// After recency boost, both must have identical boosted scores (same pre-score, same age → same boost).
+	// Tiebreaker: smaller ID wins.
+	baseTime := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+	results := []Result{
+		{ID: "uuid-x-bbb", Score: 0.5, UpdatedAt: baseTime},
+		{ID: "uuid-a-aaa", Score: 0.5, UpdatedAt: baseTime},
+	}
+
+	boosted := ApplyRecencyBoost(results, 0.3, 180, now)
+	if len(boosted) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(boosted))
+	}
+
+	// Both must have identical scores (since pre-score and age are identical)
+	if !approxEqual(boosted[0].Score, boosted[1].Score, 1e-9) {
+		t.Errorf("tied results should have same boosted score: %f vs %f", boosted[0].Score, boosted[1].Score)
+	}
+
+	// Tiebreaker: smaller ID first
+	if boosted[0].ID != "uuid-a-aaa" {
+		t.Errorf("tiebreaker: expected first ID='uuid-a-aaa', got '%s'", boosted[0].ID)
+	}
+	if boosted[1].ID != "uuid-x-bbb" {
+		t.Errorf("tiebreaker: expected second ID='uuid-x-bbb', got '%s'", boosted[1].ID)
+	}
+
+	// Determinism check: run twice, verify identical order
+	for iter := 0; iter < 2; iter++ {
+		result := ApplyRecencyBoost(results, 0.3, 180, now)
+		if result[0].ID != "uuid-a-aaa" || result[1].ID != "uuid-x-bbb" {
+			t.Errorf("iteration %d: order changed; got %s, %s", iter, result[0].ID, result[1].ID)
+		}
+	}
+}
