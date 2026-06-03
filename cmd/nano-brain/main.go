@@ -155,6 +155,9 @@ func main() {
 		case "auth":
 			runAuthCmd(args[1:])
 			return
+		case "mcp-url":
+			runMCPURLCmd(args[1:])
+			return
 		case "version":
 			runVersionCmd(args[1:])
 			return

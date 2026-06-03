@@ -119,6 +119,7 @@ type statusResponse struct {
 	QueueStatus          string                    `json:"queue_status"`
 	QueuePending         int64                     `json:"queue_pending"`
 	HarvesterStatus      harvesterStatusResponse   `json:"harvester_status"`
+	Version              string                    `json:"version,omitempty"`
 }
 
 func (h *Health) Health(c echo.Context) error {
@@ -179,6 +180,7 @@ func (h *Health) Status(c echo.Context) error {
 		ActiveProvider:      h.embedCfg.Provider,
 		WorkspaceCount:      h.workspaceCount(c.Request().Context()),
 		HarvesterStatus:     harvestStatus,
+		Version:             h.version,
 	}
 
 	if h.queue != nil {

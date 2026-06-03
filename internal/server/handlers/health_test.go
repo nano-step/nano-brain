@@ -149,6 +149,28 @@ func openCodeStatus(t *testing.T, snap handlers.HarvestStatusSnapshot) map[strin
 	return oc
 }
 
+func TestStatusReturnsVersion(t *testing.T) {
+	getCfg := func() (config.HarvesterConfig, config.IntervalsConfig) {
+		return config.HarvesterConfig{}, config.IntervalsConfig{}
+	}
+	h := handlers.NewHealth(&mockPool{}, zerolog.Nop(), "v1.2.3", time.Now(), &mockQueue{}, getCfg, nil, config.EmbeddingConfig{}, 0)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.Status(c); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want 200", rec.Code)
+	}
+	body := decodeJSON(t, rec.Body)
+	if got, ok := body["version"].(string); !ok || got != "v1.2.3" {
+		t.Errorf("version = %v, want v1.2.3", body["version"])
+	}
+}
+
 func TestStatusOpenCode_DBRootMode(t *testing.T) {
 	oc := openCodeStatus(t, handlers.HarvestStatusSnapshot{
 		Mode: "db_root", DBRoot: "/home/u/dbs", DBCount: 3,
