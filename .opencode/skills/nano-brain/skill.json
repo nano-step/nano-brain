@@ -1,6 +1,6 @@
 {
     "name": "nano-brain",
-    "version": "3.1.0",
+    "version": "3.2.0",
     "description": "Persistent memory + code intelligence for AI coding agents. Hybrid search (BM25 + vector + LLM rerank), cross-session recall, symbol analysis, impact checks, OpenCode/Claude Code session harvesting. Use this skill when you need to recall prior decisions, search across sessions/codebase, trace symbol callers/callees, or persist long-term context.",
     "compatibility": "OpenCode, Claude Code, any MCP-aware agent",
     "agent": null,

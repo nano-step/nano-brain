@@ -4,7 +4,7 @@ description: Persistent memory + code intelligence for AI coding agents. Hybrid 
 compatibility: OpenCode, Claude Code, any MCP-aware agent
 metadata:
   author: nano-step
-  version: 3.1.0
+  version: 3.2.0
   upstream: https://github.com/nano-step/nano-brain
 ---
 
@@ -15,7 +15,7 @@ Persistent memory + code-intel daemon. Agents talk to it via **MCP** (preferred)
 This file documents the MCP surface. Deeper references:
 
 - `@references/http-api.md` — full HTTP endpoint reference (for scripts, tests, dashboards)
-- `@references/cli-cheatsheet.md` — `npx nano-brain ...` subcommand reference
+- `@references/cli-cheatsheet.md` — CLI subcommand reference (incl. `version --which`, `mcp-url`, `doctor --online`)
 - `@references/code-intelligence.md` — symbol graph (`context`, `code-impact`, `detect-changes`)
 - `@references/config-reference.md` — daemon `config.yml` schema + env vars
 
