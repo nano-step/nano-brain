@@ -32,7 +32,9 @@ nano-brain is a persistent memory server for AI coding agents that solves sessio
 
 ## Quick Start
 
-### Option A: Via npx (no Go required)
+AI agents talk to nano-brain via **MCP** (zero per-call overhead) — that is the recommended path. For CLI usage, prefer a globally-installed binary over `npx` to avoid 600 ms–1.5 s of cold-start overhead per invocation.
+
+### Option A: Install globally via npm (recommended for CLI)
 
 ```bash
 # Start PostgreSQL + pgvector
@@ -43,18 +45,37 @@ docker run -d --name nanobrain-pg -p 5432:5432 \
 # Start Ollama + pull embedding model
 ollama pull nomic-embed-text
 
+# Install nano-brain globally (downloads pre-built Go binary; no Go toolchain required)
+npm install -g @nano-step/nano-brain@latest
+
 # Check prerequisites
-npx @nano-step/nano-brain@beta doctor
+nano-brain doctor
 
 # Start server
-npx @nano-step/nano-brain@beta
+nano-brain serve -d
 ```
 
-> **Also available as:** `npx nano-brain@beta` (unscoped alias)
+> No `sudo` available? Use `npm install -g --prefix ~/.local @nano-step/nano-brain@latest` and ensure `~/.local/bin` is on your `$PATH`.
+>
+> **MCP clients** point at `http://localhost:3100/mcp` (host) or `http://host.docker.internal:3100/mcp` (container). See [`MCP Configuration`](#mcp-configuration) below.
+
+### Option B: One-off via npx (fallback — no global install)
+
+Use this if you cannot or do not want a global install. Each `npx` invocation re-resolves the binary and pays 600 ms–1.5 s of cold-start overhead — for an AI agent issuing many commands per session, that adds up. Prefer Option A for repeated use.
+
+```bash
+# Check prerequisites
+npx @nano-step/nano-brain@latest doctor
+
+# Start server
+npx @nano-step/nano-brain@latest
+```
+
+> **Also available as:** `npx nano-brain@latest` (unscoped alias)
 >
 > **Note:** Do NOT run `npx nano-brain` from the nano-brain source directory — npm will resolve the local package instead of the registry. Run from any other directory.
 
-### Option B: Build from source
+### Option C: Build from source
 
 ```bash
 # Build
