@@ -56,7 +56,7 @@ func (s *SearchService) DefaultLimit() int {
 	return s.config.Limit
 }
 
-func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string) ([]Result, error) {
+func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *TimeRangeFilter) ([]Result, error) {
 	s.configMutex.RLock()
 	rrfK := s.config.RrfK
 	recencyWeight := s.config.RecencyWeight
@@ -80,10 +80,15 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 	g.Go(func() error {
 		if workspace == "all" {
 			if len(tags) > 0 {
+				ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 				rows, err := s.queries.BM25SearchAllWithTags(gctx, sqlc.BM25SearchAllWithTagsParams{
-					Query:      query,
-					Tags:       tags,
-					MaxResults: fetchLimit,
+					Query:         query,
+					Tags:          tags,
+					MaxResults:    fetchLimit,
+					CreatedAfter:  ca,
+					CreatedBefore: cb,
+					UpdatedAfter:  ua,
+					UpdatedBefore: ub,
 				})
 				if err != nil {
 					bm25Err = err
@@ -107,9 +112,14 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					})
 				}
 			} else {
+				ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 				rows, err := s.queries.BM25SearchAll(gctx, sqlc.BM25SearchAllParams{
-					Query:      query,
-					MaxResults: fetchLimit,
+					Query:         query,
+					MaxResults:    fetchLimit,
+					CreatedAfter:  ca,
+					CreatedBefore: cb,
+					UpdatedAfter:  ua,
+					UpdatedBefore: ub,
 				})
 				if err != nil {
 					bm25Err = err
@@ -135,11 +145,16 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 			}
 		} else {
 			if len(tags) > 0 {
+				ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 				rows, err := s.queries.BM25SearchWithTags(gctx, sqlc.BM25SearchWithTagsParams{
 					Query:         query,
 					WorkspaceHash: workspace,
 					Tags:          tags,
 					MaxResults:    fetchLimit,
+					CreatedAfter:  ca,
+					CreatedBefore: cb,
+					UpdatedAfter:  ua,
+					UpdatedBefore: ub,
 				})
 				if err != nil {
 					bm25Err = err
@@ -163,10 +178,15 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					})
 				}
 			} else {
+				ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 				rows, err := s.queries.BM25Search(gctx, sqlc.BM25SearchParams{
 					Query:         query,
 					WorkspaceHash: workspace,
 					MaxResults:    fetchLimit,
+					CreatedAfter:  ca,
+					CreatedBefore: cb,
+					UpdatedAfter:  ua,
+					UpdatedBefore: ub,
 				})
 				if err != nil {
 					bm25Err = err
@@ -206,10 +226,15 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 		}
 		if workspace == "all" {
 			if len(tags) > 0 {
+				ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 				rows, err := s.queries.VectorSearchAllWithTags(gctx, sqlc.VectorSearchAllWithTagsParams{
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					Tags:           tags,
 					MaxResults:     fetchLimit,
+					CreatedAfter:   ca,
+					CreatedBefore:  cb,
+					UpdatedAfter:   ua,
+					UpdatedBefore:  ub,
 				})
 				if err != nil {
 					vectorErr = err
@@ -233,9 +258,14 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					})
 				}
 			} else {
+				ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 				rows, err := s.queries.VectorSearchAll(gctx, sqlc.VectorSearchAllParams{
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					MaxResults:     fetchLimit,
+					CreatedAfter:   ca,
+					CreatedBefore:  cb,
+					UpdatedAfter:   ua,
+					UpdatedBefore:  ub,
 				})
 				if err != nil {
 					vectorErr = err
@@ -261,11 +291,16 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 			}
 		} else {
 			if len(tags) > 0 {
+				ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 				rows, err := s.queries.VectorSearchWithTags(gctx, sqlc.VectorSearchWithTagsParams{
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					WorkspaceHash:  workspace,
 					Tags:           tags,
 					MaxResults:     fetchLimit,
+					CreatedAfter:   ca,
+					CreatedBefore:  cb,
+					UpdatedAfter:   ua,
+					UpdatedBefore:  ub,
 				})
 				if err != nil {
 					vectorErr = err
@@ -289,10 +324,15 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					})
 				}
 			} else {
+				ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 				rows, err := s.queries.VectorSearch(gctx, sqlc.VectorSearchParams{
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					WorkspaceHash:  workspace,
 					MaxResults:     fetchLimit,
+					CreatedAfter:   ca,
+					CreatedBefore:  cb,
+					UpdatedAfter:   ua,
+					UpdatedBefore:  ub,
 				})
 				if err != nil {
 					vectorErr = err

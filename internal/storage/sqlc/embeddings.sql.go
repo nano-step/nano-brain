@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -388,13 +389,21 @@ FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE e.workspace_hash = $2
+  AND ($3::timestamptz IS NULL OR d.updated_at >= $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at <= $4)
+  AND ($5::timestamptz IS NULL OR d.created_at >= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at <= $6)
 ORDER BY e.embedding <=> $1::vector
-LIMIT $3
+LIMIT $7
 `
 
 type VectorSearchParams struct {
 	QueryEmbedding pgvector_go.Vector
 	WorkspaceHash  string
+	UpdatedAfter   sql.NullTime
+	UpdatedBefore  sql.NullTime
+	CreatedAfter   sql.NullTime
+	CreatedBefore  sql.NullTime
 	MaxResults     int32
 }
 
@@ -415,7 +424,15 @@ type VectorSearchRow struct {
 }
 
 func (q *Queries) VectorSearch(ctx context.Context, arg VectorSearchParams) ([]VectorSearchRow, error) {
-	rows, err := q.db.QueryContext(ctx, vectorSearch, arg.QueryEmbedding, arg.WorkspaceHash, arg.MaxResults)
+	rows, err := q.db.QueryContext(ctx, vectorSearch,
+		arg.QueryEmbedding,
+		arg.WorkspaceHash,
+		arg.UpdatedAfter,
+		arg.UpdatedBefore,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
+		arg.MaxResults,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -460,12 +477,20 @@ SELECT e.id, e.chunk_id, e.workspace_hash,
 FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
+WHERE ($2::timestamptz IS NULL OR d.updated_at >= $2)
+  AND ($3::timestamptz IS NULL OR d.updated_at <= $3)
+  AND ($4::timestamptz IS NULL OR d.created_at >= $4)
+  AND ($5::timestamptz IS NULL OR d.created_at <= $5)
 ORDER BY e.embedding <=> $1::vector
-LIMIT $2
+LIMIT $6
 `
 
 type VectorSearchAllParams struct {
 	QueryEmbedding pgvector_go.Vector
+	UpdatedAfter   sql.NullTime
+	UpdatedBefore  sql.NullTime
+	CreatedAfter   sql.NullTime
+	CreatedBefore  sql.NullTime
 	MaxResults     int32
 }
 
@@ -486,7 +511,14 @@ type VectorSearchAllRow struct {
 }
 
 func (q *Queries) VectorSearchAll(ctx context.Context, arg VectorSearchAllParams) ([]VectorSearchAllRow, error) {
-	rows, err := q.db.QueryContext(ctx, vectorSearchAll, arg.QueryEmbedding, arg.MaxResults)
+	rows, err := q.db.QueryContext(ctx, vectorSearchAll,
+		arg.QueryEmbedding,
+		arg.UpdatedAfter,
+		arg.UpdatedBefore,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
+		arg.MaxResults,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -532,13 +564,21 @@ FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE d.tags && $2::text[]
+  AND ($3::timestamptz IS NULL OR d.updated_at >= $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at <= $4)
+  AND ($5::timestamptz IS NULL OR d.created_at >= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at <= $6)
 ORDER BY e.embedding <=> $1::vector
-LIMIT $3
+LIMIT $7
 `
 
 type VectorSearchAllWithTagsParams struct {
 	QueryEmbedding pgvector_go.Vector
 	Tags           []string
+	UpdatedAfter   sql.NullTime
+	UpdatedBefore  sql.NullTime
+	CreatedAfter   sql.NullTime
+	CreatedBefore  sql.NullTime
 	MaxResults     int32
 }
 
@@ -559,7 +599,15 @@ type VectorSearchAllWithTagsRow struct {
 }
 
 func (q *Queries) VectorSearchAllWithTags(ctx context.Context, arg VectorSearchAllWithTagsParams) ([]VectorSearchAllWithTagsRow, error) {
-	rows, err := q.db.QueryContext(ctx, vectorSearchAllWithTags, arg.QueryEmbedding, pq.Array(arg.Tags), arg.MaxResults)
+	rows, err := q.db.QueryContext(ctx, vectorSearchAllWithTags,
+		arg.QueryEmbedding,
+		pq.Array(arg.Tags),
+		arg.UpdatedAfter,
+		arg.UpdatedBefore,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
+		arg.MaxResults,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -606,14 +654,22 @@ JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE e.workspace_hash = $2
   AND d.tags && $3::text[]
+  AND ($4::timestamptz IS NULL OR d.updated_at >= $4)
+  AND ($5::timestamptz IS NULL OR d.updated_at <= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR d.created_at <= $7)
 ORDER BY e.embedding <=> $1::vector
-LIMIT $4
+LIMIT $8
 `
 
 type VectorSearchWithTagsParams struct {
 	QueryEmbedding pgvector_go.Vector
 	WorkspaceHash  string
 	Tags           []string
+	UpdatedAfter   sql.NullTime
+	UpdatedBefore  sql.NullTime
+	CreatedAfter   sql.NullTime
+	CreatedBefore  sql.NullTime
 	MaxResults     int32
 }
 
@@ -638,6 +694,10 @@ func (q *Queries) VectorSearchWithTags(ctx context.Context, arg VectorSearchWith
 		arg.QueryEmbedding,
 		arg.WorkspaceHash,
 		pq.Array(arg.Tags),
+		arg.UpdatedAfter,
+		arg.UpdatedBefore,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
 		arg.MaxResults,
 	)
 	if err != nil {

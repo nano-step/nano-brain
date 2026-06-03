@@ -2,11 +2,77 @@ package search
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
+	"time"
 )
+
+// TimeRangeFilter carries optional document-timestamp bounds for search calls.
+// Zero-value struct (all nil) is a valid "no filters" sentinel.
+type TimeRangeFilter struct {
+	// Parsed absolute cutoffs. nil = filter omitted.
+	CreatedAfter  *time.Time
+	CreatedBefore *time.Time
+	UpdatedAfter  *time.Time
+	UpdatedBefore *time.Time
+
+	// Original raw input strings, preserved for cursor-hash stability across
+	// paginated calls with relative durations like "30d" (per design D5 / R1).
+	// Empty string = filter omitted.
+	CreatedAfterRaw  string
+	CreatedBeforeRaw string
+	UpdatedAfterRaw  string
+	UpdatedBeforeRaw string
+}
+
+// ToSqlNullTimes converts the parsed time.Time fields to sql.NullTime.
+// Returns (CreatedAfter, CreatedBefore, UpdatedAfter, UpdatedBefore) in that order.
+// nil *time.Time becomes sql.NullTime{Valid: false}.
+func (f *TimeRangeFilter) ToSqlNullTimes() (ca, cb, ua, ub sql.NullTime) {
+	if f == nil {
+		return ca, cb, ua, ub // all zero-value (Valid: false)
+	}
+	if f.CreatedAfter != nil {
+		ca = sql.NullTime{Time: *f.CreatedAfter, Valid: true}
+	}
+	if f.CreatedBefore != nil {
+		cb = sql.NullTime{Time: *f.CreatedBefore, Valid: true}
+	}
+	if f.UpdatedAfter != nil {
+		ua = sql.NullTime{Time: *f.UpdatedAfter, Valid: true}
+	}
+	if f.UpdatedBefore != nil {
+		ub = sql.NullTime{Time: *f.UpdatedBefore, Valid: true}
+	}
+	return ca, cb, ua, ub
+}
+
+// CursorString returns a deterministic representation of the raw time-range inputs
+// for cursor hashing. Uses raw input strings (NOT parsed times) to preserve stability
+// across paginated calls when relative durations like "30d" are used.
+// Empty strings are represented as the literal "null".
+func (f *TimeRangeFilter) CursorString() string {
+	if f == nil {
+		return "null|null|null|null"
+	}
+	emptyOr := func(s string) string {
+		if s == "" {
+			return "null"
+		}
+		return s
+	}
+	return fmt.Sprintf("%s|%s|%s|%s",
+		emptyOr(f.CreatedAfterRaw),
+		emptyOr(f.CreatedBeforeRaw),
+		emptyOr(f.UpdatedAfterRaw),
+		emptyOr(f.UpdatedBeforeRaw),
+	)
+}
 
 // ErrInvalidCursor is returned when a cursor token is malformed
 // (not valid base64url, not valid JSON, or contains a negative offset).
@@ -28,10 +94,47 @@ type cursorPayload struct {
 	QueryHash string `json:"q"`
 }
 
-// QueryHash returns the first 16 hex chars of sha256(query),
+// QueryHashInput encapsulates all filter components used for cursor hash computation.
+// This ensures that cursors invalidate when ANY filter changes, not just the query text.
+type QueryHashInput struct {
+	Query       string
+	Tags        []string
+	Scope       string
+	Collections []string
+	TimeRange   *TimeRangeFilter
+}
+
+// QueryHash returns the first 16 hex chars of sha256(...),
 // used to guard against cross-query cursor reuse.
-func QueryHash(query string) string {
-	sum := sha256.Sum256([]byte(query))
+// Hashes ALL filter inputs: query text + tags + scope + collections + time-range raw inputs.
+// Raw time-range strings (not parsed times) are used to preserve cursor stability across
+// paginated calls when relative durations like "30d" are used.
+func QueryHash(input QueryHashInput) string {
+	var components []string
+
+	components = append(components, input.Query)
+
+	sortedTags := make([]string, len(input.Tags))
+	copy(sortedTags, input.Tags)
+	sort.Strings(sortedTags)
+	components = append(components, strings.Join(sortedTags, ","))
+
+	components = append(components, input.Scope)
+
+	sortedCollections := make([]string, len(input.Collections))
+	copy(sortedCollections, input.Collections)
+	sort.Strings(sortedCollections)
+	components = append(components, strings.Join(sortedCollections, ","))
+
+	timeRangeStr := "null|null|null|null"
+	if input.TimeRange != nil {
+		timeRangeStr = input.TimeRange.CursorString()
+	}
+	components = append(components, timeRangeStr)
+
+	combined := strings.Join(components, "\x1f")
+
+	sum := sha256.Sum256([]byte(combined))
 	return fmt.Sprintf("%x", sum[:8])
 }
 
@@ -82,10 +185,10 @@ func DecodeCursor(token string) (offset int, queryHash string, err error) {
 }
 
 // VerifyCursor decodes the token and confirms the embedded queryHash
-// matches QueryHash(currentQuery). Returns the decoded offset on success.
+// matches QueryHash(input). Returns the decoded offset on success.
 // Returns ErrInvalidCursor for malformed cursors, ErrCursorQueryMismatch
-// when the query has changed. Empty token is treated as first page (offset 0).
-func VerifyCursor(token string, currentQuery string) (offset int, err error) {
+// when any filter has changed. Empty token is treated as first page (offset 0).
+func VerifyCursor(token string, input QueryHashInput) (offset int, err error) {
 	if token == "" {
 		return 0, nil
 	}
@@ -95,7 +198,7 @@ func VerifyCursor(token string, currentQuery string) (offset int, err error) {
 		return 0, err
 	}
 
-	expectedHash := QueryHash(currentQuery)
+	expectedHash := QueryHash(input)
 	if decodedHash != expectedHash {
 		return 0, fmt.Errorf("%w", ErrCursorQueryMismatch)
 	}

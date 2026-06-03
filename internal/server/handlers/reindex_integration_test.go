@@ -36,9 +36,9 @@ func TestIncrementalReindex_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	_, err = q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
-		Hash:     wsHash,
-		RootPath: dir,
-		Name:     "integration-test",
+		Hash: wsHash,
+		Path: dir,
+		Name: "integration-test",
 	})
 	if err != nil {
 		t.Fatalf("UpsertWorkspace: %v", err)

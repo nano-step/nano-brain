@@ -312,7 +312,7 @@ func TestHybridSearchIsolation(t *testing.T) {
 
 	t.Run("alpha_hybrid_returns_only_alpha", func(t *testing.T) {
 		svc := search.NewSearchService(q, &fakeEmbedder{vec: wsAlpha.vec}, cfg, zerolog.Nop())
-		results, err := svc.HybridSearch(ctx, wsAlpha.keyword, wsAlpha.hash, 20, nil)
+		results, err := svc.HybridSearch(ctx, wsAlpha.keyword, wsAlpha.hash, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("HybridSearch: %v", err)
 		}
@@ -328,7 +328,7 @@ func TestHybridSearchIsolation(t *testing.T) {
 
 	t.Run("beta_hybrid_returns_only_beta", func(t *testing.T) {
 		svc := search.NewSearchService(q, &fakeEmbedder{vec: wsBeta.vec}, cfg, zerolog.Nop())
-		results, err := svc.HybridSearch(ctx, wsBeta.keyword, wsBeta.hash, 20, nil)
+		results, err := svc.HybridSearch(ctx, wsBeta.keyword, wsBeta.hash, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("HybridSearch: %v", err)
 		}
@@ -344,7 +344,7 @@ func TestHybridSearchIsolation(t *testing.T) {
 
 	t.Run("beta_keyword_in_alpha_scope_hybrid_returns_zero", func(t *testing.T) {
 		svc := search.NewSearchService(q, &fakeEmbedder{vec: wsBeta.vec}, cfg, zerolog.Nop())
-		results, err := svc.HybridSearch(ctx, wsBeta.keyword, wsAlpha.hash, 20, nil)
+		results, err := svc.HybridSearch(ctx, wsBeta.keyword, wsAlpha.hash, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("HybridSearch: %v", err)
 		}
@@ -357,7 +357,7 @@ func TestHybridSearchIsolation(t *testing.T) {
 
 	t.Run("alpha_keyword_in_beta_scope_hybrid_returns_zero", func(t *testing.T) {
 		svc := search.NewSearchService(q, &fakeEmbedder{vec: wsAlpha.vec}, cfg, zerolog.Nop())
-		results, err := svc.HybridSearch(ctx, wsAlpha.keyword, wsBeta.hash, 20, nil)
+		results, err := svc.HybridSearch(ctx, wsAlpha.keyword, wsBeta.hash, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("HybridSearch: %v", err)
 		}
@@ -480,7 +480,7 @@ func TestCrossWorkspacePermutations(t *testing.T) {
 
 			t.Run(fmt.Sprintf("hybrid_%s_keyword_in_%s", other.name, queried.name), func(t *testing.T) {
 				svc := search.NewSearchService(q, &fakeEmbedder{vec: other.vec}, cfg, zerolog.Nop())
-				results, err := svc.HybridSearch(ctx, other.keyword, queried.hash, 20, nil)
+				results, err := svc.HybridSearch(ctx, other.keyword, queried.hash, 20, nil, nil)
 				if err != nil {
 					t.Fatalf("HybridSearch: %v", err)
 				}

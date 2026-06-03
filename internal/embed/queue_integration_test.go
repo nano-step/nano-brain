@@ -60,10 +60,13 @@ func TestQueue_ScanByStatus_SkipsInflightChunks(t *testing.T) {
 	eq.inflight.Store(chunkIDs[0], struct{}{})
 	eq.inflight.Store(chunkIDs[1], struct{}{})
 
-	total := eq.scanByStatus(ctx, false)
+	enqueued, skipped := eq.scanByStatus(ctx, false)
 
-	if total != 3 {
-		t.Errorf("scanByStatus enqueued %d, want 3 (should skip 2 inflight)", total)
+	if enqueued != 3 {
+		t.Errorf("scanByStatus enqueued %d, want 3 (should skip 2 inflight)", enqueued)
+	}
+	if skipped != 2 {
+		t.Errorf("scanByStatus skipped %d, want 2", skipped)
 	}
 	if len(eq.ch) != 3 {
 		t.Errorf("channel len = %d, want 3", len(eq.ch))

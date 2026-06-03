@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -12,14 +13,18 @@ import (
 )
 
 type HybridSearcher interface {
-	HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string) ([]search.Result, error)
+	HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *search.TimeRangeFilter) ([]search.Result, error)
 	DefaultLimit() int
 }
 
 type QueryRequest struct {
-	Query      string   `json:"query"`
-	MaxResults int      `json:"max_results,omitempty"`
-	Tags       []string `json:"tags,omitempty"`
+	Query           string   `json:"query"`
+	MaxResults      int      `json:"max_results,omitempty"`
+	Tags            []string `json:"tags,omitempty"`
+	CreatedAfter    string   `json:"created_after,omitempty"`
+	CreatedBefore   string   `json:"created_before,omitempty"`
+	UpdatedAfter    string   `json:"updated_after,omitempty"`
+	UpdatedBefore   string   `json:"updated_before,omitempty"`
 }
 
 func Query(searcher HybridSearcher, logger zerolog.Logger, rec ...*telemetry.Recorder) echo.HandlerFunc {
@@ -47,7 +52,22 @@ func Query(searcher HybridSearcher, logger zerolog.Logger, rec ...*telemetry.Rec
 
 		start := time.Now()
 
-		results, err := searcher.HybridSearch(c.Request().Context(), req.Query, workspace, maxResults, req.Tags)
+		timeRange, paramName, rawValue, timeParseErr := search.ParseTimeRangeFilter(
+			time.Now().UTC(),
+			req.CreatedAfter,
+			req.CreatedBefore,
+			req.UpdatedAfter,
+			req.UpdatedBefore,
+		)
+		if timeParseErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("invalid %s: %v", paramName, timeParseErr),
+				"param": paramName,
+				"value": rawValue,
+			})
+		}
+
+		results, err := searcher.HybridSearch(c.Request().Context(), req.Query, workspace, maxResults, req.Tags, timeRange)
 		if err != nil {
 			logger.Error().Err(err).Str("workspace", workspace).Msg("hybrid search failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "search failed")

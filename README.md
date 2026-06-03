@@ -486,9 +486,9 @@ nano-brain exposes 14 tools via MCP (Model Context Protocol):
 
 | Tool | Description |
 |------|-------------|
-| `memory_query` | Hybrid search (BM25 + vector + RRF + recency) |
-| `memory_search` | BM25 keyword search |
-| `memory_vsearch` | Vector similarity search |
+| `memory_query` | Hybrid search (BM25 + vector + RRF + recency); supports time-range filters (`created_after`, `created_before`, `updated_after`, `updated_before`) |
+| `memory_search` | BM25 keyword search; supports time-range filters (`created_after`, `created_before`, `updated_after`, `updated_before`) |
+| `memory_vsearch` | Vector similarity search; supports time-range filters (`created_after`, `created_before`, `updated_after`, `updated_before`) |
 | `memory_get` | Get document by path |
 | `memory_write` | Write/update document |
 | `memory_tags` | List tags with counts |
