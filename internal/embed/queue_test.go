@@ -1070,3 +1070,63 @@ func TestQueue_HandleRetry_DeletesInflightOnMaxRetries(t *testing.T) {
 		t.Errorf("pending = %d, want 0 after max retries", eq.pending.Load())
 	}
 }
+
+// TestScanByStatus_SkippedInflightCount verifies that scanByStatus correctly
+// counts chunks skipped because they are already in-flight, without
+// double-enqueuing them. This covers the fix in #345 / #341.
+func TestScanByStatus_SkippedInflightCount(t *testing.T) {
+	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+
+	mq := &mockQuerier{
+		getPendingChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+			return ids, nil
+		},
+	}
+
+	eq := newTestQueue(&mockEmbedder{}, mq)
+
+	// Pre-load one chunk as already in-flight (simulates watcher having
+	// enqueued it before scanPending fires).
+	eq.inflight.Store(ids[0], struct{}{})
+
+	enqueued, skipped := eq.scanByStatus(context.Background(), false)
+
+	if enqueued != 2 {
+		t.Errorf("enqueued = %d, want 2", enqueued)
+	}
+	if skipped != 1 {
+		t.Errorf("skipped = %d, want 1", skipped)
+	}
+	if len(eq.ch) != 2 {
+		t.Errorf("channel len = %d, want 2 (in-flight chunk must not be re-enqueued)", len(eq.ch))
+	}
+}
+
+// TestScanPending_SkippedInflightAggregated verifies that scanPending sums
+// skipped counts across both pending and failed scans.
+func TestScanPending_SkippedInflightAggregated(t *testing.T) {
+	pendingID := uuid.New()
+	failedID := uuid.New()
+
+	mq := &mockQuerier{
+		getPendingChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+			return []uuid.UUID{pendingID}, nil
+		},
+		getFailedChunksAllWorkspacesFn: func(ctx context.Context, limit int32) ([]uuid.UUID, error) {
+			return []uuid.UUID{failedID}, nil
+		},
+	}
+
+	eq := newTestQueue(&mockEmbedder{}, mq)
+
+	// Both chunks already in-flight — full overlap.
+	eq.inflight.Store(pendingID, struct{}{})
+	eq.inflight.Store(failedID, struct{}{})
+
+	// scanPending should complete without panic and not add anything to channel.
+	eq.scanPending(context.Background())
+
+	if len(eq.ch) != 0 {
+		t.Errorf("channel len = %d, want 0 (all chunks were in-flight)", len(eq.ch))
+	}
+}
