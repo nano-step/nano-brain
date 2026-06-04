@@ -145,8 +145,8 @@ func (q *Queries) ListChunksByDocumentID(ctx context.Context, arg ListChunksByDo
 }
 
 const upsertChunk = `-- name: UpsertChunk :one
-INSERT INTO chunks (document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO chunks (document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, symbol_name, symbol_kind, language, line_start, line_end, chunk_type, embedding_strategy)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 ON CONFLICT (content_hash, workspace_hash, document_id) DO UPDATE SET
     document_id = EXCLUDED.document_id,
     content = EXCLUDED.content,
@@ -154,19 +154,33 @@ ON CONFLICT (content_hash, workspace_hash, document_id) DO UPDATE SET
     start_line = EXCLUDED.start_line,
     end_line = EXCLUDED.end_line,
     metadata = EXCLUDED.metadata,
+    symbol_name = EXCLUDED.symbol_name,
+    symbol_kind = EXCLUDED.symbol_kind,
+    language = EXCLUDED.language,
+    line_start = EXCLUDED.line_start,
+    line_end = EXCLUDED.line_end,
+    chunk_type = EXCLUDED.chunk_type,
+    embedding_strategy = EXCLUDED.embedding_strategy,
     embed_status = 'pending'
 RETURNING id
 `
 
 type UpsertChunkParams struct {
-	DocumentID    uuid.UUID
-	WorkspaceHash string
-	ContentHash   string
-	Content       string
-	ChunkIndex    int32
-	StartLine     sql.NullInt32
-	EndLine       sql.NullInt32
-	Metadata      pqtype.NullRawMessage
+	DocumentID        uuid.UUID
+	WorkspaceHash     string
+	ContentHash       string
+	Content           string
+	ChunkIndex        int32
+	StartLine         sql.NullInt32
+	EndLine           sql.NullInt32
+	Metadata          pqtype.NullRawMessage
+	SymbolName        sql.NullString
+	SymbolKind        sql.NullString
+	Language          sql.NullString
+	LineStart         sql.NullInt32
+	LineEnd           sql.NullInt32
+	ChunkType         string
+	EmbeddingStrategy string
 }
 
 func (q *Queries) UpsertChunk(ctx context.Context, arg UpsertChunkParams) (uuid.UUID, error) {
@@ -179,6 +193,13 @@ func (q *Queries) UpsertChunk(ctx context.Context, arg UpsertChunkParams) (uuid.
 		arg.StartLine,
 		arg.EndLine,
 		arg.Metadata,
+		arg.SymbolName,
+		arg.SymbolKind,
+		arg.Language,
+		arg.LineStart,
+		arg.LineEnd,
+		arg.ChunkType,
+		arg.EmbeddingStrategy,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

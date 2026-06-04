@@ -101,14 +101,16 @@ func seedWorkspace(t *testing.T, ctx context.Context, q *sqlc.Queries, ws worksp
 		chunkHash := contentHash(chunkContent + ws.hash + fmt.Sprintf("%d", i))
 
 		chunkID, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-			DocumentID:    doc.ID,
-			WorkspaceHash: ws.hash,
-			ContentHash:   chunkHash,
-			Content:       chunkContent,
-			ChunkIndex:    int32(i),
-			StartLine:     sql.NullInt32{Int32: 1, Valid: true},
-			EndLine:       sql.NullInt32{Int32: 10, Valid: true},
-			Metadata:      pqtype.NullRawMessage{},
+			DocumentID:        doc.ID,
+			WorkspaceHash:     ws.hash,
+			ContentHash:       chunkHash,
+			Content:           chunkContent,
+			ChunkIndex:        int32(i),
+			StartLine:         sql.NullInt32{Int32: 1, Valid: true},
+			EndLine:           sql.NullInt32{Int32: 10, Valid: true},
+			Metadata:          pqtype.NullRawMessage{},
+			ChunkType:         "raw",
+			EmbeddingStrategy: "raw_code",
 		})
 		if err != nil {
 			t.Fatalf("UpsertChunk(%s, %d): %v", ws.hash, i, err)

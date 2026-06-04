@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nano-brain/nano-brain/internal/chunker"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/eventbus"
@@ -317,9 +318,23 @@ func startServer(configPath string) {
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 
+	fixedChunker := chunker.NewFixedChunker()
+	headingChunker := chunker.NewHeadingChunker()
+	symbolChunker, scErr := chunker.NewSymbolAwareChunker(fixedChunker, logger)
+	if scErr != nil {
+		logger.Error().Err(scErr).Msg("symbol-aware chunker init failed, using fixed chunker for all files")
+	}
+	var dispatcher *chunker.Dispatcher
+	if symbolChunker != nil {
+		dispatcher = chunker.NewDispatcher(symbolChunker, headingChunker, fixedChunker)
+	} else {
+		dispatcher = chunker.NewDispatcher(fixedChunker, headingChunker, fixedChunker)
+	}
+
 	fw := watcher.New(db, queries, logger, *cfg).
 		WithSymbolRegistry(symRegistry).
-		WithGraphRegistry(graphRegistry, queries)
+		WithGraphRegistry(graphRegistry, queries).
+		WithDispatcher(dispatcher)
 
 	if homeDir, hErr := os.UserHomeDir(); hErr == nil {
 		if gi, path, lErr := watcher.LoadGlobalIgnore(homeDir); lErr != nil {

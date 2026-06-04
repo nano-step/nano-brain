@@ -157,14 +157,16 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 
 	for _, ch := range chunks {
 		id, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-			DocumentID:    docRow.ID,
-			WorkspaceHash: h.workspace,
-			ContentHash:   ch.Hash,
-			Content:       ch.Content,
-			ChunkIndex:    int32(ch.Sequence),
-			StartLine:     sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
-			EndLine:       sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
-			Metadata:      chunkMeta,
+			DocumentID:        docRow.ID,
+			WorkspaceHash:     h.workspace,
+			ContentHash:       ch.Hash,
+			Content:           ch.Content,
+			ChunkIndex:        int32(ch.Sequence),
+			StartLine:         sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
+			EndLine:           sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
+			Metadata:          chunkMeta,
+			ChunkType:         "raw",
+			EmbeddingStrategy: "raw_code",
 		})
 		if err != nil {
 			return false, fmt.Errorf("upsert chunk: %w", err)

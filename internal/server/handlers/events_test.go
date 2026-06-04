@@ -1,7 +1,6 @@
 package handlers_test
 
 import (
-	"bufio"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -14,34 +13,6 @@ import (
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/rs/zerolog"
 )
-
-func setupSSERequest(t *testing.T, bus *eventbus.Bus, workspace string) (*echo.Echo, *httptest.ResponseRecorder, *http.Request, context.CancelFunc) {
-	t.Helper()
-	e := echo.New()
-	h := handlers.EventsHandler(bus, zerolog.Nop())
-	e.GET("/api/v1/events", h)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?workspace="+workspace, nil)
-	req = req.WithContext(ctx)
-	rec := httptest.NewRecorder()
-	return e, rec, req, cancel
-}
-
-func readSSEEvent(t *testing.T, body string) (eventType, data string) {
-	t.Helper()
-	scanner := bufio.NewScanner(strings.NewReader(body))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "event: ") {
-			eventType = strings.TrimPrefix(line, "event: ")
-		}
-		if strings.HasPrefix(line, "data: ") {
-			data = strings.TrimPrefix(line, "data: ")
-		}
-	}
-	return
-}
 
 func TestEventsHandler_HelloDelivered(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

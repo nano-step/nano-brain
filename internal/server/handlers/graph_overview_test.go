@@ -190,7 +190,9 @@ func TestGraphOverview_TruncatedFlag(t *testing.T) {
 	var resp struct {
 		Truncated bool `json:"truncated"`
 	}
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
 	if !resp.Truncated {
 		t.Errorf("truncated should be true when total (100) > limit (50)")
 	}

@@ -29,5 +29,8 @@
     "npm/",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "dependencies": {
+    "@nano-step/oh-my-harness": "^1.1.3"
+  }
 }

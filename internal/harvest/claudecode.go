@@ -217,14 +217,16 @@ func (h *ClaudeCodeHarvester) writeRawFallback(
 	for i, c := range chunks {
 		chunkHash := sha256.Sum256([]byte(c.Content))
 		chunkID, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-			DocumentID:    docRow.ID,
-			WorkspaceHash: h.workspace,
-			ContentHash:   hex.EncodeToString(chunkHash[:]),
-			Content:       c.Content,
-			ChunkIndex:    int32(i),
-			StartLine:     sql.NullInt32{Int32: int32(c.StartLine), Valid: true},
-			EndLine:       sql.NullInt32{Int32: int32(c.EndLine), Valid: true},
-			Metadata:      pqtype.NullRawMessage{},
+			DocumentID:        docRow.ID,
+			WorkspaceHash:     h.workspace,
+			ContentHash:       hex.EncodeToString(chunkHash[:]),
+			Content:           c.Content,
+			ChunkIndex:        int32(i),
+			StartLine:         sql.NullInt32{Int32: int32(c.StartLine), Valid: true},
+			EndLine:           sql.NullInt32{Int32: int32(c.EndLine), Valid: true},
+			Metadata:          pqtype.NullRawMessage{},
+			ChunkType:         "raw",
+			EmbeddingStrategy: "raw_code",
 		})
 		if err != nil {
 			_ = tx.Rollback()

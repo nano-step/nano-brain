@@ -105,7 +105,6 @@ func insertOrphanDoc(t *testing.T, pgDB *sql.DB, wsHash, sourcePath string) {
 
 func insertOrphanChunk(t *testing.T, pgDB *sql.DB, wsHash string) {
 	t.Helper()
-	q := sqlc.New(pgDB)
 
 	docID, err := uuid.NewRandom()
 	if err != nil {
@@ -119,16 +118,12 @@ func insertOrphanChunk(t *testing.T, pgDB *sql.DB, wsHash string) {
 		t.Fatalf("insert orphan doc for chunk: %v", err)
 	}
 
-	if _, err := q.UpsertChunk(context.Background(), sqlc.UpsertChunkParams{
-		DocumentID:    docID,
-		WorkspaceHash: wsHash,
-		ContentHash:   hex.EncodeToString(sha256.New().Sum([]byte("chunk-" + wsHash))),
-		Content:       "orphan chunk content",
-		ChunkIndex:    0,
-		StartLine:     sql.NullInt32{Int32: 1, Valid: true},
-		EndLine:       sql.NullInt32{Int32: 1, Valid: true},
-		Metadata:      pqtype.NullRawMessage{},
-	}); err != nil {
+	chunkHash := hex.EncodeToString(sha256.New().Sum([]byte("chunk-" + wsHash)))
+	if _, err := pgDB.Exec(
+		`INSERT INTO chunks (document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		docID, wsHash, chunkHash, "orphan chunk content", 0, 1, 1, "{}",
+	); err != nil {
 		t.Fatalf("insert orphan chunk: %v", err)
 	}
 }

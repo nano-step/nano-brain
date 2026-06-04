@@ -14,18 +14,25 @@ import (
 )
 
 type Chunk struct {
-	ID            uuid.UUID
-	DocumentID    uuid.UUID
-	WorkspaceHash string
-	ContentHash   string
-	Content       string
-	ChunkIndex    int32
-	StartLine     sql.NullInt32
-	EndLine       sql.NullInt32
-	Metadata      pqtype.NullRawMessage
-	CreatedAt     time.Time
-	EmbedStatus   string
-	SearchVector  interface{}
+	ID                uuid.UUID
+	DocumentID        uuid.UUID
+	WorkspaceHash     string
+	ContentHash       string
+	Content           string
+	ChunkIndex        int32
+	StartLine         sql.NullInt32
+	EndLine           sql.NullInt32
+	Metadata          pqtype.NullRawMessage
+	CreatedAt         time.Time
+	EmbedStatus       string
+	SearchVector      interface{}
+	SymbolName        sql.NullString
+	SymbolKind        sql.NullString
+	Language          sql.NullString
+	LineStart         sql.NullInt32
+	LineEnd           sql.NullInt32
+	ChunkType         string
+	EmbeddingStrategy string
 }
 
 type Collection struct {

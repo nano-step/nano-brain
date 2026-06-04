@@ -209,6 +209,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 				"max_results":      {"type": "number", "description": "Max results (default 10, max 100)"},
 				"cursor":           {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
 				"include_content":  {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
+				"chunk_type":       {"type": "string", "description": "Filter by chunk type: 'raw' or 'symbol'. Omit for all."},
 				"created_after":    {"type": "string", "description": "Filter to documents whose created_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
 				"created_before":   {"type": "string", "description": "Filter to documents whose created_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
 				"updated_after":    {"type": "string", "description": "Filter to documents whose updated_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
@@ -234,6 +235,11 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 			}
 			maxResults := argInt(args, "max_results", 10, 100)
 			includeContent := argBool(args, "include_content")
+
+			chunkType := argString(args, "chunk_type")
+			if chunkType != "" && chunkType != "raw" && chunkType != "symbol" {
+				return errResult("invalid chunk_type: must be 'raw' or 'symbol'"), nil
+			}
 
 			createdAfter := argString(args, "created_after")
 			createdBefore := argString(args, "created_before")
@@ -331,6 +337,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				"tags":             {"type": "array", "description": "Filter by tags", "items": map[string]any{"type": "string"}},
 				"cursor":           {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
 				"include_content":  {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
+				"chunk_type":       {"type": "string", "description": "Filter by chunk type: 'raw' or 'symbol'. Omit for all."},
 				"created_after":    {"type": "string", "description": "Filter to documents whose created_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
 				"created_before":   {"type": "string", "description": "Filter to documents whose created_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
 				"updated_after":    {"type": "string", "description": "Filter to documents whose updated_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
@@ -354,6 +361,15 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			maxResults := argInt(args, "max_results", 10, 100)
 			tags := argStringSlice(args, "tags")
 			includeContent := argBool(args, "include_content")
+
+			chunkType := argString(args, "chunk_type")
+			if chunkType != "" && chunkType != "raw" && chunkType != "symbol" {
+				return errResult("invalid chunk_type: must be 'raw' or 'symbol'"), nil
+			}
+			chunkTypeNull := sql.NullString{}
+			if chunkType != "" {
+				chunkTypeNull = sql.NullString{String: chunkType, Valid: true}
+			}
 
 			createdAfter := argString(args, "created_after")
 			createdBefore := argString(args, "created_before")
@@ -408,6 +424,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				if len(tags) > 0 {
 					rows, err := a.queries.BM25SearchAllWithTags(ctx, sqlc.BM25SearchAllWithTagsParams{
 						Query: query, Tags: tags, MaxResults: fetchLimit,
+						ChunkType: chunkTypeNull,
 						CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 					})
 					if err != nil {
@@ -425,6 +442,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				} else {
 					rows, err := a.queries.BM25SearchAll(ctx, sqlc.BM25SearchAllParams{
 						Query: query, MaxResults: fetchLimit,
+						ChunkType: chunkTypeNull,
 						CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 					})
 					if err != nil {
@@ -443,6 +461,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			} else if len(tags) > 0 {
 				rows, err := a.queries.BM25SearchWithTags(ctx, sqlc.BM25SearchWithTagsParams{
 					Query: query, WorkspaceHash: ws, Tags: tags, MaxResults: fetchLimit,
+					ChunkType: chunkTypeNull,
 					CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
@@ -460,6 +479,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			} else {
 				rows, err := a.queries.BM25Search(ctx, sqlc.BM25SearchParams{
 					Query: query, WorkspaceHash: ws, MaxResults: fetchLimit,
+					ChunkType: chunkTypeNull,
 					CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
@@ -532,6 +552,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				"max_results":      {"type": "number", "description": "Max results (default 10, max 100)"},
 				"cursor":           {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
 				"include_content":  {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
+				"chunk_type":       {"type": "string", "description": "Filter by chunk type: 'raw' or 'symbol'. Omit for all."},
 				"created_after":    {"type": "string", "description": "Filter to documents whose created_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
 				"created_before":   {"type": "string", "description": "Filter to documents whose created_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
 				"updated_after":    {"type": "string", "description": "Filter to documents whose updated_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
@@ -557,6 +578,15 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 			}
 			maxResults := argInt(args, "max_results", 10, 100)
 			includeContent := argBool(args, "include_content")
+
+			chunkType := argString(args, "chunk_type")
+			if chunkType != "" && chunkType != "raw" && chunkType != "symbol" {
+				return errResult("invalid chunk_type: must be 'raw' or 'symbol'"), nil
+			}
+			chunkTypeNull := sql.NullString{}
+			if chunkType != "" {
+				chunkTypeNull = sql.NullString{String: chunkType, Valid: true}
+			}
 
 			createdAfter := argString(args, "created_after")
 			createdBefore := argString(args, "created_before")
@@ -618,6 +648,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				rows, err := a.queries.VectorSearchAll(ctx, sqlc.VectorSearchAllParams{
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					MaxResults:     fetchLimit,
+					ChunkType:      chunkTypeNull,
 					CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
@@ -638,6 +669,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					WorkspaceHash:  ws,
 					MaxResults:     fetchLimit,
+					ChunkType:      chunkTypeNull,
 					CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
@@ -917,14 +949,16 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 				}
 				for _, ch := range chunks {
 					_, err := tq.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-						DocumentID:    row.ID,
-						WorkspaceHash: ws,
-						ContentHash:   ch.Hash,
-						Content:       ch.Content,
-						ChunkIndex:    int32(ch.Sequence),
-						StartLine:     sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
-						EndLine:       sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
-						Metadata:      chunkMeta,
+						DocumentID:        row.ID,
+						WorkspaceHash:     ws,
+						ContentHash:       ch.Hash,
+						Content:           ch.Content,
+						ChunkIndex:        int32(ch.Sequence),
+						StartLine:         sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
+						EndLine:           sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
+						Metadata:          chunkMeta,
+						ChunkType:         "raw",
+						EmbeddingStrategy: "raw_code",
 					})
 					if err != nil {
 						_ = tx.Rollback()
@@ -948,14 +982,16 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 				}
 				for _, ch := range chunks {
 					_, err := a.queries.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-						DocumentID:    row.ID,
-						WorkspaceHash: ws,
-						ContentHash:   ch.Hash,
-						Content:       ch.Content,
-						ChunkIndex:    int32(ch.Sequence),
-						StartLine:     sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
-						EndLine:       sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
-						Metadata:      chunkMeta,
+						DocumentID:        row.ID,
+						WorkspaceHash:     ws,
+						ContentHash:       ch.Hash,
+						Content:           ch.Content,
+						ChunkIndex:        int32(ch.Sequence),
+						StartLine:         sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
+						EndLine:           sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
+						Metadata:          chunkMeta,
+						ChunkType:         "raw",
+						EmbeddingStrategy: "raw_code",
 					})
 					if err != nil {
 						return errResult(fmt.Sprintf("upsert chunk failed: %v", err)), nil
@@ -1529,11 +1565,12 @@ func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 			}
 
 			type symbolResult struct {
-				Name       string `json:"name"`
-				Kind       string `json:"kind,omitempty"`
-				Language   string `json:"language,omitempty"`
-				Signature  string `json:"signature,omitempty"`
-				SourcePath string `json:"source_path"`
+				Name       string  `json:"name"`
+				Kind       string  `json:"kind,omitempty"`
+				Language   string  `json:"language,omitempty"`
+				Signature  string  `json:"signature,omitempty"`
+				SourcePath string  `json:"source_path"`
+				Summary    *string `json:"summary"`
 			}
 			results := make([]symbolResult, 0, len(rows))
 			for _, r := range rows {

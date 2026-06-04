@@ -18,7 +18,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	gitignore "github.com/sabhiram/go-gitignore"
-	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/chunker"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/eventbus"
@@ -63,6 +63,7 @@ type Watcher struct {
 	symbolRegistry *symbol.Registry
 	graphRegistry  *graph.Registry
 	embedQueue     *embed.Queue
+	dispatcher     *chunker.Dispatcher
 
 	fsw         *fsnotify.Watcher
 	mu          sync.Mutex
@@ -128,6 +129,11 @@ func (w *Watcher) WithGraphRegistry(r *graph.Registry, gq GraphQuerier) *Watcher
 
 func (w *Watcher) WithEmbedQueue(eq *embed.Queue) *Watcher {
 	w.embedQueue = eq
+	return w
+}
+
+func (w *Watcher) WithDispatcher(d *chunker.Dispatcher) *Watcher {
+	w.dispatcher = d
 	return w
 }
 
@@ -427,7 +433,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		return
 	}
 
-	chunks := chunk.Split(string(content), chunk.DefaultConfig())
+	chunks := w.chunkContent(string(content), filePath)
 	title := filepath.Base(filePath)
 	meta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
 
@@ -598,7 +604,7 @@ func (w *Watcher) publishFileEvent(workspace, filePath, action string) {
 	})
 }
 
-func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
+func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunker.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
@@ -622,7 +628,7 @@ func (w *Watcher) upsertWithTx(ctx context.Context, workspace, filePath string, 
 	return ids, nil
 }
 
-func (w *Watcher) upsertWithoutTx(ctx context.Context, workspace string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
+func (w *Watcher) upsertWithoutTx(ctx context.Context, workspace string, params sqlc.UpsertDocumentBySourcePathParams, chunks []chunker.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
 	docRow, err := w.queries.UpsertDocumentBySourcePath(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("upsert document: %w", err)
@@ -635,7 +641,7 @@ func (w *Watcher) upsertWithoutTx(ctx context.Context, workspace string, params 
 	return ids, nil
 }
 
-func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.UUID, workspace string, chunks []chunk.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
+func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.UUID, workspace string, chunks []chunker.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
 	if err := q.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
 		DocumentID:    docID,
 		WorkspaceHash: workspace,
@@ -645,14 +651,21 @@ func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.
 	ids := make([]uuid.UUID, 0, len(chunks))
 	for _, ch := range chunks {
 		id, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-			DocumentID:    docID,
-			WorkspaceHash: workspace,
-			ContentHash:   ch.Hash,
-			Content:       ch.Content,
-			ChunkIndex:    int32(ch.Sequence),
-			StartLine:     sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
-			EndLine:       sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
-			Metadata:      meta,
+			DocumentID:        docID,
+			WorkspaceHash:     workspace,
+			ContentHash:       ch.Hash,
+			Content:           ch.Content,
+			ChunkIndex:        int32(ch.Sequence),
+			StartLine:         sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
+			EndLine:           sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
+			Metadata:          meta,
+			SymbolName:        nullString(ch.SymbolName),
+			SymbolKind:        nullString(ch.SymbolKind),
+			Language:          nullString(ch.Language),
+			LineStart:         nullInt32(ch.StartLine),
+			LineEnd:           nullInt32(ch.EndLine),
+			ChunkType:         string(ch.ChunkType),
+			EmbeddingStrategy: string(ch.EmbeddingStrategy),
 		})
 		if err != nil {
 			return nil, err
@@ -660,4 +673,26 @@ func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+func (w *Watcher) chunkContent(content string, filePath string) []chunker.Chunk {
+	if w.dispatcher != nil {
+		return w.dispatcher.Chunk(content, filePath)
+	}
+	fixed := chunker.NewFixedChunker()
+	return fixed.Chunk(content, filePath)
+}
+
+func nullString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
+func nullInt32(v int) sql.NullInt32 {
+	if v == 0 {
+		return sql.NullInt32{}
+	}
+	return sql.NullInt32{Int32: int32(v), Valid: true}
 }

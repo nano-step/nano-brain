@@ -7,6 +7,7 @@ FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = sqlc.arg(workspace_hash)
   AND c.search_vector @@ websearch_to_tsquery('english', sqlc.arg(query)::text)
+  AND (sqlc.narg('chunk_type')::text IS NULL OR c.chunk_type = sqlc.narg('chunk_type'))
   AND (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
   AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
   AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))
@@ -22,6 +23,7 @@ SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metada
 FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.search_vector @@ websearch_to_tsquery('english', sqlc.arg(query)::text)
+  AND (sqlc.narg('chunk_type')::text IS NULL OR c.chunk_type = sqlc.narg('chunk_type'))
   AND (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
   AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
   AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))
@@ -39,6 +41,7 @@ JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = sqlc.arg(workspace_hash)
   AND c.search_vector @@ websearch_to_tsquery('english', sqlc.arg(query)::text)
   AND d.tags && sqlc.arg(tags)::text[]
+  AND (sqlc.narg('chunk_type')::text IS NULL OR c.chunk_type = sqlc.narg('chunk_type'))
   AND (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
   AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
   AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))
@@ -55,6 +58,7 @@ FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.search_vector @@ websearch_to_tsquery('english', sqlc.arg(query)::text)
   AND d.tags && sqlc.arg(tags)::text[]
+  AND (sqlc.narg('chunk_type')::text IS NULL OR c.chunk_type = sqlc.narg('chunk_type'))
   AND (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
   AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
   AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))

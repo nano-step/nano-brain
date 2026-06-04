@@ -24,17 +24,19 @@ FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = $2
   AND c.search_vector @@ websearch_to_tsquery('english', $1::text)
-  AND ($3::timestamptz IS NULL OR d.updated_at >= $3)
-  AND ($4::timestamptz IS NULL OR d.updated_at <= $4)
-  AND ($5::timestamptz IS NULL OR d.created_at >= $5)
-  AND ($6::timestamptz IS NULL OR d.created_at <= $6)
+  AND ($3::text IS NULL OR c.chunk_type = $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at >= $4)
+  AND ($5::timestamptz IS NULL OR d.updated_at <= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR d.created_at <= $7)
 ORDER BY score DESC, c.id ASC
-LIMIT $7
+LIMIT $8
 `
 
 type BM25SearchParams struct {
 	Query         string
 	WorkspaceHash string
+	ChunkType     sql.NullString
 	UpdatedAfter  sql.NullTime
 	UpdatedBefore sql.NullTime
 	CreatedAfter  sql.NullTime
@@ -62,6 +64,7 @@ func (q *Queries) BM25Search(ctx context.Context, arg BM25SearchParams) ([]BM25S
 	rows, err := q.db.QueryContext(ctx, bM25Search,
 		arg.Query,
 		arg.WorkspaceHash,
+		arg.ChunkType,
 		arg.UpdatedAfter,
 		arg.UpdatedBefore,
 		arg.CreatedAfter,
@@ -111,16 +114,18 @@ SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metada
 FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.search_vector @@ websearch_to_tsquery('english', $1::text)
-  AND ($2::timestamptz IS NULL OR d.updated_at >= $2)
-  AND ($3::timestamptz IS NULL OR d.updated_at <= $3)
-  AND ($4::timestamptz IS NULL OR d.created_at >= $4)
-  AND ($5::timestamptz IS NULL OR d.created_at <= $5)
+  AND ($2::text IS NULL OR c.chunk_type = $2)
+  AND ($3::timestamptz IS NULL OR d.updated_at >= $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at <= $4)
+  AND ($5::timestamptz IS NULL OR d.created_at >= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at <= $6)
 ORDER BY score DESC, c.id ASC
-LIMIT $6
+LIMIT $7
 `
 
 type BM25SearchAllParams struct {
 	Query         string
+	ChunkType     sql.NullString
 	UpdatedAfter  sql.NullTime
 	UpdatedBefore sql.NullTime
 	CreatedAfter  sql.NullTime
@@ -147,6 +152,7 @@ type BM25SearchAllRow struct {
 func (q *Queries) BM25SearchAll(ctx context.Context, arg BM25SearchAllParams) ([]BM25SearchAllRow, error) {
 	rows, err := q.db.QueryContext(ctx, bM25SearchAll,
 		arg.Query,
+		arg.ChunkType,
 		arg.UpdatedAfter,
 		arg.UpdatedBefore,
 		arg.CreatedAfter,
@@ -197,17 +203,19 @@ FROM chunks c
 JOIN documents d ON c.document_id = d.id
 WHERE c.search_vector @@ websearch_to_tsquery('english', $1::text)
   AND d.tags && $2::text[]
-  AND ($3::timestamptz IS NULL OR d.updated_at >= $3)
-  AND ($4::timestamptz IS NULL OR d.updated_at <= $4)
-  AND ($5::timestamptz IS NULL OR d.created_at >= $5)
-  AND ($6::timestamptz IS NULL OR d.created_at <= $6)
+  AND ($3::text IS NULL OR c.chunk_type = $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at >= $4)
+  AND ($5::timestamptz IS NULL OR d.updated_at <= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR d.created_at <= $7)
 ORDER BY score DESC, c.id ASC
-LIMIT $7
+LIMIT $8
 `
 
 type BM25SearchAllWithTagsParams struct {
 	Query         string
 	Tags          []string
+	ChunkType     sql.NullString
 	UpdatedAfter  sql.NullTime
 	UpdatedBefore sql.NullTime
 	CreatedAfter  sql.NullTime
@@ -235,6 +243,7 @@ func (q *Queries) BM25SearchAllWithTags(ctx context.Context, arg BM25SearchAllWi
 	rows, err := q.db.QueryContext(ctx, bM25SearchAllWithTags,
 		arg.Query,
 		pq.Array(arg.Tags),
+		arg.ChunkType,
 		arg.UpdatedAfter,
 		arg.UpdatedBefore,
 		arg.CreatedAfter,
@@ -286,18 +295,20 @@ JOIN documents d ON c.document_id = d.id
 WHERE c.workspace_hash = $2
   AND c.search_vector @@ websearch_to_tsquery('english', $1::text)
   AND d.tags && $3::text[]
-  AND ($4::timestamptz IS NULL OR d.updated_at >= $4)
-  AND ($5::timestamptz IS NULL OR d.updated_at <= $5)
-  AND ($6::timestamptz IS NULL OR d.created_at >= $6)
-  AND ($7::timestamptz IS NULL OR d.created_at <= $7)
+  AND ($4::text IS NULL OR c.chunk_type = $4)
+  AND ($5::timestamptz IS NULL OR d.updated_at >= $5)
+  AND ($6::timestamptz IS NULL OR d.updated_at <= $6)
+  AND ($7::timestamptz IS NULL OR d.created_at >= $7)
+  AND ($8::timestamptz IS NULL OR d.created_at <= $8)
 ORDER BY score DESC, c.id ASC
-LIMIT $8
+LIMIT $9
 `
 
 type BM25SearchWithTagsParams struct {
 	Query         string
 	WorkspaceHash string
 	Tags          []string
+	ChunkType     sql.NullString
 	UpdatedAfter  sql.NullTime
 	UpdatedBefore sql.NullTime
 	CreatedAfter  sql.NullTime
@@ -326,6 +337,7 @@ func (q *Queries) BM25SearchWithTags(ctx context.Context, arg BM25SearchWithTags
 		arg.Query,
 		arg.WorkspaceHash,
 		pq.Array(arg.Tags),
+		arg.ChunkType,
 		arg.UpdatedAfter,
 		arg.UpdatedBefore,
 		arg.CreatedAfter,
