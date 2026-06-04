@@ -6,6 +6,26 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-nano--step%2Fnano--brain-181717?logo=github)](https://github.com/nano-step/nano-brain)
 
+## Table of Contents
+
+- [What It Does](#what-it-does)
+- [Use Cases](#use-cases)
+- [Key Features](#key-features)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Verifying Downloads](#verifying-downloads)
+- [Configuration](#configuration)
+- [REST API](#rest-api)
+- [CLI Commands](#cli-commands)
+- [MCP Tools](#mcp-tools)
+- [Search Pipeline](#search-pipeline)
+- [Architecture](#architecture)
+- [Migration from V1](#migration-from-v1)
+- [Tech Stack](#tech-stack)
+- [License](#license)
+
+---
+
 ## What It Does
 
 nano-brain is a persistent memory server for AI coding agents that solves session amnesia. It automatically ingests AI sessions, notes, and codebase files, indexes everything with hybrid search (BM25 + pgvector), and serves memories via MCP tools and REST API. Built in Go with PostgreSQL — single static binary, zero CGO dependencies.
