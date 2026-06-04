@@ -43,6 +43,22 @@ Dev C (new hire) ──┘
 
 Role-based access: admins get full read/write, developers get read/write scoped to their workspace, stakeholders or reviewers get read-only access.
 
+### Knowledge preservation when an engineer leaves
+A senior engineer resigns. Without nano-brain, their institutional knowledge — why certain decisions were made, which parts of the codebase are fragile, what was tried and failed — walks out the door with them.
+
+With nano-brain, their sessions are already harvested and indexed. The team can still ask "why did we pick this approach?" or "what did Alice know about the payment service?" and get answers from her past sessions.
+
+### Freelancer / consultant context switching
+You work on 3 client projects in parallel. Each is a separate workspace. When you switch clients, run `nano-brain wake-up` to get an instant briefing — recent work, active collections, key context — and your AI agent picks up exactly where you left off without re-reading the codebase.
+
+### Legacy codebase archaeology
+You inherit a 5-year-old codebase with minimal documentation and no original authors to ask. Index it into nano-brain. Your AI agent can now answer "what does this function do?", "why does this class exist?", and "if I change this file, what else breaks?" — navigating cross-file relationships without reading 200k lines manually.
+
+Go, TypeScript, Python, JavaScript supported today. Rust, Java, and others planned.
+
+### Pre-commit / pre-PR impact check
+Before pushing, run `memory_impact` on your changed files to discover what else in the codebase depends on them — across files, across repos in the same workspace. Catch breaking changes before they hit CI. *(Multi-file diff-aware mode in roadmap.)*
+
 ## Key Features
 
 - **Hybrid search** — BM25 full-text + pgvector HNSW cosine similarity + RRF fusion + recency decay
