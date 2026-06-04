@@ -18,6 +18,7 @@ _bmad/config.user.yaml
 .opencode/worktrees/
 .opencode/worktree-sessions.json
 .opencode/.repo-id
+.omc/
 
 # Node (no npm deps in this project)
 package-lock.json

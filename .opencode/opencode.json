@@ -1,8 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    "@nano-step/oh-my-harness@latest"
-  ],
   "mcp": {
     "open-design": {
       "type": "local",
