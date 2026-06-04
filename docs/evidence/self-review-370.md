@@ -55,3 +55,12 @@ Only project source files staged. No `.opencode/`, `package-lock.json`, or runti
 
 - Smoke E2E not yet run (requires PR + running server)
 - Full Oracle review pending (will happen at PR stage)
+
+## Bot Review Triage
+
+| # | File | Line | Severity | Verdict | Resolution |
+|---|------|------|----------|---------|------------|
+| 1 | internal/chunker/symbol.go | 164 | critical | VALID:critical | fixed in commit 087b7d0 |
+| 2 | internal/chunker/symbol.go | 115 | high | VALID:high | fixed in commit 087b7d0 |
+| 3 | internal/mcp/tools.go | 242 | high | VALID:high | fixed in commit 087b7d0 |
+| 4 | internal/chunker/dispatcher.go | 31 | medium | VALID:medium | fixed in commit 087b7d0 |
