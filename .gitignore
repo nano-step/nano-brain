@@ -40,3 +40,4 @@ ai/test-case/
 .opencode/harness.override.json
 .opencode/plugin/harness-loop/node_modules/
 .opencode/plugin/harness-loop/dist/
+.opencode/commands/
