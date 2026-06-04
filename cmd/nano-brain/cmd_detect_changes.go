@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -210,51 +209,4 @@ func queryFileSymbols(base, workspace, file string) []fileSymbol {
 		return nil
 	}
 	return result.Symbols
-}
-
-func getChangedLineRanges(ctx context.Context, file string, staged bool) [][2]int {
-	diffArgs := []string{"diff"}
-	if staged {
-		diffArgs = append(diffArgs, "--staged")
-	}
-	diffArgs = append(diffArgs, file)
-	out, err := exec.CommandContext(ctx, "git", diffArgs...).Output()
-	if err != nil {
-		return nil
-	}
-	return parseHunkHeaders(string(out))
-}
-
-func parseHunkHeaders(diff string) [][2]int {
-	var ranges [][2]int
-	for _, line := range strings.Split(diff, "\n") {
-		if !strings.HasPrefix(line, "@@ ") {
-			continue
-		}
-		plus := ""
-		parts := strings.Split(line, " ")
-		for _, p := range parts {
-			if strings.HasPrefix(p, "+") && !strings.HasPrefix(p, "+++") {
-				plus = p[1:]
-				break
-			}
-		}
-		if plus == "" {
-			continue
-		}
-		comma := strings.Index(plus, ",")
-		if comma < 0 {
-			start, err := strconv.Atoi(plus)
-			if err == nil {
-				ranges = append(ranges, [2]int{start, start})
-			}
-			continue
-		}
-		start, err1 := strconv.Atoi(plus[:comma])
-		count, err2 := strconv.Atoi(plus[comma+1:])
-		if err1 == nil && err2 == nil && count > 0 {
-			ranges = append(ranges, [2]int{start, start + count - 1})
-		}
-	}
-	return ranges
 }

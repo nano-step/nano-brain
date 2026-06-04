@@ -278,7 +278,7 @@ Then re-run this gate."
             in_triage && /^\|/ {
                 line = tolower($0)
                 if (line ~ /valid:(critical|high)/) {
-                    if (line !~ /fixed in commit [a-f0-9]{6,}/ && line !~ /resolved in commit [a-f0-9]{6,}/) count++
+                    if (line !~ /fixed in commit [a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9]/ && line !~ /resolved in commit [a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9]/) count++
                 }
             }
             END { print count }

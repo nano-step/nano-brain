@@ -135,6 +135,8 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 			StartLine:     sql.NullInt32{Int32: int32(c.StartLine), Valid: true},
 			EndLine:       sql.NullInt32{Int32: int32(c.EndLine), Valid: true},
 			Metadata:      pqtype.NullRawMessage{},
+			ChunkType:         "raw",
+			EmbeddingStrategy: "raw_code",
 		})
 		if err != nil {
 			p.logger.Warn().Err(err).Int("chunk", i).Msg("persist: chunk upsert failed")

@@ -166,7 +166,9 @@ func TestListDocuments_FilterByText(t *testing.T) {
 	var resp struct {
 		Documents []map[string]interface{} `json:"documents"`
 	}
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
 	if len(resp.Documents) != 2 {
 		t.Errorf("got %d docs, want 2 (case-insensitive 'hello')", len(resp.Documents))
 	}
@@ -192,7 +194,9 @@ func TestListDocuments_FilterByTags(t *testing.T) {
 	var resp struct {
 		Documents []map[string]interface{} `json:"documents"`
 	}
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
 	if len(resp.Documents) != 2 {
 		t.Errorf("got %d docs, want 2 (tag foo)", len(resp.Documents))
 	}
@@ -220,7 +224,9 @@ func TestDeleteDocument_Success(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
 	if resp["deleted_id"] != docID {
 		t.Errorf("deleted_id = %v, want %v", resp["deleted_id"], docID)
 	}

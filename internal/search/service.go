@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"time"
@@ -56,12 +57,17 @@ func (s *SearchService) DefaultLimit() int {
 	return s.config.Limit
 }
 
-func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *TimeRangeFilter) ([]Result, error) {
+func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *TimeRangeFilter, chunkType string) ([]Result, error) {
 	s.configMutex.RLock()
 	rrfK := s.config.RrfK
 	recencyWeight := s.config.RecencyWeight
 	recencyHalfLifeDays := s.config.RecencyHalfLifeDays
 	s.configMutex.RUnlock()
+
+	var chunkTypeNullStr sql.NullString
+	if chunkType != "" {
+		chunkTypeNullStr = sql.NullString{String: chunkType, Valid: true}
+	}
 
 	fetchLimit := int32(maxResults * 3)
 	if fetchLimit < 30 {
@@ -84,6 +90,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 				rows, err := s.queries.BM25SearchAllWithTags(gctx, sqlc.BM25SearchAllWithTagsParams{
 					Query:         query,
 					Tags:          tags,
+					ChunkType:     chunkTypeNullStr,
 					MaxResults:    fetchLimit,
 					CreatedAfter:  ca,
 					CreatedBefore: cb,
@@ -115,6 +122,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 				ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 				rows, err := s.queries.BM25SearchAll(gctx, sqlc.BM25SearchAllParams{
 					Query:         query,
+					ChunkType:     chunkTypeNullStr,
 					MaxResults:    fetchLimit,
 					CreatedAfter:  ca,
 					CreatedBefore: cb,
@@ -150,6 +158,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					Query:         query,
 					WorkspaceHash: workspace,
 					Tags:          tags,
+					ChunkType:     chunkTypeNullStr,
 					MaxResults:    fetchLimit,
 					CreatedAfter:  ca,
 					CreatedBefore: cb,
@@ -182,6 +191,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 				rows, err := s.queries.BM25Search(gctx, sqlc.BM25SearchParams{
 					Query:         query,
 					WorkspaceHash: workspace,
+					ChunkType:     chunkTypeNullStr,
 					MaxResults:    fetchLimit,
 					CreatedAfter:  ca,
 					CreatedBefore: cb,

@@ -156,7 +156,7 @@ func (q *Queries) GetFailedChunksAllWorkspaces(ctx context.Context, limit int32)
 }
 
 const getPendingChunks = `-- name: GetPendingChunks :many
-SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.created_at, c.embed_status, c.search_vector FROM chunks c
+SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.created_at, c.embed_status, c.search_vector, c.symbol_name, c.symbol_kind, c.language, c.line_start, c.line_end, c.chunk_type, c.embedding_strategy FROM chunks c
 WHERE c.workspace_hash = $1
 AND c.embed_status = 'pending'
 ORDER BY c.created_at ASC
@@ -190,6 +190,13 @@ func (q *Queries) GetPendingChunks(ctx context.Context, arg GetPendingChunksPara
 			&i.CreatedAt,
 			&i.EmbedStatus,
 			&i.SearchVector,
+			&i.SymbolName,
+			&i.SymbolKind,
+			&i.Language,
+			&i.LineStart,
+			&i.LineEnd,
+			&i.ChunkType,
+			&i.EmbeddingStrategy,
 		); err != nil {
 			return nil, err
 		}
@@ -389,17 +396,19 @@ FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE e.workspace_hash = $2
-  AND ($3::timestamptz IS NULL OR d.updated_at >= $3)
-  AND ($4::timestamptz IS NULL OR d.updated_at <= $4)
-  AND ($5::timestamptz IS NULL OR d.created_at >= $5)
-  AND ($6::timestamptz IS NULL OR d.created_at <= $6)
+  AND ($3::text IS NULL OR c.chunk_type = $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at >= $4)
+  AND ($5::timestamptz IS NULL OR d.updated_at <= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR d.created_at <= $7)
 ORDER BY e.embedding <=> $1::vector
-LIMIT $7
+LIMIT $8
 `
 
 type VectorSearchParams struct {
 	QueryEmbedding pgvector_go.Vector
 	WorkspaceHash  string
+	ChunkType      sql.NullString
 	UpdatedAfter   sql.NullTime
 	UpdatedBefore  sql.NullTime
 	CreatedAfter   sql.NullTime
@@ -427,6 +436,7 @@ func (q *Queries) VectorSearch(ctx context.Context, arg VectorSearchParams) ([]V
 	rows, err := q.db.QueryContext(ctx, vectorSearch,
 		arg.QueryEmbedding,
 		arg.WorkspaceHash,
+		arg.ChunkType,
 		arg.UpdatedAfter,
 		arg.UpdatedBefore,
 		arg.CreatedAfter,
@@ -477,16 +487,18 @@ SELECT e.id, e.chunk_id, e.workspace_hash,
 FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
-WHERE ($2::timestamptz IS NULL OR d.updated_at >= $2)
-  AND ($3::timestamptz IS NULL OR d.updated_at <= $3)
-  AND ($4::timestamptz IS NULL OR d.created_at >= $4)
-  AND ($5::timestamptz IS NULL OR d.created_at <= $5)
+WHERE ($2::text IS NULL OR c.chunk_type = $2)
+  AND ($3::timestamptz IS NULL OR d.updated_at >= $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at <= $4)
+  AND ($5::timestamptz IS NULL OR d.created_at >= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at <= $6)
 ORDER BY e.embedding <=> $1::vector
-LIMIT $6
+LIMIT $7
 `
 
 type VectorSearchAllParams struct {
 	QueryEmbedding pgvector_go.Vector
+	ChunkType      sql.NullString
 	UpdatedAfter   sql.NullTime
 	UpdatedBefore  sql.NullTime
 	CreatedAfter   sql.NullTime
@@ -513,6 +525,7 @@ type VectorSearchAllRow struct {
 func (q *Queries) VectorSearchAll(ctx context.Context, arg VectorSearchAllParams) ([]VectorSearchAllRow, error) {
 	rows, err := q.db.QueryContext(ctx, vectorSearchAll,
 		arg.QueryEmbedding,
+		arg.ChunkType,
 		arg.UpdatedAfter,
 		arg.UpdatedBefore,
 		arg.CreatedAfter,
@@ -564,17 +577,19 @@ FROM embeddings e
 JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE d.tags && $2::text[]
-  AND ($3::timestamptz IS NULL OR d.updated_at >= $3)
-  AND ($4::timestamptz IS NULL OR d.updated_at <= $4)
-  AND ($5::timestamptz IS NULL OR d.created_at >= $5)
-  AND ($6::timestamptz IS NULL OR d.created_at <= $6)
+  AND ($3::text IS NULL OR c.chunk_type = $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at >= $4)
+  AND ($5::timestamptz IS NULL OR d.updated_at <= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR d.created_at <= $7)
 ORDER BY e.embedding <=> $1::vector
-LIMIT $7
+LIMIT $8
 `
 
 type VectorSearchAllWithTagsParams struct {
 	QueryEmbedding pgvector_go.Vector
 	Tags           []string
+	ChunkType      sql.NullString
 	UpdatedAfter   sql.NullTime
 	UpdatedBefore  sql.NullTime
 	CreatedAfter   sql.NullTime
@@ -602,6 +617,7 @@ func (q *Queries) VectorSearchAllWithTags(ctx context.Context, arg VectorSearchA
 	rows, err := q.db.QueryContext(ctx, vectorSearchAllWithTags,
 		arg.QueryEmbedding,
 		pq.Array(arg.Tags),
+		arg.ChunkType,
 		arg.UpdatedAfter,
 		arg.UpdatedBefore,
 		arg.CreatedAfter,
@@ -654,18 +670,20 @@ JOIN chunks c ON e.chunk_id = c.id
 JOIN documents d ON c.document_id = d.id
 WHERE e.workspace_hash = $2
   AND d.tags && $3::text[]
-  AND ($4::timestamptz IS NULL OR d.updated_at >= $4)
-  AND ($5::timestamptz IS NULL OR d.updated_at <= $5)
-  AND ($6::timestamptz IS NULL OR d.created_at >= $6)
-  AND ($7::timestamptz IS NULL OR d.created_at <= $7)
+  AND ($4::text IS NULL OR c.chunk_type = $4)
+  AND ($5::timestamptz IS NULL OR d.updated_at >= $5)
+  AND ($6::timestamptz IS NULL OR d.updated_at <= $6)
+  AND ($7::timestamptz IS NULL OR d.created_at >= $7)
+  AND ($8::timestamptz IS NULL OR d.created_at <= $8)
 ORDER BY e.embedding <=> $1::vector
-LIMIT $8
+LIMIT $9
 `
 
 type VectorSearchWithTagsParams struct {
 	QueryEmbedding pgvector_go.Vector
 	WorkspaceHash  string
 	Tags           []string
+	ChunkType      sql.NullString
 	UpdatedAfter   sql.NullTime
 	UpdatedBefore  sql.NullTime
 	CreatedAfter   sql.NullTime
@@ -694,6 +712,7 @@ func (q *Queries) VectorSearchWithTags(ctx context.Context, arg VectorSearchWith
 		arg.QueryEmbedding,
 		arg.WorkspaceHash,
 		pq.Array(arg.Tags),
+		arg.ChunkType,
 		arg.UpdatedAfter,
 		arg.UpdatedBefore,
 		arg.CreatedAfter,

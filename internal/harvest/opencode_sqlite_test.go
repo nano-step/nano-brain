@@ -805,14 +805,13 @@ func TestOpenCodeSQLite_OrphanSession_NoWorktree_Skipped(t *testing.T) {
 	insertTestPart(t, sqdb, "p-orphan", "msg-orphan", "text", "orphan content")
 
 	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, pgDB)
-	harvested, skipped, errCount := h.HarvestAll(context.Background(), nil)
+	harvested, _, errCount := h.HarvestAll(context.Background(), nil)
 
 	if harvested != 0 {
-		t.Errorf("harvested = %d, want 0 (orphan session must be skipped)", harvested)
+		t.Errorf("harvested = %d, want 0 (orphan session must not be ingested)", harvested)
 	}
-	if skipped < 1 {
-		t.Errorf("skipped = %d, want >= 1", skipped)
-	}
+	// skipped may be 0: listSessions pre-filters by registered paths (WHERE p.worktree IN ...)
+	// so orphan sessions (NULL project_id) are excluded at SQL level, not counted as skipped.
 	if errCount != 0 {
 		t.Errorf("errCount = %d, want 0", errCount)
 	}
@@ -844,14 +843,13 @@ func TestOpenCodeSQLite_UnregisteredWorktree_Skipped(t *testing.T) {
 	insertTestPart(t, sqdb, "p-unreg", "msg-unreg", "text", "unregistered content")
 
 	h := harvest.NewOpenCodeSQLiteHarvesterFromDB(sqdb, pgDB)
-	harvested, skipped, errCount := h.HarvestAll(context.Background(), nil)
+	harvested, _, errCount := h.HarvestAll(context.Background(), nil)
 
 	if harvested != 0 {
-		t.Errorf("harvested = %d, want 0 (unregistered worktree must be skipped)", harvested)
+		t.Errorf("harvested = %d, want 0 (unregistered worktree must not be ingested)", harvested)
 	}
-	if skipped < 1 {
-		t.Errorf("skipped = %d, want >= 1", skipped)
-	}
+	// skipped may be 0: listSessions pre-filters by registered paths,
+	// so sessions with unregistered worktrees are excluded at SQL level.
 	if errCount != 0 {
 		t.Errorf("errCount = %d, want 0", errCount)
 	}

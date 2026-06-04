@@ -179,14 +179,16 @@ func TestMigration00011_CascadeDeletesDocsAndChunks(t *testing.T) {
 	}
 
 	if _, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-		DocumentID:    doc.ID,
-		WorkspaceHash: wsHash,
-		ContentHash:   "chunk-hash",
-		Content:       "chunk content",
-		ChunkIndex:    0,
-		StartLine:     sql.NullInt32{Int32: 1, Valid: true},
-		EndLine:       sql.NullInt32{Int32: 1, Valid: true},
-		Metadata:      pqtype.NullRawMessage{},
+		DocumentID:        doc.ID,
+		WorkspaceHash:     wsHash,
+		ContentHash:       "chunk-hash",
+		Content:           "chunk content",
+		ChunkIndex:        0,
+		StartLine:         sql.NullInt32{Int32: 1, Valid: true},
+		EndLine:           sql.NullInt32{Int32: 1, Valid: true},
+		Metadata:          pqtype.NullRawMessage{},
+		ChunkType:         "raw",
+		EmbeddingStrategy: "raw_code",
 	}); err != nil {
 		t.Fatal(err)
 	}

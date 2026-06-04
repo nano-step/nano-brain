@@ -56,14 +56,16 @@ func writeChunks(ctx context.Context, q DocumentQuerier, docID uuid.UUID, worksp
 	ids := make([]uuid.UUID, 0, len(chunks))
 	for _, ch := range chunks {
 		id, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-			DocumentID:    docID,
-			WorkspaceHash: workspace,
-			ContentHash:   ch.Hash,
-			Content:       ch.Content,
-			ChunkIndex:    int32(ch.Sequence),
-			StartLine:     sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
-			EndLine:       sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
-			Metadata:      meta,
+			DocumentID:        docID,
+			WorkspaceHash:     workspace,
+			ContentHash:       ch.Hash,
+			Content:           ch.Content,
+			ChunkIndex:        int32(ch.Sequence),
+			StartLine:         sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
+			EndLine:           sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
+			Metadata:          meta,
+			ChunkType:         "raw",
+			EmbeddingStrategy: "raw_code",
 		})
 		if err != nil {
 			return nil, err

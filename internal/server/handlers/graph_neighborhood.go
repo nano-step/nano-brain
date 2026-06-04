@@ -173,9 +173,7 @@ func GraphNeighborhood(q NeighborhoodQuerier, logger zerolog.Logger) echo.Handle
 		}
 
 		if len(frontier) > 0 && truncated {
-			for _, n := range frontier {
-				frontierNodes = append(frontierNodes, n)
-			}
+			frontierNodes = append(frontierNodes, frontier...)
 		}
 
 		nodes := make([]neighborhoodNode, 0, len(visited))

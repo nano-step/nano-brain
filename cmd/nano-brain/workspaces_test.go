@@ -349,7 +349,7 @@ func TestWorkspacesCurrent_JSON_PrintsFullBody(t *testing.T) {
 		t.Errorf("expected JSON output, got %q", out.String())
 	}
 	var parsed map[string]interface{}
-	if err := json.Unmarshal([]byte(out.String()), &parsed); err != nil {
+	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
 		t.Fatalf("decode: %v output=%q", err, out.String())
 	}
 	if parsed["workspace_hash"] != "h" {
