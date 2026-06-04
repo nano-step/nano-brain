@@ -59,8 +59,11 @@ func TestResetWorkspace_NonTxPath(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
 	}
-	if !q.docDelCalled || !q.wsDelCalled {
-		t.Errorf("expected both deletes called: docs=%v ws=%v", q.docDelCalled, q.wsDelCalled)
+	if !q.docDelCalled {
+		t.Errorf("expected documents deleted: docs=%v", q.docDelCalled)
+	}
+	if q.wsDelCalled {
+		t.Errorf("workspace should NOT be deleted: ws=%v", q.wsDelCalled)
 	}
 	var resp map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {

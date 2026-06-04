@@ -13,7 +13,6 @@ import (
 type ResetWorkspaceQuerier interface {
 	CountDocumentsByWorkspace(ctx context.Context, workspaceHash string) (int64, error)
 	DeleteDocumentsByWorkspace(ctx context.Context, workspaceHash string) error
-	DeleteWorkspace(ctx context.Context, hash string) error
 }
 
 type resetWorkspaceTxBeginner interface {
@@ -52,10 +51,6 @@ func ResetWorkspace(q ResetWorkspaceQuerier, db resetWorkspaceTxBeginner, logger
 				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete documents failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
 			}
-			if err := q.DeleteWorkspace(ctx, req.Workspace); err != nil {
-				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete workspace failed (docs already deleted)")
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
-			}
 		} else {
 			tx, err := db.BeginTx(ctx, nil)
 			if err != nil {
@@ -67,11 +62,6 @@ func ResetWorkspace(q ResetWorkspaceQuerier, db resetWorkspaceTxBeginner, logger
 				_ = tx.Rollback()
 				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete documents failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
-			}
-			if err := txq.DeleteWorkspace(ctx, req.Workspace); err != nil {
-				_ = tx.Rollback()
-				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete workspace failed")
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
 			}
 			if err := tx.Commit(); err != nil {
 				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("commit transaction failed")

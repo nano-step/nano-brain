@@ -1,0 +1,270 @@
+# nano-brain Setup Guide for AI Agents
+
+This guide is written for AI agents (Claude Code, OpenCode, Cursor, etc.) to walk a user through installing and configuring nano-brain. Follow each step in order. Check before installing — always ask the user before making changes to their system.
+
+---
+
+## Before you start
+
+Ask the user which setup path they want:
+
+1. **Local** — single machine, Ollama for embeddings, Docker for PostgreSQL
+2. **VPS / team** — nano-brain on a remote server, shared DB, team access
+3. **Voyage AI** — use Voyage AI instead of Ollama (no local GPU needed)
+
+The steps below cover **Path 1 (local)**. For VPS and Voyage AI, adapt the embedding and server binding steps accordingly.
+
+---
+
+## Step 1 — Check Node.js
+
+```bash
+node --version
+```
+
+- **Found (18+):** proceed
+- **Found (< 18):** tell the user: "Node.js 18 or higher is required. Your version is X. Would you like me to upgrade it?"
+- **Not found:** ask: "Node.js is required to install nano-brain via npm. Would you like me to install it?" → if yes, direct to https://nodejs.org or use a version manager (`nvm`, `fnm`)
+
+---
+
+## Step 2 — Check Docker
+
+```bash
+docker --version
+docker info 2>&1 | head -5
+```
+
+- **Running:** proceed
+- **Installed but not running:** ask: "Docker is installed but not running. Would you like me to start it?" → `open -a Docker` (macOS) or `sudo systemctl start docker` (Linux)
+- **Not installed:** ask: "Docker is needed to run PostgreSQL locally. Would you like help installing it?" → direct to https://docs.docker.com/get-docker/
+
+---
+
+## Step 3 — Check Ollama
+
+```bash
+ollama --version
+curl -s http://localhost:11434/api/tags 2>&1 | head -3
+```
+
+- **Running with models:** check if `nomic-embed-text` is available:
+  ```bash
+  ollama list | grep nomic-embed-text
+  ```
+  If not present, ask: "The `nomic-embed-text` embedding model is not pulled yet. Would you like me to pull it now? (~274 MB)" → `ollama pull nomic-embed-text`
+- **Installed but not running:** ask: "Ollama is installed but not running. Would you like me to start it?" → `ollama serve &`
+- **Not installed:** ask: "Ollama is needed for local embeddings. Would you like help installing it?" → direct to https://ollama.com/download
+
+> **Alternative:** If the user has a Voyage AI API key, they can skip Ollama entirely. Set `VOYAGE_API_KEY` and use `provider: voyage` in config.
+
+---
+
+## Step 4 — Start PostgreSQL
+
+Check if a PostgreSQL instance is already running:
+
+```bash
+docker ps | grep nanobrain-pg
+pg_isready -h localhost -p 5432 2>/dev/null
+```
+
+- **Already running on port 5432:** ask: "A PostgreSQL instance is already running. Should I use it for nano-brain, or start a separate one on a different port?"
+- **Not running:** ask: "No PostgreSQL instance found. Would you like me to start one using Docker?" → if yes:
+
+```bash
+docker run -d --name nanobrain-pg \
+  --restart unless-stopped \
+  -p 5432:5432 \
+  -e POSTGRES_USER=nanobrain \
+  -e POSTGRES_PASSWORD=nanobrain \
+  -e POSTGRES_DB=nanobrain_dev \
+  pgvector/pgvector:pg17
+```
+
+Wait for it to be ready:
+```bash
+until docker exec nanobrain-pg pg_isready -U nanobrain 2>/dev/null; do sleep 1; done
+echo "PostgreSQL is ready"
+```
+
+---
+
+## Step 5 — Install nano-brain
+
+```bash
+npm list -g @nano-step/nano-brain 2>/dev/null | head -3
+```
+
+- **Already installed:** check version: `nano-brain --version`
+- **Not installed:** ask: "Would you like me to install nano-brain globally?" → if yes:
+
+```bash
+npm install -g @nano-step/nano-brain
+nano-brain --version
+```
+
+---
+
+## Step 6 — Run doctor
+
+This verifies the full stack in one command:
+
+```bash
+nano-brain doctor
+```
+
+Expected output: all checks green. Common failures and fixes:
+
+| Failure | Fix |
+|---|---|
+| `PostgreSQL: FAIL` | Check Docker container is running: `docker ps \| grep nanobrain-pg` |
+| `pgvector extension: FAIL` | The `pgvector/pgvector:pg17` image includes pgvector — re-run migrations: `nano-brain db:migrate` |
+| `Ollama: FAIL` | Ollama not running: `ollama serve &` |
+| `Embedding model: FAIL` | Model not pulled: `ollama pull nomic-embed-text` |
+| `Config: WARN` | Config file not found — nano-brain will use defaults, which is fine for local setup |
+
+If any check fails, fix it before continuing.
+
+---
+
+## Step 7 — Start the server
+
+```bash
+# Check if already running
+curl -s http://localhost:3100/health 2>/dev/null | grep -q "ok" && echo "already running"
+```
+
+- **Already running:** skip
+- **Not running:** ask: "Would you like me to start nano-brain in the background?" → if yes:
+
+```bash
+nano-brain serve -d
+```
+
+Verify it started:
+```bash
+curl -s http://localhost:3100/health
+# Expected: {"status":"ok", ...}
+```
+
+---
+
+## Step 8 — Register the workspace
+
+Ask the user: "Which project directory would you like to register with nano-brain? (press Enter for current directory)"
+
+```bash
+# Register the project
+nano-brain init --root=/path/to/project
+
+# Confirm registration
+nano-brain workspaces list
+```
+
+The output includes the workspace hash — this is used to scope all queries to this project.
+
+---
+
+## Step 9 — Configure your MCP client
+
+Ask the user which AI client they use:
+
+### Claude Code
+Add to `~/.claude.json` under `mcpServers`:
+```json
+{
+  "mcpServers": {
+    "nano-brain": {
+      "type": "http",
+      "url": "http://localhost:3100/mcp"
+    }
+  }
+}
+```
+
+### OpenCode
+Add to OpenCode config:
+```json
+{
+  "mcp": {
+    "nano-brain": {
+      "type": "http",
+      "url": "http://localhost:3100/mcp"
+    }
+  }
+}
+```
+
+### Other MCP clients
+Use `url: http://localhost:3100/mcp` with transport type `http` (MCP 2025-03-26 streamable HTTP).
+
+After adding the config, restart your AI client and verify the tools are available:
+```
+memory_status → should return {"pg_status":"healthy", ...}
+```
+
+---
+
+## Step 10 — Verify end-to-end
+
+Run a quick test to confirm everything works:
+
+```bash
+# Write a test memory
+nano-brain write --workspace=<hash> "nano-brain setup complete on $(date)"
+
+# Query it back
+nano-brain query --workspace=<hash> "setup complete"
+```
+
+If results come back, setup is successful.
+
+---
+
+## Troubleshooting
+
+### Server won't start
+```bash
+nano-brain doctor --json    # machine-readable output
+nano-brain logs -n 50       # last 50 log lines
+```
+
+### Embedding queue stuck
+```bash
+nano-brain status           # shows queue depth and provider status
+```
+If queue is growing but not shrinking, Ollama may be overloaded. Check: `curl http://localhost:11434/api/tags`
+
+### MCP tools not showing in AI client
+1. Confirm server is running: `curl http://localhost:3100/health`
+2. Confirm MCP endpoint responds: `curl -X POST http://localhost:3100/mcp -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'`
+3. Restart your AI client after updating config
+
+### Port conflict (3100 already in use)
+```bash
+# Use a different port
+nano-brain serve -d --port=3200
+```
+Update your MCP config URL accordingly.
+
+---
+
+## VPS / team setup (Path 2)
+
+If the user wants a shared server:
+
+1. Complete Steps 1–8 on the server (set `--host=0.0.0.0` in Step 7)
+2. Generate auth tokens: `nano-brain auth token` → one per team member or role
+3. Enable auth in config:
+   ```yaml
+   server:
+     host: 0.0.0.0
+     port: 3100
+     auth:
+       enabled: true
+       tokens:
+         - "nbt_..."
+   ```
+4. Each developer adds the remote URL + token to their MCP client (see Step 9, replace `localhost` with server IP)
+5. Each developer registers their local project: `NANO_BRAIN_SERVER=http://SERVER_IP:3100 nano-brain init --root=.`

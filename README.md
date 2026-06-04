@@ -6,6 +6,26 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-nano--step%2Fnano--brain-181717?logo=github)](https://github.com/nano-step/nano-brain)
 
+## Table of Contents
+
+- [What It Does](#what-it-does)
+- [Use Cases](#use-cases)
+- [Key Features](#key-features)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Verifying Downloads](#verifying-downloads)
+- [Configuration](#configuration)
+- [REST API](#rest-api)
+- [CLI Commands](#cli-commands)
+- [MCP Tools](#mcp-tools)
+- [Search Pipeline](#search-pipeline)
+- [Architecture](#architecture)
+- [Migration from V1](#migration-from-v1)
+- [Tech Stack](#tech-stack)
+- [License](#license)
+
+---
+
 ## What It Does
 
 nano-brain is a persistent memory server for AI coding agents that solves session amnesia. It automatically ingests AI sessions, notes, and codebase files, indexes everything with hybrid search (BM25 + pgvector), and serves memories via MCP tools and REST API. Built in Go with PostgreSQL — single static binary, zero CGO dependencies.
@@ -81,70 +101,105 @@ Before pushing, run `memory_impact` on your changed files to discover what else 
 
 ## Quick Start
 
-### Option A: Via MCP (recommended for AI agents)
+> **Let your AI agent set this up for you.** See [SETUP_AGENT.md](docs/SETUP_AGENT.md) — a step-by-step guide your agent can follow to install, configure, and verify nano-brain, checking for missing dependencies and asking before installing anything.
 
-Add to your MCP client config — no install required if the server is already running:
+---
 
+### Path 1 — Local machine (Ollama + Docker, ~5 min)
+
+The fastest way to get started on a single machine.
+
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/), [Ollama](https://ollama.com/download), Node.js 18+
+
+```bash
+# 1. Install nano-brain
+npm install -g @nano-step/nano-brain
+
+# 2. Start PostgreSQL + pgvector
+docker run -d --name nanobrain-pg -p 5432:5432 \
+  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
+  pgvector/pgvector:pg17
+
+# 3. Pull embedding model
+ollama pull nomic-embed-text
+
+# 4. Verify everything is in order
+nano-brain doctor
+
+# 5. Start the server (background)
+nano-brain serve -d
+
+# 6. Register your project
+nano-brain init --root=/path/to/your/project
+```
+
+**Add to your MCP client** (Claude Code, OpenCode, Cursor, etc.):
 ```json
 {
   "mcp": {
     "nano-brain": {
-      "type": "remote",
+      "type": "http",
       "url": "http://localhost:3100/mcp"
     }
   }
 }
 ```
 
-### Option B: Install globally (fast, no cold-start overhead)
+Your AI agent now has persistent memory. It will automatically index your project files and harvest sessions as you work.
 
+---
+
+### Path 2 — VPS / team server (shared memory across machines)
+
+Deploy once, connect from any machine. The whole team shares the same knowledge base.
+
+**On the server:**
 ```bash
+# 1. Start PostgreSQL + pgvector
+docker run -d --name nanobrain-pg -p 5432:5432 \
+  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
+  pgvector/pgvector:pg17
+
+# 2. Install and start nano-brain (with auth + public binding)
 npm install -g @nano-step/nano-brain
+nano-brain serve -d --host=0.0.0.0
 
-# Start PostgreSQL + pgvector
-docker run -d --name nanobrain-pg -p 5432:5432 \
-  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
-  pgvector/pgvector:pg17
-
-# Start Ollama + pull embedding model
-ollama pull nomic-embed-text
-
-# Check prerequisites
-nano-brain doctor
-
-# Start server
-nano-brain serve -d
+# 3. Generate a bearer token for your team
+nano-brain auth token
+# → nbt_xxxxxxxxxxxxxxxx
 ```
 
-### Option C: Via npx (no install, slower cold-start)
+**On each developer machine** — add to MCP client config:
+```json
+{
+  "mcp": {
+    "nano-brain": {
+      "type": "http",
+      "url": "http://YOUR_VPS_IP:3100/mcp",
+      "headers": {
+        "Authorization": "Bearer nbt_xxxxxxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
 
 ```bash
-# Start PostgreSQL + pgvector
-docker run -d --name nanobrain-pg -p 5432:5432 \
-  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
-  pgvector/pgvector:pg17
-
-# Start Ollama + pull embedding model
-ollama pull nomic-embed-text
-
-# Check prerequisites
-npx @nano-step/nano-brain@latest doctor
-
-# Start server
-npx @nano-step/nano-brain@latest
+# Register your local project against the remote server
+NANO_BRAIN_SERVER=http://YOUR_VPS_IP:3100 nano-brain init --root=/path/to/project
 ```
 
-> **Also available as:** `npx nano-brain@latest` (unscoped alias)
->
-> **Note:** Do NOT run `npx nano-brain` from the nano-brain source directory — npm will resolve the local package instead of the registry. Run from any other directory.
+See [Authentication](#authentication-vps--remote-deployment) for role-based tokens (admin / developer / read-only).
 
-### Option D: Build from source
+---
+
+### Path 3 — Build from source
 
 ```bash
 # Build
 CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain
 
-# Start PostgreSQL + pgvector (example with Docker)
+# Start PostgreSQL + pgvector
 docker run -d --name nanobrain-pg -p 5432:5432 \
   -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
   pgvector/pgvector:pg17
@@ -152,21 +207,21 @@ docker run -d --name nanobrain-pg -p 5432:5432 \
 # Start server
 DATABASE_URL="postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev" ./nano-brain
 
-# Register workspace
-curl -X POST http://localhost:3100/api/v1/init \
-  -H "Content-Type: application/json" \
-  -d '{"root_path":"/path/to/project","name":"my-project"}'
-
-# Write a document
-curl -X POST http://localhost:3100/api/v1/write \
-  -H "Content-Type: application/json" \
-  -d '{"workspace":"<hash>","source_path":"notes/decision.md","content":"# Decision\nUse PostgreSQL.","tags":["decision"]}'
-
-# Search
-curl -X POST http://localhost:3100/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{"workspace":"<hash>","query":"database decision"}'
+# Register workspace and check status
+./nano-brain init --root=/path/to/project
+./nano-brain status
 ```
+
+---
+
+### Via npx (no global install)
+
+```bash
+npx @nano-step/nano-brain@latest doctor
+npx @nano-step/nano-brain@latest serve -d
+```
+
+> Also available as `npx nano-brain@latest`. Do NOT run from the nano-brain source directory — npm will resolve the local package instead of the registry.
 
 ## Verifying Downloads
 
