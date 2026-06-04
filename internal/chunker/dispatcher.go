@@ -2,6 +2,7 @@ package chunker
 
 import (
 	"path/filepath"
+	"strings"
 )
 
 type Dispatcher struct {
@@ -19,7 +20,7 @@ func NewDispatcher(symbol, heading, fixed Chunker) *Dispatcher {
 }
 
 func (d *Dispatcher) Chunk(content string, sourcePath string) []Chunk {
-	ext := filepath.Ext(sourcePath)
+	ext := strings.ToLower(filepath.Ext(sourcePath))
 	switch ext {
 	case ".go", ".ts", ".tsx", ".js", ".jsx", ".py":
 		return d.symbol.Chunk(content, sourcePath)

@@ -275,7 +275,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 
 			fetchLimit := offset + maxResults + 1
 
-			results, err := a.searchService.HybridSearch(ctx, query, ws, fetchLimit, nil, timeRange)
+			results, err := a.searchService.HybridSearch(ctx, query, ws, fetchLimit, nil, timeRange, chunkType)
 			if err != nil {
 				return errResult(fmt.Sprintf("hybrid search failed: %v", err)), nil
 			}

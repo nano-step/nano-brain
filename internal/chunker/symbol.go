@@ -103,10 +103,11 @@ func (s *SymbolAwareChunker) Chunk(content string, sourcePath string) []Chunk {
 
 		if len(symbolContent) > maxSymbolBytes {
 			sub := s.fallback.Chunk(symbolContent, sourcePath)
+			symbolStartLine := lineForByteOffset(contentBytes, start)
 			for j := range sub {
 				sub[j].Sequence = len(chunks) + j
-				sub[j].StartLine = lineForByteOffset(contentBytes, start)
-				sub[j].EndLine = lineForByteOffset(contentBytes, end)
+				sub[j].StartLine = symbolStartLine + sub[j].StartLine - 1
+				sub[j].EndLine = symbolStartLine + sub[j].EndLine - 1
 				sub[j].SymbolName = sp.name
 				sub[j].SymbolKind = sp.kind
 				sub[j].Language = lang
@@ -142,7 +143,7 @@ func (s *SymbolAwareChunker) Chunk(content string, sourcePath string) []Chunk {
 func (s *SymbolAwareChunker) extractSymbolSpans(bt *gotreesitter.BoundTree, tree *gotreesitter.Tree, pl *parsedLang, content []byte, ext string) []symbolSpan {
 	matches := pl.query.Execute(tree)
 	var spans []symbolSpan
-	seen := map[string]bool{}
+	seen := map[uint32]bool{}
 
 	for _, match := range matches {
 		var nameNode, declNode *gotreesitter.Node
@@ -157,11 +158,12 @@ func (s *SymbolAwareChunker) extractSymbolSpans(bt *gotreesitter.BoundTree, tree
 		if nameNode == nil || declNode == nil {
 			continue
 		}
-		name := bt.NodeText(nameNode)
-		if seen[name] {
+		startByte := declNode.StartByte()
+		if seen[startByte] {
 			continue
 		}
-		seen[name] = true
+		seen[startByte] = true
+		name := bt.NodeText(nameNode)
 
 		kind := inferKind(declNode, bt, ext)
 		spans = append(spans, symbolSpan{
