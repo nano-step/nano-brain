@@ -10,6 +10,28 @@
 
 nano-brain is a persistent memory server for AI coding agents that solves session amnesia. It automatically ingests AI sessions, notes, and codebase files, indexes everything with hybrid search (BM25 + pgvector), and serves memories via MCP tools and REST API. Built in Go with PostgreSQL — single static binary, zero CGO dependencies.
 
+## Use Cases
+
+### Multi-machine developer (primary use case)
+You work on your office PC, home machine, and personal laptop — each with a different Claude Code or OpenCode session. Without shared memory, your AI agent forgets everything between machines.
+
+Deploy nano-brain on a VPS (or any always-on server) with a PostgreSQL instance. Every session you run on any machine gets harvested and indexed there. When you switch machines, your agent picks up exactly where you left off — decisions, context, code knowledge, all there.
+
+```
+Office PC ──┐
+             ├──► nano-brain on VPS ──► shared PostgreSQL
+Home Mac ───┘
+```
+
+### Persistent AI agent memory
+AI agents forget everything when the session ends. nano-brain gives them durable, searchable memory across sessions — decisions made, patterns discovered, code written — so they don't repeat work or ask the same questions twice.
+
+### Code intelligence for large codebases
+nano-brain builds a symbol graph of your codebase: functions, types, dependencies, call chains. Agents can ask "what breaks if I change this function?" (`memory_impact`) or "trace the call chain from this entry point" (`memory_trace`) — across files, across sessions.
+
+### Notes and documentation search
+Write structured notes, ADRs, or decision records into nano-brain. Hybrid search (BM25 + semantic) retrieves them by keyword or concept. Agents can surface the right context without you having to remember where you put it.
+
 ## Key Features
 
 - **Hybrid search** — BM25 full-text + pgvector HNSW cosine similarity + RRF fusion + recency decay
