@@ -6,28 +6,28 @@
 
 ## Vision
 
-nano-brain là persistent memory + code intelligence layer cho AI agents.
-Goal: agent biết context của project, lịch sử decision, và có thể dự đoán/chuẩn bị trước task tiếp theo.
+nano-brain is a persistent memory and code intelligence layer for AI coding agents.
+Goal: agents know the project context, decision history, and can anticipate what's needed next — across sessions, machines, and team members.
 
 ---
 
 ## Pillar 1: Code Intelligence
 
-**What:** Hiểu codebase như một senior engineer.
+**What:** Understand the codebase like a senior engineer.
 
 | Feature | Description | Status |
 |---|---|---|
 | File indexing | Watch + chunk + embed toàn bộ source files | ✅ |
 | Symbol extraction | Functions, types, interfaces, constants | ✅ |
 | Knowledge graph | Module → function → dependency relationships | ✅ |
-| Impact analytics | Thay đổi X → affects Y, Z (cross-file) | ✅ |
-| Call chain tracing | Trace execution path từ entry point | ✅ |
+| Impact analytics | Change X → affects Y, Z (cross-file) | ✅ |
+| Call chain tracing | Trace execution path from entry point | ✅ |
 
 ---
 
 ## Pillar 2: Session Harvesting
 
-**What:** Thu thập + summarize sessions từ AI tools, scope per workspace.
+**What:** Collect and summarize sessions from AI tools, scoped per workspace.
 
 | Feature | Description | Status |
 |---|---|---|
@@ -81,7 +81,7 @@ summarization:
 | Semantic search | `nano-brain query "..."` | ✅ |
 | Tag-based filter | `--tags decision,auth` | ✅ |
 | Supersede | Replace stale memory entries | ✅ |
-| Auto-memory from sessions | Extract decisions từ harvested sessions | ✅ |
+| Auto-memory from sessions | Extract decisions from harvested sessions | ✅ |
 | 9 MCP tools | query, search, vsearch, get, write, tags, status, update, wake_up | ✅ |
 | Hybrid search pipeline | BM25 + pgvector HNSW + RRF fusion + recency decay | ✅ |
 | Benchmarking suite | generate, run, compare, stress | ✅ |
@@ -93,31 +93,89 @@ summarization:
 
 ---
 
-## Pillar 4: Self-Learning & Prediction
+## Pillar 4: Team & Multi-user
 
-**What:** Học pattern từ user behavior → chuẩn bị context trước.
+**What:** Shared knowledge base for the whole team — one server, multiple users, role-controlled access.
 
-> ⚠️ Cần discuss thêm với user về scope/approach.
+**Use case:** Deploy one nano-brain server for the entire team. Every developer's AI agent connects to the same PostgreSQL instance — decisions, architecture notes, and code intelligence are instantly shared. New team members get full project context from day one without any per-machine setup.
 
-### 4a. Pattern Learning
-- Phân tích prompt history từ harvested sessions
-- Nhận diện recurring workflows (e.g., "user thường fix bug → run test → commit")
+| Feature | Description | Status |
+|---|---|---|
+| Bearer token auth | Single shared token for all users | ✅ |
+| Basic auth | Username/password per user | ✅ |
+| Role-based access control | Admin / Developer / Reader roles | ❌ |
+| Admin role | Full read/write + config + workspace management | ❌ |
+| Developer role | Read/write memory, scoped to assigned workspaces | ❌ |
+| Reader role | Read-only access (search, get, wake-up, status) | ❌ |
+| Per-token role assignment | Each `nbt_` token carries a role | ❌ |
+| Per-user basic auth role | Role assigned per username in config | ❌ |
+| Audit log | Who wrote/deleted what, when | ❌ |
+
+### Role Matrix
+
+| Operation | Admin | Developer | Reader |
+|---|---|---|---|
+| `memory_query` / `memory_search` / `memory_vsearch` | ✅ | ✅ | ✅ |
+| `memory_get` / `memory_wake_up` / `memory_status` | ✅ | ✅ | ✅ |
+| `memory_write` / `memory_update` | ✅ | ✅ | ❌ |
+| `memory_graph` / `memory_impact` / `memory_trace` | ✅ | ✅ | ✅ |
+| Workspace init / delete | ✅ | ❌ | ❌ |
+| Config reload / patch | ✅ | ❌ | ❌ |
+| Collection create / delete | ✅ | ✅ | ❌ |
+| Reindex / harvest | ✅ | ✅ | ❌ |
+
+### Config sketch (proposed)
+
+```yaml
+server:
+  auth:
+    enabled: true
+    users:
+      - username: alice
+        password_hash: "$2a$10$..."
+        role: admin
+      - username: bob
+        password_hash: "$2a$10$..."
+        role: developer
+      - username: reviewer
+        password_hash: "$2a$10$..."
+        role: reader
+    tokens:
+      - token: "nbt_admin_..."
+        role: admin
+      - token: "nbt_dev_..."
+        role: developer
+      - token: "nbt_readonly_..."
+        role: reader
+```
+
+---
+
+## Pillar 5: Self-Learning & Prediction
+
+**What:** Learn patterns from user behavior → prepare context proactively.
+
+> ⚠️ Needs further design discussion on scope and approach.
+
+### 5a. Pattern Learning
+- Analyze prompt history from harvested sessions
+- Identify recurring workflows (e.g., "user typically fixes bug → runs tests → commits")
 - Build user-specific workflow graph
 
-### 4b. Proactive Context Pre-loading
-- Dựa trên current task → dự đoán task tiếp theo
+### 5b. Proactive Context Pre-loading
+- Based on current task → predict what's needed next
 - Pre-fetch relevant code symbols, memory entries, past decisions
 - Surface as "you might need next: ..."
 
-### 4c. Self-Lesson Learn
-- Sau mỗi session: extract lessons ("what worked", "what failed")
+### 5c. Self-Lesson Extraction
+- After each session: extract lessons ("what worked", "what failed")
 - Store as tagged memory entries
-- Surface relevant lessons khi bắt đầu similar task
+- Surface relevant lessons when starting a similar task
 
-### 4d. Auto-execution (Stretch)
-- Nano-brain tự trigger next step mà không cần user prompt
-- Requires: high confidence prediction + user opt-in flag
-- Risk: false positives → cần confidence threshold
+### 5d. Auto-execution (Stretch)
+- nano-brain autonomously triggers the next step without a user prompt
+- Requires: high confidence prediction + explicit user opt-in flag
+- Risk: false positives — needs confidence threshold
 
 ---
 
@@ -165,7 +223,13 @@ Phase 6 — Enhanced Code Intelligence (in progress)
   ├── ✅ #174 — Symbol extraction with go-tree-sitter (Python extractor shipped)
   └── ⚠️ Cross-language support — Python via tree-sitter; TypeScript, Rust pending
 
-Phase 7 — Self-Learning (Discuss)
+Phase 7 — Team & Multi-user (Planned)
+  ├── Role-based access control (Admin / Developer / Reader)
+  ├── Per-token and per-user role assignment in config
+  ├── Read-only enforcement at middleware layer
+  └── Audit log (who wrote/deleted what)
+
+Phase 8 — Self-Learning (Discuss)
   ├── #154 — Memory consolidation + categorization + Thompson Sampling
   ├── Pattern learning from prompt history
   ├── Proactive context pre-loading

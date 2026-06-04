@@ -32,6 +32,17 @@ nano-brain builds a symbol graph of your codebase: functions, types, dependencie
 ### Notes and documentation search
 Write structured notes, ADRs, or decision records into nano-brain. Hybrid search (BM25 + semantic) retrieves them by keyword or concept. Agents can surface the right context without you having to remember where you put it.
 
+### Team knowledge base (no per-member setup)
+Deploy one nano-brain server for the whole team. Every developer's AI agent connects to the same PostgreSQL instance — decisions, architecture notes, code intelligence, and session learnings are instantly shared across the team. New team members get full project context from day one without any setup on their machine.
+
+```
+Dev A (office)   ──┐
+Dev B (remote)   ──┼──► nano-brain on team server ──► shared PostgreSQL
+Dev C (new hire) ──┘
+```
+
+Role-based access: admins get full read/write, developers get read/write scoped to their workspace, stakeholders or reviewers get read-only access.
+
 ## Key Features
 
 - **Hybrid search** — BM25 full-text + pgvector HNSW cosine similarity + RRF fusion + recency decay
