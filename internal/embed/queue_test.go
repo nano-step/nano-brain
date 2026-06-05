@@ -1130,3 +1130,38 @@ func TestScanPending_SkippedInflightAggregated(t *testing.T) {
 		t.Errorf("channel len = %d, want 0 (all chunks were in-flight)", len(eq.ch))
 	}
 }
+
+// TestForceEnqueue_BypassesInflight verifies that ForceEnqueue bypasses the
+// inflight dedup check and always enqueues the chunk, even if it's already
+// been marked in-flight by a prior Enqueue call.
+func TestForceEnqueue_BypassesInflight(t *testing.T) {
+	chunkID := uuid.New()
+
+	mq := &mockQuerier{}
+	eq := newTestQueue(&mockEmbedder{}, mq)
+
+	// First Enqueue: marks inflight, returns true
+	if !eq.Enqueue(chunkID) {
+		t.Error("first Enqueue returned false, want true")
+	}
+
+	// Second Enqueue: detects inflight, returns false
+	if eq.Enqueue(chunkID) {
+		t.Error("second Enqueue returned true, want false (inflight dedup)")
+	}
+
+	// ForceEnqueue: bypasses dedup, returns true
+	if !eq.ForceEnqueue(chunkID) {
+		t.Error("ForceEnqueue returned false, want true")
+	}
+
+	// Verify channel has 2 items (one from first Enqueue, one from ForceEnqueue)
+	if len(eq.ch) != 2 {
+		t.Errorf("channel len = %d, want 2", len(eq.ch))
+	}
+
+	// Verify pending count is 2
+	if p := eq.pending.Load(); p != 2 {
+		t.Errorf("pending = %d, want 2", p)
+	}
+}
