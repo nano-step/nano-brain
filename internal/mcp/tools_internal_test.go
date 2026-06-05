@@ -40,7 +40,9 @@ func TestEpochTimestamps(t *testing.T) {
 	item := mcpSearchResultItem{ID: "test-id", CreatedAt: now.Unix(), UpdatedAt: now.Unix()}
 	data, _ := json.Marshal(item)
 	var parsed map[string]any
-	json.Unmarshal(data, &parsed)
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
 	if ca, ok := parsed["created_at"]; ok {
 		if _, isNum := ca.(float64); !isNum {
 			t.Errorf("epoch: expected numeric created_at, got %T", ca)
@@ -50,7 +52,9 @@ func TestEpochTimestamps(t *testing.T) {
 	item2 := mcpSearchResultItem{ID: "test-id", CreatedAt: now, UpdatedAt: now}
 	data2, _ := json.Marshal(item2)
 	var parsed2 map[string]any
-	json.Unmarshal(data2, &parsed2)
+	if err := json.Unmarshal(data2, &parsed2); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
 	if ca, ok := parsed2["created_at"]; ok {
 		if _, isStr := ca.(string); !isStr {
 			t.Errorf("rfc3339: expected string created_at, got %T", ca)
