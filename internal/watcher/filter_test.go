@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	gitignore "github.com/sabhiram/go-gitignore"
 )
 
 func TestShouldSkip_DefaultExcludeDirs(t *testing.T) {
@@ -395,5 +397,132 @@ func TestFileFilter_LocalNanoBrainIgnorePermissionDenied(t *testing.T) {
 	}
 	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should NOT be skipped — other filter layers still operate")
+	}
+}
+
+func TestGitignoreStack_Push(t *testing.T) {
+	root := t.TempDir()
+	stack := &gitignoreStack{}
+
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("*.tmp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gi, err := gitignore.CompileIgnoreFile(filepath.Join(root, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stack.Push(root, gi)
+
+	if len(stack.entries) != 1 {
+		t.Errorf("expected 1 entry, got %d", len(stack.entries))
+	}
+	if stack.entries[0].dirPath != root {
+		t.Errorf("expected dirPath %q, got %q", root, stack.entries[0].dirPath)
+	}
+}
+
+func TestGitignoreStack_PopAbove(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "sub")
+	deepdir := filepath.Join(subdir, "deep")
+
+	stack := &gitignoreStack{}
+	gi1 := gitignore.CompileIgnoreLines("*.a")
+	gi2 := gitignore.CompileIgnoreLines("*.b")
+	gi3 := gitignore.CompileIgnoreLines("*.c")
+
+	stack.Push(root, gi1)
+	stack.Push(subdir, gi2)
+	stack.Push(deepdir, gi3)
+
+	if len(stack.entries) != 3 {
+		t.Fatalf("expected 3 entries after pushes, got %d", len(stack.entries))
+	}
+
+	stack.PopAbove(filepath.Join(subdir, "file.txt"))
+
+	if len(stack.entries) != 2 {
+		t.Errorf("expected 2 entries after PopAbove(subdir/file.txt), got %d", len(stack.entries))
+	}
+
+	stack.PopAbove(filepath.Join(root, "other.txt"))
+
+	if len(stack.entries) != 1 {
+		t.Errorf("expected 1 entry after PopAbove(root/other.txt), got %d", len(stack.entries))
+	}
+	if stack.entries[0].dirPath != root {
+		t.Errorf("expected remaining entry to be root, got %q", stack.entries[0].dirPath)
+	}
+}
+
+func TestGitignoreStack_Matches(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "sub")
+
+	stack := &gitignoreStack{}
+	gi1 := gitignore.CompileIgnoreLines("*.log")
+	gi2 := gitignore.CompileIgnoreLines("*.tmp")
+
+	stack.Push(root, gi1)
+	stack.Push(subdir, gi2)
+
+	cases := []struct {
+		path  string
+		match bool
+	}{
+		{filepath.Join(root, "app.log"), true},
+		{filepath.Join(subdir, "data.tmp"), true},
+		{filepath.Join(subdir, "other.log"), true},
+		{filepath.Join(root, "main.go"), false},
+		{filepath.Join(subdir, "file.go"), false},
+	}
+
+	for _, tc := range cases {
+		got := stack.Matches(tc.path)
+		if got != tc.match {
+			t.Errorf("Matches(%q) = %v, want %v", tc.path, got, tc.match)
+		}
+	}
+}
+
+func TestGitignoreStack_NestedGitignoreExclusion(t *testing.T) {
+	root := t.TempDir()
+	subRepo := filepath.Join(root, "sub-repo")
+	if err := os.MkdirAll(subRepo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("*.root\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subRepo, ".gitignore"), []byte("*.sub\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stack := &gitignoreStack{}
+	giRoot, _ := gitignore.CompileIgnoreFile(filepath.Join(root, ".gitignore"))
+	giSub, _ := gitignore.CompileIgnoreFile(filepath.Join(subRepo, ".gitignore"))
+
+	stack.Push(root, giRoot)
+	stack.Push(subRepo, giSub)
+
+	cases := []struct {
+		path  string
+		match bool
+	}{
+		{filepath.Join(root, "file.root"), true},
+		{filepath.Join(subRepo, "file.root"), true},
+		{filepath.Join(subRepo, "file.sub"), true},
+		{filepath.Join(root, "file.sub"), false},
+		{filepath.Join(root, "main.go"), false},
+		{filepath.Join(subRepo, "main.go"), false},
+	}
+
+	for _, tc := range cases {
+		got := stack.Matches(tc.path)
+		if got != tc.match {
+			t.Errorf("Matches(%q) = %v, want %v", tc.path, got, tc.match)
+		}
 	}
 }

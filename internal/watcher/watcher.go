@@ -386,6 +386,8 @@ func (w *Watcher) processAll(ctx context.Context) {
 }
 
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
+	stack := &gitignoreStack{}
+
 	err := filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			w.logger.Warn().Err(err).Str("path", path).Msg("walk error, skipping")
@@ -394,12 +396,33 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+
+		stack.PopAbove(path)
+
+		if d.IsDir() {
+			gitignorePath := filepath.Join(path, ".gitignore")
+			if info, err := os.Stat(gitignorePath); err == nil && !info.IsDir() {
+				if gi, err := gitignore.CompileIgnoreFile(gitignorePath); err == nil {
+					stack.Push(path, gi)
+					w.logger.Debug().Str("path", gitignorePath).Msg("loaded nested .gitignore")
+				}
+			}
+		}
+
 		if col.filter != nil && col.filter.shouldSkip(path, d.IsDir()) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
+
+		if stack.Matches(path) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
 		if !d.IsDir() {
 			w.processFile(ctx, col, path)
 		}
