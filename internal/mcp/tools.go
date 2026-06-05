@@ -183,7 +183,7 @@ func requireRegisteredWorkspace(ctx context.Context, a *Adapter, args map[string
 	return ws, nil
 }
 
-const mcpSnippetLen = 500
+const mcpSnippetLen = 200
 
 // mcpSearchResultItem is the per-result payload returned by memory_query,
 // memory_search, and memory_vsearch over MCP. By default content is omitted;
@@ -201,6 +201,7 @@ type mcpSearchResultItem struct {
 	SourcePath    string      `json:"source_path"`
 	CreatedAt     interface{} `json:"created_at,omitempty"`
 	UpdatedAt     interface{} `json:"updated_at,omitempty"`
+	HasMore       bool        `json:"has_more,omitempty"`
 }
 
 // mcpSearchResponse is the response envelope for all three search tools.
@@ -381,11 +382,12 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 				item := mcpSearchResultItem{
 					ID: r.ID, DocumentID: r.DocumentID,
 					WorkspaceHash: "", Title: r.Title,
-					Snippet:    search.TruncateSnippet(r.Content, mcpSnippetLen),
+					Snippet:    search.ExtractRelevantSnippet(r.Content, query, mcpSnippetLen),
 					Score:      r.Score,
 					Tags:       r.Tags,
 					Collection: r.Collection, SourcePath: r.SourcePath,
 					CreatedAt: createdAt, UpdatedAt: updatedAt,
+					HasMore:    len(r.Content) > mcpSnippetLen,
 				}
 				if includeContent {
 					item.Content = r.Content
@@ -628,11 +630,12 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				item := mcpSearchResultItem{
 					ID: r.ID, DocumentID: r.DocumentID,
 					WorkspaceHash: "", Title: r.Title,
-					Snippet:    search.TruncateSnippet(r.Content, mcpSnippetLen),
+					Snippet:    search.ExtractRelevantSnippet(r.Content, query, mcpSnippetLen),
 					Score:      r.Score,
 					Tags:       r.Tags,
 					Collection: r.Collection, SourcePath: r.SourcePath,
 					CreatedAt: createdAt, UpdatedAt: updatedAt,
+					HasMore:    len(r.Content) > mcpSnippetLen,
 				}
 				if includeContent {
 					item.Content = r.Content
@@ -841,49 +844,50 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 			if pageEnd > total {
 				pageEnd = total
 			}
-			pageStart := offset
-			if pageStart > total {
-				pageStart = total
-			}
-			page := allRows[pageStart:pageEnd]
+		pageStart := offset
+		if pageStart > total {
+			pageStart = total
+		}
+		page := allRows[pageStart:pageEnd]
 
-			items := make([]mcpSearchResultItem, len(page))
-			for i, r := range page {
-				var createdAt, updatedAt interface{}
-				if timeFormat == "epoch" {
-					createdAt = r.CreatedAt.Unix()
-					updatedAt = r.UpdatedAt.Unix()
-				} else {
-					createdAt = r.CreatedAt
-					updatedAt = r.UpdatedAt
-				}
-				item := mcpSearchResultItem{
-					ID: r.ID, DocumentID: r.DocumentID,
-					WorkspaceHash: "", Title: r.Title,
-					Snippet:    search.TruncateSnippet(r.Content, mcpSnippetLen),
-					Score:      r.Score,
-					Tags:       r.Tags,
-					Collection: r.Collection, SourcePath: r.SourcePath,
-					CreatedAt: createdAt, UpdatedAt: updatedAt,
-				}
-				if includeContent {
-					item.Content = r.Content
-				}
-				items[i] = item
+		items := make([]mcpSearchResultItem, len(page))
+		for i, r := range page {
+			var createdAt, updatedAt interface{}
+			if timeFormat == "epoch" {
+				createdAt = r.CreatedAt.Unix()
+				updatedAt = r.UpdatedAt.Unix()
+			} else {
+				createdAt = r.CreatedAt
+				updatedAt = r.UpdatedAt
 			}
+			item := mcpSearchResultItem{
+				ID: r.ID, DocumentID: r.DocumentID,
+				WorkspaceHash: "", Title: r.Title,
+				Snippet:    search.ExtractRelevantSnippet(r.Content, query, mcpSnippetLen),
+				Score:      r.Score,
+				Tags:       r.Tags,
+				Collection: r.Collection, SourcePath: r.SourcePath,
+				CreatedAt: createdAt, UpdatedAt: updatedAt,
+				HasMore:    len(r.Content) > mcpSnippetLen,
+			}
+			if includeContent {
+				item.Content = r.Content
+			}
+			items[i] = item
+		}
 
-			if fields != "" {
-				fieldSet := parseFieldSet(fields)
-				filteredItems := make([]map[string]interface{}, len(items))
-				for i, item := range items {
-					filteredItems[i] = filterFields(item, fieldSet)
-				}
-				fresp := mcpFilteredResponse{Results: filteredItems}
-				if cursorToken == "" {
-					fresp.Total = &total
-					qms := time.Since(start).Milliseconds()
-					fresp.QueryMs = &qms
-				}
+		if fields != "" {
+			fieldSet := parseFieldSet(fields)
+			filteredItems := make([]map[string]interface{}, len(items))
+			for i, item := range items {
+				filteredItems[i] = filterFields(item, fieldSet)
+			}
+			fresp := mcpFilteredResponse{Results: filteredItems}
+			if cursorToken == "" {
+				fresp.Total = &total
+				qms := time.Since(start).Milliseconds()
+				fresp.QueryMs = &qms
+			}
 				if hasMore {
 					fresp.NextCursor = search.EncodeCursor(pageEnd, search.QueryHash(hashInput))
 				}

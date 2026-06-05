@@ -173,3 +173,100 @@ func TestTruncateSnippetRuneCount(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractRelevantSnippet(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		query   string
+		maxLen  int
+		want    string
+	}{
+		{
+			name:    "query term at start - no prefix ellipsis",
+			content: "function calculateTotal() returns the sum of all items in the cart",
+			query:   "function",
+			maxLen:  40,
+			want:    "function calculateTotal() returns th…",
+		},
+		{
+			name:    "query term in middle - both ellipses",
+			content: "The authentication system uses JWT tokens for secure session management and includes refresh token rotation",
+			query:   "JWT",
+			maxLen:  50,
+			want:    "…authentication system uses JWT tokens for secure…",
+		},
+		{
+			name:    "query term at end - no suffix ellipsis",
+			content: "This component handles all the routing and navigation logic for the application",
+			query:   "application",
+			maxLen:  40,
+			want:    "…navigation logic for the application",
+		},
+		{
+			name:    "no match - empty query - fallback to head",
+			content: "This is a long piece of content that should be truncated from the beginning since there is no query match",
+			query:   "",
+			maxLen:  30,
+			want:    "This is a long piece of conten",
+		},
+		{
+			name:    "content shorter than maxLen - return as-is",
+			content: "Short content",
+			query:   "content",
+			maxLen:  50,
+			want:    "Short content",
+		},
+		{
+			name:    "unicode content with query match",
+			content: "这是一个包含中文字符的测试内容，用于验证Unicode处理是否正确",
+			query:   "测试",
+			maxLen:  20,
+			want:    "…一个包含中文字符的测试内容，用于验证…",
+		},
+		{
+			name:    "no lexical match - vector result - fallback to head",
+			content: "The system architecture follows microservices patterns with event-driven communication",
+			query:   "scalability distributed",
+			maxLen:  35,
+			want:    "The system architecture follows mi",
+		},
+		{
+			name:    "maxLen zero returns empty",
+			content: "Some content here",
+			query:   "content",
+			maxLen:  0,
+			want:    "",
+		},
+		{
+			name:    "maxLen negative returns empty",
+			content: "Some content here",
+			query:   "content",
+			maxLen:  -10,
+			want:    "",
+		},
+		{
+			name:    "query with multiple terms - uses earliest match",
+			content: "The database migration scripts handle schema updates and data transformations for production deployments",
+			query:   "schema production",
+			maxLen:  45,
+			want:    "…migration scripts handle schema updates and…",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := search.ExtractRelevantSnippet(tt.content, tt.query, tt.maxLen)
+			if !utf8.ValidString(got) {
+				t.Errorf("ExtractRelevantSnippet() returned invalid UTF-8: %q", got)
+			}
+			runeLen := utf8.RuneCountInString(got)
+			if tt.maxLen > 0 && runeLen > tt.maxLen {
+				t.Errorf("result length %d exceeds maxLen %d: %q", runeLen, tt.maxLen, got)
+			}
+			if tt.maxLen <= 0 && got != "" {
+				t.Errorf("expected empty for maxLen=%d, got %q", tt.maxLen, got)
+			}
+		})
+	}
+}
