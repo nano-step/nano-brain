@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -178,6 +179,7 @@ func main() {
 
 // initCLILog builds a best-effort logger for CLI commands before they dispatch.
 // Failures are non-fatal: cliLog falls back to zerolog.Nop().
+// Logs are written to stderr (not stdout) to avoid polluting --json output.
 func initCLILog(configPath string) {
 	path := config.ResolveConfigPath(configPath)
 	cfg, err := config.Load(path)
@@ -185,11 +187,28 @@ func initCLILog(configPath string) {
 		return
 	}
 	applyVerbose(&cfg.Logging)
-	logger, err := health.NewLogger(cfg.Logging)
-	if err != nil {
-		return
+	
+	// Parse log level
+	level := zerolog.InfoLevel
+	switch strings.ToLower(strings.TrimSpace(cfg.Logging.Level)) {
+	case "trace":
+		level = zerolog.TraceLevel
+	case "debug":
+		level = zerolog.DebugLevel
+	case "info":
+		level = zerolog.InfoLevel
+	case "warn":
+		level = zerolog.WarnLevel
+	case "error":
+		level = zerolog.ErrorLevel
 	}
-	cliLog = logger
+	
+	// CLI logger writes to stderr to avoid polluting stdout (where JSON responses go)
+	cliLog = zerolog.New(os.Stderr).
+		With().
+		Timestamp().
+		Logger().
+		Level(level)
 }
 
 // applyVerbose maps the -v/--verbose flag count to a log level string.
