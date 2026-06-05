@@ -499,7 +499,7 @@ func TestHandleFSEvent_SkipsGitEvents(t *testing.T) {
 	debounce.Stop()
 
 	gitEvent := fsnotify.Event{
-		Name: filepath.Join(dir, ".git", "index"),
+		Name: filepath.Join(dir, ".git"),
 		Op:   fsnotify.Write,
 	}
 

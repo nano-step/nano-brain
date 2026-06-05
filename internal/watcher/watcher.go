@@ -333,7 +333,7 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 	}
 	w.mu.Unlock()
 
-	if event.Op&fsnotify.Remove != 0 {
+	if event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
 		w.fileCacheMu.Lock()
 		delete(w.fileCache, event.Name)
 		w.fileCacheMu.Unlock()
