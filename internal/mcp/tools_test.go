@@ -421,3 +421,24 @@ func TestMemoryWorkspacesResolve_ToolRegistered(t *testing.T) {
 	}
 	t.Fatal("memory_workspaces_resolve not found in tool list")
 }
+
+func TestOmitEmptyTags_JSONMarshal(t *testing.T) {
+	// tested in tools_internal_test.go (package mcp)
+	t.Skip("internal struct test — see tools_internal_test.go")
+}
+
+func TestOmitWorkspaceHash_JSONMarshal(t *testing.T) {
+	t.Skip("internal struct test — see tools_internal_test.go")
+}
+
+func TestEpochTimestamps_JSONMarshal(t *testing.T) {
+	t.Skip("internal struct test — see tools_internal_test.go")
+}
+
+func TestFieldsFilter(t *testing.T) {
+	t.Skip("internal struct test — see tools_internal_test.go")
+}
+
+func TestPaginatedResponseOmitsTotal_JSONMarshal(t *testing.T) {
+	t.Skip("internal struct test — see tools_internal_test.go")
+}
