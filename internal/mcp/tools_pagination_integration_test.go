@@ -32,7 +32,7 @@ func setupSearchMCP(t *testing.T) (context.Context, *sql.DB, *sqlc.Queries, stri
 	t.Cleanup(func() { db.Close() })
 
 	queries := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := queries.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {

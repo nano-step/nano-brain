@@ -63,3 +63,12 @@ WHERE workspace_hash IN (
     LEFT JOIN workspaces w ON c.workspace_hash = w.hash
     WHERE w.hash IS NULL
 );
+
+-- name: GetWorkspaceByName :one
+SELECT * FROM workspaces WHERE lower(name) = lower($1);
+
+-- name: GetWorkspaceByHashPrefix :one
+SELECT * FROM workspaces WHERE hash LIKE $1 LIMIT 1;
+
+-- name: CountWorkspacesByHashPrefix :one
+SELECT count(*) FROM workspaces WHERE hash LIKE $1;
