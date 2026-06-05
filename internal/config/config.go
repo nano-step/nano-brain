@@ -100,6 +100,7 @@ type EmbeddingConfig struct {
 type HarvesterConfig struct {
 	OpenCode   OpenCodeHarvesterConfig   `koanf:"opencode" json:"opencode"`
 	ClaudeCode ClaudeCodeHarvesterConfig `koanf:"claudecode" json:"claudecode"`
+	Git        GitHarvesterConfig        `koanf:"git" json:"git"`
 }
 
 // OpenCodeHarvesterConfig holds OpenCode harvester configuration.
@@ -118,6 +119,11 @@ type OpenCodeHarvesterConfig struct {
 type ClaudeCodeHarvesterConfig struct {
 	Enabled    bool   `koanf:"enabled" json:"enabled"`
 	SessionDir string `koanf:"session_dir" json:"session_dir"`
+}
+
+// GitHarvesterConfig holds Git history harvesting configuration.
+type GitHarvesterConfig struct {
+	Enabled bool `koanf:"enabled" json:"enabled"`
 }
 
 // IntervalsConfig holds interval configuration.
