@@ -267,11 +267,23 @@ func filterFields(item mcpSearchResultItem, fieldSet map[string]bool) map[string
 	return result
 }
 
+func deduplicateByDocument(results []search.Result) []search.Result {
+	seen := make(map[string]bool)
+	deduped := make([]search.Result, 0, len(results))
+	for _, r := range results {
+		if !seen[r.DocumentID] {
+			seen[r.DocumentID] = true
+			deduped = append(deduped, r)
+		}
+	}
+	return deduped
+}
+
 func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_query",
-			Description: "Hybrid search (BM25 + vector + RRF + recency). Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
+			Description: "Hybrid search (BM25 + vector + RRF + recency). Auto-detects temporal phrases. Use group_by='document' to deduplicate. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"query":            {"type": "string", "description": "Search query"},
 				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
@@ -285,6 +297,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 				"updated_before":   {"type": "string", "description": "Filter to documents whose updated_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
 				"time_format":      {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
 				"fields":           {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
+				"group_by":         {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -333,6 +346,21 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 				return errResult(fmt.Sprintf("invalid %s: %v (value: %q)", paramName, timeParseErr, rawValue)), nil
 			}
 
+			if timeRange == nil {
+				if hint := search.DetectTemporalIntent(query); hint != nil {
+					timeRange = &search.TimeRangeFilter{
+						CreatedAfter:  hint.CreatedAfter,
+						CreatedBefore: hint.CreatedBefore,
+					}
+				}
+			} else if timeRange.CreatedAfter == nil && timeRange.CreatedBefore == nil &&
+				timeRange.UpdatedAfter == nil && timeRange.UpdatedBefore == nil {
+				if hint := search.DetectTemporalIntent(query); hint != nil {
+					timeRange.CreatedAfter = hint.CreatedAfter
+					timeRange.CreatedBefore = hint.CreatedBefore
+				}
+			}
+
 			cursorToken := argString(args, "cursor")
 			hashInput := search.QueryHashInput{
 				Query:       query,
@@ -354,6 +382,11 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 			results, err := a.searchService.HybridSearch(ctx, query, ws, fetchLimit, nil, timeRange, chunkType)
 			if err != nil {
 				return errResult(fmt.Sprintf("hybrid search failed: %v", err)), nil
+			}
+
+			groupBy := argString(args, "group_by")
+			if groupBy == "document" {
+				results = deduplicateByDocument(results)
 			}
 
 			total := len(results)
@@ -429,7 +462,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_search",
-			Description: "BM25 text search. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
+			Description: "BM25 text search. Auto-detects temporal phrases. Use group_by='document' to deduplicate. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"query":            {"type": "string", "description": "Search query"},
 				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
@@ -444,6 +477,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				"updated_before":   {"type": "string", "description": "Filter to documents whose updated_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
 				"time_format":      {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
 				"fields":           {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
+				"group_by":         {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -492,6 +526,21 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			)
 			if timeParseErr != nil {
 				return errResult(fmt.Sprintf("invalid %s: %v (value: %q)", paramName, timeParseErr, rawValue)), nil
+			}
+
+			if timeRange == nil {
+				if hint := search.DetectTemporalIntent(query); hint != nil {
+					timeRange = &search.TimeRangeFilter{
+						CreatedAfter:  hint.CreatedAfter,
+						CreatedBefore: hint.CreatedBefore,
+					}
+				}
+			} else if timeRange.CreatedAfter == nil && timeRange.CreatedBefore == nil &&
+				timeRange.UpdatedAfter == nil && timeRange.UpdatedBefore == nil {
+				if hint := search.DetectTemporalIntent(query); hint != nil {
+					timeRange.CreatedAfter = hint.CreatedAfter
+					timeRange.CreatedBefore = hint.CreatedBefore
+				}
 			}
 
 			cursorToken := argString(args, "cursor")
@@ -676,7 +725,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_vsearch",
-			Description: "Vector similarity search using embeddings. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
+			Description: "Vector similarity search using embeddings. Auto-detects temporal phrases. Use group_by='document' to deduplicate. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"query":            {"type": "string", "description": "Search query"},
 				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
@@ -690,6 +739,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				"updated_before":   {"type": "string", "description": "Filter to documents whose updated_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
 				"time_format":      {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
 				"fields":           {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
+				"group_by":         {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -740,6 +790,21 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 			)
 			if timeParseErr != nil {
 				return errResult(fmt.Sprintf("invalid %s: %v (value: %q)", paramName, timeParseErr, rawValue)), nil
+			}
+
+			if timeRange == nil {
+				if hint := search.DetectTemporalIntent(query); hint != nil {
+					timeRange = &search.TimeRangeFilter{
+						CreatedAfter:  hint.CreatedAfter,
+						CreatedBefore: hint.CreatedBefore,
+					}
+				}
+			} else if timeRange.CreatedAfter == nil && timeRange.CreatedBefore == nil &&
+				timeRange.UpdatedAfter == nil && timeRange.UpdatedBefore == nil {
+				if hint := search.DetectTemporalIntent(query); hint != nil {
+					timeRange.CreatedAfter = hint.CreatedAfter
+					timeRange.CreatedBefore = hint.CreatedBefore
+				}
 			}
 
 			cursorToken := argString(args, "cursor")
@@ -835,7 +900,32 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 			return allRows[i].ID < allRows[j].ID
 		})
 
-			total := len(allRows)
+		groupBy := argString(args, "group_by")
+		if groupBy == "document" {
+			vsearchResults := make([]search.Result, len(allRows))
+			for i, r := range allRows {
+				vsearchResults[i] = search.Result{
+					ID: r.ID, DocumentID: r.DocumentID,
+					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+					Content: r.Content, SourcePath: r.SourcePath,
+					Collection: r.Collection, Tags: r.Tags,
+					Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+				}
+			}
+			deduped := deduplicateByDocument(vsearchResults)
+			allRows = make([]vsRow, len(deduped))
+			for i, r := range deduped {
+				allRows[i] = vsRow{
+					ID: r.ID, DocumentID: r.DocumentID,
+					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+					Content: r.Content, SourcePath: r.SourcePath,
+					Collection: r.Collection, Tags: r.Tags,
+					Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+				}
+			}
+		}
+
+		total := len(allRows)
 			hasMore := total > offset+maxResults
 			pageEnd := offset + maxResults
 			if pageEnd > total {
