@@ -41,11 +41,13 @@ type Server struct {
 	mcpServer      *mcpsdk.Server
 	recorder       *telemetry.Recorder
 	cleanupCancel  context.CancelFunc
-	harvestMu      sync.RWMutex
-	harvestRunner  handlers.HarvestRunner
-	summarizeMu    sync.RWMutex
-	summarizer     handlers.SummarizeSummarizer
-	configMu       sync.RWMutex
+	harvestMu         sync.RWMutex
+	harvestRunner     handlers.HarvestRunner
+	summarizeMu       sync.RWMutex
+	summarizer        handlers.SummarizeSummarizer
+	codeSummarizeMu   sync.RWMutex
+	codeSummarizer    handlers.CodeSummarizer
+	configMu          sync.RWMutex
 	fullCfg        *config.Config
 	configPath     string
 	logger         zerolog.Logger
@@ -209,6 +211,18 @@ func (s *Server) getSummarizer() handlers.SummarizeSummarizer {
 	s.summarizeMu.RLock()
 	defer s.summarizeMu.RUnlock()
 	return s.summarizer
+}
+
+func (s *Server) SetCodeSummarizer(cs handlers.CodeSummarizer) {
+	s.codeSummarizeMu.Lock()
+	defer s.codeSummarizeMu.Unlock()
+	s.codeSummarizer = cs
+}
+
+func (s *Server) getCodeSummarizer() handlers.CodeSummarizer {
+	s.codeSummarizeMu.RLock()
+	defer s.codeSummarizeMu.RUnlock()
+	return s.codeSummarizer
 }
 
 // EventBus returns the server's event bus for producer wiring. May be nil.

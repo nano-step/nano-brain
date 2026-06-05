@@ -74,6 +74,7 @@ func registerRoutes(s *Server) {
 	write.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, reindexPub, s.logger))
 	write.POST("/update", handlers.TriggerUpdate(s.logger))
 	write.POST("/summarize", handlers.TriggerSummarize(s.getSummarizer, s.queries, s.logger))
+	write.POST("/code/summarize", handlers.TriggerCodeSummarize(s.getCodeSummarizer, s.currentConfig().CodeSummarization, s.logger))
 
 	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.currentConfig().Watcher, s.logger))
 	data.GET("/collections", handlers.ListCollectionsHandler(s.queries, s.logger))

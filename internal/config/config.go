@@ -40,11 +40,12 @@ type Config struct {
 	Intervals      IntervalsConfig      `koanf:"intervals" json:"intervals"`
 	Watcher        WatcherConfig        `koanf:"watcher" json:"watcher"`
 	Search         SearchConfig         `koanf:"search" json:"search"`
-	Storage        StorageConfig        `koanf:"storage" json:"storage"`
-	Telemetry      TelemetryConfig      `koanf:"telemetry" json:"telemetry"`
-	Logging        LoggingConfig        `koanf:"logging" json:"logging"`
-	Summarization  SummarizationConfig  `koanf:"summarization" json:"summarization"`
-	Intelligence   IntelligenceConfig   `koanf:"intelligence" json:"intelligence"`
+	Storage             StorageConfig             `koanf:"storage" json:"storage"`
+	Telemetry           TelemetryConfig           `koanf:"telemetry" json:"telemetry"`
+	Logging             LoggingConfig             `koanf:"logging" json:"logging"`
+	Summarization       SummarizationConfig       `koanf:"summarization" json:"summarization"`
+	CodeSummarization   CodeSummarizationConfig   `koanf:"code_summarization" json:"code_summarization"`
+	Intelligence        IntelligenceConfig        `koanf:"intelligence" json:"intelligence"`
 }
 
 // ServerConfig holds server configuration.
@@ -191,6 +192,22 @@ func (s SummarizationConfig) IsWriteToDiskEnabled() bool {
 	return *s.WriteToDisk
 }
 
+// CodeSummarizationConfig holds code symbol summarization configuration.
+type CodeSummarizationConfig struct {
+	Enabled               bool   `koanf:"enabled" json:"enabled"`
+	ProviderURL           string `koanf:"provider_url" json:"provider_url"`
+	APIKey                string `koanf:"api_key" json:"api_key"`
+	Model                 string `koanf:"model" json:"model"`
+	BatchSize             int    `koanf:"batch_size" json:"batch_size"`
+	MaxOutputTokens       int    `koanf:"max_output_tokens" json:"max_output_tokens"`
+	Concurrency           int    `koanf:"concurrency" json:"concurrency"`
+	MaxRequestsPerDay     int    `koanf:"max_requests_per_day" json:"max_requests_per_day"`
+	MaxSymbolLines        int    `koanf:"max_symbol_lines" json:"max_symbol_lines"`
+	PollIntervalSeconds   int    `koanf:"poll_interval_seconds" json:"poll_interval_seconds"`
+	MaxSummariesPerCycle  int    `koanf:"max_summaries_per_cycle" json:"max_summaries_per_cycle"`
+	FallbackModel         string `koanf:"fallback_model" json:"fallback_model"`
+}
+
 // IntelligenceConfig holds memory consolidation and LLM categorization configuration.
 type IntelligenceConfig struct {
 	Enabled          bool   `koanf:"enabled" json:"enabled"`
@@ -266,16 +283,17 @@ func Load(configPath string) (*Config, error) {
 
 	// Special non-prefixed env vars
 	specialEnvVars := map[string]string{
-		"VOYAGE_API_KEY":               "embedding.voyage_api_key",
-		"DATABASE_URL":                 "database.url",
-		"OPENCODE_STORAGE_DIR":         "harvester.opencode.session_dir",
-		"OPENCODE_DB_PATH":             "harvester.opencode.db_path",
-		"OPENCODE_DB_ROOT":             "harvester.opencode.db_root",
-		"NANO_BRAIN_EMBED_MAX_CHARS":   "embedding.max_chars",
-		"NANO_BRAIN_SUMMARIZE_API_KEY": "summarization.api_key",
-		"NANO_BRAIN_AUTH_ENABLED":      "server.auth.enabled",
-		"NANO_BRAIN_AUTH_REALM":        "server.auth.realm",
-		"NANO_BRAIN_AUTH_TOKENS":       "server.auth.tokens",
+		"VOYAGE_API_KEY":                     "embedding.voyage_api_key",
+		"DATABASE_URL":                       "database.url",
+		"OPENCODE_STORAGE_DIR":               "harvester.opencode.session_dir",
+		"OPENCODE_DB_PATH":                   "harvester.opencode.db_path",
+		"OPENCODE_DB_ROOT":                   "harvester.opencode.db_root",
+		"NANO_BRAIN_EMBED_MAX_CHARS":         "embedding.max_chars",
+		"NANO_BRAIN_SUMMARIZE_API_KEY":       "summarization.api_key",
+		"NANO_BRAIN_CODE_SUMMARIZE_API_KEY":  "code_summarization.api_key",
+		"NANO_BRAIN_AUTH_ENABLED":            "server.auth.enabled",
+		"NANO_BRAIN_AUTH_REALM":              "server.auth.realm",
+		"NANO_BRAIN_AUTH_TOKENS":             "server.auth.tokens",
 	}
 	for envVar, key := range specialEnvVars {
 		if value, exists := os.LookupEnv(envVar); exists {
@@ -394,6 +412,16 @@ func validate(cfg *Config) error {
 		}
 		if cfg.Summarization.Concurrency < 1 {
 			errs = append(errs, errors.New("summarization.concurrency must be >= 1 when summarization.enabled is true"))
+		}
+	}
+
+	// Validate CodeSummarization
+	if cfg.CodeSummarization.Enabled {
+		if cfg.CodeSummarization.ProviderURL == "" {
+			errs = append(errs, errors.New("code_summarization.provider_url is required when enabled"))
+		}
+		if cfg.CodeSummarization.Model == "" {
+			errs = append(errs, errors.New("code_summarization.model is required when enabled"))
 		}
 	}
 

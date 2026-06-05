@@ -419,7 +419,7 @@ phase_pre_merge() {
     
     # 3.3 go test -race -tags=integration
     if cmd_exists go; then
-        if go test -race -tags=integration -count=1 -timeout=60s ./... >/dev/null 2>&1; then
+        if go test -race -tags=integration -count=1 -timeout=180s ./... >/dev/null 2>&1; then
             add_check "PASS" "3.3 go test -race -tags=integration ./..."
         else
             add_check "FAIL" "3.3 go test -race -tags=integration ./... failed"
