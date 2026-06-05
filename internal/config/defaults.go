@@ -80,6 +80,15 @@ func getDefaults() *Config {
 			Concurrency: 3,
 			OutputDir:   "~/.nano-brain/summaries",
 		},
+		Intelligence: IntelligenceConfig{
+			Enabled:          false,
+			ProviderURL:      "",
+			APIKey:           "",
+			Model:            "claude-sonnet-4-5",
+			MaxTokens:        8000,
+			Concurrency:      3,
+			ConsolidationAge: 7,
+		},
 	}
 }
 

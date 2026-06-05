@@ -44,6 +44,7 @@ type Config struct {
 	Telemetry      TelemetryConfig      `koanf:"telemetry" json:"telemetry"`
 	Logging        LoggingConfig        `koanf:"logging" json:"logging"`
 	Summarization  SummarizationConfig  `koanf:"summarization" json:"summarization"`
+	Intelligence   IntelligenceConfig   `koanf:"intelligence" json:"intelligence"`
 }
 
 // ServerConfig holds server configuration.
@@ -188,6 +189,17 @@ func (s SummarizationConfig) IsWriteToDiskEnabled() bool {
 		return true
 	}
 	return *s.WriteToDisk
+}
+
+// IntelligenceConfig holds memory consolidation and LLM categorization configuration.
+type IntelligenceConfig struct {
+	Enabled          bool   `koanf:"enabled" json:"enabled"`
+	ProviderURL      string `koanf:"provider_url" json:"provider_url"`
+	APIKey           string `koanf:"api_key" json:"api_key"`
+	Model            string `koanf:"model" json:"model"`
+	MaxTokens        int    `koanf:"max_tokens" json:"max_tokens"`
+	Concurrency      int    `koanf:"concurrency" json:"concurrency"`
+	ConsolidationAge int    `koanf:"consolidation_age" json:"consolidation_age"`
 }
 
 // Load loads configuration from file and environment variables.
