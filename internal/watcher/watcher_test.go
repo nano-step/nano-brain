@@ -2,7 +2,9 @@ package watcher
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -439,5 +442,116 @@ func TestHotRegister_WatchAfterRunScansExistingFiles(t *testing.T) {
 	calls := mq.upsertDocCalls.Load()
 	if calls < 2 {
 		t.Fatalf("expected at least 2 upserts for pre-existing files after hot-register, got %d", calls)
+	}
+}
+
+func TestProcessFile_SkipsUnchangedMtime(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "unchanged.md")
+	content := []byte("# Unchanged\ncontent here")
+	if err := os.WriteFile(fp, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(fp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+
+	sum := sha256.Sum256(content)
+	contentHash := hex.EncodeToString(sum[:])
+
+	w.fileCacheMu.Lock()
+	w.fileCache[fp] = fileState{
+		ModTime: info.ModTime(),
+		Size:    info.Size(),
+		Hash:    contentHash,
+	}
+	w.fileCacheMu.Unlock()
+
+	col := watchedCollection{
+		name:          "testcol",
+		dirPath:       dir,
+		workspaceHash: "ws123",
+		globPattern:   "*.md",
+	}
+
+	w.processFile(context.Background(), col, fp)
+
+	if mq.upsertDocCalls.Load() != 0 {
+		t.Fatalf("expected mtime cache to skip processing, got %d upserts", mq.upsertDocCalls.Load())
+	}
+}
+
+func TestHandleFSEvent_SkipsGitEvents(t *testing.T) {
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+
+	dir := t.TempDir()
+	if err := w.Watch("testcol", dir, "ws123", "*.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	debounce := time.NewTimer(time.Duration(w.debounceMs) * time.Millisecond)
+	debounce.Stop()
+
+	gitEvent := fsnotify.Event{
+		Name: filepath.Join(dir, ".git"),
+		Op:   fsnotify.Write,
+	}
+
+	w.handleFSEvent(gitEvent, debounce)
+
+	w.mu.Lock()
+	isDirty := w.dirty[dir]
+	w.mu.Unlock()
+
+	if isDirty {
+		t.Fatal("expected .git/ event to be filtered, but directory was marked dirty")
+	}
+}
+
+func TestPollTicker_SkipsWhenNoEvents(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping timing-sensitive test in short mode")
+	}
+
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(fp, []byte("# Test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 50000, 1)
+
+	if err := w.Watch("testcol", dir, "ws123", "*.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+
+	time.Sleep(200 * time.Millisecond)
+
+	callsAfterInitialScan := mq.upsertDocCalls.Load()
+
+	w.hasNewEvents.Store(false)
+
+	time.Sleep(1500 * time.Millisecond)
+
+	cancel()
+	<-done
+
+	callsAfterPoll := mq.upsertDocCalls.Load()
+
+	if callsAfterPoll > callsAfterInitialScan {
+		t.Fatalf("expected poll to skip when hasNewEvents=false, but got %d new upserts after initial scan", callsAfterPoll-callsAfterInitialScan)
 	}
 }
