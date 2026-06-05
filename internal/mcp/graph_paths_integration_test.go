@@ -4,7 +4,9 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -27,7 +29,7 @@ func setupGraphMCP(t *testing.T) (context.Context, string, *mcpsdk.ClientSession
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	wsPath := "/tmp/test-ws-" + uuid.New().String()[:8]
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: wsPath,

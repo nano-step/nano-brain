@@ -4,7 +4,9 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +30,7 @@ func TestTimeFilter_MCP_ValidRelativeDuration(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
@@ -96,7 +98,7 @@ func TestTimeFilter_MCP_RFC3339CreatedAfter(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
@@ -165,7 +167,7 @@ func TestTimeFilter_MCP_AllFourFiltersCombined(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
@@ -247,7 +249,7 @@ func TestTimeFilter_MCP_InvalidDurationReturnsError(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
@@ -300,7 +302,7 @@ func TestTimeFilter_MCP_DateOnlyRejected(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
@@ -352,7 +354,7 @@ func TestTimeFilter_MCP_NegativeDurationRejected(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
@@ -404,7 +406,7 @@ func TestTimeFilter_MCP_InvertedRangeReturnsEmpty(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
@@ -474,7 +476,7 @@ func TestTimeFilter_MCP_NoMatchReturnsEmpty(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
@@ -540,7 +542,7 @@ func TestTimeFilter_MCP_VectorSearchWithTimeFilter(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
@@ -612,7 +614,7 @@ func TestTimeFilter_MCP_QueryPaginationWithTimeFilter(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash, Name: "test-ws", Path: "/tmp/" + wsHash,
 	}); err != nil {
