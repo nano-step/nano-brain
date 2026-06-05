@@ -10,7 +10,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"encoding/json"
@@ -52,6 +54,12 @@ type watchedCollection struct {
 	filter            *fileFilter
 }
 
+type fileState struct {
+	ModTime time.Time
+	Size    int64
+	Hash    string
+}
+
 type Watcher struct {
 	db             *sql.DB
 	queries        WatcherQuerier
@@ -77,6 +85,10 @@ type Watcher struct {
 	rateLimiters  map[string]*rate.Limiter
 
 	globalIgnore *gitignore.GitIgnore
+
+	fileCache   map[string]fileState
+	fileCacheMu sync.RWMutex
+	hasNewEvents atomic.Bool
 }
 
 // SetGlobalIgnore configures the watcher to apply a global gitignore-style
@@ -106,6 +118,7 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 		collections:   make(map[string]watchedCollection),
 		dirty:         make(map[string]bool),
 		hotRegisterCh: make(chan struct{}, 1),
+		fileCache:     make(map[string]fileState),
 	}
 }
 
@@ -286,6 +299,9 @@ func (w *Watcher) Run(ctx context.Context) error {
 			w.processDirty(ctx)
 
 		case <-pollTicker.C:
+			if !w.hasNewEvents.Swap(false) {
+				continue
+			}
 			w.processAll(ctx)
 
 		case <-w.hotRegisterCh:
@@ -299,6 +315,16 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 		return
 	}
 
+	for excluded := range defaultExcludeDirs {
+		sep := string(os.PathSeparator)
+		if strings.Contains(event.Name, sep+excluded+sep) ||
+			strings.HasSuffix(event.Name, sep+excluded) {
+			return
+		}
+	}
+
+	w.hasNewEvents.Store(true)
+
 	dir := filepath.Dir(event.Name)
 
 	w.mu.Lock()
@@ -308,6 +334,9 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 	w.mu.Unlock()
 
 	if event.Op&fsnotify.Remove != 0 {
+		w.fileCacheMu.Lock()
+		delete(w.fileCache, event.Name)
+		w.fileCacheMu.Unlock()
 		// TODO(story-2.x): Implement stale document cleanup. When a file is deleted,
 		// its document+chunks remain in the DB. Consider diffing globbed files against
 		// DB documents in scanCollection to purge orphans.
@@ -397,10 +426,14 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		return
 	}
 
-	w.logger.Debug().
-		Str("path", filePath).
-		Str("collection", col.name).
-		Msg("processing file")
+	// Fast-path: skip if mtime+size unchanged (biggest perf win from issue #375)
+	w.fileCacheMu.RLock()
+	cached, exists := w.fileCache[filePath]
+	w.fileCacheMu.RUnlock()
+
+	if exists && cached.ModTime.Equal(info.ModTime()) && cached.Size == info.Size() {
+		return
+	}
 
 	if info.Size() > w.maxFileSize {
 		w.logger.Warn().
@@ -430,6 +463,9 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		WorkspaceHash: col.workspaceHash,
 	})
 	if err == nil && existing.ContentHash == contentHash {
+		w.fileCacheMu.Lock()
+		w.fileCache[filePath] = fileState{ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash}
+		w.fileCacheMu.Unlock()
 		return
 	}
 
@@ -466,6 +502,10 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	}
 
 	w.publishFileEvent(col.workspaceHash, filePath, "modified")
+
+	w.fileCacheMu.Lock()
+	w.fileCache[filePath] = fileState{ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash}
+	w.fileCacheMu.Unlock()
 
 	w.logger.Info().
 		Str("file", filePath).
