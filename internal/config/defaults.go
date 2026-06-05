@@ -77,6 +77,20 @@ func getDefaults() *Config {
 			Concurrency: 3,
 			OutputDir:   "~/.nano-brain/summaries",
 		},
+		CodeSummarization: CodeSummarizationConfig{
+			Enabled:              false,
+			ProviderURL:          "",
+			APIKey:               "",
+			Model:                "",
+			BatchSize:            30,
+			MaxOutputTokens:      8000,
+			Concurrency:          2,
+			MaxRequestsPerDay:    0,
+			MaxSymbolLines:       500,
+			PollIntervalSeconds:  60,
+			MaxSummariesPerCycle: 300,
+			FallbackModel:        "",
+		},
 	}
 }
 
