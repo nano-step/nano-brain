@@ -35,20 +35,36 @@ var isContainerFn = isContainer
 const serverHealthTimeout = 10 * time.Second
 
 func resolveHostPort() (string, int) {
-	host := os.Getenv("NANO_BRAIN_HOST")
+	envHost := os.Getenv("NANO_BRAIN_HOST")
+	envPort := os.Getenv("NANO_BRAIN_PORT")
+	
+	cfg, _ := config.Load(config.ResolveConfigPath(""))
+	
+	// Host resolution with correct precedence:
+	// 1. ENV var (highest)
+	// 2. Container auto-detection
+	// 3. Config file
+	// 4. Hard-coded default (lowest)
+	host := envHost
 	if host == "" {
 		if isContainerFn() {
 			host = "host.docker.internal"
+		} else if cfg != nil && cfg.Server.Host != "" {
+			host = cfg.Server.Host
 		} else {
 			host = "localhost"
 		}
 	}
+	
 	port := 3100
-	if p := os.Getenv("NANO_BRAIN_PORT"); p != "" {
-		if v, err := strconv.Atoi(p); err == nil && v > 0 && v <= 65535 {
+	if envPort != "" {
+		if v, err := strconv.Atoi(envPort); err == nil && v > 0 && v <= 65535 {
 			port = v
 		}
+	} else if cfg != nil && cfg.Server.Port > 0 {
+		port = cfg.Server.Port
 	}
+	
 	return host, port
 }
 
