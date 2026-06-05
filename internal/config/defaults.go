@@ -43,6 +43,9 @@ func getDefaults() *Config {
 				Enabled:    false,
 				SessionDir: "",
 			},
+			Git: GitHarvesterConfig{
+				Enabled: false,
+			},
 		},
 		Intervals: IntervalsConfig{
 			SessionPoll: 120,
@@ -90,6 +93,15 @@ func getDefaults() *Config {
 			PollIntervalSeconds:  60,
 			MaxSummariesPerCycle: 300,
 			FallbackModel:        "",
+		},
+		Intelligence: IntelligenceConfig{
+			Enabled:          false,
+			ProviderURL:      "",
+			APIKey:           "",
+			Model:            "claude-sonnet-4-5",
+			MaxTokens:        8000,
+			Concurrency:      3,
+			ConsolidationAge: 7,
 		},
 	}
 }

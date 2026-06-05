@@ -45,6 +45,7 @@ type Config struct {
 	Logging             LoggingConfig             `koanf:"logging" json:"logging"`
 	Summarization       SummarizationConfig       `koanf:"summarization" json:"summarization"`
 	CodeSummarization   CodeSummarizationConfig   `koanf:"code_summarization" json:"code_summarization"`
+	Intelligence        IntelligenceConfig        `koanf:"intelligence" json:"intelligence"`
 }
 
 // ServerConfig holds server configuration.
@@ -101,6 +102,7 @@ type EmbeddingConfig struct {
 type HarvesterConfig struct {
 	OpenCode   OpenCodeHarvesterConfig   `koanf:"opencode" json:"opencode"`
 	ClaudeCode ClaudeCodeHarvesterConfig `koanf:"claudecode" json:"claudecode"`
+	Git        GitHarvesterConfig        `koanf:"git" json:"git"`
 }
 
 // OpenCodeHarvesterConfig holds OpenCode harvester configuration.
@@ -119,6 +121,11 @@ type OpenCodeHarvesterConfig struct {
 type ClaudeCodeHarvesterConfig struct {
 	Enabled    bool   `koanf:"enabled" json:"enabled"`
 	SessionDir string `koanf:"session_dir" json:"session_dir"`
+}
+
+// GitHarvesterConfig holds Git history harvesting configuration.
+type GitHarvesterConfig struct {
+	Enabled bool `koanf:"enabled" json:"enabled"`
 }
 
 // IntervalsConfig holds interval configuration.
@@ -199,6 +206,17 @@ type CodeSummarizationConfig struct {
 	PollIntervalSeconds   int    `koanf:"poll_interval_seconds" json:"poll_interval_seconds"`
 	MaxSummariesPerCycle  int    `koanf:"max_summaries_per_cycle" json:"max_summaries_per_cycle"`
 	FallbackModel         string `koanf:"fallback_model" json:"fallback_model"`
+}
+
+// IntelligenceConfig holds memory consolidation and LLM categorization configuration.
+type IntelligenceConfig struct {
+	Enabled          bool   `koanf:"enabled" json:"enabled"`
+	ProviderURL      string `koanf:"provider_url" json:"provider_url"`
+	APIKey           string `koanf:"api_key" json:"api_key"`
+	Model            string `koanf:"model" json:"model"`
+	MaxTokens        int    `koanf:"max_tokens" json:"max_tokens"`
+	Concurrency      int    `koanf:"concurrency" json:"concurrency"`
+	ConsolidationAge int    `koanf:"consolidation_age" json:"consolidation_age"`
 }
 
 // Load loads configuration from file and environment variables.
