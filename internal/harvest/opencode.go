@@ -129,6 +129,8 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 
 	meta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
 	tags := []string{"opencode", "session"}
+	semanticTags := InferSemanticTags(md, sess.Title)
+	tags = append(tags, semanticTags...)
 
 	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: h.workspace,
