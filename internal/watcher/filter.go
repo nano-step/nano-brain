@@ -9,6 +9,58 @@ import (
 	gitignore "github.com/sabhiram/go-gitignore"
 )
 
+// gitignoreStack maintains a stack of .gitignore matchers discovered during
+// directory traversal. Each entry tracks the directory path and its associated
+// gitignore matcher. The stack is used to apply nested .gitignore files in
+// multi-repo workspaces (issue #379).
+type gitignoreStack struct {
+	entries []gitignoreEntry
+}
+
+type gitignoreEntry struct {
+	dirPath string
+	matcher *gitignore.GitIgnore
+}
+
+func (s *gitignoreStack) Push(dirPath string, matcher *gitignore.GitIgnore) {
+	s.entries = append(s.entries, gitignoreEntry{
+		dirPath: dirPath,
+		matcher: matcher,
+	})
+}
+
+// PopAbove removes stack entries that are not ancestors of the given path.
+// This is called when ascending from a subdirectory during tree traversal.
+func (s *gitignoreStack) PopAbove(currentPath string) {
+	i := 0
+	for _, entry := range s.entries {
+		rel, err := filepath.Rel(entry.dirPath, currentPath)
+		if err == nil && !strings.HasPrefix(rel, "..") {
+			s.entries[i] = entry
+			i++
+		}
+	}
+	s.entries = s.entries[:i]
+}
+
+// Matches checks if the given path matches any .gitignore pattern in the stack.
+// Returns true if the path should be excluded.
+func (s *gitignoreStack) Matches(path string) bool {
+	for _, entry := range s.entries {
+		rel, err := filepath.Rel(entry.dirPath, path)
+		if err != nil {
+			continue
+		}
+		if strings.HasPrefix(rel, "..") {
+			continue
+		}
+		if entry.matcher.MatchesPath(rel) {
+			return true
+		}
+	}
+	return false
+}
+
 var defaultExcludeDirs = map[string]bool{
 	"node_modules": true,
 	".git":         true,
