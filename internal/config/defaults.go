@@ -43,6 +43,9 @@ func getDefaults() *Config {
 				Enabled:    false,
 				SessionDir: "",
 			},
+			Git: GitHarvesterConfig{
+				Enabled: false,
+			},
 		},
 		Intervals: IntervalsConfig{
 			SessionPoll: 120,
