@@ -209,7 +209,7 @@ func TestMemoryGet_RequiresPath(t *testing.T) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_get",
 		Arguments: map[string]any{
-			"workspace": "test-ws",
+			"workspace": "0000000000000000000000000000000000000000000000000000000000000001",
 		},
 	})
 	if err != nil {
@@ -230,7 +230,7 @@ func TestMemoryGet_InvalidUUID(t *testing.T) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_get",
 		Arguments: map[string]any{
-			"workspace": "test-ws",
+			"workspace": "0000000000000000000000000000000000000000000000000000000000000001",
 			"path":      "#not-a-uuid",
 		},
 	})
@@ -252,7 +252,7 @@ func TestMemoryGet_NotFound_ByUUID(t *testing.T) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_get",
 		Arguments: map[string]any{
-			"workspace": "test-ws",
+			"workspace": "0000000000000000000000000000000000000000000000000000000000000001",
 			"path":      "#00000000-0000-0000-0000-000000000001",
 		},
 	})
@@ -274,7 +274,7 @@ func TestMemoryGet_NotFound_BySourcePath(t *testing.T) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_get",
 		Arguments: map[string]any{
-			"workspace": "test-ws",
+			"workspace": "0000000000000000000000000000000000000000000000000000000000000001",
 			"path":      "/nonexistent/path.md",
 		},
 	})
@@ -296,7 +296,7 @@ func TestMemoryGet_WithLineRange_StillReportsNotFound(t *testing.T) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_get",
 		Arguments: map[string]any{
-			"workspace":  "test-ws",
+			"workspace":  "0000000000000000000000000000000000000000000000000000000000000001",
 			"path":       "/nonexistent/path.md",
 			"start_line": float64(5),
 			"end_line":   float64(10),
@@ -320,7 +320,7 @@ func TestMemoryWrite_WithSupersedes_AcceptsField(t *testing.T) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_write",
 		Arguments: map[string]any{
-			"workspace":  "test-ws",
+			"workspace":  "0000000000000000000000000000000000000000000000000000000000000001",
 			"content":    "new content that supersedes old",
 			"supersedes": "#00000000-0000-0000-0000-000000000099",
 		},
@@ -346,7 +346,7 @@ func TestMemoryWrite_WithSupersedes_BySourcePath(t *testing.T) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_write",
 		Arguments: map[string]any{
-			"workspace":  "test-ws",
+			"workspace":  "0000000000000000000000000000000000000000000000000000000000000001",
 			"content":    "new content",
 			"supersedes": "/some/old/path.md",
 		},

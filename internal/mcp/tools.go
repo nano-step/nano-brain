@@ -140,12 +140,19 @@ func parseArgs(raw json.RawMessage) (map[string]any, error) {
 	return args, nil
 }
 
-func requireWorkspace(args map[string]any) (string, *mcpsdk.CallToolResult) {
-	ws := argString(args, "workspace")
-	if ws == "" {
+func (a *Adapter) requireWorkspace(ctx context.Context, args map[string]any) (string, *mcpsdk.CallToolResult) {
+	input := argString(args, "workspace")
+	if input == "" {
 		return "", errResult("workspace is required")
 	}
-	return ws, nil
+	if input == "all" {
+		return "all", nil
+	}
+	hash, err := storage.ResolveWorkspaceParam(ctx, a.queries, input)
+	if err != nil {
+		return "", errResult(err.Error())
+	}
+	return hash, nil
 }
 
 // requireRegisteredWorkspace extends requireWorkspace with a registration check
@@ -154,16 +161,22 @@ func requireWorkspace(args map[string]any) (string, *mcpsdk.CallToolResult) {
 // enforcement must happen inside each write tool (issue #238). Rejects the
 // literal "all" since cross-workspace writes are not supported.
 func requireRegisteredWorkspace(ctx context.Context, a *Adapter, args map[string]any) (string, *mcpsdk.CallToolResult) {
-	ws, errRes := requireWorkspace(args)
+	input := argString(args, "workspace")
+	if input == "" {
+		return "", errResult("workspace is required")
+	}
+	if input == "all" {
+		return "", errResult("workspace_all_not_supported: this tool does not accept the 'all' workspace scope; provide a specific registered workspace name or hash")
+	}
+	ws, errRes := a.requireWorkspace(ctx, args)
 	if errRes != nil {
 		return "", errRes
 	}
-	if ws == "all" {
-		return "", errResult("workspace_all_not_supported: this tool does not accept the 'all' workspace scope; provide a specific registered workspace hash")
-	}
+	// For full-hash inputs, requireWorkspace returns the hash without a DB check.
+	// Verify registration here to enforce the write-path constraint (issue #238).
 	if _, err := a.queries.GetWorkspaceByHash(ctx, ws); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", errResult(fmt.Sprintf("workspace_not_registered: workspace_hash %q is not registered; use POST /api/v1/init to register it first", ws))
+			return "", errResult(fmt.Sprintf("workspace_not_registered: workspace %q is not registered; use POST /api/v1/init to register it first", input))
 		}
 		return "", errResult(fmt.Sprintf("workspace_lookup_failed: %v", err))
 	}
@@ -205,7 +218,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 			Description: "Hybrid search (BM25 + vector + RRF + recency). Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"query":            {"type": "string", "description": "Search query"},
-				"workspace":        {"type": "string", "description": "Workspace hash"},
+				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"max_results":      {"type": "number", "description": "Max results (default 10, max 100)"},
 				"cursor":           {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
 				"include_content":  {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
@@ -222,7 +235,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -332,7 +345,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			Description: "BM25 text search. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"query":            {"type": "string", "description": "Search query"},
-				"workspace":        {"type": "string", "description": "Workspace hash"},
+				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"max_results":      {"type": "number", "description": "Max results (default 10, max 100)"},
 				"tags":             {"type": "array", "description": "Filter by tags", "items": map[string]any{"type": "string"}},
 				"cursor":           {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
@@ -350,7 +363,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -548,7 +561,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 			Description: "Vector similarity search using embeddings. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"query":            {"type": "string", "description": "Search query"},
-				"workspace":        {"type": "string", "description": "Workspace hash"},
+				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"max_results":      {"type": "number", "description": "Max results (default 10, max 100)"},
 				"cursor":           {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
 				"include_content":  {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
@@ -565,7 +578,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -749,7 +762,7 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 			Description: "Get a document by ID or path",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"path":       {"type": "string", "description": "Document source_path or #<uuid> for lookup by ID"},
-				"workspace":  {"type": "string", "description": "Workspace hash"},
+				"workspace":  {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"start_line": {"type": "number", "description": "Start line (1-indexed, inclusive)"},
 				"end_line":   {"type": "number", "description": "End line (1-indexed, inclusive)"},
 			}, []string{"path", "workspace"}),
@@ -759,7 +772,7 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -840,7 +853,7 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 			Description: "Write or update a document in memory",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"content":     {"type": "string", "description": "Document content"},
-				"workspace":   {"type": "string", "description": "Workspace hash"},
+				"workspace":   {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"title":       {"type": "string", "description": "Document title"},
 				"tags":        {"type": "array", "description": "Document tags", "items": map[string]any{"type": "string"}},
 				"collection":  {"type": "string", "description": "Collection name (default: memory)"},
@@ -1017,7 +1030,7 @@ func registerMemoryTags(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_tags",
 			Description: "List collections in a workspace",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace hash"},
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 			}, []string{"workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -1025,7 +1038,7 @@ func registerMemoryTags(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -1100,7 +1113,7 @@ func registerMemoryUpdate(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_update",
 			Description: "Trigger re-embedding of a workspace",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace hash"},
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 			}, []string{"workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -1126,7 +1139,7 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_wake_up",
 			Description: "Workspace briefing with recent activity and stats",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace hash"},
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"limit":     {"type": "number", "description": "Number of recent memories (default 10, max 50)"},
 			}, []string{"workspace"}),
 		},
@@ -1135,7 +1148,7 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -1253,7 +1266,7 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_graph",
 			Description: "Query the knowledge graph: find imports, calls, and symbol containment relationships for a node. Node accepts workspace-relative or absolute paths (e.g. \"internal/x.go::F\" or \"/abs/path/internal/x.go::F\").",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace hash"},
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"node":      {"type": "string", "description": "Source node (file path or file::symbol). Accepts workspace-relative or absolute."},
 				"direction": {"type": "string", "description": "Edge direction: out (default), in, both"},
 				"edge_type": {"type": "string", "description": "Filter by edge type: contains, imports, calls (empty = all)"},
@@ -1265,7 +1278,7 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -1356,7 +1369,7 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_trace",
 			Description: "Trace the call chain from an entry symbol — shows what a function calls, transitively, with cycle detection. Node accepts workspace-relative or absolute paths.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace hash"},
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"node":      {"type": "string", "description": "Entry symbol (e.g. file::FunctionName). Accepts workspace-relative or absolute."},
 				"max_depth": {"type": "number", "description": "Max traversal depth 1-10 (default 5)"},
 				"paths":     {"type": "string", "description": "Output path style: \"absolute\" (default) or \"relative\""},
@@ -1367,7 +1380,7 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -1449,7 +1462,7 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_impact",
 			Description: "Find what would be affected if a node (file or symbol) changes — reverse import/call lookup with optional depth traversal. Node accepts workspace-relative or absolute paths.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace hash"},
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"node":      {"type": "string", "description": "The node to analyze (file path or file::symbol). Accepts workspace-relative or absolute."},
 				"edge_type": {"type": "string", "description": "Filter by edge type: imports, calls (empty = all)"},
 				"max_depth": {"type": "number", "description": "Traversal depth 1-3 (default 1)"},
@@ -1461,7 +1474,7 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -1535,7 +1548,7 @@ func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_symbols",
 			Description: "Search code symbols (functions, types, methods, interfaces) extracted from indexed source files",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace hash"},
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"query":     {"type": "string", "description": "Symbol name filter (partial match)"},
 				"kind":      {"type": "string", "description": "Symbol kind: function, method, type, interface, struct, const, var"},
 				"limit":     {"type": "number", "description": "Max results (default 50)"},
@@ -1546,7 +1559,7 @@ func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := requireWorkspace(args)
+			ws, errRes := a.requireWorkspace(ctx, args)
 			if errRes != nil {
 				return errRes, nil
 			}
@@ -1625,19 +1638,25 @@ func registerMemoryWorkspacesResolve(server *mcpsdk.Server, a *Adapter) {
 
 			ws, err := a.queries.GetWorkspaceByHash(ctx, hash)
 			if err == nil {
+				useName := ws.Name
+				if useName == "" {
+					useName = ws.Hash
+				}
 				return textResult(map[string]any{
 					"workspace_hash": ws.Hash,
+					"workspace_name": ws.Name,
 					"root_path":      ws.Path,
-					"name":           ws.Name,
 					"registered":     true,
+					"use":            useName,
 				})
 			}
 			if errors.Is(err, sql.ErrNoRows) {
 				return textResult(map[string]any{
 					"workspace_hash": hash,
+					"workspace_name": filepath.Base(absPath),
 					"root_path":      absPath,
-					"name":           filepath.Base(absPath),
 					"registered":     false,
+					"use":            hash,
 				})
 			}
 			return errResult(fmt.Sprintf("resolve workspace failed: %v", err)), nil

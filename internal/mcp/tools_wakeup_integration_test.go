@@ -4,6 +4,8 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -29,7 +31,7 @@ func TestMemoryWakeUp_OnlyReturnsMemoryAndSessionSummaryDocs(t *testing.T) {
 
 	queries := sqlc.New(db)
 
-	wsHash := "test_ws_" + uuid.New().String()[:8]
+	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	if _, err := queries.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: wsHash,
 		Name: "test-ws",

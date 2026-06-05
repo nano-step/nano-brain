@@ -109,7 +109,7 @@ func TestMemoryWrite_RejectsUnregisteredWorkspace(t *testing.T) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_write",
 		Arguments: map[string]any{
-			"workspace": "unregistered-mcp-hash-xyz",
+			"workspace": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 			"content":   "leak attempt",
 		},
 	})
@@ -164,7 +164,7 @@ func TestMemoryUpdate_RejectsUnregisteredWorkspace(t *testing.T) {
 	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "memory_update",
 		Arguments: map[string]any{
-			"workspace": "unregistered-mcp-update-xyz",
+			"workspace": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
 		},
 	})
 	if err != nil {
