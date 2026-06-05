@@ -99,7 +99,7 @@ func triggerForceWipe(c echo.Context, queries ReindexQuerier, w *watcher.Watcher
 		}
 		if eq != nil {
 			for _, id := range ids {
-				if eq.Enqueue(id) {
+				if eq.ForceEnqueue(id) {
 					totalChunks++
 				}
 			}

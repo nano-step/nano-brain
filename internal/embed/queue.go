@@ -130,6 +130,28 @@ func (q *Queue) Enqueue(chunkID uuid.UUID) bool {
 	}
 }
 
+// ForceEnqueue bypasses the inflight dedup check and always enqueues the chunk.
+// It deletes any existing inflight entry first, then enqueues. Returns true if successful.
+func (q *Queue) ForceEnqueue(chunkID uuid.UUID) bool {
+	if q.pending.Load() >= rejectionThreshold {
+		q.logger.Warn().Str("chunk_id", chunkID.String()).
+			Int64("pending", q.pending.Load()).
+			Msg("backpressure: rejecting force-enqueue")
+		return false
+	}
+	q.inflight.Delete(chunkID)
+	select {
+	case q.ch <- chunkID:
+		q.pending.Add(1)
+		q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("chunk force-enqueued")
+		q.publishStatus()
+		return true
+	default:
+		q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("queue full, chunk dropped")
+		return false
+	}
+}
+
 // Depth returns the current channel length.
 func (q *Queue) Depth() int { return len(q.ch) }
 
