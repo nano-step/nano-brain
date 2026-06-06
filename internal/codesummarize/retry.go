@@ -2,6 +2,7 @@ package codesummarize
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -13,32 +14,30 @@ const (
 	ErrorPermanent
 )
 
-// ClassifyError categorizes an error as transient (retryable) or permanent.
-// Transient: 429, 408, 5xx, timeout, context errors
-// Permanent: 400, 401, 403
-// Default: transient (safer to retry than to skip)
+var (
+	transientRegex = regexp.MustCompile(`\b(429|408|500|502|503|504)\b`)
+	permanentRegex = regexp.MustCompile(`\b(400|401|403)\b`)
+)
+
 func ClassifyError(err error) ErrorClass {
+	if err == nil {
+		return ErrorTransient
+	}
 	errStr := err.Error()
 
-	transientPatterns := []string{
-		"429", "408", "500", "502", "503", "504",
-		"context deadline", "context canceled", "timeout",
-		"connection refused", "connection reset",
-	}
-	for _, p := range transientPatterns {
-		if strings.Contains(errStr, p) {
-			return ErrorTransient
-		}
+	if transientRegex.MatchString(errStr) ||
+		strings.Contains(errStr, "context deadline") ||
+		strings.Contains(errStr, "context canceled") ||
+		strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "connection reset") {
+		return ErrorTransient
 	}
 
-	permanentPatterns := []string{"400", "401", "403"}
-	for _, p := range permanentPatterns {
-		if strings.Contains(errStr, p) {
-			return ErrorPermanent
-		}
+	if permanentRegex.MatchString(errStr) {
+		return ErrorPermanent
 	}
 
-	// Default to transient (safer — will retry)
 	return ErrorTransient
 }
 
@@ -59,6 +58,10 @@ func (s *Service) sendWithRetry(ctx context.Context, batch []SymbolForSummary) (
 		summaries, err := s.provider.SummarizeBatch(ctx, batch)
 		if err == nil {
 			return summaries, nil
+		}
+
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 
 		lastErr = err

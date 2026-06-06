@@ -3,6 +3,7 @@ package codesummarize
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,7 @@ type ServiceQuerier interface {
 	GetUnsummarizedSymbols(ctx context.Context, arg sqlc.GetUnsummarizedSymbolsParams) ([]sqlc.GetUnsummarizedSymbolsRow, error)
 	UpsertDocument(ctx context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error)
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
+	UpsertCodeSummarizationFailure(ctx context.Context, arg sqlc.UpsertCodeSummarizationFailureParams) error
 }
 
 type EmbedQueue interface {
@@ -70,14 +72,36 @@ func (s *Service) splitAndSend(ctx context.Context, workspaceHash string, batch 
 
 	summaries, err := s.sendWithRetry(ctx, batch)
 	if err != nil {
+		errType := "transient_exhausted"
+		if ClassifyError(err) == ErrorPermanent {
+			errType = "permanent"
+		}
+		for _, sym := range batch {
+			if dbErr := s.queries.UpsertCodeSummarizationFailure(ctx, sqlc.UpsertCodeSummarizationFailureParams{
+				WorkspaceHash: workspaceHash,
+				SymbolName:    sym.Name,
+				SymbolKind:    sql.NullString{String: sym.Kind, Valid: sym.Kind != ""},
+				SourceFile:    sym.File,
+				ContentHash:   sym.ContentHash,
+				ErrorReason:   err.Error(),
+				ErrorType:     errType,
+			}); dbErr != nil {
+				s.logger.Warn().Err(dbErr).Str("symbol", sym.Name).Msg("failed to persist failure record")
+			}
+		}
 		return 0, len(batch)
 	}
 
+	matched := make(map[int]bool)
 	for _, summary := range summaries {
 		var matchedSymbol *SymbolForSummary
 		for i := range batch {
+			if matched[i] {
+				continue
+			}
 			if batch[i].Name == summary.Name && batch[i].File == summary.File {
 				matchedSymbol = &batch[i]
+				matched[i] = true
 				break
 			}
 		}

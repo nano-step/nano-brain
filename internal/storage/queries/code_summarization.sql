@@ -33,9 +33,13 @@ LIMIT $2;
 
 -- name: UpsertCodeSummarizationFailure :exec
 INSERT INTO code_summarization_failures (workspace_hash, symbol_name, symbol_kind, source_file, content_hash, error_reason, error_type, attempts, last_attempt_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+VALUES ($1, $2, $3, $4, $5, $6, $7, 1, NOW())
 ON CONFLICT (workspace_hash, content_hash) WHERE resolved_at IS NULL
-DO UPDATE SET attempts = EXCLUDED.attempts, error_reason = EXCLUDED.error_reason, error_type = EXCLUDED.error_type, last_attempt_at = NOW();
+DO UPDATE SET
+    attempts = code_summarization_failures.attempts + 1,
+    error_reason = EXCLUDED.error_reason,
+    error_type = EXCLUDED.error_type,
+    last_attempt_at = NOW();
 
 -- name: UpdateCodeSummarizationFailure :exec
 UPDATE code_summarization_failures
