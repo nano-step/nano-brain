@@ -22,6 +22,7 @@ LEFT JOIN documents d ON d.id = c.document_id
 WHERE c.workspace_hash = $1
   AND c.chunk_type = 'symbol'
   AND c.symbol_name IS NOT NULL
+  AND c.symbol_name != ''
   AND NOT EXISTS (
       SELECT 1
       FROM documents doc
