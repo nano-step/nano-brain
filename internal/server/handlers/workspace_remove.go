@@ -15,6 +15,8 @@ type RemoveWorkspaceQuerier interface {
 	GetWorkspaceByHash(ctx context.Context, hash string) (sqlc.Workspace, error)
 	CountDocumentsByWorkspace(ctx context.Context, workspaceHash string) (int64, error)
 	DeleteDocumentsByWorkspace(ctx context.Context, workspaceHash string) error
+	DeleteCodeSummarizationUsageByWorkspace(ctx context.Context, workspaceHash string) error
+	DeleteCodeSummarizationFailuresByWorkspace(ctx context.Context, workspaceHash string) error
 	DeleteWorkspace(ctx context.Context, hash string) error
 }
 
@@ -51,15 +53,21 @@ func RemoveWorkspace(q RemoveWorkspaceQuerier, db removeWorkspaceTxBeginner, log
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count documents")
 		}
 
-		if db == nil {
-			if err := q.DeleteDocumentsByWorkspace(ctx, hash); err != nil {
-				logger.Error().Err(err).Str("workspace", hash).Msg("delete documents failed")
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
-			}
-			if err := q.DeleteWorkspace(ctx, hash); err != nil {
-				logger.Error().Err(err).Str("workspace", hash).Msg("delete workspace failed (docs already deleted)")
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
-			}
+	if db == nil {
+		if err := q.DeleteDocumentsByWorkspace(ctx, hash); err != nil {
+			logger.Error().Err(err).Str("workspace", hash).Msg("delete documents failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
+		}
+		if err := q.DeleteCodeSummarizationUsageByWorkspace(ctx, hash); err != nil {
+			logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization usage")
+		}
+		if err := q.DeleteCodeSummarizationFailuresByWorkspace(ctx, hash); err != nil {
+			logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization failures")
+		}
+		if err := q.DeleteWorkspace(ctx, hash); err != nil {
+			logger.Error().Err(err).Str("workspace", hash).Msg("delete workspace failed (docs already deleted)")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
+		}
 		} else {
 			tx, err := db.BeginTx(ctx, nil)
 			if err != nil {
@@ -71,6 +79,12 @@ func RemoveWorkspace(q RemoveWorkspaceQuerier, db removeWorkspaceTxBeginner, log
 				_ = tx.Rollback()
 				logger.Error().Err(err).Str("workspace", hash).Msg("delete documents failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
+			}
+			if err := txq.DeleteCodeSummarizationUsageByWorkspace(ctx, hash); err != nil {
+				logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization usage")
+			}
+			if err := txq.DeleteCodeSummarizationFailuresByWorkspace(ctx, hash); err != nil {
+				logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization failures")
 			}
 			if err := txq.DeleteWorkspace(ctx, hash); err != nil {
 				_ = tx.Rollback()

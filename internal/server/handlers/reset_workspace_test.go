@@ -44,6 +44,14 @@ func (m *mockResetQuerier) DeleteWorkspace(ctx context.Context, hash string) err
 	return nil
 }
 
+func (m *mockResetQuerier) DeleteCodeSummarizationUsageByWorkspace(ctx context.Context, hash string) error {
+	return nil
+}
+
+func (m *mockResetQuerier) DeleteCodeSummarizationFailuresByWorkspace(ctx context.Context, hash string) error {
+	return nil
+}
+
 func TestResetWorkspace_NonTxPath(t *testing.T) {
 	q := &mockResetQuerier{}
 	e := echo.New()

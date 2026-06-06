@@ -13,6 +13,7 @@ import { SymbolsPanel } from '../panels/SymbolsPanel'
 import { HarvestPanel } from '../panels/HarvestPanel'
 import { SettingsPanel } from '../panels/SettingsPanel'
 import { WorkspacesPanel } from '../panels/WorkspacesPanel'
+import { CodeSummarizePanel } from '../panels/CodeSummarizePanel'
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -74,6 +75,12 @@ const workspacesRoute = createRoute({
   component: WorkspacesPanel,
 })
 
+const codeSummarizeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/code-summarize',
+  component: CodeSummarizePanel,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   dashboardRoute,
@@ -83,6 +90,7 @@ const routeTree = rootRoute.addChildren([
   harvestRoute,
   settingsRoute,
   workspacesRoute,
+  codeSummarizeRoute,
 ])
 
 export const router = createRouter({
