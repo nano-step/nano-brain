@@ -206,6 +206,9 @@ type CodeSummarizationConfig struct {
 	PollIntervalSeconds   int    `koanf:"poll_interval_seconds" json:"poll_interval_seconds"`
 	MaxSummariesPerCycle  int    `koanf:"max_summaries_per_cycle" json:"max_summaries_per_cycle"`
 	FallbackModel         string `koanf:"fallback_model" json:"fallback_model"`
+	MaxBatchTokens        int    `koanf:"max_batch_tokens" json:"max_batch_tokens"`
+	MaxRetries            int    `koanf:"max_retries" json:"max_retries"`
+	RetryBackoffSeconds   int    `koanf:"retry_backoff_seconds" json:"retry_backoff_seconds"`
 }
 
 // IntelligenceConfig holds memory consolidation and LLM categorization configuration.

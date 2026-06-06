@@ -93,6 +93,9 @@ func getDefaults() *Config {
 			PollIntervalSeconds:  60,
 			MaxSummariesPerCycle: 300,
 			FallbackModel:        "",
+			MaxBatchTokens:       100000,
+			MaxRetries:           3,
+			RetryBackoffSeconds:  1,
 		},
 		Intelligence: IntelligenceConfig{
 			Enabled:          false,
