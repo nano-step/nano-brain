@@ -462,6 +462,12 @@ After the local Review Gate passes, push branch and open a PR. The PR triggers y
 
 **R31: Agent-triaged comment verdicts (do NOT trust Gemini's severity labels).**
 
+**R31a: Wait for Gemini review before merging.** The agent MUST wait at least
+5 minutes after the last push to the PR before attempting merge. Gemini review
+typically arrives within 2-5 minutes. If no review appears after 5 minutes,
+proceed (gate 3.6 will PASS with "No Gemini comments"). If review arrives
+after merge, fix issues in a follow-up PR immediately.
+
 Every Gemini PR comment MUST be triaged by the agent. Gemini lacks context
 (codebase patterns, story intent, prior decisions); the agent has that context
 and is the source of truth. Triage is recorded in the self-review evidence file

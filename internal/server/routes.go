@@ -75,6 +75,10 @@ func registerRoutes(s *Server) {
 	write.POST("/update", handlers.TriggerUpdate(s.logger))
 	write.POST("/summarize", handlers.TriggerSummarize(s.getSummarizer, s.queries, s.logger))
 	write.POST("/code/summarize", handlers.TriggerCodeSummarize(s.getCodeSummarizer, s.currentConfig().CodeSummarization, s.logger))
+	write.GET("/code/summarize/status", handlers.GetCodeSummarizeStatus(s.queries, s.logger))
+	write.GET("/code/summarize/failures", handlers.GetCodeSummarizeFailures(s.queries, s.logger))
+	write.POST("/code/summarize/retry", handlers.RetryCodeSummarize(s.getCodeSummarizer, s.queries, s.currentConfig().CodeSummarization, s.logger))
+	write.POST("/code/summarize/retry-all", handlers.RetryAllCodeSummarize(s.getCodeSummarizer, s.queries, s.currentConfig().CodeSummarization, s.logger))
 
 	data.POST("/collections", handlers.AddCollection(s.queries, s.watcher, s.currentConfig().Watcher, s.logger))
 	data.GET("/collections", handlers.ListCollectionsHandler(s.queries, s.logger))
