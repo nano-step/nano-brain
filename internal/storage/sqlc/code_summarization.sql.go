@@ -8,6 +8,7 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -22,6 +23,105 @@ func (q *Queries) GetCodeSummarizationUsage(ctx context.Context, workspaceHash s
 	var request_count int32
 	err := row.Scan(&request_count)
 	return request_count, err
+}
+
+const getFailureBySymbol = `-- name: GetFailureBySymbol :one
+SELECT id, attempts FROM code_summarization_failures
+WHERE workspace_hash = $1 AND content_hash = $2 AND resolved_at IS NULL
+LIMIT 1
+`
+
+type GetFailureBySymbolParams struct {
+	WorkspaceHash string
+	ContentHash   string
+}
+
+type GetFailureBySymbolRow struct {
+	ID       uuid.UUID
+	Attempts int32
+}
+
+func (q *Queries) GetFailureBySymbol(ctx context.Context, arg GetFailureBySymbolParams) (GetFailureBySymbolRow, error) {
+	row := q.db.QueryRowContext(ctx, getFailureBySymbol, arg.WorkspaceHash, arg.ContentHash)
+	var i GetFailureBySymbolRow
+	err := row.Scan(&i.ID, &i.Attempts)
+	return i, err
+}
+
+const getSummarizationStatus = `-- name: GetSummarizationStatus :one
+SELECT
+    (SELECT COUNT(*) FROM chunks c WHERE c.workspace_hash = $1 AND c.chunk_type = 'symbol' AND c.symbol_name IS NOT NULL)::int AS total_symbols,
+    (SELECT COUNT(*) FROM documents d WHERE d.workspace_hash = $1 AND d.tags @> ARRAY['symbol-summary'])::int AS summarized,
+    (SELECT COUNT(*) FROM code_summarization_failures csf WHERE csf.workspace_hash = $1 AND csf.resolved_at IS NULL)::int AS failed
+`
+
+type GetSummarizationStatusRow struct {
+	TotalSymbols int32
+	Summarized   int32
+	Failed       int32
+}
+
+func (q *Queries) GetSummarizationStatus(ctx context.Context, workspaceHash string) (GetSummarizationStatusRow, error) {
+	row := q.db.QueryRowContext(ctx, getSummarizationStatus, workspaceHash)
+	var i GetSummarizationStatusRow
+	err := row.Scan(&i.TotalSymbols, &i.Summarized, &i.Failed)
+	return i, err
+}
+
+const getUnresolvedFailures = `-- name: GetUnresolvedFailures :many
+SELECT id, workspace_hash, symbol_name, symbol_kind, source_file, content_hash, error_reason, error_type, attempts, last_attempt_at, created_at
+FROM code_summarization_failures
+WHERE workspace_hash = $1 AND resolved_at IS NULL
+ORDER BY last_attempt_at DESC
+`
+
+type GetUnresolvedFailuresRow struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+	SymbolName    string
+	SymbolKind    sql.NullString
+	SourceFile    string
+	ContentHash   string
+	ErrorReason   string
+	ErrorType     string
+	Attempts      int32
+	LastAttemptAt time.Time
+	CreatedAt     time.Time
+}
+
+func (q *Queries) GetUnresolvedFailures(ctx context.Context, workspaceHash string) ([]GetUnresolvedFailuresRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUnresolvedFailures, workspaceHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUnresolvedFailuresRow
+	for rows.Next() {
+		var i GetUnresolvedFailuresRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.SymbolName,
+			&i.SymbolKind,
+			&i.SourceFile,
+			&i.ContentHash,
+			&i.ErrorReason,
+			&i.ErrorType,
+			&i.Attempts,
+			&i.LastAttemptAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUnsummarizedSymbols = `-- name: GetUnsummarizedSymbols :many
@@ -103,5 +203,65 @@ SET request_count = code_summarization_usage.request_count + 1
 
 func (q *Queries) IncrementCodeSummarizationUsage(ctx context.Context, workspaceHash string) error {
 	_, err := q.db.ExecContext(ctx, incrementCodeSummarizationUsage, workspaceHash)
+	return err
+}
+
+const resolveFailure = `-- name: ResolveFailure :exec
+UPDATE code_summarization_failures
+SET resolved_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) ResolveFailure(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, resolveFailure, id)
+	return err
+}
+
+const updateCodeSummarizationFailure = `-- name: UpdateCodeSummarizationFailure :exec
+UPDATE code_summarization_failures
+SET attempts = $2, error_reason = $3, last_attempt_at = NOW()
+WHERE id = $1
+`
+
+type UpdateCodeSummarizationFailureParams struct {
+	ID          uuid.UUID
+	Attempts    int32
+	ErrorReason string
+}
+
+func (q *Queries) UpdateCodeSummarizationFailure(ctx context.Context, arg UpdateCodeSummarizationFailureParams) error {
+	_, err := q.db.ExecContext(ctx, updateCodeSummarizationFailure, arg.ID, arg.Attempts, arg.ErrorReason)
+	return err
+}
+
+const upsertCodeSummarizationFailure = `-- name: UpsertCodeSummarizationFailure :exec
+INSERT INTO code_summarization_failures (workspace_hash, symbol_name, symbol_kind, source_file, content_hash, error_reason, error_type, attempts, last_attempt_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+ON CONFLICT (workspace_hash, content_hash) WHERE resolved_at IS NULL
+DO UPDATE SET attempts = EXCLUDED.attempts, error_reason = EXCLUDED.error_reason, error_type = EXCLUDED.error_type, last_attempt_at = NOW()
+`
+
+type UpsertCodeSummarizationFailureParams struct {
+	WorkspaceHash string
+	SymbolName    string
+	SymbolKind    sql.NullString
+	SourceFile    string
+	ContentHash   string
+	ErrorReason   string
+	ErrorType     string
+	Attempts      int32
+}
+
+func (q *Queries) UpsertCodeSummarizationFailure(ctx context.Context, arg UpsertCodeSummarizationFailureParams) error {
+	_, err := q.db.ExecContext(ctx, upsertCodeSummarizationFailure,
+		arg.WorkspaceHash,
+		arg.SymbolName,
+		arg.SymbolKind,
+		arg.SourceFile,
+		arg.ContentHash,
+		arg.ErrorReason,
+		arg.ErrorType,
+		arg.Attempts,
+	)
 	return err
 }

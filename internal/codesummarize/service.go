@@ -52,6 +52,64 @@ func NewService(
 	}
 }
 
+// splitAndSend recursively splits a batch if it exceeds token limits, then sends with retry.
+// Returns (processed count, error count).
+func (s *Service) splitAndSend(ctx context.Context, workspaceHash string, batch []SymbolForSummary) (processed, errors int) {
+	estimated := EstimateTokens(batch)
+	maxTokens := s.cfg.MaxBatchTokens
+	if maxTokens <= 0 {
+		maxTokens = 100000
+	}
+
+	if estimated > maxTokens && len(batch) > 1 {
+		mid := len(batch) / 2
+		p1, e1 := s.splitAndSend(ctx, workspaceHash, batch[:mid])
+		p2, e2 := s.splitAndSend(ctx, workspaceHash, batch[mid:])
+		return p1 + p2, e1 + e2
+	}
+
+	summaries, err := s.sendWithRetry(ctx, batch)
+	if err != nil {
+		return 0, len(batch)
+	}
+
+	for _, summary := range summaries {
+		var matchedSymbol *SymbolForSummary
+		for i := range batch {
+			if batch[i].Name == summary.Name && batch[i].File == summary.File {
+				matchedSymbol = &batch[i]
+				break
+			}
+		}
+		if matchedSymbol == nil {
+			s.logger.Warn().
+				Str("name", summary.Name).
+				Str("file", summary.File).
+				Msg("summary returned for unknown symbol")
+			errors++
+			continue
+		}
+
+		if err := s.upsertSummaryDocument(ctx, workspaceHash, matchedSymbol, summary.Summary); err != nil {
+			s.logger.Error().
+				Err(err).
+				Str("symbol", matchedSymbol.Name).
+				Str("file", matchedSymbol.File).
+				Msg("upsert summary document failed")
+			errors++
+			continue
+		}
+
+		processed++
+	}
+
+	if err := s.budget.Increment(ctx, workspaceHash); err != nil {
+		s.logger.Warn().Err(err).Msg("failed to increment budget counter")
+	}
+
+	return processed, errors
+}
+
 func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed, skipped, errors int, err error) {
 	exhausted, err := s.budget.IsExhausted(ctx, workspaceHash, s.cfg.MaxRequestsPerDay)
 	if err != nil {
@@ -151,46 +209,9 @@ func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed,
 			break
 		}
 
-		summaries, err := s.provider.SummarizeBatch(ctx, batch)
-		if err != nil {
-			s.logger.Error().Err(err).Int("batch_size", len(batch)).Msg("batch summarization failed")
-			errors += len(batch)
-			continue
-		}
-
-		for _, summary := range summaries {
-			var matchedSymbol *SymbolForSummary
-			for i := range batch {
-				if batch[i].Name == summary.Name && batch[i].File == summary.File {
-					matchedSymbol = &batch[i]
-					break
-				}
-			}
-			if matchedSymbol == nil {
-				s.logger.Warn().
-					Str("name", summary.Name).
-					Str("file", summary.File).
-					Msg("summary returned for unknown symbol")
-				errors++
-				continue
-			}
-
-			if err := s.upsertSummaryDocument(ctx, workspaceHash, matchedSymbol, summary.Summary); err != nil {
-				s.logger.Error().
-					Err(err).
-					Str("symbol", matchedSymbol.Name).
-					Str("file", matchedSymbol.File).
-					Msg("upsert summary document failed")
-				errors++
-				continue
-			}
-
-			processed++
-		}
-
-		if err := s.budget.Increment(ctx, workspaceHash); err != nil {
-			s.logger.Warn().Err(err).Msg("failed to increment budget counter")
-		}
+		p, e := s.splitAndSend(ctx, workspaceHash, batch)
+		processed += p
+		errors += e
 	}
 
 	s.logger.Info().

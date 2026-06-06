@@ -35,6 +35,21 @@ type Chunk struct {
 	EmbeddingStrategy string
 }
 
+type CodeSummarizationFailure struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+	SymbolName    string
+	SymbolKind    sql.NullString
+	SourceFile    string
+	ContentHash   string
+	ErrorReason   string
+	ErrorType     string
+	Attempts      int32
+	LastAttemptAt time.Time
+	ResolvedAt    sql.NullTime
+	CreatedAt     time.Time
+}
+
 type CodeSummarizationUsage struct {
 	WorkspaceHash string
 	UsageDate     time.Time
