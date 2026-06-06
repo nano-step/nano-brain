@@ -5,6 +5,13 @@ All notable changes to nano-brain are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Code symbol summarization** (`internal/codesummarize/`): LLM-generated 2-4 sentence summaries for code symbols (functions, types, structs) at index time. Batches 30 symbols per request to minimize API calls. Summaries stored as searchable documents and participate in BM25 + vector search. (#397)
+- New config section `code_summarization` with fields: `enabled`, `provider_url`, `api_key`, `model`, `batch_size`, `max_output_tokens`, `concurrency`, `max_requests_per_day`, `max_symbol_lines`, `poll_interval_seconds`, `max_summaries_per_cycle`.
+- New endpoint `POST /api/v1/code/summarize` — manual trigger for code summarization on a workspace.
+- New migration `00017_code_summarization_usage` — DB-persisted daily budget counter.
+
 ### Changed (MCP only — breaking for agents parsing `content` from search results)
 
 - **`memory_query` / `memory_search` / `memory_vsearch`** now return a 500-char `snippet` by default and OMIT the full `content` field. Agents needing full text must either pass `include_content: true` or call `memory_get` for one full document. HTTP API (`/api/v1/search`, `/api/v1/query`, `/api/v1/vsearch`) is unchanged. (#358)

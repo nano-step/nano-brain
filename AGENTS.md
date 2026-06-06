@@ -266,6 +266,7 @@ Each test gets an **isolated schema** (`test_<hash>`) created and dropped automa
 | `internal/search/` | Hybrid search pipeline (BM25 + vector + RRF) | `internal/search/AGENTS.md` |
 | `internal/embed/` | Embedding queue + provider adapters | `internal/embed/AGENTS.md` |
 | `internal/mcp/` | MCP protocol tool implementations | `internal/mcp/AGENTS.md` |
+| `internal/codesummarize/` | Batched LLM code symbol summarization | — |
 
 ## Development Workflow
 

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/chunker"
+	"github.com/nano-brain/nano-brain/internal/codesummarize"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/eventbus"
@@ -520,6 +521,15 @@ func startServer(configPath string) {
 				return hr.Run(gctx)
 			})
 		}
+	}
+
+	// Wire code summarization service (if enabled)
+	if cfg.CodeSummarization.Enabled && cfg.CodeSummarization.ProviderURL != "" {
+		csProvider := codesummarize.NewLLMProvider(cfg.CodeSummarization, logger)
+		csBudget := codesummarize.NewBudgetTracker(queries)
+		csSvc := codesummarize.NewService(cfg.CodeSummarization, csProvider, csBudget, queries, eq, logger)
+		srv.SetCodeSummarizer(csSvc)
+		logger.Info().Str("model", cfg.CodeSummarization.Model).Msg("code summarization service configured")
 	}
 
 	g.Go(func() error {
