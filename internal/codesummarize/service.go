@@ -163,6 +163,8 @@ func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed,
 	}
 
 	symbols := make([]SymbolForSummary, 0, len(rows))
+	var oversized []SymbolForSummary
+
 	for _, row := range rows {
 		symbolName := ""
 		if row.SymbolName.Valid {
@@ -177,29 +179,31 @@ func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed,
 			language = row.Language.String
 		}
 
-		lineCount := strings.Count(row.Content, "\n") + 1
-		if s.cfg.MaxSymbolLines > 0 && lineCount > s.cfg.MaxSymbolLines {
-			s.logger.Debug().
-				Str("symbol", symbolName).
-				Int("lines", lineCount).
-				Int("max", s.cfg.MaxSymbolLines).
-				Msg("symbol too large, skipping")
-			skipped++
-			continue
-		}
-
-		symbols = append(symbols, SymbolForSummary{
+		sym := SymbolForSummary{
 			Name:        symbolName,
 			Kind:        symbolKind,
 			File:        row.SourcePath,
 			Language:    language,
 			Code:        row.Content,
 			ContentHash: row.ContentHash,
-		})
+		}
+
+		lineCount := strings.Count(row.Content, "\n") + 1
+		if s.cfg.MaxSymbolLines > 0 && lineCount > s.cfg.MaxSymbolLines {
+			s.logger.Info().
+				Str("symbol", symbolName).
+				Int("lines", lineCount).
+				Int("max", s.cfg.MaxSymbolLines).
+				Msg("oversized symbol, will send individually")
+			oversized = append(oversized, sym)
+			continue
+		}
+
+		symbols = append(symbols, sym)
 	}
 
-	if len(symbols) == 0 {
-		s.logger.Info().Str("workspace", workspaceHash).Msg("all symbols filtered out (too large)")
+	if len(symbols) == 0 && len(oversized) == 0 {
+		s.logger.Info().Str("workspace", workspaceHash).Msg("no symbols to summarize")
 		return 0, skipped, 0, nil
 	}
 
@@ -234,6 +238,26 @@ func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed,
 		}
 
 		p, e := s.splitAndSend(ctx, workspaceHash, batch)
+		processed += p
+		errors += e
+	}
+
+	for _, sym := range oversized {
+		exhausted, err := s.budget.IsExhausted(ctx, workspaceHash, s.cfg.MaxRequestsPerDay)
+		if err != nil {
+			s.logger.Warn().Err(err).Msg("failed to check budget for oversized symbol")
+		} else if exhausted {
+			s.logger.Warn().Str("workspace", workspaceHash).Msg("budget exhausted during oversized symbols")
+			break
+		}
+
+		s.logger.Info().
+			Str("symbol", sym.Name).
+			Str("file", sym.File).
+			Int("lines", strings.Count(sym.Code, "\n")+1).
+			Msg("summarizing oversized symbol individually")
+
+		p, e := s.splitAndSend(ctx, workspaceHash, []SymbolForSummary{sym})
 		processed += p
 		errors += e
 	}
