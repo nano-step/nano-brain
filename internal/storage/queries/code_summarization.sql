@@ -67,3 +67,9 @@ SELECT
 SELECT id, attempts FROM code_summarization_failures
 WHERE workspace_hash = $1 AND content_hash = $2 AND resolved_at IS NULL
 LIMIT 1;
+
+-- name: DeleteCodeSummarizationUsageByWorkspace :exec
+DELETE FROM code_summarization_usage WHERE workspace_hash = $1;
+
+-- name: DeleteCodeSummarizationFailuresByWorkspace :exec
+DELETE FROM code_summarization_failures WHERE workspace_hash = $1;

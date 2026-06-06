@@ -13,6 +13,8 @@ import (
 type ResetWorkspaceQuerier interface {
 	CountDocumentsByWorkspace(ctx context.Context, workspaceHash string) (int64, error)
 	DeleteDocumentsByWorkspace(ctx context.Context, workspaceHash string) error
+	DeleteCodeSummarizationUsageByWorkspace(ctx context.Context, workspaceHash string) error
+	DeleteCodeSummarizationFailuresByWorkspace(ctx context.Context, workspaceHash string) error
 }
 
 type resetWorkspaceTxBeginner interface {
@@ -46,28 +48,40 @@ func ResetWorkspace(q ResetWorkspaceQuerier, db resetWorkspaceTxBeginner, logger
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count documents")
 		}
 
-		if db == nil {
-			if err := q.DeleteDocumentsByWorkspace(ctx, req.Workspace); err != nil {
-				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete documents failed")
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
-			}
-		} else {
-			tx, err := db.BeginTx(ctx, nil)
-			if err != nil {
-				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("begin transaction failed")
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to begin transaction")
-			}
-			txq := sqlc.New(tx)
-			if err := txq.DeleteDocumentsByWorkspace(ctx, req.Workspace); err != nil {
-				_ = tx.Rollback()
-				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete documents failed")
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
-			}
-			if err := tx.Commit(); err != nil {
-				logger.Error().Err(err).Str("workspace", req.Workspace).Msg("commit transaction failed")
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to commit transaction")
-			}
+	if db == nil {
+		if err := q.DeleteDocumentsByWorkspace(ctx, req.Workspace); err != nil {
+			logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete documents failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
 		}
+		if err := q.DeleteCodeSummarizationUsageByWorkspace(ctx, req.Workspace); err != nil {
+			logger.Warn().Err(err).Str("workspace", req.Workspace).Msg("failed to cleanup code summarization usage")
+		}
+		if err := q.DeleteCodeSummarizationFailuresByWorkspace(ctx, req.Workspace); err != nil {
+			logger.Warn().Err(err).Str("workspace", req.Workspace).Msg("failed to cleanup code summarization failures")
+		}
+	} else {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			logger.Error().Err(err).Str("workspace", req.Workspace).Msg("begin transaction failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to begin transaction")
+		}
+		txq := sqlc.New(tx)
+		if err := txq.DeleteDocumentsByWorkspace(ctx, req.Workspace); err != nil {
+			_ = tx.Rollback()
+			logger.Error().Err(err).Str("workspace", req.Workspace).Msg("delete documents failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
+		}
+		if err := txq.DeleteCodeSummarizationUsageByWorkspace(ctx, req.Workspace); err != nil {
+			logger.Warn().Err(err).Str("workspace", req.Workspace).Msg("failed to cleanup code summarization usage")
+		}
+		if err := txq.DeleteCodeSummarizationFailuresByWorkspace(ctx, req.Workspace); err != nil {
+			logger.Warn().Err(err).Str("workspace", req.Workspace).Msg("failed to cleanup code summarization failures")
+		}
+		if err := tx.Commit(); err != nil {
+			logger.Error().Err(err).Str("workspace", req.Workspace).Msg("commit transaction failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to commit transaction")
+		}
+	}
 
 		reqLog := LoggerFromCtx(c, logger)
 		reqLog.Info().

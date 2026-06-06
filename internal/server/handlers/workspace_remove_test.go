@@ -39,6 +39,14 @@ func (m *mockRemoveQuerier) DeleteWorkspace(ctx context.Context, hash string) er
 	return m.deleteWorkspaceFn(ctx, hash)
 }
 
+func (m *mockRemoveQuerier) DeleteCodeSummarizationUsageByWorkspace(ctx context.Context, hash string) error {
+	return nil
+}
+
+func (m *mockRemoveQuerier) DeleteCodeSummarizationFailuresByWorkspace(ctx context.Context, hash string) error {
+	return nil
+}
+
 func newDefaultRemoveQuerier() *mockRemoveQuerier {
 	return &mockRemoveQuerier{
 		getWorkspaceFn: func(_ context.Context, hash string) (sqlc.Workspace, error) {

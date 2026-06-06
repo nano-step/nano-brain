@@ -13,6 +13,24 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteCodeSummarizationFailuresByWorkspace = `-- name: DeleteCodeSummarizationFailuresByWorkspace :exec
+DELETE FROM code_summarization_failures WHERE workspace_hash = $1
+`
+
+func (q *Queries) DeleteCodeSummarizationFailuresByWorkspace(ctx context.Context, workspaceHash string) error {
+	_, err := q.db.ExecContext(ctx, deleteCodeSummarizationFailuresByWorkspace, workspaceHash)
+	return err
+}
+
+const deleteCodeSummarizationUsageByWorkspace = `-- name: DeleteCodeSummarizationUsageByWorkspace :exec
+DELETE FROM code_summarization_usage WHERE workspace_hash = $1
+`
+
+func (q *Queries) DeleteCodeSummarizationUsageByWorkspace(ctx context.Context, workspaceHash string) error {
+	_, err := q.db.ExecContext(ctx, deleteCodeSummarizationUsageByWorkspace, workspaceHash)
+	return err
+}
+
 const getCodeSummarizationUsage = `-- name: GetCodeSummarizationUsage :one
 SELECT request_count FROM code_summarization_usage
 WHERE workspace_hash = $1 AND usage_date = CURRENT_DATE
