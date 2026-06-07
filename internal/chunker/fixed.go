@@ -4,14 +4,22 @@ import (
 	"github.com/nano-brain/nano-brain/internal/chunk"
 )
 
-type FixedChunker struct{}
+type FixedChunker struct {
+	overlap int
+}
 
 func NewFixedChunker() *FixedChunker {
-	return &FixedChunker{}
+	return &FixedChunker{overlap: 600}
+}
+
+func NewFixedChunkerWithOverlap(overlap int) *FixedChunker {
+	return &FixedChunker{overlap: overlap}
 }
 
 func (f *FixedChunker) Chunk(content string, sourcePath string) []Chunk {
-	raw := chunk.Split(content, chunk.DefaultConfig())
+	cfg := chunk.DefaultConfig()
+	cfg.Overlap = f.overlap
+	raw := chunk.Split(content, cfg)
 	out := make([]Chunk, len(raw))
 	for i, c := range raw {
 		out[i] = Chunk{

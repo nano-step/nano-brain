@@ -17,6 +17,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/links"
 	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/search"
+	"github.com/nano-brain/nano-brain/internal/search/preprocess"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/telemetry"
@@ -80,6 +81,11 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		ss = search.NewSearchService(queries, embedder, fullCfg.Search, logger)
 		ss.SetPageRankLoader(search.NewSQLPageRankLoader(queries))
 		ss.SetEntityQuerier(queries)
+		// Create and inject preprocessor if enabled
+		if fullCfg.Search.QueryPreprocessing.Enabled && queries != nil {
+			preprocessor := preprocess.NewPreprocessor(fullCfg.Search.QueryPreprocessing, logger)
+			ss.SetPreprocessor(preprocessor)
+		}
 	}
 
 	mcpServer := internalmcp.NewMCPServer(version)

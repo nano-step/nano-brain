@@ -386,6 +386,9 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 			}
 
 			groupBy := argString(args, "group_by")
+			if groupBy == "" {
+				groupBy = "document"
+			}
 			if groupBy == "document" {
 				results = deduplicateByDocument(results)
 			}
@@ -904,6 +907,33 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 		})
 
 		groupBy := argString(args, "group_by")
+		if groupBy == "" {
+			groupBy = "document"
+		}
+		if groupBy == "document" {
+			vsearchResults := make([]search.Result, len(allRows))
+			for i, r := range allRows {
+				vsearchResults[i] = search.Result{
+					ID: r.ID, DocumentID: r.DocumentID,
+					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+					Content: r.Content, SourcePath: r.SourcePath,
+					Collection: r.Collection, Tags: r.Tags,
+					Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+				}
+			}
+			deduped := deduplicateByDocument(vsearchResults)
+			allRows = make([]vsRow, len(deduped))
+			for i, r := range deduped {
+				allRows[i] = vsRow{
+					ID: r.ID, DocumentID: r.DocumentID,
+					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+					Content: r.Content, SourcePath: r.SourcePath,
+					Collection: r.Collection, Tags: r.Tags,
+					Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+				}
+			}
+		}
+
 		if groupBy == "document" {
 			vsearchResults := make([]search.Result, len(allRows))
 			for i, r := range allRows {
