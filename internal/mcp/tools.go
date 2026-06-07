@@ -1034,7 +1034,7 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_get",
 			Description: "Get a document by ID or path",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"path":       {"type": "string", "description": "Document source_path or #<uuid> for lookup by ID"},
+				"path":       {"type": "string", "description": "Document source_path, UUID (auto-detected), or #<uuid> for explicit ID lookup"},
 				"workspace":  {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"start_line": {"type": "number", "description": "Start line (1-indexed, inclusive)"},
 				"end_line":   {"type": "number", "description": "End line (1-indexed, inclusive)"},
@@ -1058,7 +1058,9 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 			}
 
 			var doc sqlc.Document
-			if strings.HasPrefix(path, "#") {
+			switch {
+			case strings.HasPrefix(path, "#"):
+				// Explicit UUID lookup via #<uuid> prefix
 				docID, parseErr := uuid.Parse(strings.TrimPrefix(path, "#"))
 				if parseErr != nil {
 					return errResult(fmt.Sprintf("invalid document ID: %v", parseErr)), nil
@@ -1067,11 +1069,20 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 					ID:            docID,
 					WorkspaceHash: ws,
 				})
-			} else {
-				doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
-					SourcePath:    path,
-					WorkspaceHash: ws,
-				})
+			default:
+				// Try UUID-first: many clients pass the document_id (UUID) returned
+				// by memory_query / memory_search directly as the path.
+				if docID, parseErr := uuid.Parse(path); parseErr == nil {
+					doc, err = a.queries.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{
+						ID:            docID,
+						WorkspaceHash: ws,
+					})
+				} else {
+					doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+						SourcePath:    path,
+						WorkspaceHash: ws,
+					})
+				}
 			}
 			if err != nil {
 				return errResult(fmt.Sprintf("document not found: %v", err)), nil

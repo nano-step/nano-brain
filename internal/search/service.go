@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/search/hyde"
 	"github.com/nano-brain/nano-brain/internal/search/preprocess"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -49,6 +50,8 @@ type SearchService struct {
 	logger         zerolog.Logger
 	pagerankLoader PageRankLoader
 	preprocessor   *preprocess.Preprocessor
+	hydeGenerator  *hyde.Generator
+	reranker       Reranker
 }
 
 func NewSearchService(queries Querier, embedder Embedder, cfg config.SearchConfig, logger zerolog.Logger) *SearchService {
@@ -65,6 +68,14 @@ func (s *SearchService) SetPageRankLoader(loader PageRankLoader) {
 
 func (s *SearchService) SetPreprocessor(pp *preprocess.Preprocessor) {
 	s.preprocessor = pp
+}
+
+func (s *SearchService) SetHydeGenerator(hg *hyde.Generator) {
+	s.hydeGenerator = hg
+}
+
+func (s *SearchService) SetReranker(rr Reranker) {
+	s.reranker = rr
 }
 
 // UpdateConfig updates the search configuration with thread-safe locking.
@@ -110,6 +121,21 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 			}
 			if result.TimeFilter.Before != nil && timeRange.UpdatedBefore == nil {
 				timeRange.UpdatedBefore = result.TimeFilter.Before
+			}
+		}
+	}
+
+	// HyDE: generate a hypothetical document for embedding if enabled
+	embedQuery := query
+	if s.hydeGenerator != nil {
+		s.configMutex.RLock()
+		hydeEnabled := s.config.HyDE.Enabled
+		s.configMutex.RUnlock()
+		if hydeEnabled {
+			hypothetical, err := s.hydeGenerator.Generate(ctx, query)
+			if err == nil && hypothetical != "" {
+				s.logger.Debug().Str("original", query).Str("hyde", hypothetical).Msg("hyde: generated hypothetical document")
+				embedQuery = hypothetical
 			}
 		}
 	}
@@ -273,7 +299,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 		if s.embedder == nil {
 			return nil
 		}
-		vec, err := s.embedder.Embed(gctx, query)
+		vec, err := s.embedder.Embed(gctx, embedQuery)
 		if err != nil {
 			vectorErr = err
 			s.logger.Warn().Err(err).Msg("embed failed, degrading")
@@ -421,7 +447,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 		return nil, fmt.Errorf("all search legs failed: bm25: %v, vector: %v", bm25Err, vectorErr)
 	}
 
-	merged := RRFMerge(bm25Results, vectorResults, rrfK)
+	merged := DynamicRRFMerge(bm25Results, vectorResults, rrfK)
 
 	boosted := ApplyRecencyBoost(merged, recencyWeight, recencyHalfLifeDays, time.Now())
 
@@ -460,9 +486,26 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 		}
 	}
 
-	if len(boosted) > maxResults {
-		boosted = boosted[:maxResults]
+	// Apply reranking if enabled
+	reranked := boosted
+	if s.reranker != nil {
+		s.configMutex.RLock()
+		rerankEnabled := s.config.Reranking.Enabled
+		rerankTopK := s.config.Reranking.TopK
+		s.configMutex.RUnlock()
+		if rerankEnabled && rerankTopK > 0 {
+			var err error
+			reranked, err = s.reranker.Rerank(ctx, query, boosted, rerankTopK)
+			if err != nil {
+				s.logger.Warn().Err(err).Msg("reranking failed, using boosted results")
+				reranked = boosted
+			}
+		}
 	}
 
-	return boosted, nil
+	if len(reranked) > maxResults {
+		reranked = reranked[:maxResults]
+	}
+
+	return reranked, nil
 }

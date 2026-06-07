@@ -17,7 +17,9 @@ import (
 	"github.com/nano-brain/nano-brain/internal/links"
 	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/search"
+	"github.com/nano-brain/nano-brain/internal/search/hyde"
 	"github.com/nano-brain/nano-brain/internal/search/preprocess"
+	"github.com/nano-brain/nano-brain/internal/search/reranking"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/telemetry"
@@ -85,6 +87,16 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		if fullCfg.Search.QueryPreprocessing.Enabled && queries != nil {
 			preprocessor := preprocess.NewPreprocessor(fullCfg.Search.QueryPreprocessing, logger)
 			ss.SetPreprocessor(preprocessor)
+		}
+		// Create and inject HyDE generator if enabled
+		if fullCfg.Search.HyDE.Enabled {
+			hg := hyde.NewGenerator(fullCfg.Search.HyDE, logger)
+			ss.SetHydeGenerator(hg)
+		}
+		// Create and inject reranker if enabled
+		if fullCfg.Search.Reranking.Enabled {
+			rr := reranking.NewReranker(fullCfg.Search.Reranking, logger)
+			ss.SetReranker(rr)
 		}
 	}
 

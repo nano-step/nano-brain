@@ -159,7 +159,26 @@ type SearchConfig struct {
 	EntityBoostEnabled    bool                     `koanf:"entity_boost_enabled" json:"entity_boost_enabled"`
 	EntityBoostFactor     float64                  `koanf:"entity_boost_factor" json:"entity_boost_factor"`
 	QueryPreprocessing    QueryPreprocessingConfig `koanf:"query_preprocessing" json:"query_preprocessing"`
+	HyDE                  HyDEConfig               `koanf:"hyde" json:"hyde"`
+	Reranking             RerankingConfig          `koanf:"reranking" json:"reranking"`
 	BM25Language          string                   `koanf:"bm25_language" json:"bm25_language"`
+}
+
+// HyDEConfig holds HyDE (Hypothetical Document Embedding) configuration.
+type HyDEConfig struct {
+	Enabled      bool   `koanf:"enabled" json:"enabled"`
+	ProviderURL  string `koanf:"provider_url" json:"provider_url"`
+	APIKey       string `koanf:"api_key" json:"api_key"`
+	Model        string `koanf:"model" json:"model"`
+	MaxLatencyMs int    `koanf:"max_latency_ms" json:"max_latency_ms"`
+}
+
+// RerankingConfig holds cross-encoder reranking configuration.
+type RerankingConfig struct {
+	Enabled  bool   `koanf:"enabled" json:"enabled"`
+	Provider string `koanf:"provider" json:"provider"`
+	APIKey   string `koanf:"api_key" json:"api_key"`
+	TopK     int    `koanf:"top_k" json:"top_k"`
 }
 
 // QueryPreprocessingConfig holds LLM-based query preprocessing configuration.

@@ -1,7 +1,10 @@
 // Package search handles semantic and keyword search queries.
 package search
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Result represents a single search result from any search method.
 // JSON tags use snake_case to match the public API + MCP tool response contract.
@@ -20,4 +23,9 @@ type Result struct {
 	SourcePath    string    `json:"source_path"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// Reranker is the interface for search result reranking.
+type Reranker interface {
+	Rerank(ctx context.Context, query string, docs []Result, topK int) ([]Result, error)
 }
