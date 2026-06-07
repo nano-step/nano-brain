@@ -107,6 +107,7 @@ func registerRoutes(s *Server) {
 	statsH.SetHarvestStatus(s.harvestStatus)
 	s.statsHandler = statsH
 	data.GET("/stats", statsH.Handle)
+	write.POST("/graph/pagerank/compute", handlers.GraphPageRankCompute(s.queries, s.logger))
 	write.POST("/graph/neighborhood", handlers.GraphNeighborhood(s.queries, s.logger))
 	data.GET("/links/:doc_id/backlinks", handlers.Backlinks(s.queries, s.logger))
 	if s.concreteLinkRes != nil {

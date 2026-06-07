@@ -527,8 +527,16 @@ func startServer(configPath string) {
 	if cfg.CodeSummarization.Enabled && cfg.CodeSummarization.ProviderURL != "" {
 		csProvider := codesummarize.NewLLMProvider(cfg.CodeSummarization, logger)
 		csBudget := codesummarize.NewBudgetTracker(queries)
-		csSvc := codesummarize.NewService(cfg.CodeSummarization, csProvider, csBudget, queries, eq, logger)
+		csSvc := codesummarize.NewService(cfg.CodeSummarization, csProvider, csBudget, queries, eq, logger).
+			WithWorkspaceLister(queries)
 		srv.SetCodeSummarizer(csSvc)
+		fw.WithSummarizeNotify(csSvc.Notify)
+		if !cfg.Server.ServeOnly {
+			g.Go(func() error {
+				csSvc.StartWorkerPool(gctx)
+				return nil
+			})
+		}
 		logger.Info().Str("model", cfg.CodeSummarization.Model).Msg("code summarization service configured")
 	}
 

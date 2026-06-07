@@ -11,7 +11,93 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
+
+const bulkGetCalleeNodes = `-- name: BulkGetCalleeNodes :many
+SELECT DISTINCT source_node, target_node
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND source_node = ANY($2::text[])
+  AND edge_type = 'calls'
+`
+
+type BulkGetCalleeNodesParams struct {
+	WorkspaceHash string
+	Column2       []string
+}
+
+type BulkGetCalleeNodesRow struct {
+	SourceNode string
+	TargetNode string
+}
+
+func (q *Queries) BulkGetCalleeNodes(ctx context.Context, arg BulkGetCalleeNodesParams) ([]BulkGetCalleeNodesRow, error) {
+	rows, err := q.db.QueryContext(ctx, bulkGetCalleeNodes, arg.WorkspaceHash, pq.Array(arg.Column2))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BulkGetCalleeNodesRow
+	for rows.Next() {
+		var i BulkGetCalleeNodesRow
+		if err := rows.Scan(&i.SourceNode, &i.TargetNode); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const bulkGetCallerContext = `-- name: BulkGetCallerContext :many
+SELECT target_node, source_node, COUNT(*)::int AS frequency
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND target_node = ANY($2::text[])
+  AND edge_type = 'calls'
+GROUP BY target_node, source_node
+ORDER BY target_node, frequency DESC
+`
+
+type BulkGetCallerContextParams struct {
+	WorkspaceHash string
+	Column2       []string
+}
+
+type BulkGetCallerContextRow struct {
+	TargetNode string
+	SourceNode string
+	Frequency  int32
+}
+
+func (q *Queries) BulkGetCallerContext(ctx context.Context, arg BulkGetCallerContextParams) ([]BulkGetCallerContextRow, error) {
+	rows, err := q.db.QueryContext(ctx, bulkGetCallerContext, arg.WorkspaceHash, pq.Array(arg.Column2))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BulkGetCallerContextRow
+	for rows.Next() {
+		var i BulkGetCallerContextRow
+		if err := rows.Scan(&i.TargetNode, &i.SourceNode, &i.Frequency); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const deleteCodeSummarizationFailuresByWorkspace = `-- name: DeleteCodeSummarizationFailuresByWorkspace :exec
 DELETE FROM code_summarization_failures WHERE workspace_hash = $1
@@ -29,6 +115,42 @@ DELETE FROM code_summarization_usage WHERE workspace_hash = $1
 func (q *Queries) DeleteCodeSummarizationUsageByWorkspace(ctx context.Context, workspaceHash string) error {
 	_, err := q.db.ExecContext(ctx, deleteCodeSummarizationUsageByWorkspace, workspaceHash)
 	return err
+}
+
+const getCalleeNodes = `-- name: GetCalleeNodes :many
+SELECT DISTINCT target_node
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND source_node = $2
+  AND edge_type = 'calls'
+`
+
+type GetCalleeNodesParams struct {
+	WorkspaceHash string
+	SourceNode    string
+}
+
+func (q *Queries) GetCalleeNodes(ctx context.Context, arg GetCalleeNodesParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getCalleeNodes, arg.WorkspaceHash, arg.SourceNode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var target_node string
+		if err := rows.Scan(&target_node); err != nil {
+			return nil, err
+		}
+		items = append(items, target_node)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getCodeSummarizationUsage = `-- name: GetCodeSummarizationUsage :one
@@ -84,6 +206,81 @@ func (q *Queries) GetSummarizationStatus(ctx context.Context, workspaceHash stri
 	var i GetSummarizationStatusRow
 	err := row.Scan(&i.TotalSymbols, &i.Summarized, &i.Failed)
 	return i, err
+}
+
+const getSymbolChunksByGraphContextStale = `-- name: GetSymbolChunksByGraphContextStale :many
+SELECT
+    c.id,
+    c.content,
+    c.symbol_name,
+    c.symbol_kind,
+    c.language,
+    c.content_hash,
+    c.graph_context_hash,
+    COALESCE(d.source_path, '') AS source_path
+FROM chunks c
+LEFT JOIN documents d ON d.id = c.document_id
+WHERE c.workspace_hash = $1
+  AND c.chunk_type = 'symbol'
+  AND c.symbol_name IS NOT NULL
+  AND c.symbol_name != ''
+  AND c.graph_context_hash IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM documents doc
+      WHERE doc.workspace_hash = c.workspace_hash
+        AND doc.tags @> ARRAY['symbol-summary']::text[]
+        AND doc.metadata->>'source_content_hash' = c.content_hash
+  )
+LIMIT $2
+`
+
+type GetSymbolChunksByGraphContextStaleParams struct {
+	WorkspaceHash string
+	Limit         int32
+}
+
+type GetSymbolChunksByGraphContextStaleRow struct {
+	ID               uuid.UUID
+	Content          string
+	SymbolName       sql.NullString
+	SymbolKind       sql.NullString
+	Language         sql.NullString
+	ContentHash      string
+	GraphContextHash sql.NullString
+	SourcePath       string
+}
+
+func (q *Queries) GetSymbolChunksByGraphContextStale(ctx context.Context, arg GetSymbolChunksByGraphContextStaleParams) ([]GetSymbolChunksByGraphContextStaleRow, error) {
+	rows, err := q.db.QueryContext(ctx, getSymbolChunksByGraphContextStale, arg.WorkspaceHash, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSymbolChunksByGraphContextStaleRow
+	for rows.Next() {
+		var i GetSymbolChunksByGraphContextStaleRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Content,
+			&i.SymbolName,
+			&i.SymbolKind,
+			&i.Language,
+			&i.ContentHash,
+			&i.GraphContextHash,
+			&i.SourcePath,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUnresolvedFailures = `-- name: GetUnresolvedFailures :many
@@ -225,6 +422,23 @@ func (q *Queries) IncrementCodeSummarizationUsage(ctx context.Context, workspace
 	return err
 }
 
+const nullifyGraphContextHashBySymbols = `-- name: NullifyGraphContextHashBySymbols :exec
+UPDATE chunks SET graph_context_hash = NULL
+WHERE workspace_hash = $1
+  AND chunk_type = 'symbol'
+  AND symbol_name = ANY($2::text[])
+`
+
+type NullifyGraphContextHashBySymbolsParams struct {
+	WorkspaceHash string
+	Column2       []string
+}
+
+func (q *Queries) NullifyGraphContextHashBySymbols(ctx context.Context, arg NullifyGraphContextHashBySymbolsParams) error {
+	_, err := q.db.ExecContext(ctx, nullifyGraphContextHashBySymbols, arg.WorkspaceHash, pq.Array(arg.Column2))
+	return err
+}
+
 const resolveFailure = `-- name: ResolveFailure :exec
 UPDATE code_summarization_failures
 SET resolved_at = NOW()
@@ -233,6 +447,21 @@ WHERE id = $1
 
 func (q *Queries) ResolveFailure(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, resolveFailure, id)
+	return err
+}
+
+const updateChunkGraphContextHash = `-- name: UpdateChunkGraphContextHash :exec
+UPDATE chunks SET graph_context_hash = $2
+WHERE id = $1
+`
+
+type UpdateChunkGraphContextHashParams struct {
+	ID               uuid.UUID
+	GraphContextHash sql.NullString
+}
+
+func (q *Queries) UpdateChunkGraphContextHash(ctx context.Context, arg UpdateChunkGraphContextHashParams) error {
+	_, err := q.db.ExecContext(ctx, updateChunkGraphContextHash, arg.ID, arg.GraphContextHash)
 	return err
 }
 

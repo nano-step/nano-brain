@@ -156,7 +156,7 @@ func (q *Queries) GetFailedChunksAllWorkspaces(ctx context.Context, limit int32)
 }
 
 const getPendingChunks = `-- name: GetPendingChunks :many
-SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.created_at, c.embed_status, c.search_vector, c.symbol_name, c.symbol_kind, c.language, c.line_start, c.line_end, c.chunk_type, c.embedding_strategy FROM chunks c
+SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.created_at, c.embed_status, c.search_vector, c.symbol_name, c.symbol_kind, c.language, c.line_start, c.line_end, c.chunk_type, c.embedding_strategy, c.summary, c.summary_hash, c.graph_context_hash FROM chunks c
 WHERE c.workspace_hash = $1
 AND c.embed_status = 'pending'
 ORDER BY c.created_at ASC
@@ -197,6 +197,9 @@ func (q *Queries) GetPendingChunks(ctx context.Context, arg GetPendingChunksPara
 			&i.LineEnd,
 			&i.ChunkType,
 			&i.EmbeddingStrategy,
+			&i.Summary,
+			&i.SummaryHash,
+			&i.GraphContextHash,
 		); err != nil {
 			return nil, err
 		}

@@ -78,6 +78,8 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 	var ss *search.SearchService
 	if queries != nil {
 		ss = search.NewSearchService(queries, embedder, fullCfg.Search, logger)
+		ss.SetPageRankLoader(search.NewSQLPageRankLoader(queries))
+		ss.SetEntityQuerier(queries)
 	}
 
 	mcpServer := internalmcp.NewMCPServer(version)

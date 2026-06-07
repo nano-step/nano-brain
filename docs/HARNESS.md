@@ -740,6 +740,28 @@ When unsure: create the issue. Closing is cheap.
 | PR | Link PR to issue | `gh pr create ... --body "Closes #<N>"` |
 | Archive | Close issue | auto-closed by PR merge (via `Closes #N`) |
 
+### Decision Autonomy Rule
+
+When the deep-design pipeline surfaces **Open Questions** (LOW-confidence conflicts
+requiring user input), the agent MUST:
+
+1. **Attempt resolution autonomously first** — consult Oracle or fire additional
+   explore/librarian agents to gather evidence that resolves the conflict.
+2. **Make the decision** with documented reasoning if evidence is sufficient
+   (i.e., one option is clearly better based on codebase patterns, prior art, or
+   cross-critique consensus).
+3. **Escalate to user ONLY when**:
+   - Both options have genuinely equal tradeoffs AND
+   - The choice is irreversible (schema migration, public API contract) AND
+   - No codebase precedent or research evidence favors one side.
+
+**Default bias: DECIDE, don't ask.** The user trusts the agent to make informed
+technical decisions. Asking "Option A or B?" when the answer is derivable from
+context is a waste of the user's time.
+
+**Document every autonomous decision** in the design.md Conflict Resolution Log
+so the user can override later if needed.
+
 ### Labels
 
 Apply `lane:*` + `change-type:*` (+ optional `status:*`) labels as soon as

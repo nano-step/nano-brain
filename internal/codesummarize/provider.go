@@ -60,12 +60,12 @@ type chatResponse struct {
 	} `json:"choices"`
 }
 
-func (p *LLMProvider) SummarizeBatch(ctx context.Context, symbols []SymbolForSummary) ([]SymbolSummary, error) {
+func (p *LLMProvider) SummarizeBatch(ctx context.Context, symbols []SymbolForSummary, graphContexts map[string]*SymbolGraphContext) ([]SymbolSummary, error) {
 	if len(symbols) == 0 {
 		return nil, nil
 	}
 
-	prompt := BuildBatchPrompt(symbols)
+	prompt := BuildBatchPromptWithContext(symbols, graphContexts)
 
 	reqBody := chatRequest{
 		Model: p.model,

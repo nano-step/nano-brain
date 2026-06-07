@@ -33,6 +33,16 @@ type Chunk struct {
 	LineEnd           sql.NullInt32
 	ChunkType         string
 	EmbeddingStrategy string
+	Summary           sql.NullString
+	SummaryHash       sql.NullString
+	GraphContextHash  sql.NullString
+}
+
+type ChunkEntity struct {
+	ChunkID       uuid.UUID
+	EntityName    string
+	EntityType    string
+	WorkspaceHash string
 }
 
 type CodeSummarizationFailure struct {
@@ -104,6 +114,13 @@ type GraphEdge struct {
 	SourceFile    string
 	Metadata      json.RawMessage
 	CreatedAt     time.Time
+}
+
+type PagerankScore struct {
+	WorkspaceHash string
+	NodeName      string
+	Score         float64
+	ComputedAt    time.Time
 }
 
 type TelemetryLog struct {

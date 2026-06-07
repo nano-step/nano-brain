@@ -42,6 +42,7 @@ type WatcherQuerier interface {
 	DeleteChunksByDocumentID(ctx context.Context, arg sqlc.DeleteChunksByDocumentIDParams) error
 	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
 	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
+	InsertChunkEntity(ctx context.Context, arg sqlc.InsertChunkEntityParams) error
 }
 
 type watchedCollection struct {
@@ -85,6 +86,8 @@ type Watcher struct {
 	rateLimiters  map[string]*rate.Limiter
 
 	globalIgnore *gitignore.GitIgnore
+
+	summarizeNotify func()
 
 	fileCache   map[string]fileState
 	fileCacheMu sync.RWMutex
@@ -147,6 +150,11 @@ func (w *Watcher) WithEmbedQueue(eq *embed.Queue) *Watcher {
 
 func (w *Watcher) WithDispatcher(d *chunker.Dispatcher) *Watcher {
 	w.dispatcher = d
+	return w
+}
+
+func (w *Watcher) WithSummarizeNotify(fn func()) *Watcher {
+	w.summarizeNotify = fn
 	return w
 }
 
@@ -542,8 +550,13 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		}
 	}
 
+	w.extractAndInsertEntities(ctx, col.workspaceHash, chunks, chunkIDs)
+
 	if w.symbolRegistry != nil {
 		w.extractAndUpsertSymbols(ctx, col, filePath, content)
+		if w.summarizeNotify != nil {
+			w.summarizeNotify()
+		}
 	}
 	if w.graphRegistry != nil {
 		w.extractAndUpsertEdges(ctx, col, filePath, content)
