@@ -167,3 +167,98 @@ func TestRRFMerge_PaginationConsistency(t *testing.T) {
 func approxEqual(a, b, epsilon float64) bool {
 	return math.Abs(a-b) < epsilon
 }
+
+func TestComputeRRFK_HighOverlap(t *testing.T) {
+	// High overlap -> should return k smaller than baseK
+	bm25 := []Result{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
+	vector := []Result{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "f"}, {ID: "g"}}
+	baseK := 60.0
+
+	k := ComputeRRFK(bm25, vector, baseK)
+	if k >= baseK {
+		t.Errorf("High overlap should produce k < baseK (%.2f), got %.2f", baseK, k)
+	}
+	if k < baseK*0.5 {
+		t.Errorf("k should be >= baseK*0.5 (%.2f), got %.2f", baseK*0.5, k)
+	}
+}
+
+func TestComputeRRFK_LowOverlap(t *testing.T) {
+	// Low overlap -> should return k larger than baseK
+	bm25 := []Result{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
+	vector := []Result{{ID: "f"}, {ID: "g"}, {ID: "h"}, {ID: "i"}, {ID: "j"}}
+	baseK := 60.0
+
+	k := ComputeRRFK(bm25, vector, baseK)
+	if k <= baseK {
+		t.Errorf("Low overlap should produce k > baseK (%.2f), got %.2f", baseK, k)
+	}
+	if k > baseK*2.0 {
+		t.Errorf("k should be <= baseK*2.0 (%.2f), got %.2f", baseK*2.0, k)
+	}
+}
+
+func TestComputeRRFK_SmallLists(t *testing.T) {
+	// Lists too small -> should return baseK
+	bm25 := []Result{{ID: "a"}, {ID: "b"}}
+	vector := []Result{{ID: "c"}, {ID: "d"}}
+	baseK := 60.0
+
+	k := ComputeRRFK(bm25, vector, baseK)
+	if !approxEqual(k, baseK, 1e-9) {
+		t.Errorf("Small lists should return baseK (%.2f), got %.2f", baseK, k)
+	}
+}
+
+func TestComputeRRFK_EmptyVector(t *testing.T) {
+	// Empty vector list -> should return baseK
+	bm25 := []Result{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
+	vector := []Result{}
+	baseK := 60.0
+
+	k := ComputeRRFK(bm25, vector, baseK)
+	if !approxEqual(k, baseK, 1e-9) {
+		t.Errorf("Empty vector list should return baseK (%.2f), got %.2f", baseK, k)
+	}
+}
+
+func TestComputeRRFK_EmptyBM25(t *testing.T) {
+	// Empty BM25 list -> should return baseK
+	bm25 := []Result{}
+	vector := []Result{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
+	baseK := 60.0
+
+	k := ComputeRRFK(bm25, vector, baseK)
+	if !approxEqual(k, baseK, 1e-9) {
+		t.Errorf("Empty BM25 list should return baseK (%.2f), got %.2f", baseK, k)
+	}
+}
+
+func TestComputeRRFK_BothEmpty(t *testing.T) {
+	// Both lists empty -> should return baseK
+	bm25 := []Result{}
+	vector := []Result{}
+	baseK := 60.0
+
+	k := ComputeRRFK(bm25, vector, baseK)
+	if !approxEqual(k, baseK, 1e-9) {
+		t.Errorf("Both empty lists should return baseK (%.2f), got %.2f", baseK, k)
+	}
+}
+
+func TestDynamicRRFMerge_Basic(t *testing.T) {
+	bm25 := []Result{{ID: "a"}, {ID: "b"}, {ID: "c"}}
+	vector := []Result{{ID: "d"}, {ID: "e"}, {ID: "f"}}
+	baseK := 60.0
+
+	results := DynamicRRFMerge(bm25, vector, baseK)
+	if len(results) != 6 {
+		t.Errorf("Expected 6 results, got %d", len(results))
+	}
+
+	for i := 0; i < len(results)-1; i++ {
+		if results[i].Score < results[i+1].Score {
+			t.Error("Results not sorted descending")
+		}
+	}
+}
