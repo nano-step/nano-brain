@@ -12,6 +12,7 @@
 - [Use Cases](#use-cases)
 - [Key Features](#key-features)
 - [Prerequisites](#prerequisites)
+- [Recommended Models & Free Providers](#recommended-models--free-providers)
 - [Quick Start](#quick-start)
 - [Verifying Downloads](#verifying-downloads)
 - [Configuration](#configuration)
@@ -98,6 +99,111 @@ Before pushing, run `memory_impact` on your changed files to discover what else 
 - **Go 1.23+** (building from source) OR pre-built binary
 - **PostgreSQL 17** with **pgvector 0.8.2** extension
 - **Embedding provider:** Ollama (default, local) or Voyage AI
+
+## Recommended Models & Free Providers
+
+nano-brain needs two types of AI models: **embedding** (for vector search) and **chat/completion** (for code summarization, session summarization). Both use standard APIs — any OpenAI-compatible provider works.
+
+### Embedding Models (via Ollama — free, local)
+
+| Model | Dims | Context | Size | Quality | Best For |
+|-------|------|---------|------|---------|----------|
+| **nomic-embed-text** | 768 | 8K tokens | 274 MB | ★★★ | Default choice — handles full functions, CPU-friendly |
+| **mxbai-embed-large** | 1024 | 512 tokens | 670 MB | ★★★★ | Best precision for short code chunks (<500 tokens) |
+| **qwen3-embedding:8b** | 4096 | 8K tokens | 4.9 GB | ★★★★★ | Maximum quality — needs GPU (5 GB+ VRAM) |
+| **bge-m3** | 1024 | 8K tokens | 1.2 GB | ★★★★ | Multilingual codebases, hybrid retrieval |
+| **all-minilm** | 384 | 256 tokens | 46 MB | ★★ | Extreme resource constraints only |
+
+```bash
+# Install your chosen model
+ollama pull nomic-embed-text    # recommended default
+ollama pull mxbai-embed-large   # upgrade for precision
+ollama pull qwen3-embedding:8b  # premium (GPU required)
+```
+
+> **Tip:** Start with `nomic-embed-text`. It handles long functions without truncation and runs on CPU. Upgrade only if retrieval quality matters for your use case.
+
+### Chat/Completion Models (for code & session summarization)
+
+These providers offer **free tiers** with OpenAI-compatible `/chat/completions` endpoints — plug directly into nano-brain's `code_summarization` and `summarization` config.
+
+| Provider | Free Tier | Rate Limits | Best Model | Speed |
+|----------|-----------|-------------|------------|-------|
+| **[Cerebras](https://cerebras.ai)** | 1M tokens/day | 30 req/min | `llama3.1-8b` | ~2,000 tok/s |
+| **[Groq](https://groq.com)** | Ongoing (no expiry) | 30 req/min, 14.4K req/day | `llama-3.3-70b-versatile` | ~400 tok/s |
+| **[Together AI](https://together.ai)** | $25 free credits | 60 req/min | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | ~200 tok/s |
+| **[Google AI Studio](https://ai.google.dev)** | 1,500 req/day | 15 req/min | `gemini-2.0-flash` | ~300 tok/s |
+| **Ollama (local)** | Unlimited | Hardware-bound | `qwen3:8b`, `llama3.1:8b` | Depends on GPU |
+
+> **Note:** Google Gemini is NOT OpenAI-compatible natively — use it via a proxy like [9router](https://github.com/nano-step/9router) or [LiteLLM](https://github.com/BerriAI/litellm) to get a `/chat/completions` endpoint.
+
+### Configuration Examples
+
+**Cerebras (recommended — fastest free inference):**
+
+```yaml
+code_summarization:
+  enabled: true
+  provider_url: "https://api.cerebras.ai/v1"
+  api_key: "your-cerebras-key"   # free signup, no credit card
+  model: "llama3.1-8b"
+
+summarization:
+  enabled: true
+  provider_url: "https://api.cerebras.ai/v1"
+  api_key: "your-cerebras-key"
+  model: "llama3.1-8b"
+```
+
+**Groq (generous free tier, great for throughput):**
+
+```yaml
+code_summarization:
+  enabled: true
+  provider_url: "https://api.groq.com/openai/v1"
+  api_key: "your-groq-key"      # free signup
+  model: "llama-3.3-70b-versatile"
+```
+
+**Together AI (200+ models, $25 free credits):**
+
+```yaml
+code_summarization:
+  enabled: true
+  provider_url: "https://api.together.ai/v1"
+  api_key: "your-together-key"  # $25 free, no card required
+  model: "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+```
+
+**Ollama (fully local, no API key needed):**
+
+```yaml
+code_summarization:
+  enabled: true
+  provider_url: "http://localhost:11434/v1"
+  api_key: ""
+  model: "qwen3:8b"
+```
+
+**Via 9router (proxy multiple providers):**
+
+```yaml
+code_summarization:
+  enabled: true
+  provider_url: "http://localhost:9090/v1"  # 9router endpoint
+  api_key: ""
+  model: "nano-brain"                       # routed by 9router config
+```
+
+### Provider Selection Guide
+
+| You want... | Use |
+|-------------|-----|
+| Zero cost, no API keys, full privacy | Ollama (local) |
+| Free cloud, fastest inference | Cerebras |
+| Free cloud, best model quality | Groq (`llama-3.3-70b`) |
+| Many model options, startup-friendly | Together AI |
+| Route through multiple providers | 9router / LiteLLM proxy |
 
 ## Quick Start
 

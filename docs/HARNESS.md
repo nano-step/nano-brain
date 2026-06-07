@@ -346,7 +346,7 @@ the response.
 go build -o ./bin/nano-brain ./cmd/nano-brain/
 
 # 2. Start server (background, non-default port to avoid conflicts)
-NANO_BRAIN_DATABASE_URL="postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev?sslmode=disable" \
+NANO_BRAIN_DATABASE_URL="postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable" \
 NANO_BRAIN_SERVER_PORT=3199 \
 NANO_BRAIN_EMBEDDING_PROVIDER="" \
 ./bin/nano-brain &

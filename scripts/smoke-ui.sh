@@ -49,7 +49,7 @@ build_binary() {
 }
 start_server() {
     local cfg_path="${BUILD_DIR}/config.yml"
-    local db_url="${NANO_BRAIN_DATABASE_URL:-postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_dev}"
+    local db_url="${NANO_BRAIN_DATABASE_URL:-postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test}"
     cat > "${cfg_path}" <<EOF
 server:
     host: 0.0.0.0

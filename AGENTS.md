@@ -356,6 +356,7 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 - **No starting work without a GitHub issue.**
 - **No archiving without Review Verdict = PASS.**
 - **No modifying harness rules without user approval.**
+- **No using `nanobrain_dev` for harness testing.** All smoke:e2e, test:integration, and harness validation MUST use `nanobrain_test` database. The dev database (`nanobrain_dev`) is for the running production server only — test workspaces pollute it and create stale data. Use `NANO_BRAIN_DATABASE_URL="postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"` or `config.test.yml`.
 - **No direct commits to `master`.** Always work on a feature branch (`feat/`, `fix/`, `chore/`, `docs/`) and open a PR. The only exception is a merge commit produced by resolving an existing PR's conflicts — and even then the resolution should normally happen on the PR's head branch, not on the target.
 - **No `git push origin <branch>` without first verifying you are ON `<branch>`.** Always run `git branch --show-current` (or check `git status` header) before pushing. Pushing while on the wrong branch silently returns "Everything up-to-date" without error. Use `git push` (no args, relies on upstream tracking) when in doubt.
 - **Single-trunk model: `master` only.** All feature branches branch from `master` and PR back to `master`. The `b-main` staging branch was retired on 2026-06-01 — no more `b-main → master` promotion step. Every merge to `master` triggers `auto-tag.yml` → `release.yml` → npm publish.
