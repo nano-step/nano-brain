@@ -55,10 +55,15 @@ func getDefaults() *Config {
 			ReindexInterval: 300,
 		},
 		Search: SearchConfig{
-			RrfK:                60,
-			RecencyWeight:       0.3,
-			RecencyHalfLifeDays: 180,
-			Limit:               20,
+			RrfK:                  60,
+			RecencyWeight:         0.3,
+			RecencyHalfLifeDays:   180,
+			Limit:                 20,
+		PageRankEnabled:       false,
+		PageRankWeight:        0.2,
+		PageRankEdgeThreshold: 100,
+		EntityBoostEnabled:    false,
+		EntityBoostFactor:     0.3,
 		},
 		Storage: StorageConfig{
 			MaxFileSize: 314572800,  // 300MB

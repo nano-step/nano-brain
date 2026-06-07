@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -30,16 +31,34 @@ type Embedder interface {
 	Dimension() int
 }
 
+type PageRankLoader interface {
+	LoadScores(ctx context.Context, workspace string) (map[string]float64, error)
+}
+
+type EntityQuerier interface {
+	GetChunkIDsByEntityNames(ctx context.Context, arg sqlc.GetChunkIDsByEntityNamesParams) ([]uuid.UUID, error)
+}
+
 type SearchService struct {
-	queries     Querier
-	embedder    Embedder
-	config      config.SearchConfig
-	configMutex sync.RWMutex
-	logger      zerolog.Logger
+	queries        Querier
+	embedder       Embedder
+	entityQuerier  EntityQuerier
+	config         config.SearchConfig
+	configMutex    sync.RWMutex
+	logger         zerolog.Logger
+	pagerankLoader PageRankLoader
 }
 
 func NewSearchService(queries Querier, embedder Embedder, cfg config.SearchConfig, logger zerolog.Logger) *SearchService {
 	return &SearchService{queries: queries, embedder: embedder, config: cfg, logger: logger}
+}
+
+func (s *SearchService) SetEntityQuerier(eq EntityQuerier) {
+	s.entityQuerier = eq
+}
+
+func (s *SearchService) SetPageRankLoader(loader PageRankLoader) {
+	s.pagerankLoader = loader
 }
 
 // UpdateConfig updates the search configuration with thread-safe locking.
@@ -379,6 +398,41 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 	merged := RRFMerge(bm25Results, vectorResults, rrfK)
 
 	boosted := ApplyRecencyBoost(merged, recencyWeight, recencyHalfLifeDays, time.Now())
+
+	s.configMutex.RLock()
+	entityEnabled := s.config.EntityBoostEnabled
+	entityFactor := s.config.EntityBoostFactor
+	prEnabled := s.config.PageRankEnabled
+	prWeight := s.config.PageRankWeight
+	s.configMutex.RUnlock()
+
+	if entityEnabled && s.entityQuerier != nil && workspace != "all" {
+		queryEntities := ExtractQueryEntities(query)
+		if len(queryEntities) > 0 {
+			chunkIDs, err := s.entityQuerier.GetChunkIDsByEntityNames(ctx, sqlc.GetChunkIDsByEntityNamesParams{
+				WorkspaceHash: workspace,
+				Column2:       queryEntities,
+			})
+			if err != nil {
+				s.logger.Warn().Err(err).Msg("entity lookup failed, skipping boost")
+			} else if len(chunkIDs) > 0 {
+				matchedChunkIDs := make(map[string]int, len(chunkIDs))
+				for _, id := range chunkIDs {
+					matchedChunkIDs[id.String()]++
+				}
+				boosted = ApplyEntityBoost(boosted, matchedChunkIDs, entityFactor)
+			}
+		}
+	}
+
+	if prEnabled && s.pagerankLoader != nil && workspace != "all" {
+		scores, err := s.pagerankLoader.LoadScores(ctx, workspace)
+		if err != nil {
+			s.logger.Warn().Err(err).Msg("pagerank scores load failed, skipping boost")
+		} else if len(scores) > 0 {
+			boosted = ApplyPageRankBoost(boosted, scores, prWeight)
+		}
+	}
 
 	if len(boosted) > maxResults {
 		boosted = boosted[:maxResults]

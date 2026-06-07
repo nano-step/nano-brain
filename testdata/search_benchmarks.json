@@ -1,0 +1,352 @@
+[
+  {
+    "query": "ProcessFile function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["ProcessFile", "processFile", "file", "index"],
+    "expected_symbols": ["ProcessFile", "processFile"],
+    "relevance_hints": ["should reference file processing logic"]
+  },
+  {
+    "query": "HybridSearch definition",
+    "category": "symbol_lookup",
+    "expected_keywords": ["HybridSearch", "search", "hybrid", "bm25", "vector"],
+    "expected_symbols": ["HybridSearch"],
+    "relevance_hints": ["should reference the main search entry point"]
+  },
+  {
+    "query": "RRFMerge function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["RRFMerge", "rrf", "merge", "rank", "fusion"],
+    "expected_symbols": ["RRFMerge"],
+    "relevance_hints": ["should reference reciprocal rank fusion merging"]
+  },
+  {
+    "query": "ApplyRecencyBoost",
+    "category": "symbol_lookup",
+    "expected_keywords": ["ApplyRecencyBoost", "recency", "boost", "decay", "half_life"],
+    "expected_symbols": ["ApplyRecencyBoost"],
+    "relevance_hints": ["should reference recency scoring logic"]
+  },
+  {
+    "query": "NewSearchService constructor",
+    "category": "symbol_lookup",
+    "expected_keywords": ["NewSearchService", "SearchService", "constructor", "queries", "embedder"],
+    "expected_symbols": ["NewSearchService"],
+    "relevance_hints": ["should reference search service initialization"]
+  },
+  {
+    "query": "ExtractSymbols function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["ExtractSymbols", "symbol", "extract", "parse"],
+    "expected_symbols": ["ExtractSymbols"],
+    "relevance_hints": ["should reference symbol extraction from source files"]
+  },
+  {
+    "query": "ChunkDocument function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["ChunkDocument", "chunk", "split", "markdown"],
+    "expected_symbols": ["ChunkDocument", "chunkDocument"],
+    "relevance_hints": ["should reference document chunking logic"]
+  },
+  {
+    "query": "SetupTestDB helper",
+    "category": "symbol_lookup",
+    "expected_keywords": ["SetupTestDB", "test", "database", "schema"],
+    "expected_symbols": ["SetupTestDB"],
+    "relevance_hints": ["should reference test database setup utility"]
+  },
+  {
+    "query": "WriteDocument handler",
+    "category": "symbol_lookup",
+    "expected_keywords": ["WriteDocument", "write", "handler", "document", "upsert"],
+    "expected_symbols": ["WriteDocument", "HandleWrite"],
+    "relevance_hints": ["should reference document write/upsert endpoint"]
+  },
+  {
+    "query": "VectorSearch query",
+    "category": "symbol_lookup",
+    "expected_keywords": ["VectorSearch", "vector", "embedding", "cosine", "pgvector"],
+    "expected_symbols": ["VectorSearch"],
+    "relevance_hints": ["should reference vector similarity search"]
+  },
+  {
+    "query": "BM25Search implementation",
+    "category": "symbol_lookup",
+    "expected_keywords": ["BM25Search", "bm25", "tsvector", "tsquery", "rank"],
+    "expected_symbols": ["BM25Search"],
+    "relevance_hints": ["should reference full-text search implementation"]
+  },
+  {
+    "query": "Embed function in embedder",
+    "category": "symbol_lookup",
+    "expected_keywords": ["Embed", "embedding", "float32", "vector", "provider"],
+    "expected_symbols": ["Embed"],
+    "relevance_hints": ["should reference the embedding interface method"]
+  },
+  {
+    "query": "RegisterWorkspace function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["register", "workspace", "init", "hash"],
+    "expected_symbols": ["RegisterWorkspace", "InitWorkspace"],
+    "relevance_hints": ["should reference workspace registration"]
+  },
+  {
+    "query": "ApplyEntityBoost function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["ApplyEntityBoost", "entity", "boost", "score"],
+    "expected_symbols": ["ApplyEntityBoost"],
+    "relevance_hints": ["should reference entity-based score boosting"]
+  },
+  {
+    "query": "ApplyPageRankBoost function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["ApplyPageRankBoost", "pagerank", "boost", "weight"],
+    "expected_symbols": ["ApplyPageRankBoost"],
+    "relevance_hints": ["should reference PageRank score boosting"]
+  },
+  {
+    "query": "TimeRangeFilter struct",
+    "category": "symbol_lookup",
+    "expected_keywords": ["TimeRangeFilter", "time", "range", "filter", "created", "updated"],
+    "expected_symbols": ["TimeRangeFilter"],
+    "relevance_hints": ["should reference time-based search filtering"]
+  },
+  {
+    "query": "ParseDuration function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["ParseDuration", "duration", "parse", "relative", "time"],
+    "expected_symbols": ["ParseDuration", "parseDuration"],
+    "relevance_hints": ["should reference duration string parsing"]
+  },
+  {
+    "query": "SnippetFromContent function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["Snippet", "content", "truncate", "extract"],
+    "expected_symbols": ["SnippetFromContent", "BuildSnippet"],
+    "relevance_hints": ["should reference snippet generation from content"]
+  },
+  {
+    "query": "LoadScores pagerank",
+    "category": "symbol_lookup",
+    "expected_keywords": ["LoadScores", "pagerank", "scores", "workspace"],
+    "expected_symbols": ["LoadScores"],
+    "relevance_hints": ["should reference pagerank score loading"]
+  },
+  {
+    "query": "ExtractQueryEntities function",
+    "category": "symbol_lookup",
+    "expected_keywords": ["ExtractQueryEntities", "entity", "query", "extract"],
+    "expected_symbols": ["ExtractQueryEntities"],
+    "relevance_hints": ["should reference entity extraction from search queries"]
+  },
+  {
+    "query": "How does the file watcher detect changes?",
+    "category": "behavioral",
+    "expected_keywords": ["fsnotify", "watcher", "debounce", "file", "event"],
+    "expected_symbols": ["Watch", "handleEvent"],
+    "relevance_hints": ["should mention fsnotify-based file system watching", "should mention debounce"]
+  },
+  {
+    "query": "What triggers embedding of new documents?",
+    "category": "behavioral",
+    "expected_keywords": ["embed", "queue", "chunk", "write", "document"],
+    "expected_symbols": ["Enqueue", "processQueue"],
+    "relevance_hints": ["should explain embedding queue mechanism", "triggered after document write"]
+  },
+  {
+    "query": "How does session harvesting work?",
+    "category": "behavioral",
+    "expected_keywords": ["harvest", "session", "opencode", "claude", "ingest"],
+    "expected_symbols": ["Harvest", "harvestSessions"],
+    "relevance_hints": ["should explain session ingestion from OpenCode/Claude Code"]
+  },
+  {
+    "query": "How are search results ranked?",
+    "category": "behavioral",
+    "expected_keywords": ["rrf", "rank", "fusion", "recency", "score", "boost"],
+    "expected_symbols": ["RRFMerge", "ApplyRecencyBoost"],
+    "relevance_hints": ["should explain RRF fusion + recency decay pipeline"]
+  },
+  {
+    "query": "How does content-addressed deduplication work?",
+    "category": "behavioral",
+    "expected_keywords": ["sha256", "hash", "deduplicate", "content", "upsert"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain SHA-256 based deduplication on write"]
+  },
+  {
+    "query": "What happens when config is hot-reloaded?",
+    "category": "behavioral",
+    "expected_keywords": ["reload", "config", "mutex", "hot", "koanf"],
+    "expected_symbols": ["UpdateConfig", "ReloadConfig"],
+    "relevance_hints": ["should explain RWMutex-based config swap"]
+  },
+  {
+    "query": "How does workspace isolation work in search?",
+    "category": "behavioral",
+    "expected_keywords": ["workspace", "hash", "isolation", "scope", "all"],
+    "expected_symbols": ["HybridSearch"],
+    "relevance_hints": ["should explain workspace-scoped queries vs all"]
+  },
+  {
+    "query": "How are documents chunked before indexing?",
+    "category": "behavioral",
+    "expected_keywords": ["chunk", "heading", "markdown", "split", "size"],
+    "expected_symbols": ["ChunkDocument"],
+    "relevance_hints": ["should explain heading-aware markdown chunking"]
+  },
+  {
+    "query": "What happens when both search legs fail?",
+    "category": "behavioral",
+    "expected_keywords": ["error", "degrade", "bm25", "vector", "fail"],
+    "expected_symbols": ["HybridSearch"],
+    "relevance_hints": ["should explain graceful degradation when one leg fails"]
+  },
+  {
+    "query": "How does the cursor pagination system work?",
+    "category": "behavioral",
+    "expected_keywords": ["cursor", "pagination", "page", "next", "offset"],
+    "expected_symbols": ["EncodeCursor", "DecodeCursor"],
+    "relevance_hints": ["should explain opaque cursor-based pagination"]
+  },
+  {
+    "query": "How does the MCP server handle tool calls?",
+    "category": "behavioral",
+    "expected_keywords": ["mcp", "tool", "handler", "streamable", "http"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain MCP tool dispatch and response format"]
+  },
+  {
+    "query": "How does goose migration work in this project?",
+    "category": "behavioral",
+    "expected_keywords": ["goose", "migration", "sql", "embed", "version"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain embedded SQL migration execution"]
+  },
+  {
+    "query": "How does the recency decay formula work?",
+    "category": "behavioral",
+    "expected_keywords": ["recency", "decay", "exponential", "half_life", "weight", "age"],
+    "expected_symbols": ["ApplyRecencyBoost"],
+    "relevance_hints": ["should show the exponential decay formula with half-life"]
+  },
+  {
+    "query": "How does entity boost improve search relevance?",
+    "category": "behavioral",
+    "expected_keywords": ["entity", "boost", "factor", "chunk", "match"],
+    "expected_symbols": ["ApplyEntityBoost", "ExtractQueryEntities"],
+    "relevance_hints": ["should explain entity extraction from query then score boosting"]
+  },
+  {
+    "query": "How does the symbol graph get populated?",
+    "category": "behavioral",
+    "expected_keywords": ["symbol", "graph", "index", "extract", "edge", "node"],
+    "expected_symbols": ["ExtractSymbols", "BuildGraph"],
+    "relevance_hints": ["should explain symbol extraction during file indexing"]
+  },
+  {
+    "query": "What uses the GraphRegistry?",
+    "category": "entity_centric",
+    "expected_keywords": ["GraphRegistry", "graph", "registry", "symbol", "edge"],
+    "expected_symbols": ["GraphRegistry"],
+    "relevance_hints": ["should show callers and dependents of GraphRegistry"]
+  },
+  {
+    "query": "Functions that call ExtractSymbols",
+    "category": "entity_centric",
+    "expected_keywords": ["ExtractSymbols", "call", "watcher", "index", "process"],
+    "expected_symbols": ["ExtractSymbols"],
+    "relevance_hints": ["should list functions that invoke ExtractSymbols"]
+  },
+  {
+    "query": "What depends on the SearchService?",
+    "category": "entity_centric",
+    "expected_keywords": ["SearchService", "handler", "server", "dependency"],
+    "expected_symbols": ["SearchService", "NewSearchService"],
+    "relevance_hints": ["should show what constructs or uses SearchService"]
+  },
+  {
+    "query": "What imports the storage package?",
+    "category": "entity_centric",
+    "expected_keywords": ["storage", "import", "sqlc", "pool", "queries"],
+    "expected_symbols": [],
+    "relevance_hints": ["should list packages that depend on internal/storage"]
+  },
+  {
+    "query": "What calls RRFMerge?",
+    "category": "entity_centric",
+    "expected_keywords": ["RRFMerge", "HybridSearch", "caller", "search"],
+    "expected_symbols": ["RRFMerge", "HybridSearch"],
+    "relevance_hints": ["should identify HybridSearch as the caller of RRFMerge"]
+  },
+  {
+    "query": "What uses the Embedder interface?",
+    "category": "entity_centric",
+    "expected_keywords": ["Embedder", "interface", "Embed", "search", "queue"],
+    "expected_symbols": ["Embedder", "Embed"],
+    "relevance_hints": ["should show SearchService and embed queue as consumers"]
+  },
+  {
+    "query": "Handlers that use workspace hash",
+    "category": "entity_centric",
+    "expected_keywords": ["workspace", "hash", "handler", "extract", "middleware"],
+    "expected_symbols": [],
+    "relevance_hints": ["should list HTTP handlers that require workspace context"]
+  },
+  {
+    "query": "What constructs the Echo server?",
+    "category": "entity_centric",
+    "expected_keywords": ["echo", "server", "route", "middleware", "setup"],
+    "expected_symbols": ["SetupRoutes", "NewServer"],
+    "relevance_hints": ["should show server construction and route registration"]
+  },
+  {
+    "query": "Types that implement the Querier interface",
+    "category": "entity_centric",
+    "expected_keywords": ["Querier", "interface", "implement", "sqlc", "queries"],
+    "expected_symbols": ["Querier"],
+    "relevance_hints": ["should identify sqlc.Queries as the implementation"]
+  },
+  {
+    "query": "What reads config.yml?",
+    "category": "entity_centric",
+    "expected_keywords": ["config", "koanf", "yaml", "load", "read"],
+    "expected_symbols": ["LoadConfig"],
+    "relevance_hints": ["should show config loading with koanf"]
+  },
+  {
+    "query": "What is the RRF algorithm?",
+    "category": "conceptual",
+    "expected_keywords": ["reciprocal", "rank", "fusion", "score", "merge", "k"],
+    "expected_symbols": ["RRFMerge"],
+    "relevance_hints": ["should explain Reciprocal Rank Fusion formula and purpose"]
+  },
+  {
+    "query": "How does search ranking work in nano-brain?",
+    "category": "conceptual",
+    "expected_keywords": ["bm25", "vector", "rrf", "recency", "hybrid", "pipeline"],
+    "expected_symbols": ["HybridSearch", "RRFMerge", "ApplyRecencyBoost"],
+    "relevance_hints": ["should explain the full search pipeline from query to ranked results"]
+  },
+  {
+    "query": "What is content-addressed storage?",
+    "category": "conceptual",
+    "expected_keywords": ["sha256", "hash", "content", "deduplicate", "idempotent"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain SHA-256 hashing for dedup"]
+  },
+  {
+    "query": "What is the purpose of pgvector in this project?",
+    "category": "conceptual",
+    "expected_keywords": ["pgvector", "vector", "embedding", "hnsw", "cosine", "similarity"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain pgvector for semantic vector search"]
+  },
+  {
+    "query": "How does hybrid search differ from pure keyword search?",
+    "category": "conceptual",
+    "expected_keywords": ["hybrid", "bm25", "vector", "semantic", "keyword", "fusion"],
+    "expected_symbols": ["HybridSearch"],
+    "relevance_hints": ["should contrast BM25 keyword matching with vector semantic similarity"]
+  }
+]

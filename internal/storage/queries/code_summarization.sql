@@ -74,3 +74,62 @@ DELETE FROM code_summarization_usage WHERE workspace_hash = $1;
 
 -- name: DeleteCodeSummarizationFailuresByWorkspace :exec
 DELETE FROM code_summarization_failures WHERE workspace_hash = $1;
+
+-- name: BulkGetCallerContext :many
+SELECT target_node, source_node, COUNT(*)::int AS frequency
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND target_node = ANY($2::text[])
+  AND edge_type = 'calls'
+GROUP BY target_node, source_node
+ORDER BY target_node, frequency DESC;
+
+-- name: GetCalleeNodes :many
+SELECT DISTINCT target_node
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND source_node = $2
+  AND edge_type = 'calls';
+
+-- name: BulkGetCalleeNodes :many
+SELECT DISTINCT source_node, target_node
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND source_node = ANY($2::text[])
+  AND edge_type = 'calls';
+
+-- name: UpdateChunkGraphContextHash :exec
+UPDATE chunks SET graph_context_hash = $2
+WHERE id = $1;
+
+-- name: GetSymbolChunksByGraphContextStale :many
+SELECT
+    c.id,
+    c.content,
+    c.symbol_name,
+    c.symbol_kind,
+    c.language,
+    c.content_hash,
+    c.graph_context_hash,
+    COALESCE(d.source_path, '') AS source_path
+FROM chunks c
+LEFT JOIN documents d ON d.id = c.document_id
+WHERE c.workspace_hash = $1
+  AND c.chunk_type = 'symbol'
+  AND c.symbol_name IS NOT NULL
+  AND c.symbol_name != ''
+  AND c.graph_context_hash IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM documents doc
+      WHERE doc.workspace_hash = c.workspace_hash
+        AND doc.tags @> ARRAY['symbol-summary']::text[]
+        AND doc.metadata->>'source_content_hash' = c.content_hash
+  )
+LIMIT $2;
+
+-- name: NullifyGraphContextHashBySymbols :exec
+UPDATE chunks SET graph_context_hash = NULL
+WHERE workspace_hash = $1
+  AND chunk_type = 'symbol'
+  AND symbol_name = ANY($2::text[]);

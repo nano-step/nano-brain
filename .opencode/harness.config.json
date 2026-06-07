@@ -1,5 +1,6 @@
 {
   "runner_path": "./scripts/harness-check.sh",
+  "runner_args": ["--json", "--issue", "405"],
   "gates": ["pre-work", "in-progress", "pre-merge", "async-pr-review", "post-merge", "post-merge-npm-release", "next-ready"],
   "rule_id_format": "R{id}",
   "fail_policy": "hybrid",

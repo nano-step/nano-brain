@@ -64,6 +64,10 @@ func (m *mockQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDoc
 	}, nil
 }
 
+func (m *mockQuerier) InsertChunkEntity(_ context.Context, _ sqlc.InsertChunkEntityParams) error {
+	return nil
+}
+
 func testConfig(debounceMs, pollSec int) config.Config {
 	return config.Config{
 		Watcher: config.WatcherConfig{

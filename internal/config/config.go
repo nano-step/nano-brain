@@ -148,10 +148,15 @@ type WatcherConfig struct {
 
 // SearchConfig holds search configuration.
 type SearchConfig struct {
-	RrfK                float64 `koanf:"rrf_k" json:"rrf_k"`
-	RecencyWeight       float64 `koanf:"recency_weight" json:"recency_weight"`
-	RecencyHalfLifeDays int     `koanf:"recency_half_life_days" json:"recency_half_life_days"`
-	Limit               int     `koanf:"limit" json:"limit"`
+	RrfK                  float64 `koanf:"rrf_k" json:"rrf_k"`
+	RecencyWeight         float64 `koanf:"recency_weight" json:"recency_weight"`
+	RecencyHalfLifeDays   int     `koanf:"recency_half_life_days" json:"recency_half_life_days"`
+	Limit                 int     `koanf:"limit" json:"limit"`
+	PageRankEnabled       bool    `koanf:"pagerank_enabled" json:"pagerank_enabled"`
+	PageRankWeight        float64 `koanf:"pagerank_weight" json:"pagerank_weight"`
+	PageRankEdgeThreshold int     `koanf:"pagerank_edge_threshold" json:"pagerank_edge_threshold"`
+	EntityBoostEnabled    bool    `koanf:"entity_boost_enabled" json:"entity_boost_enabled"`
+	EntityBoostFactor     float64 `koanf:"entity_boost_factor" json:"entity_boost_factor"`
 }
 
 // StorageConfig holds storage configuration.
@@ -209,6 +214,7 @@ type CodeSummarizationConfig struct {
 	MaxBatchTokens        int    `koanf:"max_batch_tokens" json:"max_batch_tokens"`
 	MaxRetries            int    `koanf:"max_retries" json:"max_retries"`
 	RetryBackoffSeconds   int    `koanf:"retry_backoff_seconds" json:"retry_backoff_seconds"`
+	Workers               int    `koanf:"workers" json:"workers"`
 }
 
 // IntelligenceConfig holds memory consolidation and LLM categorization configuration.

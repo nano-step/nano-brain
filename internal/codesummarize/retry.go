@@ -43,7 +43,7 @@ func ClassifyError(err error) ErrorClass {
 
 // sendWithRetry attempts to send a batch to the LLM provider with exponential backoff.
 // Returns summaries on success, or the last error after exhausting retries.
-func (s *Service) sendWithRetry(ctx context.Context, batch []SymbolForSummary) ([]SymbolSummary, error) {
+func (s *Service) sendWithRetry(ctx context.Context, batch []SymbolForSummary, graphContexts map[string]*SymbolGraphContext) ([]SymbolSummary, error) {
 	maxRetries := s.cfg.MaxRetries
 	if maxRetries <= 0 {
 		maxRetries = 3
@@ -55,7 +55,7 @@ func (s *Service) sendWithRetry(ctx context.Context, batch []SymbolForSummary) (
 
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		summaries, err := s.provider.SummarizeBatch(ctx, batch)
+		summaries, err := s.provider.SummarizeBatch(ctx, batch, graphContexts)
 		if err == nil {
 			return summaries, nil
 		}

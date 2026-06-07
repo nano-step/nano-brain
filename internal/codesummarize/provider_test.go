@@ -170,7 +170,7 @@ func TestLLMProvider_SummarizeBatch(t *testing.T) {
 			provider := NewLLMProvider(cfg, logger)
 
 			ctx := context.Background()
-			summaries, err := provider.SummarizeBatch(ctx, tt.symbols)
+			summaries, err := provider.SummarizeBatch(ctx, tt.symbols, nil)
 
 			if tt.expectError {
 				if err == nil {
