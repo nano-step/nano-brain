@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +50,7 @@ type Service struct {
 	logger          zerolog.Logger
 	notifyCh        chan struct{}
 	stopOnce        sync.Once
+	processing      atomic.Bool
 }
 
 func NewService(
@@ -73,6 +75,14 @@ func NewService(
 func (s *Service) WithWorkspaceLister(wl WorkspaceLister) *Service {
 	s.workspaceLister = wl
 	return s
+}
+
+func (s *Service) tryAcquireProcessing() bool {
+	return s.processing.CompareAndSwap(false, true)
+}
+
+func (s *Service) releaseProcessing() {
+	s.processing.Store(false)
 }
 
 func (s *Service) Notify() {
@@ -394,10 +404,10 @@ func (s *Service) processGraphContextStale(ctx context.Context, workspaceHash st
 
 		if newHash != oldHash {
 			needsResummarize = append(needsResummarize, sym)
-		} else {
+		} else if newHash != "" {
 			if err := s.queries.UpdateChunkGraphContextHash(ctx, sqlc.UpdateChunkGraphContextHashParams{
 				ID:               sym.ChunkID,
-				GraphContextHash: sql.NullString{String: newHash, Valid: newHash != ""},
+				GraphContextHash: sql.NullString{String: newHash, Valid: true},
 			}); err != nil {
 				s.logger.Warn().Err(err).Str("symbol", sym.Name).Msg("failed to mark graph context as current")
 			}
@@ -520,9 +530,17 @@ func (s *Service) runWorker(ctx context.Context, id int, pollInterval time.Durat
 		case <-ctx.Done():
 			return
 		case <-s.notifyCh:
+			if !s.tryAcquireProcessing() {
+				continue
+			}
 			backoff = s.processAllWorkspaces(ctx, id, backoff)
+			s.releaseProcessing()
 		case <-ticker.C:
+			if !s.tryAcquireProcessing() {
+				continue
+			}
 			backoff = s.processAllWorkspaces(ctx, id, backoff)
+			s.releaseProcessing()
 		}
 	}
 }
@@ -554,17 +572,10 @@ func (s *Service) processAllWorkspaces(ctx context.Context, workerID int, curren
 		_, _, _, err := s.RunOnce(ctx, ws.Hash)
 		if err != nil {
 			if errors.Is(err, ErrBudgetExhausted) {
-				nextReset := timeUntilUTCMidnight()
 				s.logger.Info().
 					Int("worker", workerID).
 					Str("workspace", ws.Hash).
-					Dur("pause_until_reset", nextReset).
-					Msg("budget exhausted, pausing until UTC daily reset")
-				select {
-				case <-ctx.Done():
-					return 0
-				case <-time.After(nextReset):
-				}
+					Msg("budget exhausted for workspace, skipping to next")
 				continue
 			}
 			if isRateLimited(err) {

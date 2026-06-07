@@ -76,11 +76,6 @@ func (s *PageRankService) Compute(ctx context.Context, workspace string) {
 
 	scores := ComputePageRank(edges, 0.85, 100, 1e-6)
 
-	if err := s.store.DeletePageRankScores(ctx, workspace); err != nil {
-		s.logger.Error().Err(err).Str("workspace", workspace).Msg("pagerank: delete old scores failed")
-		return
-	}
-
 	count := 0
 	for node, score := range scores {
 		if err := s.store.UpsertPageRankScore(ctx, sqlc.UpsertPageRankScoreParams{
@@ -92,6 +87,11 @@ func (s *PageRankService) Compute(ctx context.Context, workspace string) {
 			continue
 		}
 		count++
+	}
+
+	// Clean up stale scores for nodes no longer in the graph (after all upserts complete)
+	if err := s.store.DeletePageRankScores(ctx, workspace); err != nil {
+		s.logger.Warn().Err(err).Str("workspace", workspace).Msg("pagerank: cleanup stale scores failed")
 	}
 
 	s.logger.Info().Str("workspace", workspace).Int("symbols_updated", count).Msg("pagerank: computation complete")
