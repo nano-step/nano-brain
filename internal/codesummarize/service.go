@@ -49,7 +49,6 @@ type Service struct {
 	embedQ          EmbedQueue
 	logger          zerolog.Logger
 	notifyCh        chan struct{}
-	stopOnce        sync.Once
 	processing      atomic.Bool
 }
 
@@ -591,12 +590,6 @@ func (s *Service) processAllWorkspaces(ctx context.Context, workerID int, curren
 	}
 
 	return 0
-}
-
-func timeUntilUTCMidnight() time.Duration {
-	now := time.Now().UTC()
-	next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
-	return next.Sub(now)
 }
 
 func isRateLimited(err error) bool {
