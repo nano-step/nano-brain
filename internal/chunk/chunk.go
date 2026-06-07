@@ -44,7 +44,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		TargetSize: DefaultMaxChunkBytes - searchWindow/2,
-		Overlap:    200,
+		Overlap:    600,
 		MinSize:    200,
 	}
 }

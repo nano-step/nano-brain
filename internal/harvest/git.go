@@ -271,10 +271,13 @@ func (g *GitHarvester) updateLastHarvestedSHA(ctx context.Context, workspaceHash
 }
 
 func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]gitCommit, error) {
+	// Use %x1e (record separator) to delimit commits, %x1f (unit separator) for fields.
+	// --name-only output appears after the format string for each commit.
 	args := []string{
 		"log",
-		"--format=%x1f%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b%x1f",
+		"--format=%x1e%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b",
 		"--name-only",
+		"--reverse",
 	}
 
 	if maxCommits > 0 {
@@ -304,7 +307,7 @@ func parseGitLog(output string) ([]gitCommit, error) {
 	}
 
 	commits := []gitCommit{}
-	entries := strings.Split(output, "\x1f\x1f")
+	entries := strings.Split(output, "\x1e")
 
 	for _, entry := range entries {
 		entry = strings.TrimSpace(entry)
@@ -312,18 +315,29 @@ func parseGitLog(output string) ([]gitCommit, error) {
 			continue
 		}
 
-		parts := strings.Split(entry, "\x1f")
-		if len(parts) < 8 {
+		parts := strings.SplitN(entry, "\x1f", 6)
+		if len(parts) < 5 {
 			continue
 		}
 
-		sha := strings.TrimSpace(parts[1])
-		author := strings.TrimSpace(parts[2])
-		email := strings.TrimSpace(parts[3])
-		dateStr := strings.TrimSpace(parts[4])
-		subject := strings.TrimSpace(parts[5])
-		body := strings.TrimSpace(parts[6])
-		filesStr := strings.TrimSpace(parts[7])
+		sha := strings.TrimSpace(parts[0])
+		author := strings.TrimSpace(parts[1])
+		email := strings.TrimSpace(parts[2])
+		dateStr := strings.TrimSpace(parts[3])
+		subject := strings.TrimSpace(parts[4])
+
+		var body string
+		var filesStr string
+		if len(parts) >= 6 {
+			remainder := parts[5]
+			// --name-only output is separated from body by a double newline
+			if idx := strings.Index(remainder, "\n\n"); idx >= 0 {
+				body = strings.TrimSpace(remainder[:idx])
+				filesStr = strings.TrimSpace(remainder[idx+2:])
+			} else {
+				body = strings.TrimSpace(remainder)
+			}
+		}
 
 		if sha == "" {
 			continue

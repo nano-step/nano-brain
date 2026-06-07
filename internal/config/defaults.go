@@ -53,6 +53,7 @@ func getDefaults() *Config {
 		Watcher: WatcherConfig{
 			DebounceMs:      2000,
 			ReindexInterval: 300,
+			ChunkOverlap:    600,
 		},
 		Search: SearchConfig{
 			RrfK:                  60,
@@ -64,6 +65,14 @@ func getDefaults() *Config {
 		PageRankEdgeThreshold: 100,
 		EntityBoostEnabled:    false,
 		EntityBoostFactor:     0.3,
+		QueryPreprocessing: QueryPreprocessingConfig{
+			Enabled:      false,
+			ProviderURL:  "",
+			APIKey:       "",
+			Model:        "",
+			MaxLatencyMs: 500,
+		},
+		BM25Language:         "english",
 		},
 		Storage: StorageConfig{
 			MaxFileSize: 314572800,  // 300MB

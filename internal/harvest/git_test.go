@@ -48,8 +48,8 @@ func TestRenderCommitMarkdown(t *testing.T) {
 }
 
 func TestParseGitLog(t *testing.T) {
-	output := "\x1fabc123\x1fJohn Doe\x1fjohn@example.com\x1f2024-01-15T10:30:00Z\x1ffeat: add feature\x1fDetailed body\x1ffile1.go\nfile2.go\x1f\x1f" +
-		"\x1fdef456\x1fJane Smith\x1fjane@example.com\x1f2024-01-16T11:00:00Z\x1ffix: bug fix\x1fMore details here\x1ffile3.go\x1f"
+	output := "\x1eabc123\x1fJohn Doe\x1fjohn@example.com\x1f2024-01-15T10:30:00Z\x1ffeat: add feature\x1fDetailed body\n\nfile1.go\nfile2.go\n" +
+		"\x1edef456\x1fJane Smith\x1fjane@example.com\x1f2024-01-16T11:00:00Z\x1ffix: bug fix\x1fMore details here\n\nfile3.go\n"
 
 	commits, err := parseGitLog(output)
 	if err != nil {

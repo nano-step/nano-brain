@@ -69,6 +69,7 @@ type Watcher struct {
 	debounceMs     int
 	pollInterval   int
 	maxFileSize    int64
+	chunkOverlap   int
 	symbolRegistry *symbol.Registry
 	graphRegistry  *graph.Registry
 	embedQueue     *embed.Queue
@@ -118,6 +119,7 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 		debounceMs:    cfg.Watcher.DebounceMs,
 		pollInterval:  cfg.Watcher.ReindexInterval,
 		maxFileSize:   cfg.Storage.MaxFileSize,
+		chunkOverlap:  cfg.Watcher.ChunkOverlap,
 		collections:   make(map[string]watchedCollection),
 		dirty:         make(map[string]bool),
 		hotRegisterCh: make(chan struct{}, 1),
@@ -755,7 +757,7 @@ func (w *Watcher) chunkContent(content string, filePath string) []chunker.Chunk 
 	if w.dispatcher != nil {
 		return w.dispatcher.Chunk(content, filePath)
 	}
-	fixed := chunker.NewFixedChunker()
+	fixed := chunker.NewFixedChunkerWithOverlap(w.chunkOverlap)
 	return fixed.Chunk(content, filePath)
 }
 

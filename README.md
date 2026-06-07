@@ -586,6 +586,28 @@ export NANO_BRAIN_SUMMARIZE_API_KEY="sk-..."
 
 Large sessions (100K+ tokens) are handled via map-reduce chunking — no session is too large.
 
+### Query Preprocessing (Search Quality)
+
+When `search.query_preprocessing.enabled: true`, nano-brain uses an LLM to preprocess search queries before execution — translating non-English queries to English, expanding with related terms, and detecting temporal intent. This improves retrieval quality for natural language queries.
+
+```yaml
+search:
+  bm25_language: "english"          # "english" (default) or "simple" (language-agnostic)
+  query_preprocessing:
+    enabled: false                   # set to true to activate
+    provider_url: ""                 # OpenAI-compatible endpoint (reuse summarization provider)
+    api_key: ""                      # or set NANO_BRAIN_SEARCH_PREPROCESS_API_KEY
+    model: ""                        # model for query preprocessing
+    max_latency_ms: 500              # timeout — falls back to raw query on timeout
+
+watcher:
+  chunk_overlap: 600                 # bytes of overlap between adjacent chunks (default: 600)
+```
+
+**How it works:** The preprocessor makes a single LLM call that returns: translated query (if non-English), 2-3 expansion terms, intent classification (keyword/conceptual/temporal), and optional time filter extraction. On timeout or error, the original query passes through unchanged.
+
+**Multilingual note:** If you primarily query in English, `nomic-embed-text` is sufficient. For multilingual workspaces, consider switching to `bge-m3` (1024d) — this requires re-embedding all chunks (`POST /api/v1/update`).
+
 ### Environment Variables
 
 | Variable | Description |

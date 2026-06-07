@@ -141,6 +141,7 @@ type WorkspaceFilterConfig struct {
 type WatcherConfig struct {
 	DebounceMs        int                               `koanf:"debounce_ms" json:"debounce_ms"`
 	ReindexInterval   int                               `koanf:"reindex_interval" json:"reindex_interval"`
+	ChunkOverlap      int                               `koanf:"chunk_overlap" json:"chunk_overlap"`
 	ExcludePatterns   []string                          `koanf:"exclude_patterns" json:"exclude_patterns"`
 	AllowedExtensions []string                          `koanf:"allowed_extensions" json:"allowed_extensions"`
 	Workspaces        map[string]WorkspaceFilterConfig  `koanf:"workspaces" json:"workspaces"`
@@ -148,15 +149,26 @@ type WatcherConfig struct {
 
 // SearchConfig holds search configuration.
 type SearchConfig struct {
-	RrfK                  float64 `koanf:"rrf_k" json:"rrf_k"`
-	RecencyWeight         float64 `koanf:"recency_weight" json:"recency_weight"`
-	RecencyHalfLifeDays   int     `koanf:"recency_half_life_days" json:"recency_half_life_days"`
-	Limit                 int     `koanf:"limit" json:"limit"`
-	PageRankEnabled       bool    `koanf:"pagerank_enabled" json:"pagerank_enabled"`
-	PageRankWeight        float64 `koanf:"pagerank_weight" json:"pagerank_weight"`
-	PageRankEdgeThreshold int     `koanf:"pagerank_edge_threshold" json:"pagerank_edge_threshold"`
-	EntityBoostEnabled    bool    `koanf:"entity_boost_enabled" json:"entity_boost_enabled"`
-	EntityBoostFactor     float64 `koanf:"entity_boost_factor" json:"entity_boost_factor"`
+	RrfK                  float64                  `koanf:"rrf_k" json:"rrf_k"`
+	RecencyWeight         float64                  `koanf:"recency_weight" json:"recency_weight"`
+	RecencyHalfLifeDays   int                      `koanf:"recency_half_life_days" json:"recency_half_life_days"`
+	Limit                 int                      `koanf:"limit" json:"limit"`
+	PageRankEnabled       bool                     `koanf:"pagerank_enabled" json:"pagerank_enabled"`
+	PageRankWeight        float64                  `koanf:"pagerank_weight" json:"pagerank_weight"`
+	PageRankEdgeThreshold int                      `koanf:"pagerank_edge_threshold" json:"pagerank_edge_threshold"`
+	EntityBoostEnabled    bool                     `koanf:"entity_boost_enabled" json:"entity_boost_enabled"`
+	EntityBoostFactor     float64                  `koanf:"entity_boost_factor" json:"entity_boost_factor"`
+	QueryPreprocessing    QueryPreprocessingConfig `koanf:"query_preprocessing" json:"query_preprocessing"`
+	BM25Language          string                   `koanf:"bm25_language" json:"bm25_language"`
+}
+
+// QueryPreprocessingConfig holds LLM-based query preprocessing configuration.
+type QueryPreprocessingConfig struct {
+	Enabled      bool   `koanf:"enabled" json:"enabled"`
+	ProviderURL  string `koanf:"provider_url" json:"provider_url"`
+	APIKey       string `koanf:"api_key" json:"api_key"`
+	Model        string `koanf:"model" json:"model"`
+	MaxLatencyMs int    `koanf:"max_latency_ms" json:"max_latency_ms"`
 }
 
 // StorageConfig holds storage configuration.

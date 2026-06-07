@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/search/preprocess"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	pgvector_go "github.com/pgvector/pgvector-go"
 	"github.com/rs/zerolog"
@@ -47,6 +48,7 @@ type SearchService struct {
 	configMutex    sync.RWMutex
 	logger         zerolog.Logger
 	pagerankLoader PageRankLoader
+	preprocessor   *preprocess.Preprocessor
 }
 
 func NewSearchService(queries Querier, embedder Embedder, cfg config.SearchConfig, logger zerolog.Logger) *SearchService {
@@ -59,6 +61,10 @@ func (s *SearchService) SetEntityQuerier(eq EntityQuerier) {
 
 func (s *SearchService) SetPageRankLoader(loader PageRankLoader) {
 	s.pagerankLoader = loader
+}
+
+func (s *SearchService) SetPreprocessor(pp *preprocess.Preprocessor) {
+	s.preprocessor = pp
 }
 
 // UpdateConfig updates the search configuration with thread-safe locking.
@@ -86,6 +92,26 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 	var chunkTypeNullStr sql.NullString
 	if chunkType != "" {
 		chunkTypeNullStr = sql.NullString{String: chunkType, Valid: true}
+	}
+
+	// Apply query preprocessing if available
+	if s.preprocessor != nil {
+		result := s.preprocessor.Process(ctx, query)
+		if result != nil && result.EnglishQuery != "" {
+			query = result.EnglishQuery
+		}
+		// Apply time filter if extracted
+		if result != nil && result.TimeFilter != nil {
+			if timeRange == nil {
+				timeRange = &TimeRangeFilter{}
+			}
+			if result.TimeFilter.After != nil && timeRange.UpdatedAfter == nil {
+				timeRange.UpdatedAfter = result.TimeFilter.After
+			}
+			if result.TimeFilter.Before != nil && timeRange.UpdatedBefore == nil {
+				timeRange.UpdatedBefore = result.TimeFilter.Before
+			}
+		}
 	}
 
 	fetchLimit := int32(maxResults * 3)

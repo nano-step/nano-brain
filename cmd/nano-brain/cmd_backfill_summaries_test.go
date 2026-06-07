@@ -192,7 +192,7 @@ func TestBackfill_DryRun(t *testing.T) {
 	bfInsertDoc(t, q, wsHash, "ses_dry003", "Session Gamma", "# Gamma\nContent C.", "opencode")
 
 	docs, err := q.ListSummaryDocumentsForBackfill(ctx, sqlc.ListSummaryDocumentsForBackfillParams{
-		Column1: "",
+		Column1: wsHash,
 		Column2: time.Time{},
 	})
 	if err != nil {
