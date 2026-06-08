@@ -46,6 +46,7 @@ type Config struct {
 	Summarization       SummarizationConfig       `koanf:"summarization" json:"summarization"`
 	CodeSummarization   CodeSummarizationConfig   `koanf:"code_summarization" json:"code_summarization"`
 	Intelligence        IntelligenceConfig        `koanf:"intelligence" json:"intelligence"`
+	Bench               BenchConfig               `koanf:"bench" json:"bench"`
 }
 
 // ServerConfig holds server configuration.
@@ -257,6 +258,15 @@ type IntelligenceConfig struct {
 	MaxTokens        int    `koanf:"max_tokens" json:"max_tokens"`
 	Concurrency      int    `koanf:"concurrency" json:"concurrency"`
 	ConsolidationAge int    `koanf:"consolidation_age" json:"consolidation_age"`
+}
+
+// BenchConfig holds benchmark configuration.
+type BenchConfig struct {
+	QueryGeneration string `koanf:"query_generation" json:"query_generation"` // "llm" or "content" (default)
+	ProviderURL     string `koanf:"provider_url" json:"provider_url"`
+	APIKey          string `koanf:"api_key" json:"api_key"`
+	Model           string `koanf:"model" json:"model"`
+	MaxTokens       int    `koanf:"max_tokens" json:"max_tokens"`
 }
 
 // Load loads configuration from file and environment variables.

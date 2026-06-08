@@ -21,6 +21,13 @@ func (m *mockStore) ListDocumentsByWorkspace(_ context.Context, _ string) ([]Doc
 	return m.docs, nil
 }
 
+func (m *mockStore) GetDocumentByID(_ context.Context, _ uuid.UUID, _ string) (*DocumentRow, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return nil, fmt.Errorf("not implemented in mock")
+}
+
 func makeDocs(n int) []DocumentRow {
 	docs := make([]DocumentRow, n)
 	for i := range docs {
@@ -40,7 +47,7 @@ func TestGenerate_Success(t *testing.T) {
 	docs := makeDocs(10)
 	store := &mockStore{docs: docs}
 
-	ds, err := Generate(context.Background(), store, "ws-test", 5)
+	ds, err := Generate(context.Background(), store, "ws-test", 5, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -69,7 +76,7 @@ func TestGenerate_Success(t *testing.T) {
 func TestGenerate_InsufficientDocuments(t *testing.T) {
 	store := &mockStore{docs: makeDocs(3)}
 
-	_, err := Generate(context.Background(), store, "ws-test", 10)
+	_, err := Generate(context.Background(), store, "ws-test", 10, nil)
 	if err == nil {
 		t.Fatal("expected error for insufficient documents")
 	}
@@ -78,11 +85,11 @@ func TestGenerate_InsufficientDocuments(t *testing.T) {
 func TestGenerate_InvalidScale(t *testing.T) {
 	store := &mockStore{docs: makeDocs(10)}
 
-	_, err := Generate(context.Background(), store, "ws-test", 0)
+	_, err := Generate(context.Background(), store, "ws-test", 0, nil)
 	if err == nil {
 		t.Fatal("expected error for scale=0")
 	}
-	_, err = Generate(context.Background(), store, "ws-test", -1)
+	_, err = Generate(context.Background(), store, "ws-test", -1, nil)
 	if err == nil {
 		t.Fatal("expected error for scale=-1")
 	}
@@ -91,7 +98,7 @@ func TestGenerate_InvalidScale(t *testing.T) {
 func TestGenerate_StoreError(t *testing.T) {
 	store := &mockStore{err: fmt.Errorf("db connection failed")}
 
-	_, err := Generate(context.Background(), store, "ws-test", 5)
+	_, err := Generate(context.Background(), store, "ws-test", 5, nil)
 	if err == nil {
 		t.Fatal("expected error from store failure")
 	}
@@ -100,7 +107,7 @@ func TestGenerate_StoreError(t *testing.T) {
 func TestGenerate_ListError(t *testing.T) {
 	store := &mockStore{err: fmt.Errorf("list query failed")}
 
-	_, err := Generate(context.Background(), store, "ws-test", 1)
+	_, err := Generate(context.Background(), store, "ws-test", 1, nil)
 	if err == nil {
 		t.Fatal("expected error from list failure")
 	}
@@ -110,7 +117,7 @@ func TestGenerate_EmptyTitleAndPath(t *testing.T) {
 	id := uuid.MustParse("11111111-2222-3333-4444-555555555555")
 	store := &mockStore{docs: []DocumentRow{{ID: id, WorkspaceHash: "ws-test", ContentHash: "h1"}}}
 
-	ds, err := Generate(context.Background(), store, "ws-test", 1)
+	ds, err := Generate(context.Background(), store, "ws-test", 1, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,13 +133,13 @@ func TestGenerate_Deterministic(t *testing.T) {
 	docs := makeDocs(20)
 	store := &mockStore{docs: docs}
 
-	ds1, err := Generate(context.Background(), store, "ws-test", 10)
+	ds1, err := Generate(context.Background(), store, "ws-test", 10, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	store2 := &mockStore{docs: docs}
-	ds2, err := Generate(context.Background(), store2, "ws-test", 10)
+	ds2, err := Generate(context.Background(), store2, "ws-test", 10, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -156,9 +163,19 @@ func TestDeriveQuery(t *testing.T) {
 			want: "My Document Title",
 		},
 		{
-			name: "falls back to source_path",
+			name: "strips Summary prefix from title",
+			doc:  DocumentRow{Title: "Summary: setup", SourcePath: "/path"},
+			want: "setup",
+		},
+		{
+			name: "strips query params from title",
+			doc:  DocumentRow{Title: "handleRequest?symbol=setup&kind=method", SourcePath: "/path"},
+			want: "handleRequest",
+		},
+		{
+			name: "uses filename from path when title empty",
 			doc:  DocumentRow{Title: "", SourcePath: "/path/to/file.md"},
-			want: "/path/to/file.md",
+			want: "file.md",
 		},
 		{
 			name: "falls back to doc ID when both empty",
@@ -166,8 +183,8 @@ func TestDeriveQuery(t *testing.T) {
 			want: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
 		},
 		{
-			name: "trims whitespace",
-			doc:  DocumentRow{Title: "  spaced title  "},
+			name: "trims whitespace from title",
+			doc:  DocumentRow{Title: "  spaced title  ", SourcePath: "/path"},
 			want: "spaced title",
 		},
 	}

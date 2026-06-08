@@ -11,10 +11,14 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/bench"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/search"
+	"github.com/nano-brain/nano-brain/internal/search/hyde"
+	"github.com/nano-brain/nano-brain/internal/search/preprocess"
+	"github.com/nano-brain/nano-brain/internal/search/reranking"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -155,7 +159,14 @@ func runBenchGenerate(args []string) {
 	queries := sqlc.New(db)
 	store := &sqlcAdapter{q: queries}
 
-	dataset, err := bench.Generate(ctx, store, workspace, scale)
+	benchCfg := &bench.BenchConfig{
+		QueryGeneration: cfg.Bench.QueryGeneration,
+		ProviderURL:     cfg.Bench.ProviderURL,
+		APIKey:          cfg.Bench.APIKey,
+		Model:           cfg.Bench.Model,
+		MaxTokens:       cfg.Bench.MaxTokens,
+	}
+	dataset, err := bench.Generate(ctx, store, workspace, scale, benchCfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -256,6 +267,17 @@ func runBenchRun(args []string) {
 	queries := sqlc.New(db)
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	svc := search.NewSearchService(queries, embedder, cfg.Search, logger)
+	svc.SetPageRankLoader(search.NewSQLPageRankLoader(queries))
+	svc.SetEntityQuerier(queries)
+	if cfg.Search.QueryPreprocessing.Enabled {
+		svc.SetPreprocessor(preprocess.NewPreprocessor(cfg.Search.QueryPreprocessing, logger))
+	}
+	if cfg.Search.HyDE.Enabled {
+		svc.SetHydeGenerator(hyde.NewGenerator(cfg.Search.HyDE, logger))
+	}
+	if cfg.Search.Reranking.Enabled {
+		svc.SetReranker(reranking.NewReranker(cfg.Search.Reranking, logger))
+	}
 
 	results, err := bench.Run(ctx, &ds, svc, Version)
 	if err != nil {
@@ -550,4 +572,23 @@ func (a *sqlcAdapter) ListDocumentsByWorkspace(ctx context.Context, workspaceHas
 		}
 	}
 	return result, nil
+}
+
+func (a *sqlcAdapter) GetDocumentByID(ctx context.Context, id uuid.UUID, workspaceHash string) (*bench.DocumentRow, error) {
+	row, err := a.q.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{
+		ID:            id,
+		WorkspaceHash: workspaceHash,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &bench.DocumentRow{
+		ID:            row.ID,
+		WorkspaceHash: row.WorkspaceHash,
+		ContentHash:   row.ContentHash,
+		Title:         row.Title,
+		SourcePath:    row.SourcePath,
+		Collection:    row.Collection,
+		Content:       row.Content,
+	}, nil
 }
