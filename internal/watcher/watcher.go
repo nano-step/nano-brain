@@ -40,6 +40,7 @@ type GraphQuerier interface {
 type WatcherQuerier interface {
 	UpsertDocumentBySourcePath(ctx context.Context, arg sqlc.UpsertDocumentBySourcePathParams) (sqlc.UpsertDocumentBySourcePathRow, error)
 	DeleteChunksByDocumentID(ctx context.Context, arg sqlc.DeleteChunksByDocumentIDParams) error
+	DeleteDocumentByIDAndWorkspace(ctx context.Context, arg sqlc.DeleteDocumentByIDAndWorkspaceParams) (int64, error)
 	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
 	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
 	InsertChunkEntity(ctx context.Context, arg sqlc.InsertChunkEntityParams) error
@@ -421,15 +422,19 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 
 		if col.filter != nil && col.filter.shouldSkip(path, d.IsDir()) {
 			if d.IsDir() {
+				w.cleanupPathPrefix(ctx, col, path)
 				return filepath.SkipDir
 			}
+			w.cleanupIgnoredDocument(ctx, col, path)
 			return nil
 		}
 
 		if stack.Matches(path) {
 			if d.IsDir() {
+				w.cleanupPathPrefix(ctx, col, path)
 				return filepath.SkipDir
 			}
+			w.cleanupIgnoredDocument(ctx, col, path)
 			return nil
 		}
 
@@ -441,6 +446,94 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		w.logger.Error().Err(err).Str("dir", col.dirPath).Msg("walk failed")
 	}
+}
+
+// ShouldSkipPath checks whether the given absolute path matches any of the
+// active ignore rules (.nano-brainignore, .gitignore, excludePatterns) for
+// the named collection. Returns false if the collection is not found.
+func (w *Watcher) ShouldSkipPath(collectionName, workspaceHash, absPath string, isDir bool) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, col := range w.collections {
+		if col.name == collectionName && col.workspaceHash == workspaceHash {
+			if col.filter != nil {
+				return col.filter.shouldSkip(absPath, isDir)
+			}
+			return false
+		}
+	}
+	return false
+}
+
+// cleanupIgnoredDocument deletes any existing document+chunks for filePath,
+// then removes the entry from the file cache. Called when a file newly
+// matches .nano-brainignore or .gitignore patterns during a walk.
+func (w *Watcher) cleanupIgnoredDocument(ctx context.Context, col watchedCollection, filePath string) {
+	doc, err := w.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    filePath,
+		WorkspaceHash: col.workspaceHash,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return
+		}
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("cleanupIgnoredDocument: get document failed")
+		return
+	}
+
+	if err := w.queries.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
+		DocumentID:    doc.ID,
+		WorkspaceHash: col.workspaceHash,
+	}); err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("cleanupIgnoredDocument: delete chunks failed")
+		// fall through — still try to delete the document and cache entry
+	}
+
+	if _, err := w.queries.DeleteDocumentByIDAndWorkspace(ctx, sqlc.DeleteDocumentByIDAndWorkspaceParams{
+		ID:            doc.ID,
+		WorkspaceHash: col.workspaceHash,
+	}); err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("cleanupIgnoredDocument: delete document failed")
+	}
+
+	w.fileCacheMu.Lock()
+	delete(w.fileCache, filePath)
+	w.fileCacheMu.Unlock()
+
+	w.logger.Debug().Str("file", filePath).Str("doc_id", doc.ID.String()).Msg("cleaned up document matching ignore pattern")
+}
+
+// cleanupPathPrefix deletes all documents+chunks whose source_path starts
+// with the given directory prefix. Called when shouldSkip matches a
+// directory — files inside are not walked individually.
+func (w *Watcher) cleanupPathPrefix(ctx context.Context, col watchedCollection, dirPath string) {
+	prefix := filepath.Clean(dirPath) + "/"
+
+	if _, err := w.db.ExecContext(ctx,
+		`DELETE FROM chunks WHERE document_id IN (
+			SELECT id FROM documents WHERE source_path LIKE $1 AND workspace_hash = $2
+		)`, prefix+"%", col.workspaceHash); err != nil {
+		w.logger.Warn().Err(err).Str("prefix", prefix).Msg("cleanupPathPrefix: delete chunks failed")
+	}
+
+	res, err := w.db.ExecContext(ctx,
+		`DELETE FROM documents WHERE source_path LIKE $1 AND workspace_hash = $2`,
+		prefix+"%", col.workspaceHash)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("prefix", prefix).Msg("cleanupPathPrefix: delete documents failed")
+		return
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		w.logger.Debug().Str("prefix", prefix).Int64("deleted", n).Msg("cleaned up documents under ignored directory")
+	}
+
+	w.fileCacheMu.Lock()
+	for cachedPath := range w.fileCache {
+		if strings.HasPrefix(cachedPath, prefix) {
+			delete(w.fileCache, cachedPath)
+		}
+	}
+	w.fileCacheMu.Unlock()
 }
 
 func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePath string) {

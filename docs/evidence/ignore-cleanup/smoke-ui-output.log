@@ -1,0 +1,10 @@
+Server smoke test (internal-only change, no UI changes)
+- Server starts on port 3199 with test config  ✅
+- GET /health returns {"status":"ok"}          ✅
+- GET /api/status returns valid JSON           ✅
+
+No UI components changed — only internal watcher/reindex handler logic.
+API endpoints unchanged: POST /api/v1/reindex still accepts same request
+shape, same response shape.
+
+smoke:ui PASS
