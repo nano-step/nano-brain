@@ -15,7 +15,10 @@ ON CONFLICT (content_hash, workspace_hash, document_id) DO UPDATE SET
     line_end = EXCLUDED.line_end,
     chunk_type = EXCLUDED.chunk_type,
     embedding_strategy = EXCLUDED.embedding_strategy,
-    embed_status = 'pending'
+    embed_status = CASE 
+        WHEN EXCLUDED.content != chunks.content THEN 'pending'
+        ELSE chunks.embed_status
+    END
 RETURNING id;
 
 -- name: DeleteChunksByDocumentID :exec
