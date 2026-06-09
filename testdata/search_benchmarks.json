@@ -348,5 +348,425 @@
     "expected_keywords": ["hybrid", "bm25", "vector", "semantic", "keyword", "fusion"],
     "expected_symbols": ["HybridSearch"],
     "relevance_hints": ["should contrast BM25 keyword matching with vector semantic similarity"]
+  },
+  {
+    "query": "what did we decide about search quality",
+    "category": "session",
+    "expected_keywords": ["search", "quality", "hybrid", "reranker", "hyde"],
+    "expected_symbols": ["HybridSearch", "ApplyRecencyBoost"],
+    "relevance_hints": ["should retrieve session summaries about RAG search quality improvements and Phase 2 implementation"]
+  },
+  {
+    "query": "why choose HyDE over query expansion",
+    "category": "session",
+    "expected_keywords": ["hyde", "hypothetical", "document", "embedding", "llm"],
+    "expected_symbols": ["HybridSearch"],
+    "relevance_hints": ["should reference HyDE research, design docs, or session discussions about hypothetical document embeddings"]
+  },
+  {
+    "query": "what was discussed about MCP tool schema",
+    "category": "session",
+    "expected_keywords": ["mcp", "tool", "schema", "consumer", "memory_query"],
+    "expected_symbols": [],
+    "relevance_hints": ["should retrieve sessions about MCP consumers, tool schema, and memory_query implementation"]
+  },
+  {
+    "query": "decisions about search preprocessor integration",
+    "category": "session",
+    "expected_keywords": ["preprocess", "query", "translate", "english", "llm"],
+    "expected_symbols": ["NewPreprocessor", "PreprocessResult"],
+    "relevance_hints": ["should retrieve sessions about integrating the search preprocessor package into the service"]
+  },
+  {
+    "query": "why Go instead of Python for the project",
+    "category": "session",
+    "expected_keywords": ["go", "static", "binary", "performance", "concurrency"],
+    "expected_symbols": [],
+    "relevance_hints": ["should retrieve architecture decisions about Go as the implementation language"]
+  },
+  {
+    "query": "approach for code summarization",
+    "category": "session",
+    "expected_keywords": ["summarize", "code", "llm", "batched", "symbol"],
+    "expected_symbols": [],
+    "relevance_hints": ["should retrieve sessions about the codesummarize package and batched LLM summarization"]
+  },
+  {
+    "query": "discussion about entity boost for search",
+    "category": "session",
+    "expected_keywords": ["entity", "boost", "extract", "factor", "search"],
+    "expected_symbols": ["ApplyEntityBoost", "ExtractQueryEntities"],
+    "relevance_hints": ["should retrieve session summaries about entity extraction and boosting in the search pipeline"]
+  },
+  {
+    "query": "what did we decide about pagination format",
+    "category": "session",
+    "expected_keywords": ["cursor", "pagination", "offset", "query_hash", "decode"],
+    "expected_symbols": ["EncodeCursor", "DecodeCursor"],
+    "relevance_hints": ["should retrieve discussions about opaque cursor-based pagination design decisions"]
+  },
+  {
+    "query": "approach for handling concurrent workspace access",
+    "category": "session",
+    "expected_keywords": ["workspace", "hash", "isolate", "scope", "multi"],
+    "expected_symbols": [],
+    "relevance_hints": ["should retrieve sessions about multi-tenant workspace isolation and scoped queries"]
+  },
+  {
+    "query": "why PostgreSQL with pgvector over dedicated vector DB",
+    "category": "session",
+    "expected_keywords": ["pgvector", "postgresql", "vector", "hnsw", "cosine"],
+    "expected_symbols": [],
+    "relevance_hints": ["should retrieve architecture decisions about pgvector and PostgreSQL as the data store"]
+  },
+  {
+    "query": "what was the plan for the benchmark suite",
+    "category": "session",
+    "expected_keywords": ["benchmark", "bench", "generate", "run", "compare"],
+    "expected_symbols": [],
+    "relevance_hints": ["should retrieve sessions about the benchmark CLI suite design and implementation"]
+  },
+  {
+    "query": "discussion about recency boost parameters",
+    "category": "session",
+    "expected_keywords": ["recency", "half_life", "decay", "weight", "boost"],
+    "expected_symbols": ["ApplyRecencyBoost"],
+    "relevance_hints": ["should retrieve session discussions about recency half-life and blend weight tuning"]
+  },
+  {
+    "query": "what did we decide about the memory write API",
+    "category": "session",
+    "expected_keywords": ["memory", "write", "upsert", "document", "source_path"],
+    "expected_symbols": ["UpsertDocument"],
+    "relevance_hints": ["should retrieve sessions about memory write/upsert API design choices"]
+  },
+  {
+    "query": "approach for extracting symbols from Go code",
+    "category": "session",
+    "expected_keywords": ["symbol", "extract", "go", "function", "type"],
+    "expected_symbols": ["ExtractSymbols"],
+    "relevance_hints": ["should retrieve sessions about Go symbol extraction and the code intelligence pipeline"]
+  },
+  {
+    "query": "what were the requirements for the search API",
+    "category": "session",
+    "expected_keywords": ["search", "api", "query", "hybrid", "workspace"],
+    "expected_symbols": ["HybridSearch", "NewSearchService"],
+    "relevance_hints": ["should retrieve spec documents and sessions discussing search API requirements"]
+  },
+  {
+    "query": "find the code that splits documents into chunks",
+    "category": "natural_language",
+    "expected_keywords": ["chunk", "document", "split", "markdown", "heading"],
+    "expected_symbols": ["ChunkDocument"],
+    "relevance_hints": ["should find ChunkDocument function and related chunking logic in the storage package"]
+  },
+  {
+    "query": "show me where search results get merged",
+    "category": "natural_language",
+    "expected_keywords": ["rrf", "merge", "fusion", "bm25", "vector"],
+    "expected_symbols": ["RRFMerge"],
+    "relevance_hints": ["should find the RRF merge function that fuses BM25 and vector results"]
+  },
+  {
+    "query": "I need to understand how entity boosting works",
+    "category": "natural_language",
+    "expected_keywords": ["entity", "boost", "score", "factor", "match"],
+    "expected_symbols": ["ApplyEntityBoost", "ExtractQueryEntities"],
+    "relevance_hints": ["should find entity extraction and score boosting logic in the search pipeline"]
+  },
+  {
+    "query": "how does the file watcher know when to reindex",
+    "category": "natural_language",
+    "expected_keywords": ["watcher", "reindex", "fsnotify", "debounce", "event"],
+    "expected_symbols": [],
+    "relevance_hints": ["should find the watcher package with fsnotify-based file monitoring and debounce logic"]
+  },
+  {
+    "query": "where is the embedding queue code",
+    "category": "natural_language",
+    "expected_keywords": ["embed", "queue", "concurrency", "batch", "process"],
+    "expected_symbols": [],
+    "relevance_hints": ["should find the embedding queue implementation in the embed package"]
+  },
+  {
+    "query": "find the health check endpoint handler",
+    "category": "natural_language",
+    "expected_keywords": ["health", "doctor", "check", "ping", "status"],
+    "expected_symbols": [],
+    "relevance_hints": ["should find the health check endpoint or doctor command implementation"]
+  },
+  {
+    "query": "who runs the database migrations",
+    "category": "natural_language",
+    "expected_keywords": ["migrate", "goose", "migration", "sql", "embed"],
+    "expected_symbols": ["RunMigrations"],
+    "relevance_hints": ["should find goose migration execution code in the migrate package"]
+  },
+  {
+    "query": "how does the server start up",
+    "category": "natural_language",
+    "expected_keywords": ["server", "echo", "route", "start", "listen"],
+    "expected_symbols": ["NewServer", "SetupRoutes"],
+    "relevance_hints": ["should find server construction and route registration in cmd or handler setup"]
+  },
+  {
+    "query": "show me the recency boost calculation",
+    "category": "natural_language",
+    "expected_keywords": ["recency", "decay", "exponential", "half_life", "score"],
+    "expected_symbols": ["ApplyRecencyBoost"],
+    "relevance_hints": ["should find the recency.go file with the exponential decay formula"]
+  },
+  {
+    "query": "how does the content deduplication work",
+    "category": "natural_language",
+    "expected_keywords": ["sha256", "hash", "dedup", "content", "addressed"],
+    "expected_symbols": [],
+    "relevance_hints": ["should find content-addressed storage with SHA-256 hashing for deduplication"]
+  },
+  {
+    "query": "what code handles the search query endpoint",
+    "category": "natural_language",
+    "expected_keywords": ["query", "handler", "search", "hybrid", "api"],
+    "expected_symbols": ["HybridSearch", "SetupRoutes"],
+    "relevance_hints": ["should find the HTTP handler that accepts search queries and invokes HybridSearch"]
+  },
+  {
+    "query": "find the preprocessor that cleans up queries",
+    "category": "natural_language",
+    "expected_keywords": ["preprocess", "translate", "english", "intent", "expand"],
+    "expected_symbols": ["NewPreprocessor", "PreprocessResult"],
+    "relevance_hints": ["should find the preprocessor package with LLM-based query translation and expansion"]
+  },
+  {
+    "query": "how does the MCP tool dispatch work",
+    "category": "natural_language",
+    "expected_keywords": ["mcp", "tool", "dispatch", "handler", "register"],
+    "expected_symbols": [],
+    "relevance_hints": ["should find MCP server tool registration and dispatch logic in mcp/tools.go"]
+  },
+  {
+    "query": "show me how documents are stored",
+    "category": "natural_language",
+    "expected_keywords": ["upsert", "document", "insert", "sqlc", "storage"],
+    "expected_symbols": ["UpsertDocument"],
+    "relevance_hints": ["should find the UpsertDocument SQL or function that persists documents"]
+  },
+  {
+    "query": "code that extracts symbols from Go files",
+    "category": "natural_language",
+    "expected_keywords": ["extract", "symbol", "go", "ast", "parse"],
+    "expected_symbols": ["ExtractSymbols"],
+    "relevance_hints": ["should find the symbol extraction logic that parses Go AST"]
+  },
+  {
+    "query": "where is the reranker called",
+    "category": "natural_language",
+    "expected_keywords": ["rerank", "cohere", "cross_encoder", "score"],
+    "expected_symbols": ["NewCohereReranker"],
+    "relevance_hints": ["should find the reranking package with Cohere cross-encoder adapter"]
+  },
+  {
+    "query": "how does workspace isolation work",
+    "category": "natural_language",
+    "expected_keywords": ["workspace", "hash", "isolate", "scope", "filter"],
+    "expected_symbols": [],
+    "relevance_hints": ["should find workspace hash extraction middleware and scoped query logic"]
+  },
+  {
+    "query": "find the function that computes nDCG",
+    "category": "natural_language",
+    "expected_keywords": ["ndcg", "dcg", "discounted", "cumulative", "gain"],
+    "expected_symbols": ["nDCG"],
+    "relevance_hints": ["should find the nDCG metric computation in the search metrics package"]
+  },
+  {
+    "query": "show me how search results are formatted for the API",
+    "category": "natural_language",
+    "expected_keywords": ["result", "format", "response", "json", "snippet"],
+    "expected_symbols": [],
+    "relevance_hints": ["should find the Result struct and response formatting code"]
+  },
+  {
+    "query": "how does the session harvesting work",
+    "category": "natural_language",
+    "expected_keywords": ["harvest", "session", "opencode", "summary", "ingest"],
+    "expected_symbols": ["HarvestSession"],
+    "relevance_hints": ["should find the harvest package that ingests OpenCode and Claude Code sessions"]
+  },
+  {
+    "query": "cơ chế hoạt động của search pipeline",
+    "category": "cross_language",
+    "expected_keywords": ["search", "pipeline", "hybrid", "bm25", "vector"],
+    "expected_symbols": ["HybridSearch", "RRFMerge"],
+    "relevance_hints": ["Vietnamese query asking how the search pipeline works — should find pipeline docs"]
+  },
+  {
+    "query": "làm sao để tìm kiếm code trong nano brain",
+    "category": "cross_language",
+    "expected_keywords": ["search", "code", "query", "symbol", "find"],
+    "expected_symbols": ["ExtractSymbols", "HybridSearch"],
+    "relevance_hints": ["Vietnamese query asking how to search code in nano-brain"]
+  },
+  {
+    "query": "chức năng trích xuất symbol từ code",
+    "category": "cross_language",
+    "expected_keywords": ["extract", "symbol", "go", "ast", "parse"],
+    "expected_symbols": ["ExtractSymbols"],
+    "relevance_hints": ["Vietnamese query asking about symbol extraction from code"]
+  },
+  {
+    "query": "cách quản lý workspace và bộ nhớ",
+    "category": "cross_language",
+    "expected_keywords": ["workspace", "memory", "collection", "document", "hash"],
+    "expected_symbols": [],
+    "relevance_hints": ["Vietnamese query asking about workspace and memory management"]
+  },
+  {
+    "query": "giải thích về hybrid search",
+    "category": "cross_language",
+    "expected_keywords": ["hybrid", "bm25", "vector", "search", "rrf"],
+    "expected_symbols": ["HybridSearch", "RRFMerge"],
+    "relevance_hints": ["Vietnamese query asking about hybrid search explanation"]
+  },
+  {
+    "query": "ai gọi hàm RRFMerge",
+    "category": "cross_language",
+    "expected_keywords": ["RRFMerge", "call", "hybrid", "fusion", "merge"],
+    "expected_symbols": ["RRFMerge", "HybridSearch"],
+    "relevance_hints": ["Vietnamese query asking who calls the RRFMerge function"]
+  },
+  {
+    "query": "cấu trúc của search service",
+    "category": "cross_language",
+    "expected_keywords": ["search", "service", "config", "embed", "rerank"],
+    "expected_symbols": ["NewSearchService", "HybridSearch"],
+    "relevance_hints": ["Vietnamese query about the structure of the search service"]
+  },
+  {
+    "query": "làm sao để thêm migration mới",
+    "category": "cross_language",
+    "expected_keywords": ["migrate", "goose", "sql", "up", "version"],
+    "expected_symbols": ["RunMigrations"],
+    "relevance_hints": ["Vietnamese query asking how to add a new database migration"]
+  },
+  {
+    "query": "nano brain xử lý session như thế nào",
+    "category": "cross_language",
+    "expected_keywords": ["session", "harvest", "summary", "opencode", "ingest"],
+    "expected_symbols": ["HarvestSession"],
+    "relevance_hints": ["Vietnamese query about how nano-brain processes sessions"]
+  },
+  {
+    "query": "cách tính điểm tìm kiếm trong nano brain",
+    "category": "cross_language",
+    "expected_keywords": ["score", "rank", "rrf", "recency", "boost"],
+    "expected_symbols": ["ApplyRecencyBoost", "RRFMerge"],
+    "relevance_hints": ["Vietnamese query about search scoring in nano-brain"]
+  },
+  {
+    "query": "explain how the search pipeline processes a query from start to finish",
+    "category": "conceptual",
+    "expected_keywords": ["search", "pipeline", "preprocess", "bm25", "rerank"],
+    "expected_symbols": ["HybridSearch", "RRFMerge", "ApplyRecencyBoost"],
+    "relevance_hints": ["should explain the full search pipeline flow from query input to ranked results output"]
+  },
+  {
+    "query": "what happens when both BM25 and vector search return results",
+    "category": "conceptual",
+    "expected_keywords": ["rrf", "fusion", "bm25", "vector", "merge"],
+    "expected_symbols": ["RRFMerge"],
+    "relevance_hints": ["should explain how Reciprocal Rank Fusion combines both result sets"]
+  },
+  {
+    "query": "how does the system handle embedding provider failures",
+    "category": "conceptual",
+    "expected_keywords": ["degrade", "graceful", "fallback", "error", "embed"],
+    "expected_symbols": ["HybridSearch"],
+    "relevance_hints": ["should explain graceful degradation when embedding provider fails"]
+  },
+  {
+    "query": "what is the content addressing strategy",
+    "category": "conceptual",
+    "expected_keywords": ["sha256", "hash", "dedup", "content", "addressed"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain SHA-256 content addressing for deduplication"]
+  },
+  {
+    "query": "how does the system prioritize recent documents",
+    "category": "conceptual",
+    "expected_keywords": ["recency", "half_life", "decay", "weight", "score"],
+    "expected_symbols": ["ApplyRecencyBoost"],
+    "relevance_hints": ["should explain the exponential half-life recency decay formula"]
+  },
+  {
+    "query": "explain the reranking step in search",
+    "category": "conceptual",
+    "expected_keywords": ["rerank", "cross_encoder", "cohere", "score", "reorder"],
+    "expected_symbols": ["NewCohereReranker"],
+    "relevance_hints": ["should explain how cross-encoder reranking reorders search results after initial retrieval"]
+  },
+  {
+    "query": "what happens when a document is updated or reindexed",
+    "category": "conceptual",
+    "expected_keywords": ["upsert", "reindex", "update", "chunk", "embed"],
+    "expected_symbols": ["UpsertDocument", "ChunkDocument"],
+    "relevance_hints": ["should explain the document upsert flow including chunking and re-embedding"]
+  },
+  {
+    "query": "how does the watcher handle file changes",
+    "category": "conceptual",
+    "expected_keywords": ["watcher", "fsnotify", "event", "debounce", "reindex"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain the fsnotify-based file watcher with debounce and reindex logic"]
+  },
+  {
+    "query": "what is the role of the preprocessor in search",
+    "category": "conceptual",
+    "expected_keywords": ["preprocess", "translate", "intent", "expand", "llm"],
+    "expected_symbols": ["NewPreprocessor", "PreprocessResult"],
+    "relevance_hints": ["should explain how the preprocessor translates queries and detects intent"]
+  },
+  {
+    "query": "explain how session summarization works",
+    "category": "conceptual",
+    "expected_keywords": ["summarize", "session", "llm", "map_reduce", "chunk"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain the LLM-based session summarization pipeline with map-reduce chunking"]
+  },
+  {
+    "query": "how does the system handle concurrent indexing",
+    "category": "conceptual",
+    "expected_keywords": ["concurrent", "mutex", "errgroup", "pool", "goroutine"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain concurrency patterns for indexing including errgroup and connection pooling"]
+  },
+  {
+    "query": "what is the cursor pagination strategy",
+    "category": "conceptual",
+    "expected_keywords": ["cursor", "pagination", "opaque", "offset", "hash"],
+    "expected_symbols": ["EncodeCursor", "DecodeCursor"],
+    "relevance_hints": ["should explain the opaque cursor-based pagination approach"]
+  },
+  {
+    "query": "explain the workspace hash isolation approach",
+    "category": "conceptual",
+    "expected_keywords": ["workspace", "hash", "isolate", "scope", "middleware"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain how workspace hashes isolate data between different projects"]
+  },
+  {
+    "query": "how does MCP protocol integration work",
+    "category": "conceptual",
+    "expected_keywords": ["mcp", "protocol", "streamable", "http", "tool"],
+    "expected_symbols": [],
+    "relevance_hints": ["should explain the MCP server implementation with streamable HTTP transport"]
+  },
+  {
+    "query": "what is the relationship between documents and chunks",
+    "category": "conceptual",
+    "expected_keywords": ["document", "chunk", "split", "heading", "embed"],
+    "expected_symbols": ["ChunkDocument"],
+    "relevance_hints": ["should explain the document-to-chunk mapping and heading-aware splitting"]
   }
 ]

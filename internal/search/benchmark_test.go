@@ -3,14 +3,108 @@
 package search_test
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/nano-brain/nano-brain/internal/search"
 )
+
+type queryAPIResponse struct {
+	Results []queryAPIResult `json:"results"`
+}
+
+type queryAPIResult struct {
+	ID            string  `json:"id"`
+	Title         string  `json:"title"`
+	Snippet       string  `json:"snippet"`
+	Score         float64 `json:"score"`
+	Collection    string  `json:"collection"`
+	WorkspaceHash string  `json:"workspace_hash"`
+	SourcePath    string  `json:"source_path"`
+	DocumentID    string  `json:"document_id"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
+// apiResultToSearchResult maps an API response result to a search.Result.
+// The API returns snippet (not full content) — we use snippet as Content
+// so the existing scoring logic works on available text.
+func apiResultToSearchResult(r queryAPIResult) search.Result {
+	return search.Result{
+		ID:            r.ID,
+		DocumentID:    r.DocumentID,
+		WorkspaceHash: r.WorkspaceHash,
+		Title:         r.Title,
+		Content:       r.Snippet,
+		Snippet:       r.Snippet,
+		Score:         r.Score,
+		Collection:    r.Collection,
+		SourcePath:    r.SourcePath,
+	}
+}
+
+// callQueryAPI sends a query to the nano-brain hybrid search API and returns
+// the results. Uses NANO_BRAIN_SERVER (default http://localhost:3100) and
+// NANO_BRAIN_BENCH_WORKSPACE (default: nano-brain workspace hash).
+func callQueryAPI(ctx context.Context, query string, limit int) ([]search.Result, error) {
+	serverURL := os.Getenv("NANO_BRAIN_SERVER")
+	if serverURL == "" {
+		serverURL = "http://localhost:3100"
+	}
+	workspace := os.Getenv("NANO_BRAIN_BENCH_WORKSPACE")
+	if workspace == "" {
+		workspace = "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f"
+	}
+
+	body := map[string]interface{}{
+		"workspace": workspace,
+		"query":     query,
+		"limit":     limit,
+	}
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, serverURL+"/api/v1/query", bytes.NewReader(bodyJSON))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http post: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var apiResp queryAPIResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	results := make([]search.Result, len(apiResp.Results))
+	for i, r := range apiResp.Results {
+		results[i] = apiResultToSearchResult(r)
+	}
+	return results, nil
+}
 
 type BenchmarkQuery struct {
 	Query            string   `json:"query"`
@@ -118,13 +212,18 @@ func TestSearchBenchmark(t *testing.T) {
 	}
 
 	t.Logf("Loaded %d benchmark queries", len(queries))
-	t.Log("NOTE: This test requires a running nano-brain instance with indexed data.")
-	t.Log("Without live search results, metrics will be zero (baseline recording mode).")
+	serverURL := os.Getenv("NANO_BRAIN_SERVER")
+	if serverURL == "" {
+		serverURL = "http://localhost:3100"
+	}
+	t.Logf("Using nano-brain server: %s", serverURL)
 
 	report := BenchmarkReport{
 		ByCategory: make(map[string]CategoryReport),
 	}
 
+	ctx := context.Background()
+	var totalFailures int
 	var allNDCG5, allNDCG10 []float64
 	var allMRRRanks []int
 
@@ -136,7 +235,12 @@ func TestSearchBenchmark(t *testing.T) {
 	categoryCounts := make(map[string]int)
 
 	for _, q := range queries {
-		var results []search.Result
+		results, err := callQueryAPI(ctx, q.Query, 20)
+		if err != nil {
+			t.Logf("WARNING: query %q failed: %v", q.Query, err)
+			totalFailures++
+			continue
+		}
 
 		ndcg5, ndcg10, recall5, recall10, firstRank := evaluateResults(results, q)
 
@@ -165,6 +269,10 @@ func TestSearchBenchmark(t *testing.T) {
 			MRR:      search.MeanMRR(categoryMRR[cat]),
 			Count:    categoryCounts[cat],
 		}
+	}
+
+	if totalFailures > 0 {
+		t.Logf("WARNING: %d queries failed to reach the server (results excluded from metrics)", totalFailures)
 	}
 
 	t.Log("\n=== Search Benchmark Results ===")
