@@ -44,6 +44,7 @@ type WatcherQuerier interface {
 	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
 	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
 	InsertChunkEntity(ctx context.Context, arg sqlc.InsertChunkEntityParams) error
+	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 }
 
 type watchedCollection struct {
@@ -813,36 +814,61 @@ func (w *Watcher) upsertWithoutTx(ctx context.Context, workspace string, params 
 }
 
 func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.UUID, workspace string, chunks []chunker.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
-	if err := q.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
+	existing, err := q.ListChunksByDocumentID(ctx, sqlc.ListChunksByDocumentIDParams{
 		DocumentID:    docID,
 		WorkspaceHash: workspace,
-	}); err != nil {
-		return nil, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list existing chunks: %w", err)
 	}
+
+	existingByHash := make(map[string]uuid.UUID)
+	for _, ch := range existing {
+		existingByHash[ch.ContentHash] = ch.ID
+	}
+
 	ids := make([]uuid.UUID, 0, len(chunks))
 	for _, ch := range chunks {
-		id, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
-			DocumentID:        docID,
-			WorkspaceHash:     workspace,
-			ContentHash:       ch.Hash,
-			Content:           ch.Content,
-			ChunkIndex:        int32(ch.Sequence),
-			StartLine:         sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
-			EndLine:           sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
-			Metadata:          meta,
-			SymbolName:        nullString(ch.SymbolName),
-			SymbolKind:        nullString(ch.SymbolKind),
-			Language:          nullString(ch.Language),
-			LineStart:         nullInt32(ch.StartLine),
-			LineEnd:           nullInt32(ch.EndLine),
-			ChunkType:         string(ch.ChunkType),
-			EmbeddingStrategy: string(ch.EmbeddingStrategy),
-		})
-		if err != nil {
-			return nil, err
+		if existingID, exists := existingByHash[ch.Hash]; exists {
+			ids = append(ids, existingID)
+			delete(existingByHash, ch.Hash)
+		} else {
+			id, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
+				DocumentID:        docID,
+				WorkspaceHash:     workspace,
+				ContentHash:       ch.Hash,
+				Content:           ch.Content,
+				ChunkIndex:        int32(ch.Sequence),
+				StartLine:         sql.NullInt32{Int32: int32(ch.StartLine), Valid: true},
+				EndLine:           sql.NullInt32{Int32: int32(ch.EndLine), Valid: true},
+				Metadata:          meta,
+				SymbolName:        nullString(ch.SymbolName),
+				SymbolKind:        nullString(ch.SymbolKind),
+				Language:          nullString(ch.Language),
+				LineStart:         nullInt32(ch.StartLine),
+				LineEnd:           nullInt32(ch.EndLine),
+				ChunkType:         string(ch.ChunkType),
+				EmbeddingStrategy: string(ch.EmbeddingStrategy),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("upsert chunk: %w", err)
+			}
+			ids = append(ids, id)
 		}
-		ids = append(ids, id)
 	}
+
+	for _, ch := range existing {
+		if _, exists := existingByHash[ch.ContentHash]; exists {
+			if err := q.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
+				DocumentID:    docID,
+				WorkspaceHash: workspace,
+			}); err != nil {
+				return nil, fmt.Errorf("delete old chunks: %w", err)
+			}
+			break
+		}
+	}
+
 	return ids, nil
 }
 

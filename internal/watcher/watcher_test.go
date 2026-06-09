@@ -72,6 +72,10 @@ func (m *mockQuerier) InsertChunkEntity(_ context.Context, _ sqlc.InsertChunkEnt
 	return nil
 }
 
+func (m *mockQuerier) ListChunksByDocumentID(_ context.Context, _ sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error) {
+	return nil, nil
+}
+
 func testConfig(debounceMs, pollSec int) config.Config {
 	return config.Config{
 		Watcher: config.WatcherConfig{
