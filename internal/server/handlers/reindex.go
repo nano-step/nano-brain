@@ -177,6 +177,15 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 
 		var colHasChanges bool
 		for path, diskHash := range diskFiles {
+			// Skip files matching ignore patterns — the watcher's periodic
+			// scanCollection handles their cleanup via shouldSkip.
+			if w != nil && w.ShouldSkipPath(col.Name, workspace, path, false) {
+				// Also purge from indexed so the orphan loop below deletes
+				// any previously-indexed document + chunks.
+				delete(indexed, path)
+				skipped++
+				continue
+			}
 			scanned++
 			entry, exists := indexed[path]
 			if !exists {

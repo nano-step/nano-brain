@@ -64,6 +64,10 @@ func (m *mockQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDoc
 	}, nil
 }
 
+func (m *mockQuerier) DeleteDocumentByIDAndWorkspace(_ context.Context, _ sqlc.DeleteDocumentByIDAndWorkspaceParams) (int64, error) {
+	return 1, nil
+}
+
 func (m *mockQuerier) InsertChunkEntity(_ context.Context, _ sqlc.InsertChunkEntityParams) error {
 	return nil
 }
