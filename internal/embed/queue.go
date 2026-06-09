@@ -234,6 +234,7 @@ func (q *Queue) scanByStatus(ctx context.Context, failed bool) (enqueued int, sk
 			q.logger.Error().Err(err).Bool("failed", failed).Msg("failed to scan chunks")
 			return enqueued, skipped
 		}
+		batchSkipped := 0
 		for _, id := range ids {
 			if failed {
 				q.clearRetries(id)
@@ -243,12 +244,21 @@ func (q *Queue) scanByStatus(ctx context.Context, failed bool) (enqueued int, sk
 					q.logger.Info().Int("total", enqueued).Bool("failed", failed).Msg("scan stopped (queue full)")
 					return enqueued, skipped
 				}
+				batchSkipped++
 				skipped++
 				continue
 			}
 			enqueued++
 		}
 		if len(ids) < scanBatchSize {
+			break
+		}
+		// All items in this batch are already in-flight; SQL has no OFFSET so the same
+		// rows would be returned again, causing an infinite loop. Stop scanning until
+		// the next rescan ticker fires and some workers have completed.
+		if batchSkipped == len(ids) {
+			q.logger.Warn().Int("total", enqueued).Int("batch", batchSkipped).Bool("failed", failed).
+				Msg("scan stopped: all items in batch already in-flight")
 			break
 		}
 	}
