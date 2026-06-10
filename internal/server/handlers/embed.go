@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"time"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/embed"
@@ -31,7 +32,7 @@ type EmbedResponse struct {
 	Remaining int64 `json:"remaining"`
 }
 
-func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model string, logger zerolog.Logger) echo.HandlerFunc {
+func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model string, maxChars int, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if embedder == nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "embedding not configured")
@@ -75,7 +76,15 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model strin
 		embedded := 0
 		for _, chunk := range chunks {
 			embedCtx, cancel := context.WithTimeout(loopCtx, 30*time.Second)
-			vec, embedErr := embedder.Embed(embedCtx, chunk.Content)
+			content := truncateToMaxChars(chunk.Content, maxChars)
+			if len(content) < len(chunk.Content) {
+				logger.Warn().
+					Str("chunk_id", chunk.ID.String()).
+					Int("original_len", len(chunk.Content)).
+					Int("truncated_len", len(content)).
+					Msg("chunk truncated before embedding (exceeds context limit)")
+			}
+			vec, embedErr := embedder.Embed(embedCtx, content)
 			cancel()
 			if embedErr != nil {
 				logger.Error().Err(embedErr).Str("chunk_id", chunk.ID.String()).Msg("embed failed")
@@ -130,4 +139,15 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model strin
 			Remaining: remaining,
 		})
 	}
+}
+
+func truncateToMaxChars(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	truncated := s[:max]
+	for len(truncated) > 0 && !utf8.ValidString(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return truncated
 }
