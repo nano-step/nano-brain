@@ -260,6 +260,49 @@ func (q *Queries) GetOutgoingEdges(ctx context.Context, arg GetOutgoingEdgesPara
 	return items, nil
 }
 
+const getOutgoingEdgesBySources = `-- name: GetOutgoingEdgesBySources :many
+SELECT DISTINCT source_node, target_node, edge_type
+FROM graph_edges
+WHERE workspace_hash = $1 AND source_node = ANY($2::text[])
+  AND ($3::text = '' OR edge_type = $3)
+ORDER BY edge_type, target_node
+`
+
+type GetOutgoingEdgesBySourcesParams struct {
+	WorkspaceHash string
+	Column2       []string
+	Column3       string
+}
+
+type GetOutgoingEdgesBySourcesRow struct {
+	SourceNode string
+	TargetNode string
+	EdgeType   string
+}
+
+func (q *Queries) GetOutgoingEdgesBySources(ctx context.Context, arg GetOutgoingEdgesBySourcesParams) ([]GetOutgoingEdgesBySourcesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getOutgoingEdgesBySources, arg.WorkspaceHash, pq.Array(arg.Column2), arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetOutgoingEdgesBySourcesRow
+	for rows.Next() {
+		var i GetOutgoingEdgesBySourcesRow
+		if err := rows.Scan(&i.SourceNode, &i.TargetNode, &i.EdgeType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const graphStats = `-- name: GraphStats :one
 SELECT
     COUNT(*) FILTER (WHERE edge_type = 'contains') AS contains_count,

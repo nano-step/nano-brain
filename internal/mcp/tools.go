@@ -1748,6 +1748,7 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"node":      {"type": "string", "description": "The node to analyze (file path or file::symbol). Accepts workspace-relative or absolute."},
+				"direction": {"type": "string", "description": "Edge direction: \"in\" (default, what affects the node), \"out\" (what the node affects)"},
 				"edge_type": {"type": "string", "description": "Filter by edge type: imports, calls (empty = all)"},
 				"max_depth": {"type": "number", "description": "Traversal depth 1-3 (default 1)"},
 				"paths":     {"type": "string", "description": "Output path style: \"absolute\" (default) or \"relative\""},
@@ -1771,6 +1772,10 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 				return errResult(err.Error()), nil
 			}
 			edgeType := argString(args, "edge_type")
+			direction := argString(args, "direction")
+			if direction == "" {
+				direction = "in"
+			}
 			maxDepth := argInt(args, "max_depth", 1, 3)
 			pathStyle := argString(args, "paths")
 
@@ -1785,28 +1790,54 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			var impacted []impactItem
 
 			for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
-				rows, err := a.queries.GetImpactorsByTargets(ctx, sqlc.GetImpactorsByTargetsParams{
-					WorkspaceHash: ws,
-					Column2:       frontier,
-					Column3:       edgeType,
-				})
-				if err != nil {
-					return errResult(fmt.Sprintf("impact query failed: %v", err)), nil
-				}
-				var next []string
-				for _, r := range rows {
-					if seen[r.SourceNode] {
-						continue
-					}
-					seen[r.SourceNode] = true
-					impacted = append(impacted, impactItem{
-						Node:     r.SourceNode,
-						Depth:    depth,
-						EdgeType: r.EdgeType,
+				switch direction {
+				case "out":
+					rows, err := a.queries.GetOutgoingEdgesBySources(ctx, sqlc.GetOutgoingEdgesBySourcesParams{
+						WorkspaceHash: ws,
+						Column2:       frontier,
+						Column3:       edgeType,
 					})
-					next = append(next, r.SourceNode)
+					if err != nil {
+						return errResult(fmt.Sprintf("impact query failed: %v", err)), nil
+					}
+					var next []string
+					for _, r := range rows {
+						if seen[r.TargetNode] {
+							continue
+						}
+						seen[r.TargetNode] = true
+						impacted = append(impacted, impactItem{
+							Node:     r.TargetNode,
+							Depth:    depth,
+							EdgeType: r.EdgeType,
+						})
+						next = append(next, r.TargetNode)
+					}
+					frontier = next
+				default:
+					rows, err := a.queries.GetImpactorsByTargets(ctx, sqlc.GetImpactorsByTargetsParams{
+						WorkspaceHash: ws,
+						Column2:       frontier,
+						Column3:       edgeType,
+					})
+					if err != nil {
+						return errResult(fmt.Sprintf("impact query failed: %v", err)), nil
+					}
+					var next []string
+					for _, r := range rows {
+						if seen[r.SourceNode] {
+							continue
+						}
+						seen[r.SourceNode] = true
+						impacted = append(impacted, impactItem{
+							Node:     r.SourceNode,
+							Depth:    depth,
+							EdgeType: r.EdgeType,
+						})
+						next = append(next, r.SourceNode)
+					}
+					frontier = next
 				}
-				frontier = next
 			}
 
 			var wsRoot string
