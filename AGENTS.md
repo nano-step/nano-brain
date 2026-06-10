@@ -48,6 +48,7 @@ Symbol-level analysis (requires the workspace to be indexed by the daemon's watc
 |---|---|
 | Find 1-hop callers/callees of a symbol | `memory_graph` |
 | Assess risk of changing a symbol (reverse impact BFS) | `memory_impact` |
+| Find what a symbol depends on (forward traversal) | `memory_impact` (direction="out") |
 | Trace forward call chain from an entry point | `memory_trace` |
 | Find a symbol by name/kind across the workspace | `memory_symbols` |
 
@@ -58,6 +59,7 @@ Symbol-level analysis (requires the workspace to be indexed by the daemon's watc
 - **"How does this concept work here?"** → both (memory for past context + grep for current code)
 - **"What calls this function?"** → `memory_graph(node="<name>", direction="in")`
 - **"What breaks if I change X?"** → `memory_impact(node="<name>", max_depth=2)`
+- **"What does X depend on?"** → `memory_impact(node="<name>", direction="out")`
 - **"Walk the call chain from entry point X"** → `memory_trace(node="<name>", max_depth=5)`
 
 See `.opencode/skills/nano-brain/SKILL.md` for the full reference (all MCP tools, recipes, troubleshooting).
