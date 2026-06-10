@@ -24,6 +24,9 @@ RETURNING id;
 -- name: DeleteChunksByDocumentID :exec
 DELETE FROM chunks WHERE document_id = $1 AND workspace_hash = $2;
 
+-- name: DeleteChunksByIDs :exec
+DELETE FROM chunks WHERE id = ANY($1::uuid[]);
+
 -- name: CountChunksByDocumentID :one
 SELECT count(*) FROM chunks WHERE document_id = $1 AND workspace_hash = $2;
 
