@@ -1776,6 +1776,9 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			if direction == "" {
 				direction = "in"
 			}
+			if direction != "in" && direction != "out" {
+				return errResult("direction must be \"in\" or \"out\""), nil
+			}
 			maxDepth := argInt(args, "max_depth", 1, 3)
 			pathStyle := argString(args, "paths")
 
