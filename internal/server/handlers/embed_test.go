@@ -99,7 +99,7 @@ func TestTriggerEmbed_Success(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, "test-provider", "test-model", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "test-provider", "test-model", 3000, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestTriggerEmbed_NoPending(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "p", "m", 3000, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestTriggerEmbed_NoEmbedder(t *testing.T) {
 	e := echo.New()
 	c, _ := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, nil, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, nil, "p", "m", 3000, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for nil embedder")
@@ -180,7 +180,7 @@ func TestTriggerEmbed_Force(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1","force":true}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "p", "m", 3000, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestTriggerEmbed_PartialFailure(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "p", "m", 3000, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestTriggerEmbed_HasMore(t *testing.T) {
 	e := echo.New()
 	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
 
-	h := handlers.TriggerEmbed(q, emb, "p", "m", zerolog.Nop())
+	h := handlers.TriggerEmbed(q, emb, "p", "m", 3000, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -277,5 +277,55 @@ func TestTriggerEmbed_HasMore(t *testing.T) {
 	}
 	if resp.Remaining != 120 {
 		t.Errorf("remaining = %d, want 120", resp.Remaining)
+	}
+}
+
+func TestTriggerEmbed_Truncation(t *testing.T) {
+	longContent := "SELECT " + strings.Repeat("x,", 5000)
+	chunks := []sqlc.Chunk{
+		{
+			ID:            uuid.New(),
+			WorkspaceHash: "ws1",
+			Content:       longContent,
+		},
+	}
+	var receivedContent string
+	q := &mockEmbedQuerier{
+		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+			return chunks, nil
+		},
+	}
+	emb := &mockEmbedder{
+		embedFn: func(_ context.Context, content string) ([]float32, error) {
+			receivedContent = content
+			return testVector(), nil
+		},
+		dimension: 3,
+	}
+
+	e := echo.New()
+	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
+
+	h := handlers.TriggerEmbed(q, emb, "p", "m", 3000, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	if len(receivedContent) != 3000 {
+		t.Errorf("received content length = %d, want 3000", len(receivedContent))
+	}
+	if receivedContent != longContent[:3000] {
+		t.Error("received content does not match expected truncated content")
+	}
+
+	var resp handlers.EmbedResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Embedded != 1 {
+		t.Errorf("embedded = %d, want 1", resp.Embedded)
 	}
 }

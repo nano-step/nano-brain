@@ -48,6 +48,11 @@ func (m *mockQuerier) DeleteChunksByDocumentID(_ context.Context, _ sqlc.DeleteC
 	return nil
 }
 
+func (m *mockQuerier) DeleteChunksByIDs(_ context.Context, _ []uuid.UUID) error {
+	m.deleteChunkCalls.Add(1)
+	return nil
+}
+
 func (m *mockQuerier) UpsertChunk(_ context.Context, _ sqlc.UpsertChunkParams) (uuid.UUID, error) {
 	m.upsertChunkCalls.Add(1)
 	return uuid.New(), nil
@@ -70,6 +75,10 @@ func (m *mockQuerier) DeleteDocumentByIDAndWorkspace(_ context.Context, _ sqlc.D
 
 func (m *mockQuerier) InsertChunkEntity(_ context.Context, _ sqlc.InsertChunkEntityParams) error {
 	return nil
+}
+
+func (m *mockQuerier) ListChunksByDocumentID(_ context.Context, _ sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error) {
+	return nil, nil
 }
 
 func testConfig(debounceMs, pollSec int) config.Config {

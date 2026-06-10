@@ -40,10 +40,12 @@ type GraphQuerier interface {
 type WatcherQuerier interface {
 	UpsertDocumentBySourcePath(ctx context.Context, arg sqlc.UpsertDocumentBySourcePathParams) (sqlc.UpsertDocumentBySourcePathRow, error)
 	DeleteChunksByDocumentID(ctx context.Context, arg sqlc.DeleteChunksByDocumentIDParams) error
+	DeleteChunksByIDs(ctx context.Context, ids []uuid.UUID) error
 	DeleteDocumentByIDAndWorkspace(ctx context.Context, arg sqlc.DeleteDocumentByIDAndWorkspaceParams) (int64, error)
 	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
 	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
 	InsertChunkEntity(ctx context.Context, arg sqlc.InsertChunkEntityParams) error
+	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 }
 
 type watchedCollection struct {
@@ -813,13 +815,10 @@ func (w *Watcher) upsertWithoutTx(ctx context.Context, workspace string, params 
 }
 
 func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.UUID, workspace string, chunks []chunker.Chunk, meta pqtype.NullRawMessage) ([]uuid.UUID, error) {
-	if err := q.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
-		DocumentID:    docID,
-		WorkspaceHash: workspace,
-	}); err != nil {
-		return nil, err
-	}
+	// Step 1: Upsert ALL new chunks (ON CONFLICT handles both new inserts and updates)
 	ids := make([]uuid.UUID, 0, len(chunks))
+	newHashes := make(map[string]bool, len(chunks))
+	
 	for _, ch := range chunks {
 		id, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
 			DocumentID:        docID,
@@ -839,10 +838,34 @@ func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.
 			EmbeddingStrategy: string(ch.EmbeddingStrategy),
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("upsert chunk: %w", err)
 		}
 		ids = append(ids, id)
+		newHashes[ch.Hash] = true
 	}
+
+	// Step 2: Delete old chunks that are no longer present
+	existing, err := q.ListChunksByDocumentID(ctx, sqlc.ListChunksByDocumentIDParams{
+		DocumentID:    docID,
+		WorkspaceHash: workspace,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list existing chunks: %w", err)
+	}
+
+	var staleIDs []uuid.UUID
+	for _, ch := range existing {
+		if !newHashes[ch.ContentHash] {
+			staleIDs = append(staleIDs, ch.ID)
+		}
+	}
+
+	if len(staleIDs) > 0 {
+		if err := q.DeleteChunksByIDs(ctx, staleIDs); err != nil {
+			return nil, fmt.Errorf("delete stale chunks: %w", err)
+		}
+	}
+
 	return ids, nil
 }
 

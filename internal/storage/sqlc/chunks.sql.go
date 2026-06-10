@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -41,6 +42,15 @@ type DeleteChunksByDocumentIDParams struct {
 
 func (q *Queries) DeleteChunksByDocumentID(ctx context.Context, arg DeleteChunksByDocumentIDParams) error {
 	_, err := q.db.ExecContext(ctx, deleteChunksByDocumentID, arg.DocumentID, arg.WorkspaceHash)
+	return err
+}
+
+const deleteChunksByIDs = `-- name: DeleteChunksByIDs :exec
+DELETE FROM chunks WHERE id = ANY($1::uuid[])
+`
+
+func (q *Queries) DeleteChunksByIDs(ctx context.Context, dollar_1 []uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteChunksByIDs, pq.Array(dollar_1))
 	return err
 }
 
@@ -161,7 +171,10 @@ ON CONFLICT (content_hash, workspace_hash, document_id) DO UPDATE SET
     line_end = EXCLUDED.line_end,
     chunk_type = EXCLUDED.chunk_type,
     embedding_strategy = EXCLUDED.embedding_strategy,
-    embed_status = 'pending'
+    embed_status = CASE 
+        WHEN EXCLUDED.content != chunks.content THEN 'pending'
+        ELSE chunks.embed_status
+    END
 RETURNING id
 `
 

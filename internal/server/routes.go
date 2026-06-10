@@ -66,7 +66,7 @@ func registerRoutes(s *Server) {
 
 	write := data.Group("", workspaceRegisteredMiddleware(s.db), csrfMW)
 	write.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize, s.linkResolver, s.linkExtractor))
-	write.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.logger))
+	write.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.embedCfg.MaxChars, s.logger))
 	var reindexPub eventbus.Publisher
 	if s.eventBus != nil {
 		reindexPub = s.eventBus
