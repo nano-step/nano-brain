@@ -448,8 +448,10 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 	}
 
 	merged := DynamicRRFMerge(bm25Results, vectorResults, rrfK)
+	deduped := DeduplicateResults(merged)
+	codeAware := ApplyCodeAwareBoost(deduped, query, 1.2, 1.3)
 
-	boosted := ApplyRecencyBoost(merged, recencyWeight, recencyHalfLifeDays, time.Now())
+	boosted := ApplyRecencyBoost(codeAware, recencyWeight, recencyHalfLifeDays, time.Now())
 
 	s.configMutex.RLock()
 	entityEnabled := s.config.EntityBoostEnabled
@@ -505,6 +507,10 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 
 	if len(reranked) > maxResults {
 		reranked = reranked[:maxResults]
+	}
+
+	for i := range reranked {
+		reranked[i].Snippet = ExtractRelevantSnippet(reranked[i].Content, query, MaxSnippetLen)
 	}
 
 	return reranked, nil

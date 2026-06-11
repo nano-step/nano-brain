@@ -2,6 +2,8 @@ package search
 
 import "strings"
 
+const MaxSnippetLen = 700
+
 // TruncateSnippet truncates a string to maxChars runes, preserving valid UTF-8 boundaries.
 // The function iterates over runes (not bytes), so multi-byte characters are handled correctly.
 // If maxChars <= 0, returns empty string.

@@ -53,10 +53,6 @@ type SearchResult struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-func truncateSnippet(content string, maxLen int) string {
-	return search.TruncateSnippet(content, maxLen)
-}
-
 type SearchResponse struct {
 	Results []SearchResult `json:"results"`
 	Total   int            `json:"total"`
@@ -139,7 +135,7 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, re
 				results = append(results, SearchResult{
 					ID:            r.ID.String(),
 					Title:         r.Title,
-					Snippet:       truncateSnippet(r.Content, maxSnippetLen),
+					Snippet:       search.ExtractRelevantSnippet(r.Content, req.Query, maxSnippetLen),
 					Score:         r.Score,
 					Tags:          r.Tags,
 					Collection:    r.Collection,
@@ -166,7 +162,7 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, re
 				results = append(results, SearchResult{
 					ID:            r.ID.String(),
 					Title:         r.Title,
-					Snippet:       truncateSnippet(r.Content, maxSnippetLen),
+					Snippet:       search.ExtractRelevantSnippet(r.Content, req.Query, maxSnippetLen),
 					Score:         r.Score,
 					Tags:          r.Tags,
 					Collection:    r.Collection,

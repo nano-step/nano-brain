@@ -79,7 +79,7 @@ func Query(searcher HybridSearcher, logger zerolog.Logger, rec ...*telemetry.Rec
 			out = append(out, SearchResult{
 				ID:            r.ID,
 				Title:         r.Title,
-				Snippet:       truncateSnippet(r.Content, maxSnippetLen),
+				Snippet:       r.Snippet,
 				Score:         r.Score,
 				Tags:          r.Tags,
 				Collection:    r.Collection,
