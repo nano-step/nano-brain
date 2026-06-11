@@ -689,8 +689,26 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 			Tags:          []string{"symbol", s.Language, string(s.Kind)},
 			Metadata:      pqtype.NullRawMessage{RawMessage: metaBytes, Valid: true},
 		}
-		if _, err := w.queries.UpsertDocumentBySourcePath(ctx, params); err != nil {
+		docRow, err := w.queries.UpsertDocumentBySourcePath(ctx, params)
+		if err != nil {
 			w.logger.Warn().Err(err).Str("symbol", s.Name).Msg("symbol upsert failed")
+			continue
+		}
+
+		chunks := w.chunkContent(s.Signature, sourcePath)
+		if len(chunks) == 0 {
+			continue
+		}
+		chunkMeta := pqtype.NullRawMessage{RawMessage: metaBytes, Valid: true}
+		chunkIDs, err := w.writeChunks(ctx, w.queries, docRow.ID, col.workspaceHash, chunks, chunkMeta)
+		if err != nil {
+			w.logger.Warn().Err(err).Str("symbol", s.Name).Msg("symbol chunk write failed")
+			continue
+		}
+		if w.embedQueue != nil {
+			for _, id := range chunkIDs {
+				w.embedQueue.Enqueue(id)
+			}
 		}
 	}
 
