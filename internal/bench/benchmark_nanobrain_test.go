@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -65,6 +66,30 @@ func (h *httpSearcher) HybridSearch(ctx context.Context, query string, workspace
 	return filtered, nil
 }
 
+func loadBaseline(t *testing.T) *BenchmarkResults {
+	t.Helper()
+	data, err := os.ReadFile("testdata/baseline_v1.json")
+	if err != nil {
+		t.Fatalf("failed to read baseline: %v", err)
+	}
+	var baseline BenchmarkResults
+	if err := json.Unmarshal(data, &baseline); err != nil {
+		t.Fatalf("failed to parse baseline: %v", err)
+	}
+	return &baseline
+}
+
+func saveResults(t *testing.T, results *BenchmarkResults) {
+	t.Helper()
+	data, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal results: %v", err)
+	}
+	if err := os.WriteFile("testdata/results_current.json", data, 0644); err != nil {
+		t.Fatalf("failed to write results: %v", err)
+	}
+}
+
 func TestBenchmarkNanoBrain(t *testing.T) {
 	searcher := &httpSearcher{
 		baseURL:    "http://host.docker.internal:3100",
@@ -78,6 +103,8 @@ func TestBenchmarkNanoBrain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("benchmark failed: %v", err)
 	}
+
+	saveResults(t, results)
 
 	fmt.Println("=== Nano-Brain Search Benchmark ===")
 	fmt.Printf("Dataset:     %s (scale=%d)\n", results.DatasetVersion, results.Scale)
@@ -93,11 +120,12 @@ func TestBenchmarkNanoBrain(t *testing.T) {
 	fmt.Printf("P50:   %.1fms\n", results.QueryP50ms)
 	fmt.Printf("P95:   %.1fms\n", results.QueryP95ms)
 
-	cr := Compare(results, NanoBrainBaselineV1)
+	baseline := loadBaseline(t)
+	cr := Compare(results, baseline)
 	fmt.Println()
 	if !cr.DatasetOK {
 		fmt.Printf("❌ DATASET MISMATCH: baseline=%s, current=%s\n",
-			NanoBrainBaselineV1.DatasetVersion, results.DatasetVersion)
+			baseline.DatasetVersion, results.DatasetVersion)
 		t.Errorf("dataset version mismatch")
 		return
 	}
