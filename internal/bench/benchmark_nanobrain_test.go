@@ -79,15 +79,10 @@ func TestBenchmarkNanoBrain(t *testing.T) {
 		t.Fatalf("benchmark failed: %v", err)
 	}
 
-	fmt.Println("=== Nano-Brain Search Benchmark (Post-Improvements) ===")
+	fmt.Println("=== Nano-Brain Search Benchmark ===")
+	fmt.Printf("Dataset:     %s (scale=%d)\n", results.DatasetVersion, results.Scale)
 	fmt.Printf("Version:     %s\n", results.Version)
-	fmt.Printf("Queries:     %d\n", results.QueryCount)
 	fmt.Printf("Workspace:   %s...\n", results.WorkspaceHash[:16])
-	fmt.Println()
-	fmt.Println("--- Doc ID Metrics ---")
-	fmt.Printf("P@5:   %.1f%%\n", results.PrecisionAt5*100)
-	fmt.Printf("R@10:  %.1f%%\n", results.RecallAt10*100)
-	fmt.Printf("MRR:   %.3f\n", results.MRR)
 	fmt.Println()
 	fmt.Println("--- Path Metrics ---")
 	fmt.Printf("P@5:   %.1f%%\n", results.PrecisionAt5Paths*100)
@@ -98,7 +93,30 @@ func TestBenchmarkNanoBrain(t *testing.T) {
 	fmt.Printf("P50:   %.1fms\n", results.QueryP50ms)
 	fmt.Printf("P95:   %.1fms\n", results.QueryP95ms)
 
-	if results.PrecisionAt5Paths < 0.05 {
-		t.Errorf("P@5 (paths) too low: %.1f%% (expected >= 5%%)", results.PrecisionAt5Paths*100)
+	cr := Compare(results, NanoBrainBaselineV1)
+	fmt.Println()
+	if !cr.DatasetOK {
+		fmt.Printf("❌ DATASET MISMATCH: baseline=%s, current=%s\n",
+			NanoBrainBaselineV1.DatasetVersion, results.DatasetVersion)
+		t.Errorf("dataset version mismatch")
+		return
+	}
+
+	fmt.Println("=== vs Baseline ===")
+	for name, d := range cr.Deltas {
+		sign := "+"
+		if d.Change < 0 {
+			sign = ""
+		}
+		fmt.Printf("%s:  %.3f → %.3f (%s%.3f)\n", name, d.Baseline, d.New, sign, d.Change)
+	}
+	fmt.Println()
+	if cr.Passed {
+		fmt.Println("✅ PASS — no regressions")
+	} else {
+		for _, r := range cr.Regressions {
+			fmt.Printf("❌ REGRESSION: %s\n", r.Message)
+		}
+		t.Errorf("benchmark regressed: %d regressions", len(cr.Regressions))
 	}
 }

@@ -12,18 +12,20 @@ func almostEqualDelta(a, b, tolerance float64) bool {
 
 func TestCompareAllMetricsWithinThreshold(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.8,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.8,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.79,
-		RecallAt10:   0.74,
-		MRR:          0.89,
-		QueryP50ms:   51.0,
-		QueryP95ms:   101.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.79,
+		RecallAt10Paths:   0.74,
+		MRRPaths:          0.89,
+		QueryP50ms:        51.0,
+		QueryP95ms:        101.0,
 	}
 	result := Compare(newResults, baseline)
 	if !result.Passed {
@@ -36,18 +38,20 @@ func TestCompareAllMetricsWithinThreshold(t *testing.T) {
 
 func TestComparePrecisionAt5Exactly10DropBoundary(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.70,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.70,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	result := Compare(newResults, baseline)
 	if !result.Passed {
@@ -60,18 +64,20 @@ func TestComparePrecisionAt5Exactly10DropBoundary(t *testing.T) {
 
 func TestComparePrecisionAt5Over10DropRegression(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.69,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.69,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	result := Compare(newResults, baseline)
 	if result.Passed {
@@ -80,25 +86,27 @@ func TestComparePrecisionAt5Over10DropRegression(t *testing.T) {
 	if len(result.Regressions) != 1 {
 		t.Errorf("expected 1 regression, got %d", len(result.Regressions))
 	}
-	if result.Regressions[0].Metric != "P@5" {
-		t.Errorf("expected P@5 regression, got %s", result.Regressions[0].Metric)
+	if result.Regressions[0].Metric != "P@5 (paths)" {
+		t.Errorf("expected P@5 (paths) regression, got %s", result.Regressions[0].Metric)
 	}
 }
 
 func TestCompareRecallAt10Over10DropRegression(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.80,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.80,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.69,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.69,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	result := Compare(newResults, baseline)
 	if result.Passed {
@@ -107,25 +115,27 @@ func TestCompareRecallAt10Over10DropRegression(t *testing.T) {
 	if len(result.Regressions) != 1 {
 		t.Errorf("expected 1 regression, got %d", len(result.Regressions))
 	}
-	if result.Regressions[0].Metric != "R@10" {
-		t.Errorf("expected R@10 regression, got %s", result.Regressions[0].Metric)
+	if result.Regressions[0].Metric != "R@10 (paths)" {
+		t.Errorf("expected R@10 (paths) regression, got %s", result.Regressions[0].Metric)
 	}
 }
 
 func TestCompareMRROver05DropRegression(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          1.0,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          1.0,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.94,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.94,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	result := Compare(newResults, baseline)
 	if result.Passed {
@@ -134,25 +144,27 @@ func TestCompareMRROver05DropRegression(t *testing.T) {
 	if len(result.Regressions) != 1 {
 		t.Errorf("expected 1 regression, got %d", len(result.Regressions))
 	}
-	if result.Regressions[0].Metric != "MRR" {
-		t.Errorf("expected MRR regression, got %s", result.Regressions[0].Metric)
+	if result.Regressions[0].Metric != "MRR (paths)" {
+		t.Errorf("expected MRR (paths) regression, got %s", result.Regressions[0].Metric)
 	}
 }
 
 func TestCompareMRRExactly05DropBoundary(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          1.0,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          1.0,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.95,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.95,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	result := Compare(newResults, baseline)
 	if !result.Passed {
@@ -165,18 +177,20 @@ func TestCompareMRRExactly05DropBoundary(t *testing.T) {
 
 func TestCompareQueryP95Exactly2xBoundary(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   200.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        200.0,
 	}
 	result := Compare(newResults, baseline)
 	if !result.Passed {
@@ -189,18 +203,20 @@ func TestCompareQueryP95Exactly2xBoundary(t *testing.T) {
 
 func TestCompareQueryP95Over2xRegression(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   200.1,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        200.1,
 	}
 	result := Compare(newResults, baseline)
 	if result.Passed {
@@ -216,18 +232,20 @@ func TestCompareQueryP95Over2xRegression(t *testing.T) {
 
 func TestCompareMultipleRegressions(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.80,
-		MRR:          1.0,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.80,
+		MRRPaths:          1.0,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.69,
-		RecallAt10:   0.69,
-		MRR:          0.94,
-		QueryP50ms:   50.0,
-		QueryP95ms:   250.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.69,
+		RecallAt10Paths:   0.69,
+		MRRPaths:          0.94,
+		QueryP50ms:        50.0,
+		QueryP95ms:        250.0,
 	}
 	result := Compare(newResults, baseline)
 	if result.Passed {
@@ -240,18 +258,20 @@ func TestCompareMultipleRegressions(t *testing.T) {
 
 func TestCompareAllMetricsImproved(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.70,
-		RecallAt10:   0.70,
-		MRR:          0.8,
-		QueryP50ms:   100.0,
-		QueryP95ms:   200.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.70,
+		RecallAt10Paths:   0.70,
+		MRRPaths:          0.8,
+		QueryP50ms:        100.0,
+		QueryP95ms:        200.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.85,
-		RecallAt10:   0.85,
-		MRR:          0.95,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.85,
+		RecallAt10Paths:   0.85,
+		MRRPaths:          0.95,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	result := Compare(newResults, baseline)
 	if !result.Passed {
@@ -261,8 +281,8 @@ func TestCompareAllMetricsImproved(t *testing.T) {
 		t.Errorf("expected 0 regressions, got %d", len(result.Regressions))
 	}
 
-	if result.Deltas["P@5"].Change <= 0 {
-		t.Errorf("expected positive change for P@5 improvement, got %f", result.Deltas["P@5"].Change)
+	if result.Deltas["P@5 (paths)"].Change <= 0 {
+		t.Errorf("expected positive change for P@5 improvement, got %f", result.Deltas["P@5 (paths)"].Change)
 	}
 	if result.Deltas["Query P95"].Change <= 0 {
 		t.Errorf("expected positive change for Query P95 improvement (lower is better), got %f", result.Deltas["Query P95"].Change)
@@ -271,18 +291,20 @@ func TestCompareAllMetricsImproved(t *testing.T) {
 
 func TestCompareDeltasComputed(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.75,
-		RecallAt10:   0.70,
-		MRR:          0.85,
-		QueryP50ms:   55.0,
-		QueryP95ms:   120.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.75,
+		RecallAt10Paths:   0.70,
+		MRRPaths:          0.85,
+		QueryP50ms:        55.0,
+		QueryP95ms:        120.0,
 	}
 	result := Compare(newResults, baseline)
 
@@ -290,7 +312,7 @@ func TestCompareDeltasComputed(t *testing.T) {
 		t.Errorf("expected 5 deltas, got %d", len(result.Deltas))
 	}
 
-	p5Delta := result.Deltas["P@5"]
+	p5Delta := result.Deltas["P@5 (paths)"]
 	if !almostEqualDelta(p5Delta.Baseline, 0.80, 0.001) {
 		t.Errorf("expected P@5 baseline 0.80, got %f", p5Delta.Baseline)
 	}
@@ -309,18 +331,20 @@ func TestCompareDeltasComputed(t *testing.T) {
 
 func TestCompareZeroBaselineP95(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   0.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        0.0,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.75,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   5.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.75,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        5.0,
 	}
 	result := Compare(newResults, baseline)
 	if result.Passed {
@@ -342,20 +366,43 @@ func TestCompareZeroBaselineP95(t *testing.T) {
 	}
 }
 
-func TestCompareRecallAt10Exactly10DropBoundary(t *testing.T) {
+func TestCompareDatasetVersionMismatch(t *testing.T) {
 	baseline := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.80,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
 	}
 	newResults := &BenchmarkResults{
-		PrecisionAt5: 0.80,
-		RecallAt10:   0.70,
-		MRR:          0.9,
-		QueryP50ms:   50.0,
-		QueryP95ms:   100.0,
+		DatasetVersion:    "v2",
+		PrecisionAt5Paths: 0.80,
+	}
+	result := Compare(newResults, baseline)
+	if result.Passed {
+		t.Errorf("expected Passed=false for dataset version mismatch, got %v", result.Passed)
+	}
+	if result.DatasetOK {
+		t.Errorf("expected DatasetOK=false, got true")
+	}
+	if len(result.Regressions) != 1 {
+		t.Errorf("expected 1 regression, got %d", len(result.Regressions))
+	}
+}
+
+func TestCompareRecallAt10Exactly10DropBoundary(t *testing.T) {
+	baseline := &BenchmarkResults{
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.80,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
+	}
+	newResults := &BenchmarkResults{
+		DatasetVersion:    "v1",
+		PrecisionAt5Paths: 0.80,
+		RecallAt10Paths:   0.70,
+		MRRPaths:          0.9,
+		QueryP50ms:        50.0,
+		QueryP95ms:        100.0,
 	}
 	result := Compare(newResults, baseline)
 	if !result.Passed {

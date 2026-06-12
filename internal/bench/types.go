@@ -12,8 +12,8 @@ type DatasetEntry struct {
 
 // BenchmarkDataset holds a complete benchmark dataset with metadata.
 type BenchmarkDataset struct {
+	Version       string         `json:"version"`        // Dataset version (e.g., "v1") — increment when queries change
 	Scale         int            `json:"scale"`
 	WorkspaceHash string         `json:"workspace_hash"`
-	GeneratedAt   string         `json:"generated_at"`
 	Entries       []DatasetEntry `json:"entries"`
 }

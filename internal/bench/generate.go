@@ -81,9 +81,9 @@ func Generate(ctx context.Context, store DataStore, workspaceHash string, scale 
 	}
 
 	return &BenchmarkDataset{
+		Version:       "generated",
 		Scale:         scale,
 		WorkspaceHash: workspaceHash,
-		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 		Entries:       entries,
 	}, nil
 }

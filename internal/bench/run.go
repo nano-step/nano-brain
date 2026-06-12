@@ -48,6 +48,7 @@ func Run(ctx context.Context, dataset *BenchmarkDataset, searcher Searcher, vers
 	}
 
 	return &BenchmarkResults{
+		DatasetVersion:    dataset.Version,
 		Scale:             dataset.Scale,
 		WorkspaceHash:     dataset.WorkspaceHash,
 		Timestamp:         time.Now().UTC().Format(time.RFC3339),
