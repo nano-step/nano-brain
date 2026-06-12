@@ -14,6 +14,7 @@ func DeduplicateResults(results []Result) []Result {
 		return results
 	}
 
+	// Level 1: Dedup by DocumentID — keep highest-scored chunk per doc.
 	byDocID := make(map[string]*Result, len(results))
 	var docOrder []string
 	for i := range results {
@@ -28,32 +29,36 @@ func DeduplicateResults(results []Result) []Result {
 		}
 	}
 
+	// Level 2: Dedup by content hash — keep shorter path per content group.
 	type contentEntry struct {
-		result *Result
-		path   string
+		docID    string
+		normPath string
 	}
-	byContentHash := make(map[string]*contentEntry)
-	var out []Result
-
+	bestContent := make(map[string]contentEntry, len(docOrder))
 	for _, docID := range docOrder {
 		r := byDocID[docID]
 		hash := contentHash(r.Content)
 		normPath := normalizePath(r.SourcePath)
 
-		if existing, ok := byContentHash[hash]; ok {
-			if len(normPath) < len(existing.path) {
-				byContentHash[hash] = &contentEntry{result: r, path: normPath}
-				for i, o := range out {
-					if o.DocumentID == existing.result.DocumentID {
-						out = append(out[:i], out[i+1:]...)
-						break
-					}
-				}
-				out = append(out, *r)
+		if existing, ok := bestContent[hash]; ok {
+			if len(normPath) < len(existing.normPath) {
+				bestContent[hash] = contentEntry{docID: docID, normPath: normPath}
 			}
 		} else {
-			byContentHash[hash] = &contentEntry{result: r, path: normPath}
-			out = append(out, *r)
+			bestContent[hash] = contentEntry{docID: docID, normPath: normPath}
+		}
+	}
+
+	keepDocIDs := make(map[string]bool, len(bestContent))
+	for _, entry := range bestContent {
+		keepDocIDs[entry.docID] = true
+	}
+
+	// Single pass to build output preserving original order.
+	out := make([]Result, 0, len(keepDocIDs))
+	for _, docID := range docOrder {
+		if keepDocIDs[docID] {
+			out = append(out, *byDocID[docID])
 		}
 	}
 

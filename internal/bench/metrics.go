@@ -127,7 +127,8 @@ func pathMatches(returnedPaths, relevantPaths []string) int {
 			continue
 		}
 		for _, rel := range relevantPaths {
-			if strings.HasSuffix(pLower, "/"+rel) || strings.HasSuffix(pLower, "\\"+rel) {
+			relLower := strings.ToLower(rel)
+			if strings.HasSuffix(pLower, "/"+relLower) || strings.HasSuffix(pLower, "\\"+relLower) {
 				hits++
 				break
 			}
@@ -198,12 +199,13 @@ func MRRPaths(results []QueryResult) float64 {
 				sum += 1.0 / float64(rank+1)
 				break
 			}
-			for _, rel := range r.RelevantSourcePaths {
-				if strings.HasSuffix(pLower, "/"+rel) || strings.HasSuffix(pLower, "\\"+rel) {
-					sum += 1.0 / float64(rank+1)
-					break
-				}
+		for _, rel := range r.RelevantSourcePaths {
+			relLower := strings.ToLower(rel)
+			if strings.HasSuffix(pLower, "/"+relLower) || strings.HasSuffix(pLower, "\\"+relLower) {
+				sum += 1.0 / float64(rank+1)
+				break
 			}
+		}
 		}
 	}
 	return sum / float64(len(results))

@@ -1,7 +1,7 @@
 package search
 
 import (
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -26,7 +26,7 @@ func ApplyCodeAwareBoost(results []Result, query string, boostPathFactor, boostT
 		boost := 1.0
 
 		pathLower := strings.ToLower(results[i].SourcePath)
-		baseName := strings.ToLower(filepath.Base(results[i].SourcePath))
+		baseName := strings.ToLower(path.Base(results[i].SourcePath))
 		for _, kw := range keywords {
 			if strings.Contains(pathLower, kw) || strings.Contains(baseName, kw) {
 				boost *= boostPathFactor
