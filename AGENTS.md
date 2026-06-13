@@ -164,6 +164,22 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 
 
+## ⛔ CRITICAL: Testing Isolation (MANDATORY)
+
+**Any test, benchmark, reindex experiment, or throwaway server MUST target the test database and test port — NEVER the dev database (`nanobrain_dev`) or dev server (`:3100`).**
+
+- **Test DB:** `nanobrain_test` · **Test port:** `3199` · config: `config.test.yml`. (See the "Test Database & Isolation" table above.)
+- **Run a standalone test/bench server** alongside the running dev server with:
+  ```bash
+  NANO_BRAIN_ALLOW_DUPLICATE_SERVER=1 NANO_BRAIN_SERVER_PORT=3199 NANO_BRAIN_FLOW_ENABLED=true \
+    DATABASE_URL="postgres://nanobrain:nanobrain@localhost:5432/nanobrain_test" ./nano-brain serve
+  ```
+  (`NANO_BRAIN_ALLOW_DUPLICATE_SERVER=1` bypasses the single-instance guard so it coexists with `:3100`.)
+- The capability benchmark bootstraps this automatically: `benchmarks/capability/setup.sh` (clean `nanobrain_test` → migrate → :3199 server → index only this repo). The harness defaults to `http://localhost:3199`.
+- **NEVER** run `POST /api/v1/reindex`, `force_wipe`, or destructive ops against the **dev** workspace to set up a test — index into `nanobrain_test` instead.
+- **NEVER kill processes with broad `pkill -f`/`lsof | xargs kill` patterns.** They can take down Postgres (the Docker container `nanobrain-pg`) or Docker itself. Capture the exact PID when you launch a server (e.g. `echo $! > /tmp/nb-bench.pid`) and kill only that PID.
+- Postgres runs as a **Docker container** (`nanobrain-pg`, image `pgvector/pgvector:pg17`, volume `docker_nanobrain_pgdata`) via `docker compose`. Data survives container restarts; if 5432 is down, bring it back with `docker compose up -d postgres` — do not start a stray brew/native cluster on 5432.
+
 ## Git Worktree Rules (MANDATORY)
 
 **All worktrees MUST live inside the repo, under `.opencode/worktrees/`.**

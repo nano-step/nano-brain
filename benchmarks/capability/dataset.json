@@ -1,0 +1,136 @@
+{
+  "$comment": "Static capability benchmark for nano-brain. Frozen developer questions about the nano-brain codebase itself, each with hand-curated ground-truth answers (key symbols/files a correct answer MUST surface). Measures how well nano-brain's tools — combined — help understand the real codebase. SUT: the live nano-brain server indexed on the nano-brain repo. Improve scores over time vs baseline_v1.json. Do NOT edit expectations to make a run pass; only edit when the correct answer genuinely changes.",
+  "workspace": "nano-brain",
+  "version": 1,
+  "tasks": [
+    {
+      "id": "flow-query-execution",
+      "category": "flow",
+      "question": "What happens end-to-end when a client calls POST /api/v1/query?",
+      "tools": ["flow"],
+      "input": { "entry": "POST /api/v1/query" },
+      "expect_symbols": ["HybridSearch", "BM25SearchAll", "ApplyPageRankBoost", "ApplyCodeAwareBoost"]
+    },
+    {
+      "id": "flow-write-document",
+      "category": "flow",
+      "question": "Trace the write-document request flow including middleware.",
+      "tools": ["flow"],
+      "input": { "entry": "POST /api/v1/write" },
+      "expect_symbols": ["WriteDocument", "Enqueue", "csrfMW", "workspaceRegisteredMiddleware"]
+    },
+    {
+      "id": "flow-health",
+      "category": "flow",
+      "question": "What does the health endpoint do?",
+      "tools": ["flow"],
+      "input": { "entry": "GET /health" },
+      "expect_symbols": ["Health", "CountWorkspaces"]
+    },
+    {
+      "id": "flow-reindex",
+      "category": "flow",
+      "question": "What is the flow when POST /api/v1/reindex is called?",
+      "tools": ["flow"],
+      "input": { "entry": "POST /api/v1/reindex" },
+      "expect_symbols": ["TriggerReindex"]
+    },
+    {
+      "id": "impact-hybridsearch",
+      "category": "impact",
+      "question": "What breaks if I change HybridSearch?",
+      "tools": ["impact"],
+      "input": { "node": "HybridSearch", "max_depth": 3 },
+      "expect_files": ["internal/mcp/tools.go", "internal/server/handlers"]
+    },
+    {
+      "id": "impact-enqueue",
+      "category": "impact",
+      "question": "Who depends on the embed queue Enqueue?",
+      "tools": ["impact"],
+      "input": { "node": "Enqueue", "max_depth": 3 },
+      "expect_files": ["internal/watcher", "internal/server/handlers"]
+    },
+    {
+      "id": "trace-writedocument",
+      "category": "trace",
+      "question": "What does the WriteDocument handler call downstream?",
+      "tools": ["trace"],
+      "input": { "node": "internal/server/handlers/document.go::WriteDocument", "max_depth": 4 },
+      "expect_symbols": ["Enqueue"]
+    },
+    {
+      "id": "trace-hybridsearch",
+      "category": "trace",
+      "question": "What is the outbound call chain from HybridSearch?",
+      "tools": ["trace"],
+      "input": { "node": "internal/search/service.go::HybridSearch", "max_depth": 4 },
+      "expect_symbols": ["BM25SearchAll"]
+    },
+    {
+      "id": "symbol-bm25",
+      "category": "symbol-lookup",
+      "question": "Where is BM25 search implemented?",
+      "tools": ["symbols"],
+      "input": { "query": "BM25Search" },
+      "expect_files": ["internal/search"]
+    },
+    {
+      "id": "symbol-chunker",
+      "category": "symbol-lookup",
+      "question": "Where is the symbol-aware chunker?",
+      "tools": ["symbols"],
+      "input": { "query": "SymbolAwareChunker" },
+      "expect_files": ["internal/chunker"]
+    },
+    {
+      "id": "symbol-rrf",
+      "category": "symbol-lookup",
+      "question": "Where is RRF fusion implemented?",
+      "tools": ["symbols", "query"],
+      "input": { "query": "reciprocal rank fusion RRF" },
+      "expect_files": ["internal/search"]
+    },
+    {
+      "id": "qa-embedding-worker",
+      "category": "search-qa",
+      "question": "How does the embedding queue worker function?",
+      "tools": ["query"],
+      "input": { "query": "embedding queue worker provider ollama voyage" },
+      "expect_files": ["internal/embed"]
+    },
+    {
+      "id": "qa-recency-decay",
+      "category": "search-qa",
+      "question": "Where is recency decay applied to ranking?",
+      "tools": ["query"],
+      "input": { "query": "recency decay ranking boost" },
+      "expect_symbols": ["ApplyRecencyBoost"]
+    },
+    {
+      "id": "qa-harvest",
+      "category": "search-qa",
+      "question": "How are coding sessions harvested from OpenCode/Claude Code?",
+      "tools": ["query"],
+      "input": { "query": "harvest session opencode claude code sqlite" },
+      "expect_files": ["internal/harvest"]
+    },
+    {
+      "id": "multi-query-flow-impact",
+      "category": "multi-tool",
+      "question": "Show the query execution flow AND what depends on its core search function.",
+      "tools": ["flow", "impact"],
+      "input": { "entry": "POST /api/v1/query", "node": "HybridSearch", "max_depth": 3 },
+      "expect_symbols": ["HybridSearch", "BM25SearchAll"],
+      "expect_files": ["internal/mcp/tools.go"]
+    },
+    {
+      "id": "multi-bm25-blast-radius",
+      "category": "multi-tool",
+      "question": "Find the BM25 search function and its blast radius if changed.",
+      "tools": ["symbols", "impact"],
+      "input": { "query": "BM25SearchAll", "node": "BM25SearchAll", "max_depth": 3 },
+      "expect_files": ["internal/search"]
+    }
+  ]
+}
