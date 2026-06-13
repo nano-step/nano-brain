@@ -141,7 +141,7 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger, rec ...*telemetry.Re
 			results = append(results, SearchResult{
 				ID:            r.ID,
 				Title:         r.Title,
-				Snippet:       truncateSnippet(r.Content, maxSnippetLen),
+				Snippet:       search.ExtractRelevantSnippet(r.Content, req.Query, maxSnippetLen),
 				Score:         r.Score,
 				Tags:          r.Tags,
 				Collection:    r.Collection,

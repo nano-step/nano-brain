@@ -30,29 +30,36 @@ func Run(ctx context.Context, dataset *BenchmarkDataset, searcher Searcher, vers
 		}
 
 		returnedIDs := make([]string, len(results))
+		returnedPaths := make([]string, len(results))
 		for i, r := range results {
 			returnedIDs[i] = r.DocumentID
+			returnedPaths[i] = r.SourcePath
 		}
 
 		queryResults = append(queryResults, QueryResult{
-			Query:          entry.Query,
-			RelevantDocIDs: entry.RelevantDocIDs,
-			ReturnedDocIDs: returnedIDs,
-			LatencyMs:      elapsed,
+			Query:              entry.Query,
+			RelevantDocIDs:     entry.RelevantDocIDs,
+			RelevantSourcePaths: entry.RelevantSourcePaths,
+			ReturnedDocIDs:     returnedIDs,
+			ReturnedSourcePaths: returnedPaths,
+			LatencyMs:          elapsed,
 		})
 		latencies = append(latencies, elapsed)
 	}
 
 	return &BenchmarkResults{
-		Scale:         dataset.Scale,
-		WorkspaceHash: dataset.WorkspaceHash,
-		Timestamp:     time.Now().UTC().Format(time.RFC3339),
-		Version:       version,
-		PrecisionAt5:  PrecisionAtK(queryResults, 5),
-		RecallAt10:    RecallAtK(queryResults, 10),
-		MRR:           MeanReciprocalRank(queryResults),
-		QueryP50ms:    Percentile(latencies, 50),
-		QueryP95ms:    Percentile(latencies, 95),
-		QueryCount:    len(queryResults),
+		Scale:             dataset.Scale,
+		WorkspaceHash:     dataset.WorkspaceHash,
+		Timestamp:         time.Now().UTC().Format(time.RFC3339),
+		Version:           version,
+		PrecisionAt5:      PrecisionAtK(queryResults, 5),
+		RecallAt10:        RecallAtK(queryResults, 10),
+		MRR:               MeanReciprocalRank(queryResults),
+		PrecisionAt5Paths: PrecisionAtKPaths(queryResults, 5),
+		RecallAt10Paths:   RecallAtKPaths(queryResults, 10),
+		MRRPaths:          MRRPaths(queryResults),
+		QueryP50ms:        Percentile(latencies, 50),
+		QueryP95ms:        Percentile(latencies, 95),
+		QueryCount:        len(queryResults),
 	}, nil
 }
