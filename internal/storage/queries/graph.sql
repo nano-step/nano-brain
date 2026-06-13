@@ -106,3 +106,9 @@ WHERE workspace_hash = $1
   AND edge_type = ANY($2::text[])
   AND (source_node = ANY($3::text[]) OR target_node = ANY($3::text[]))
 LIMIT $4;
+
+-- name: ListAllEdgesByWorkspace :many
+SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
+FROM graph_edges
+WHERE workspace_hash = $1
+ORDER BY edge_type, source_node, target_node;

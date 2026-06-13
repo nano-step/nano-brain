@@ -195,6 +195,7 @@ For deep code analysis, see [`references/code-intelligence.md`](references/code-
 - **Symbol lookup:** `GET /api/v1/symbols?workspace=...&query=...&kind=...&limit=...` — find a function/type definition. Returns `{count, symbols: [{name, kind, language, signature, source_path}]}`.
 - **Impact analysis:** `POST /api/v1/graph/impact` body `{workspace, node, max_depth, edge_type}` — who depends on this symbol, transitively.
 - **Call trace:** `POST /api/v1/graph/trace` body `{workspace, node, max_depth}` — what does this entry function call.
+- **Execution flow:** `POST /api/v1/graph/flow` body `{workspace, entry, max_depth, format}` (or MCP `memory_flow`) — for an HTTP entry point like `"POST /api/v1/write"`, returns the middleware → handler → downstream call chain plus an optional Mermaid flowchart. Requires `flow.enabled: true` in config (Go/Echo routes only; returns `found:false` when disabled or the entry isn't indexed).
 
 ### 3.8 Tags — `GET /api/v1/tags`
 

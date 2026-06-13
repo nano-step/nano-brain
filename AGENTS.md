@@ -48,6 +48,7 @@ Symbol-level analysis (requires the workspace to be indexed by the daemon's watc
 |---|---|
 | Find 1-hop callers/callees of a symbol | `memory_graph` |
 | Assess risk of changing a symbol (reverse impact BFS) | `memory_impact` |
+| Find what a symbol depends on (forward traversal) | `memory_impact` (direction="out") |
 | Trace forward call chain from an entry point | `memory_trace` |
 | Find a symbol by name/kind across the workspace | `memory_symbols` |
 
@@ -58,6 +59,7 @@ Symbol-level analysis (requires the workspace to be indexed by the daemon's watc
 - **"How does this concept work here?"** → both (memory for past context + grep for current code)
 - **"What calls this function?"** → `memory_graph(node="<name>", direction="in")`
 - **"What breaks if I change X?"** → `memory_impact(node="<name>", max_depth=2)`
+- **"What does X depend on?"** → `memory_impact(node="<name>", direction="out")`
 - **"Walk the call chain from entry point X"** → `memory_trace(node="<name>", max_depth=5)`
 
 See `.opencode/skills/nano-brain/SKILL.md` for the full reference (all MCP tools, recipes, troubleshooting).
@@ -419,3 +421,16 @@ Bot commits authored as `github-actions[bot]` are also auto-skipped.
 **`package.json.version`** stays at `0.0.0-dev` on master. The auto-tag workflow rewrites it in-place from the tag value before `npm publish` — the bump is NEVER committed back to master.
 
 <!-- HARNESS:END -->
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

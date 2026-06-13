@@ -111,6 +111,11 @@ func getDefaults() *Config {
 			MaxRetries:           3,
 			RetryBackoffSeconds:  1,
 		},
+		Flow: FlowConfig{
+			Enabled:   false,
+			MaxDepth:  10,
+			MaxFanout: 8,
+		},
 		Intelligence: IntelligenceConfig{
 			Enabled:          false,
 			ProviderURL:      "",

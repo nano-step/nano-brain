@@ -47,6 +47,7 @@ type Config struct {
 	CodeSummarization   CodeSummarizationConfig   `koanf:"code_summarization" json:"code_summarization"`
 	Intelligence        IntelligenceConfig        `koanf:"intelligence" json:"intelligence"`
 	Bench               BenchConfig               `koanf:"bench" json:"bench"`
+	Flow                FlowConfig                `koanf:"flow" json:"flow"`
 }
 
 // ServerConfig holds server configuration.
@@ -227,6 +228,16 @@ func (s SummarizationConfig) IsWriteToDiskEnabled() bool {
 		return true
 	}
 	return *s.WriteToDisk
+}
+
+// FlowConfig holds execution-flow visualization configuration (Phase 1).
+// When Enabled is false the feature is fully inert: the Echo route extractor
+// is not registered, no http/middleware edges are produced, and flow
+// materialization is skipped.
+type FlowConfig struct {
+	Enabled   bool `koanf:"enabled" json:"enabled"`
+	MaxDepth  int  `koanf:"max_depth" json:"max_depth"`
+	MaxFanout int  `koanf:"max_fanout" json:"max_fanout"`
 }
 
 // CodeSummarizationConfig holds code symbol summarization configuration.
@@ -472,6 +483,16 @@ func validate(cfg *Config) error {
 		}
 		if cfg.CodeSummarization.Model == "" {
 			errs = append(errs, errors.New("code_summarization.model is required when enabled"))
+		}
+	}
+
+	// Validate Flow
+	if cfg.Flow.Enabled {
+		if cfg.Flow.MaxDepth <= 0 || cfg.Flow.MaxDepth > 10 {
+			errs = append(errs, errors.New("flow.max_depth must be between 1 and 10 when enabled"))
+		}
+		if cfg.Flow.MaxFanout <= 0 {
+			errs = append(errs, errors.New("flow.max_fanout must be greater than 0 when enabled"))
 		}
 	}
 

@@ -106,7 +106,7 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 	if eq != nil {
 		eqInfo = eq
 	}
-	mcpAdapter := internalmcp.NewAdapter(queries, db, embedder, ss, eqInfo, fullCfg.Embedding, fullCfg.Search, pool, logger)
+	mcpAdapter := internalmcp.NewAdapter(queries, db, embedder, ss, eqInfo, fullCfg.Embedding, fullCfg.Search, fullCfg.Flow, pool, logger)
 	internalmcp.RegisterTools(mcpServer, mcpAdapter)
 
 	var rec *telemetry.Recorder

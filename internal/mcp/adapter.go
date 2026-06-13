@@ -33,6 +33,7 @@ type Adapter struct {
 	embedQueue    EmbedQueueInfo
 	embedCfg      config.EmbeddingConfig
 	searchCfg     config.SearchConfig
+	flowCfg       config.FlowConfig
 	pool          PoolChecker
 	logger        zerolog.Logger
 }
@@ -46,6 +47,7 @@ func NewAdapter(
 	embedQueue EmbedQueueInfo,
 	embedCfg config.EmbeddingConfig,
 	searchCfg config.SearchConfig,
+	flowCfg config.FlowConfig,
 	pool PoolChecker,
 	logger zerolog.Logger,
 ) *Adapter {
@@ -57,6 +59,7 @@ func NewAdapter(
 		embedQueue:    embedQueue,
 		embedCfg:      embedCfg,
 		searchCfg:     searchCfg,
+		flowCfg:       flowCfg,
 		pool:          pool,
 		logger:        logger,
 	}
