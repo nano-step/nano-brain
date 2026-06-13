@@ -15,7 +15,7 @@ import (
 
 func TestRegisterTools_CountAndNames(t *testing.T) {
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(nil, nil, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(nil, nil, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ctx := context.Background()
@@ -35,8 +35,8 @@ func TestRegisterTools_CountAndNames(t *testing.T) {
 		t.Fatalf("ListTools: %v", err)
 	}
 
-	if len(result.Tools) != 14 {
-		t.Errorf("expected 14 tools, got %d", len(result.Tools))
+	if len(result.Tools) != 15 {
+		t.Errorf("expected 15 tools, got %d", len(result.Tools))
 		for _, tool := range result.Tools {
 			t.Logf("  - %s", tool.Name)
 		}
@@ -56,6 +56,7 @@ func TestRegisterTools_CountAndNames(t *testing.T) {
 		"memory_graph",
 		"memory_impact",
 		"memory_trace",
+		"memory_flow",
 		"memory_workspaces_resolve",
 	}
 	sort.Strings(expected)
@@ -79,7 +80,7 @@ func TestRegisterTools_CountAndNames(t *testing.T) {
 func setupTestClient(t *testing.T) (*mcpsdk.ClientSession, context.Context) {
 	t.Helper()
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(nil, nil, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(nil, nil, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ctx := context.Background()

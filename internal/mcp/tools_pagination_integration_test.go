@@ -40,7 +40,7 @@ func setupSearchMCP(t *testing.T) (context.Context, *sql.DB, *sqlc.Queries, stri
 	}
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(queries, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(queries, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()

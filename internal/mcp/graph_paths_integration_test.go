@@ -59,7 +59,7 @@ func setupGraphMCP(t *testing.T) (context.Context, string, *mcpsdk.ClientSession
 	}
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()

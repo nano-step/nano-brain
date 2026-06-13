@@ -85,7 +85,7 @@ func setupMCPSecTestPG(t *testing.T) *sql.DB {
 func setupMCPSecClient(t *testing.T, pgDB *sql.DB) (*mcpsdk.ClientSession, context.Context) {
 	t.Helper()
 	server := internalmcp.NewMCPServer("test-sec")
-	adapter := internalmcp.NewAdapter(sqlc.New(pgDB), pgDB, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(sqlc.New(pgDB), pgDB, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ctx := context.Background()

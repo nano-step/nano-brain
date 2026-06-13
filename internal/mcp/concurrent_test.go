@@ -115,6 +115,7 @@ func setupMockedTestClient(t *testing.T) (*mcpsdk.ClientSession, context.Context
 		queries, db, embedder, searchSvc, &mockEmbedQueueInfo{},
 		config.EmbeddingConfig{Provider: "mock"},
 		config.SearchConfig{},
+		config.FlowConfig{},
 		&mockPoolChecker{},
 		zerolog.Nop(),
 	)
@@ -136,7 +137,7 @@ func setupMockedTestClient(t *testing.T) (*mcpsdk.ClientSession, context.Context
 
 func TestToolRegistration_ListToolsUnderRaceDetector(t *testing.T) {
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(nil, nil, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(nil, nil, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ctx := context.Background()
@@ -155,8 +156,8 @@ func TestToolRegistration_ListToolsUnderRaceDetector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if len(result.Tools) != 14 {
-		t.Errorf("expected 14 tools, got %d", len(result.Tools))
+	if len(result.Tools) != 15 {
+		t.Errorf("expected 15 tools, got %d", len(result.Tools))
 	}
 }
 

@@ -95,6 +95,7 @@ func registerRoutes(s *Server) {
 	data.POST("/graph/overview", handlers.GraphOverview(s.queries, s.logger))
 	data.POST("/graph/impact", handlers.GraphImpact(s.queries, s.logger))
 	data.POST("/graph/trace", handlers.GraphTrace(s.queries, s.logger))
+	data.POST("/graph/flow", handlers.GraphFlow(s.queries, s.currentConfig().Flow, s.logger))
 
 	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger, s.recorder))
 	data.POST("/search", handlers.BM25Search(s.queries, s.logger, s.recorder))
