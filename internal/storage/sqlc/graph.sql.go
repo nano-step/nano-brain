@@ -260,6 +260,53 @@ func (q *Queries) GetOutgoingEdges(ctx context.Context, arg GetOutgoingEdgesPara
 	return items, nil
 }
 
+const getOutgoingEdgesBySymbol = `-- name: GetOutgoingEdgesBySymbol :many
+SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND (source_node = $2 OR source_node LIKE '%::' || $2)
+  AND ($3::text = '' OR edge_type = $3)
+ORDER BY edge_type, target_node
+`
+
+type GetOutgoingEdgesBySymbolParams struct {
+	WorkspaceHash string
+	SourceNode    string
+	Column3       string
+}
+
+func (q *Queries) GetOutgoingEdgesBySymbol(ctx context.Context, arg GetOutgoingEdgesBySymbolParams) ([]GraphEdge, error) {
+	rows, err := q.db.QueryContext(ctx, getOutgoingEdgesBySymbol, arg.WorkspaceHash, arg.SourceNode, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GraphEdge
+	for rows.Next() {
+		var i GraphEdge
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.SourceNode,
+			&i.TargetNode,
+			&i.EdgeType,
+			&i.SourceFile,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const graphStats = `-- name: GraphStats :one
 SELECT
     COUNT(*) FILTER (WHERE edge_type = 'contains') AS contains_count,
