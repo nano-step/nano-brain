@@ -102,8 +102,8 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 			Chain:     chain,
 			Externals: externals,
 		}
-		if req.Format != "json" {
-			resp.Mermaid = flow.RenderFlowchart(f)
+		if diagram := flow.Render(f, req.Format); diagram != "" {
+			resp.Mermaid = diagram
 		}
 
 		return c.JSON(http.StatusOK, resp)

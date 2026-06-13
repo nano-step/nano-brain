@@ -46,6 +46,21 @@ func sanitizeID(name string) string {
 	return replacer.Replace(name)
 }
 
+// Render renders a Flow using the requested format:
+//   - "sequence" → Mermaid sequenceDiagram
+//   - "json" → empty string (caller handles JSON separately)
+//   - anything else (including "mermaid") → Mermaid graph TD
+func Render(f Flow, format string) string {
+	switch format {
+	case "sequence":
+		return RenderSequenceDiagram(f)
+	case "json":
+		return ""
+	default:
+		return RenderFlowchart(f)
+	}
+}
+
 // RenderFlowchart renders a Flow as a Mermaid graph TD diagram.
 // Output is deterministic: nodes and edges are sorted before emission.
 func RenderFlowchart(f Flow) string {

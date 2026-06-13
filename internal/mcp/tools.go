@@ -1960,7 +1960,7 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"entry":     {"type": "string", "description": "HTTP entry point to visualize, e.g. 'POST /api/v1/write'"},
 				"max_depth": {"type": "number", "description": "Max call-chain depth 1-10 (default: config value)"},
-				"format":    {"type": "string", "description": "Output format: 'mermaid' (default) or 'json'"},
+				"format":    {"type": "string", "description": "Output format: 'mermaid' (default), 'sequence' (sequence diagram), or 'json'"},
 			}, []string{"workspace", "entry"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -2070,8 +2070,8 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				"chain":     chain,
 				"externals": externals,
 			}
-			if format != "json" {
-				result["mermaid"] = flow.RenderFlowchart(f)
+			if diagram := flow.Render(f, format); diagram != "" {
+				result["mermaid"] = diagram
 			}
 
 			return textResult(result)
