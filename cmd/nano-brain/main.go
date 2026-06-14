@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/chunker"
+	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/codesummarize"
+	"github.com/nano-brain/nano-brain/internal/flow"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/eventbus"
@@ -336,6 +338,20 @@ func startServer(configPath string) {
 	} else {
 		graphExtractors = append(graphExtractors, pyGE)
 	}
+	if cfg.Flow.Enabled {
+		if echoGE, err := graph.NewEchoRouteExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("echo route extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, echoGE)
+			logger.Info().Msg("execution-flow: echo route extractor enabled")
+		}
+		if intGE, err := graph.NewIntegrationExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("integration extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, intGE)
+			logger.Info().Msg("execution-flow: integration extractor enabled")
+		}
+	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 
 	fixedChunker := chunker.NewFixedChunker()
@@ -538,6 +554,16 @@ func startServer(configPath string) {
 			})
 		}
 		logger.Info().Str("model", cfg.CodeSummarization.Model).Msg("code summarization service configured")
+	}
+
+	// Wire flow materializer (if enabled).
+	if cfg.Flow.Enabled {
+		enqueueFn := func(id uuid.UUID) { eq.Enqueue(id) }
+		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, logger)
+		fw.WithFlowNotify(func(wsHash string) {
+			go mat.Trigger(gctx, wsHash)
+		})
+		logger.Info().Int("max_depth", cfg.Flow.MaxDepth).Int("max_fanout", cfg.Flow.MaxFanout).Msg("flow materialization enabled")
 	}
 
 	g.Go(func() error {

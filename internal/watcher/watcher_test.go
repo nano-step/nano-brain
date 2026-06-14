@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
@@ -570,5 +572,93 @@ func TestPollTicker_SkipsWhenNoEvents(t *testing.T) {
 
 	if callsAfterPoll > callsAfterInitialScan {
 		t.Fatalf("expected poll to skip when hasNewEvents=false, but got %d new upserts after initial scan", callsAfterPoll-callsAfterInitialScan)
+	}
+}
+
+func TestBuildEdgeMetadata_WithMetadata(t *testing.T) {
+	e := graph.Edge{
+		SourceNode: "handler",
+		TargetNode: "/api/v1/items",
+		Kind:       graph.EdgeHTTP,
+		SourceFile: "api.go",
+		Line:       42,
+		Language:   "go",
+		Metadata:   map[string]any{"method": "POST", "path": "/x"},
+	}
+
+	data, err := buildEdgeMetadata(e)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if got["method"] != "POST" {
+		t.Errorf("expected method=POST, got %v", got["method"])
+	}
+	if got["path"] != "/x" {
+		t.Errorf("expected path=/x, got %v", got["path"])
+	}
+	if got["line"] == nil {
+		t.Error("expected line field to be present")
+	}
+	if got["language"] != "go" {
+		t.Errorf("expected language=go, got %v", got["language"])
+	}
+}
+
+func TestBuildEdgeMetadata_NilMetadata(t *testing.T) {
+	e := graph.Edge{
+		SourceNode: "A",
+		TargetNode: "B",
+		Kind:       graph.EdgeCalls,
+		SourceFile: "main.go",
+		Line:       10,
+		Language:   "go",
+		Metadata:   nil,
+	}
+
+	data, err := buildEdgeMetadata(e)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Errorf("expected exactly 2 keys (line, language), got %d: %v", len(got), got)
+	}
+	if got["line"] == nil {
+		t.Error("expected line field")
+	}
+	if got["language"] != "go" {
+		t.Errorf("expected language=go, got %v", got["language"])
+	}
+}
+
+func TestBuildEdgeMetadata_DoesNotMutateInput(t *testing.T) {
+	original := map[string]any{"method": "GET"}
+	e := graph.Edge{
+		Line:     5,
+		Language: "go",
+		Metadata: original,
+	}
+
+	_, err := buildEdgeMetadata(e)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(original) != 1 {
+		t.Errorf("buildEdgeMetadata must not mutate e.Metadata, but it grew to %d keys", len(original))
+	}
+	if _, ok := original["line"]; ok {
+		t.Error("buildEdgeMetadata must not inject 'line' into e.Metadata")
 	}
 }

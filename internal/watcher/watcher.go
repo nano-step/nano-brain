@@ -92,6 +92,7 @@ type Watcher struct {
 	globalIgnore *gitignore.GitIgnore
 
 	summarizeNotify func()
+	flowNotify      func(string)
 
 	fileCache   map[string]fileState
 	fileCacheMu sync.RWMutex
@@ -160,6 +161,11 @@ func (w *Watcher) WithDispatcher(d *chunker.Dispatcher) *Watcher {
 
 func (w *Watcher) WithSummarizeNotify(fn func()) *Watcher {
 	w.summarizeNotify = fn
+	return w
+}
+
+func (w *Watcher) WithFlowNotify(fn func(string)) *Watcher {
+	w.flowNotify = fn
 	return w
 }
 
@@ -657,6 +663,9 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	}
 	if w.graphRegistry != nil {
 		w.extractAndUpsertEdges(ctx, col, filePath, content)
+		if w.flowNotify != nil {
+			w.flowNotify(col.workspaceHash)
+		}
 	}
 }
 
@@ -718,6 +727,18 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 		Msg("symbols extracted")
 }
 
+// buildEdgeMetadata merges e.Metadata (if non-nil) with {"line", "language"},
+// giving the caller-supplied fields priority but always including line+language.
+func buildEdgeMetadata(e graph.Edge) ([]byte, error) {
+	merged := make(map[string]any, len(e.Metadata)+2)
+	for k, v := range e.Metadata {
+		merged[k] = v
+	}
+	merged["line"] = e.Line
+	merged["language"] = e.Language
+	return json.Marshal(merged)
+}
+
 func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollection, filePath string, content []byte) {
 	edges, err := w.graphRegistry.ExtractEdges(filePath, content)
 	if err != nil {
@@ -742,7 +763,7 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 	}
 
 	for _, e := range edges {
-		meta, _ := json.Marshal(map[string]any{"line": e.Line, "language": e.Language})
+		meta, _ := buildEdgeMetadata(e)
 		if err := tq.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
 			WorkspaceHash: col.workspaceHash,
 			SourceNode:    e.SourceNode,
@@ -765,6 +786,45 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		Str("file", filePath).
 		Int("edges", len(edges)).
 		Msg("graph edges extracted")
+}
+
+// ReextractEdgesForWorkspace re-runs graph edge extraction for every file in
+// the workspace's collections, bypassing the content-hash early-exit. This is
+// needed when a new extractor is added after the workspace was already indexed.
+// Returns the number of files processed.
+func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash string) int {
+	if w.graphRegistry == nil {
+		return 0
+	}
+
+	w.mu.Lock()
+	var cols []watchedCollection
+	for _, col := range w.collections {
+		if col.workspaceHash == workspaceHash {
+			cols = append(cols, col)
+		}
+	}
+	w.mu.Unlock()
+
+	var count int
+	for _, col := range cols {
+		_ = filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || ctx.Err() != nil {
+				return nil
+			}
+			if col.filter != nil && col.filter.shouldSkip(path, false) {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			w.extractAndUpsertEdges(ctx, col, path, content)
+			count++
+			return nil
+		})
+	}
+	return count
 }
 
 func (w *Watcher) publishFileEvent(workspace, filePath, action string) {

@@ -16,6 +16,8 @@ import (
 	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nano-brain/nano-brain/internal/chunk"
+	"github.com/nano-brain/nano-brain/internal/flow"
+	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/search"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -37,6 +39,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryGraph(server, a)
 	registerMemoryImpact(server, a)
 	registerMemoryTrace(server, a)
+	registerMemoryFlow(server, a)
 	registerMemoryWorkspacesResolve(server, a)
 }
 
@@ -1978,6 +1981,134 @@ func registerMemoryWorkspacesResolve(server *mcpsdk.Server, a *Adapter) {
 				})
 			}
 			return errResult(fmt.Sprintf("resolve workspace failed: %v", err)), nil
+		},
+	)
+}
+
+func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_flow",
+			Description: "Visualize the execution flow for an HTTP entry point (e.g. 'POST /api/v1/write'). Shows the middleware chain, handler, and downstream call chain as a node list and optional Mermaid diagram. Returns found:false when the entry is not indexed or flow indexing is disabled.",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
+				"entry":     {"type": "string", "description": "HTTP entry point to visualize, e.g. 'POST /api/v1/write'"},
+				"max_depth": {"type": "number", "description": "Max call-chain depth 1-10 (default: config value)"},
+				"format":    {"type": "string", "description": "Output format: 'mermaid' (default), 'sequence' (sequence diagram), or 'json'"},
+			}, []string{"workspace", "entry"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			if !a.flowCfg.Enabled {
+				return textResult(map[string]any{
+					"found":   false,
+					"message": "flow indexing disabled",
+				})
+			}
+
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ws, errRes := a.requireWorkspace(ctx, args)
+			if errRes != nil {
+				return errRes, nil
+			}
+			entry := argString(args, "entry")
+			if entry == "" {
+				return errResult("entry is required"), nil
+			}
+			format := argString(args, "format")
+			if format == "" {
+				format = "mermaid"
+			}
+			maxDepth := argInt(args, "max_depth", a.flowCfg.MaxDepth, a.flowCfg.MaxDepth)
+
+			rawEdges, err := a.queries.ListAllEdgesByWorkspace(ctx, ws)
+			if err != nil {
+				return errResult(fmt.Sprintf("flow query failed: %v", err)), nil
+			}
+
+			edges := make([]graph.Edge, 0, len(rawEdges))
+			for _, r := range rawEdges {
+				e := graph.Edge{
+					SourceNode: r.SourceNode,
+					TargetNode: r.TargetNode,
+					Kind:       graph.EdgeKind(r.EdgeType),
+					SourceFile: r.SourceFile,
+				}
+				if len(r.Metadata) > 0 {
+					var meta map[string]any
+					if jsonErr := json.Unmarshal(r.Metadata, &meta); jsonErr == nil {
+						if lang, ok := meta["language"].(string); ok {
+							e.Language = lang
+						}
+						e.Metadata = meta
+					}
+				}
+				edges = append(edges, e)
+			}
+
+			// An entry is only "found" if an http edge actually originates from
+			// it. BuildFlow always emits the entry node itself, so node count
+			// cannot distinguish a real flow from an unknown entry.
+			hasEntry := false
+			for _, e := range edges {
+				if e.Kind == graph.EdgeHTTP && e.SourceNode == entry {
+					hasEntry = true
+					break
+				}
+			}
+			if !hasEntry {
+				return textResult(map[string]any{
+					"found":   false,
+					"entry":   entry,
+					"message": "entry not found among http edges",
+				})
+			}
+
+			f := flow.BuildFlow(edges, entry, maxDepth, a.flowCfg.MaxFanout)
+
+			type nodeItem struct {
+				ID        string `json:"id"`
+				Name      string `json:"name"`
+				Role      string `json:"role"`
+				Ambiguous bool   `json:"ambiguous,omitempty"`
+			}
+			var chain []nodeItem
+			var externals []nodeItem
+			for _, n := range f.Nodes {
+				ni := nodeItem{
+					ID:        n.ID,
+					Name:      n.Name,
+					Role:      string(n.Role),
+					Ambiguous: n.Ambiguous,
+				}
+				if n.Role == flow.RoleExternal {
+					externals = append(externals, ni)
+				} else {
+					chain = append(chain, ni)
+				}
+			}
+			if chain == nil {
+				chain = []nodeItem{}
+			}
+			if externals == nil {
+				externals = []nodeItem{}
+			}
+
+			result := map[string]any{
+				"found":     true,
+				"entry":     f.Entry,
+				"method":    f.Method,
+				"path":      f.Path,
+				"chain":     chain,
+				"externals": externals,
+			}
+			if diagram := flow.Render(f, format); diagram != "" {
+				result["mermaid"] = diagram
+			}
+
+			return textResult(result)
 		},
 	)
 }

@@ -1,12 +1,12 @@
 package bench
 
-import "time"
+const NanoBrainDatasetVersion = "v1"
 
 func NanoBrainDataset() *BenchmarkDataset {
 	return &BenchmarkDataset{
+		Version:       NanoBrainDatasetVersion,
 		Scale:         len(nanoBrainQueries),
 		WorkspaceHash: "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
-		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 		Entries:       nanoBrainQueries,
 	}
 }

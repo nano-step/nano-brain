@@ -200,9 +200,9 @@ func TestDeriveQuery(t *testing.T) {
 
 func TestBenchmarkDataset_JSONRoundtrip(t *testing.T) {
 	ds := BenchmarkDataset{
+		Version:       "v1",
 		Scale:         5,
 		WorkspaceHash: "ws-test",
-		GeneratedAt:   "2025-01-01T00:00:00Z",
 		Entries: []DatasetEntry{
 			{
 				Query:          "test query",

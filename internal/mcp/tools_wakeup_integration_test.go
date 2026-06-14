@@ -59,7 +59,7 @@ func TestMemoryWakeUp_OnlyReturnsMemoryAndSessionSummaryDocs(t *testing.T) {
 	insertDoc(t, "code", "code-doc-3")
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(queries, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(queries, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()

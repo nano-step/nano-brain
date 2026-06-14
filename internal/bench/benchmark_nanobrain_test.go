@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -65,6 +66,30 @@ func (h *httpSearcher) HybridSearch(ctx context.Context, query string, workspace
 	return filtered, nil
 }
 
+func loadBaseline(t *testing.T) *BenchmarkResults {
+	t.Helper()
+	data, err := os.ReadFile("testdata/baseline_v1.json")
+	if err != nil {
+		t.Fatalf("failed to read baseline: %v", err)
+	}
+	var baseline BenchmarkResults
+	if err := json.Unmarshal(data, &baseline); err != nil {
+		t.Fatalf("failed to parse baseline: %v", err)
+	}
+	return &baseline
+}
+
+func saveResults(t *testing.T, results *BenchmarkResults) {
+	t.Helper()
+	data, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal results: %v", err)
+	}
+	if err := os.WriteFile("testdata/results_current.json", data, 0644); err != nil {
+		t.Fatalf("failed to write results: %v", err)
+	}
+}
+
 func TestBenchmarkNanoBrain(t *testing.T) {
 	searcher := &httpSearcher{
 		baseURL:    "http://host.docker.internal:3100",
@@ -79,15 +104,12 @@ func TestBenchmarkNanoBrain(t *testing.T) {
 		t.Fatalf("benchmark failed: %v", err)
 	}
 
-	fmt.Println("=== Nano-Brain Search Benchmark (Post-Improvements) ===")
+	saveResults(t, results)
+
+	fmt.Println("=== Nano-Brain Search Benchmark ===")
+	fmt.Printf("Dataset:     %s (scale=%d)\n", results.DatasetVersion, results.Scale)
 	fmt.Printf("Version:     %s\n", results.Version)
-	fmt.Printf("Queries:     %d\n", results.QueryCount)
 	fmt.Printf("Workspace:   %s...\n", results.WorkspaceHash[:16])
-	fmt.Println()
-	fmt.Println("--- Doc ID Metrics ---")
-	fmt.Printf("P@5:   %.1f%%\n", results.PrecisionAt5*100)
-	fmt.Printf("R@10:  %.1f%%\n", results.RecallAt10*100)
-	fmt.Printf("MRR:   %.3f\n", results.MRR)
 	fmt.Println()
 	fmt.Println("--- Path Metrics ---")
 	fmt.Printf("P@5:   %.1f%%\n", results.PrecisionAt5Paths*100)
@@ -98,7 +120,31 @@ func TestBenchmarkNanoBrain(t *testing.T) {
 	fmt.Printf("P50:   %.1fms\n", results.QueryP50ms)
 	fmt.Printf("P95:   %.1fms\n", results.QueryP95ms)
 
-	if results.PrecisionAt5Paths < 0.05 {
-		t.Errorf("P@5 (paths) too low: %.1f%% (expected >= 5%%)", results.PrecisionAt5Paths*100)
+	baseline := loadBaseline(t)
+	cr := Compare(results, baseline)
+	fmt.Println()
+	if !cr.DatasetOK {
+		fmt.Printf("❌ DATASET MISMATCH: baseline=%s, current=%s\n",
+			baseline.DatasetVersion, results.DatasetVersion)
+		t.Errorf("dataset version mismatch")
+		return
+	}
+
+	fmt.Println("=== vs Baseline ===")
+	for name, d := range cr.Deltas {
+		sign := "+"
+		if d.Change < 0 {
+			sign = ""
+		}
+		fmt.Printf("%s:  %.3f → %.3f (%s%.3f)\n", name, d.Baseline, d.New, sign, d.Change)
+	}
+	fmt.Println()
+	if cr.Passed {
+		fmt.Println("✅ PASS — no regressions")
+	} else {
+		for _, r := range cr.Regressions {
+			fmt.Printf("❌ REGRESSION: %s\n", r.Message)
+		}
+		t.Errorf("benchmark regressed: %d regressions", len(cr.Regressions))
 	}
 }

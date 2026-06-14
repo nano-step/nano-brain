@@ -46,10 +46,13 @@
       ],
       "enabled": false
     },
-  "nano-brain": {
-    "type": "remote",
-    "url": "http://host.docker.internal:3100/mcp",
-    "enabled": true
-  }
-  }
+    "nano-brain": {
+      "type": "remote",
+      "url": "http://host.docker.internal:3100/mcp",
+      "enabled": true
+    }
+  },
+  "plugin": [
+    ".opencode/plugins/graphify.js"
+  ]
 }

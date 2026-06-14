@@ -122,3 +122,8 @@ WHERE workspace_hash = $1
   AND collection = $2
   AND source_path != ''
 ORDER BY source_path;
+
+-- name: DeleteFlowDocumentsByWorkspace :exec
+DELETE FROM documents
+WHERE workspace_hash = $1
+  AND collection = 'flows';

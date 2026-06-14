@@ -43,7 +43,7 @@ func TestTimeFilter_MCP_ValidRelativeDuration(t *testing.T) {
 	testutil.SeedDocumentWithTimestamps(t, ctx, db, wsHash, "doc-60d", "content for 60 days ago", nil, now.AddDate(0, 0, -60), now.AddDate(0, 0, -60))
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -110,7 +110,7 @@ func TestTimeFilter_MCP_RFC3339CreatedAfter(t *testing.T) {
 	testutil.SeedDocumentWithTimestamps(t, ctx, db, wsHash, "doc-recent", "recent content", nil, now.AddDate(0, 0, -10), now)
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -188,7 +188,7 @@ func TestTimeFilter_MCP_AllFourFiltersCombined(t *testing.T) {
 	testutil.SeedDocumentWithTimestamps(t, ctx, db, wsHash, "doc-b", "doc b text", nil, docB["created_at"], docB["updated_at"])
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -257,7 +257,7 @@ func TestTimeFilter_MCP_InvalidDurationReturnsError(t *testing.T) {
 	}
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -310,7 +310,7 @@ func TestTimeFilter_MCP_DateOnlyRejected(t *testing.T) {
 	}
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -362,7 +362,7 @@ func TestTimeFilter_MCP_NegativeDurationRejected(t *testing.T) {
 	}
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -417,7 +417,7 @@ func TestTimeFilter_MCP_InvertedRangeReturnsEmpty(t *testing.T) {
 	testutil.SeedDocumentWithTimestamps(t, ctx, db, wsHash, "doc", "test content", nil, now.AddDate(0, 0, -30), now.AddDate(0, 0, -30))
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -487,7 +487,7 @@ func TestTimeFilter_MCP_NoMatchReturnsEmpty(t *testing.T) {
 	testutil.SeedDocumentWithTimestamps(t, ctx, db, wsHash, "doc", "old content", nil, now.AddDate(0, -1, 0), now.AddDate(0, -1, 0))
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -554,7 +554,7 @@ func TestTimeFilter_MCP_VectorSearchWithTimeFilter(t *testing.T) {
 	testutil.SeedDocumentWithTimestamps(t, ctx, db, wsHash, "doc-old", "vector search old", nil, now.AddDate(0, 0, -100), now.AddDate(0, 0, -100))
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -638,7 +638,7 @@ func TestTimeFilter_MCP_QueryPaginationWithTimeFilter(t *testing.T) {
 	}, zerolog.Nop())
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, &mockEmbedder{}, searchSvc, nil, config.EmbeddingConfig{}, config.SearchConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(q, db, &mockEmbedder{}, searchSvc, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()

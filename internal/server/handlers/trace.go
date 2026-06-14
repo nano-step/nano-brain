@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -11,6 +12,7 @@ import (
 
 type TraceQuerier interface {
 	GetOutgoingEdges(ctx context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdge, error)
+	GetOutgoingEdgesBySymbol(ctx context.Context, arg sqlc.GetOutgoingEdgesBySymbolParams) ([]sqlc.GraphEdge, error)
 }
 
 type traceRequest struct {
@@ -77,11 +79,23 @@ func traceCallChain(ctx context.Context, q TraceQuerier, workspace, entry string
 			continue
 		}
 
-		edges, err := q.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
-			WorkspaceHash: workspace,
-			SourceNode:    cur.node,
-			Column3:       "calls",
-		})
+		var edges []sqlc.GraphEdge
+		var err error
+		if strings.Contains(cur.node, "::") {
+			// Qualified name (e.g. "file.go::Func") — exact match, no cross-file noise.
+			edges, err = q.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
+				WorkspaceHash: workspace,
+				SourceNode:    cur.node,
+				Column3:       "calls",
+			})
+		} else {
+			// Bare name (e.g. "BM25SearchAll") — reconcile to all defining source nodes.
+			edges, err = q.GetOutgoingEdgesBySymbol(ctx, sqlc.GetOutgoingEdgesBySymbolParams{
+				WorkspaceHash: workspace,
+				SourceNode:    cur.node,
+				Column3:       "calls",
+			})
+		}
 		if err != nil {
 			return nil, err
 		}

@@ -164,6 +164,22 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 
 
+## ⛔ CRITICAL: Testing Isolation (MANDATORY)
+
+**Any test, benchmark, reindex experiment, or throwaway server MUST target the test database and test port — NEVER the dev database (`nanobrain_dev`) or dev server (`:3100`).**
+
+- **Test DB:** `nanobrain_test` · **Test port:** `3199` · config: `config.test.yml`. (See the "Test Database & Isolation" table above.)
+- **Run a standalone test/bench server** alongside the running dev server with:
+  ```bash
+  NANO_BRAIN_ALLOW_DUPLICATE_SERVER=1 NANO_BRAIN_SERVER_PORT=3199 NANO_BRAIN_FLOW_ENABLED=true \
+    DATABASE_URL="postgres://nanobrain:nanobrain@localhost:5432/nanobrain_test" ./nano-brain serve
+  ```
+  (`NANO_BRAIN_ALLOW_DUPLICATE_SERVER=1` bypasses the single-instance guard so it coexists with `:3100`.)
+- The capability benchmark bootstraps this automatically: `benchmarks/capability/setup.sh` (clean `nanobrain_test` → migrate → :3199 server → index only this repo). The harness defaults to `http://localhost:3199`.
+- **NEVER** run `POST /api/v1/reindex`, `force_wipe`, or destructive ops against the **dev** workspace to set up a test — index into `nanobrain_test` instead.
+- **NEVER kill processes with broad `pkill -f`/`lsof | xargs kill` patterns.** They can take down Postgres (the Docker container `nanobrain-pg`) or Docker itself. Capture the exact PID when you launch a server (e.g. `echo $! > /tmp/nb-bench.pid`) and kill only that PID.
+- Postgres runs as a **Docker container** (`nanobrain-pg`, image `pgvector/pgvector:pg17`, volume `docker_nanobrain_pgdata`) via `docker compose`. Data survives container restarts; if 5432 is down, bring it back with `docker compose up -d postgres` — do not start a stray brew/native cluster on 5432.
+
 ## Git Worktree Rules (MANDATORY)
 
 **All worktrees MUST live inside the repo, under `.opencode/worktrees/`.**
@@ -421,3 +437,16 @@ Bot commits authored as `github-actions[bot]` are also auto-skipped.
 **`package.json.version`** stays at `0.0.0-dev` on master. The auto-tag workflow rewrites it in-place from the tag value before `npm publish` — the bump is NEVER committed back to master.
 
 <!-- HARNESS:END -->
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

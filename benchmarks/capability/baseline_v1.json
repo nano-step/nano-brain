@@ -1,0 +1,169 @@
+{
+  "version": "1",
+  "overall": 0.813,
+  "by_category": {
+    "flow": 1,
+    "impact": 1,
+    "multi-tool": 1,
+    "search-qa": 0.667,
+    "symbol-lookup": 1,
+    "trace": 0
+  },
+  "tasks": [
+    {
+      "id": "flow-query-execution",
+      "category": "flow",
+      "recall": 1,
+      "matched": [
+        "HybridSearch",
+        "BM25SearchAll",
+        "ApplyPageRankBoost",
+        "ApplyCodeAwareBoost"
+      ],
+      "missed": null
+    },
+    {
+      "id": "flow-write-document",
+      "category": "flow",
+      "recall": 1,
+      "matched": [
+        "WriteDocument",
+        "Enqueue",
+        "csrfMW",
+        "workspaceRegisteredMiddleware"
+      ],
+      "missed": null
+    },
+    {
+      "id": "flow-health",
+      "category": "flow",
+      "recall": 1,
+      "matched": [
+        "Health",
+        "CountWorkspaces"
+      ],
+      "missed": null
+    },
+    {
+      "id": "flow-reindex",
+      "category": "flow",
+      "recall": 1,
+      "matched": [
+        "TriggerReindex"
+      ],
+      "missed": null
+    },
+    {
+      "id": "impact-hybridsearch",
+      "category": "impact",
+      "recall": 1,
+      "matched": [
+        "internal/mcp/tools.go",
+        "internal/server/handlers"
+      ],
+      "missed": null
+    },
+    {
+      "id": "impact-enqueue",
+      "category": "impact",
+      "recall": 1,
+      "matched": [
+        "internal/watcher",
+        "internal/server/handlers"
+      ],
+      "missed": null
+    },
+    {
+      "id": "trace-writedocument",
+      "category": "trace",
+      "recall": 0,
+      "matched": null,
+      "missed": [
+        "Enqueue"
+      ]
+    },
+    {
+      "id": "trace-hybridsearch",
+      "category": "trace",
+      "recall": 0,
+      "matched": null,
+      "missed": [
+        "BM25SearchAll"
+      ]
+    },
+    {
+      "id": "symbol-bm25",
+      "category": "symbol-lookup",
+      "recall": 1,
+      "matched": [
+        "internal/search"
+      ],
+      "missed": null
+    },
+    {
+      "id": "symbol-chunker",
+      "category": "symbol-lookup",
+      "recall": 1,
+      "matched": [
+        "internal/chunker"
+      ],
+      "missed": null
+    },
+    {
+      "id": "symbol-rrf",
+      "category": "symbol-lookup",
+      "recall": 1,
+      "matched": [
+        "internal/search"
+      ],
+      "missed": null
+    },
+    {
+      "id": "qa-embedding-worker",
+      "category": "search-qa",
+      "recall": 1,
+      "matched": [
+        "internal/embed"
+      ],
+      "missed": null
+    },
+    {
+      "id": "qa-recency-decay",
+      "category": "search-qa",
+      "recall": 0,
+      "matched": null,
+      "missed": [
+        "ApplyRecencyBoost"
+      ]
+    },
+    {
+      "id": "qa-harvest",
+      "category": "search-qa",
+      "recall": 1,
+      "matched": [
+        "internal/harvest"
+      ],
+      "missed": null
+    },
+    {
+      "id": "multi-query-flow-impact",
+      "category": "multi-tool",
+      "recall": 1,
+      "matched": [
+        "HybridSearch",
+        "BM25SearchAll",
+        "internal/mcp/tools.go"
+      ],
+      "missed": null
+    },
+    {
+      "id": "multi-bm25-blast-radius",
+      "category": "multi-tool",
+      "recall": 1,
+      "matched": [
+        "internal/search"
+      ],
+      "missed": null
+    }
+  ]
+}
