@@ -50,6 +50,13 @@ WHERE workspace_hash = $1 AND target_node = ANY($2::text[])
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, source_node;
 
+-- name: GetOutgoingEdgesBySources :many
+SELECT DISTINCT source_node, target_node, edge_type
+FROM graph_edges
+WHERE workspace_hash = $1 AND source_node = ANY($2::text[])
+  AND ($3::text = '' OR edge_type = $3)
+ORDER BY edge_type, target_node;
+
 -- name: ListDocIDsByTitle :many
 SELECT id FROM documents
 WHERE workspace_hash = $1 AND lower(title) = lower($2);
