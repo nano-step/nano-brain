@@ -92,9 +92,9 @@ func saveResults(t *testing.T, results *BenchmarkResults) {
 
 func TestBenchmarkNanoBrain(t *testing.T) {
 	searcher := &httpSearcher{
-		baseURL:    "http://host.docker.internal:3100",
+		baseURL:    "http://localhost:3100",
 		workspace:  "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{Timeout: 90 * time.Second},
 	}
 
 	dataset := NanoBrainDataset()

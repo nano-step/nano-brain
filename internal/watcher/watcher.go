@@ -788,6 +788,44 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		Msg("graph edges extracted")
 }
 
+// ReextractSymbolsForWorkspace re-runs symbol extraction for every file in the
+// workspace's collections, bypassing the content-hash early-exit. Returns the
+// number of files processed.
+func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHash string) int {
+	if w.symbolRegistry == nil {
+		return 0
+	}
+
+	w.mu.Lock()
+	var cols []watchedCollection
+	for _, col := range w.collections {
+		if col.workspaceHash == workspaceHash {
+			cols = append(cols, col)
+		}
+	}
+	w.mu.Unlock()
+
+	var count int
+	for _, col := range cols {
+		_ = filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || ctx.Err() != nil {
+				return nil
+			}
+			if col.filter != nil && col.filter.shouldSkip(path, false) {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			w.extractAndUpsertSymbols(ctx, col, path, content)
+			count++
+			return nil
+		})
+	}
+	return count
+}
+
 // ReextractEdgesForWorkspace re-runs graph edge extraction for every file in
 // the workspace's collections, bypassing the content-hash early-exit. This is
 // needed when a new extractor is added after the workspace was already indexed.

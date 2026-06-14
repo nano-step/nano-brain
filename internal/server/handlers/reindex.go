@@ -369,21 +369,23 @@ func TriggerUpdate(w *watcher.Watcher, logger zerolog.Logger) echo.HandlerFunc {
 		workspace := c.Get("workspace").(string)
 		start := time.Now()
 
-		var count int
+		var edgeCount, symCount int
 		if w != nil {
-			count = w.ReextractEdgesForWorkspace(c.Request().Context(), workspace)
+			edgeCount = w.ReextractEdgesForWorkspace(c.Request().Context(), workspace)
+			symCount = w.ReextractSymbolsForWorkspace(c.Request().Context(), workspace)
 		}
 
 		reqLog := LoggerFromCtx(c, logger)
 		reqLog.Info().
 			Str("workspace", workspace).
-			Int("files_processed", count).
+			Int("edges_files", edgeCount).
+			Int("symbols_files", symCount).
 			Dur("duration", time.Since(start)).
-			Msg("edge re-extraction complete")
+			Msg("update re-extraction complete")
 
 		return c.JSON(http.StatusAccepted, reindexResponse{
 			Status:  "queued",
-			Scanned: count,
+			Scanned: edgeCount,
 			Message: fmt.Sprintf("Update queued for all collections in workspace %s", workspace),
 		})
 	}
