@@ -1,13 +1,13 @@
 {
   "version": "1",
-  "overall": 0.813,
+  "overall": 0.875,
   "by_category": {
     "flow": 1,
     "impact": 1,
     "multi-tool": 1,
     "search-qa": 0.667,
-    "symbol-lookup": 1,
-    "trace": 0
+    "symbol-lookup": 0.667,
+    "trace": 1
   },
   "tasks": [
     {
@@ -76,20 +76,20 @@
     {
       "id": "trace-writedocument",
       "category": "trace",
-      "recall": 0,
-      "matched": null,
-      "missed": [
+      "recall": 1,
+      "matched": [
         "Enqueue"
-      ]
+      ],
+      "missed": null
     },
     {
       "id": "trace-hybridsearch",
       "category": "trace",
-      "recall": 0,
-      "matched": null,
-      "missed": [
+      "recall": 1,
+      "matched": [
         "BM25SearchAll"
-      ]
+      ],
+      "missed": null
     },
     {
       "id": "symbol-bm25",
@@ -112,11 +112,11 @@
     {
       "id": "symbol-rrf",
       "category": "symbol-lookup",
-      "recall": 1,
-      "matched": [
+      "recall": 0,
+      "matched": null,
+      "missed": [
         "internal/search"
-      ],
-      "missed": null
+      ]
     },
     {
       "id": "qa-embedding-worker",
