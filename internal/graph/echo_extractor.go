@@ -61,6 +61,9 @@ func (e *EchoRouteExtractor) ExtractEdges(filePath string, content []byte) ([]Ed
 		varName := ""
 		for i := 0; i < int(left.ChildCount()); i++ {
 			child := left.Child(i)
+			if child == nil {
+				continue
+			}
 			if child.Type(lang) == "identifier" {
 				varName = bt.NodeText(child)
 				break
@@ -72,6 +75,9 @@ func (e *EchoRouteExtractor) ExtractEdges(filePath string, content []byte) ([]Ed
 		// Get first call_expression on right.
 		for i := 0; i < int(right.ChildCount()); i++ {
 			child := right.Child(i)
+			if child == nil {
+				continue
+			}
 			if child.Type(lang) == "call_expression" {
 				callToVar[child.StartByte()] = varName
 				break
@@ -226,6 +232,9 @@ func echoArgNode(argList *gotreesitter.Node, lang *gotreesitter.Language, n int)
 	idx := 0
 	for i := 0; i < int(argList.ChildCount()); i++ {
 		child := argList.Child(i)
+		if child == nil {
+			continue
+		}
 		t := child.Type(lang)
 		if t == "," || t == "(" || t == ")" {
 			continue
@@ -248,6 +257,9 @@ func echoArgNames(bt *gotreesitter.BoundTree, argList *gotreesitter.Node, lang *
 	idx := 0
 	for i := 0; i < int(argList.ChildCount()); i++ {
 		child := argList.Child(i)
+		if child == nil {
+			continue
+		}
 		t := child.Type(lang)
 		if t == "," || t == "(" || t == ")" {
 			continue

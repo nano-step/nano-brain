@@ -808,7 +808,10 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 	var count int
 	for _, col := range cols {
 		_ = filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || ctx.Err() != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if err != nil || d.IsDir() {
 				return nil
 			}
 			if col.filter != nil && col.filter.shouldSkip(path, false) {
@@ -825,7 +828,6 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 	}
 	return count
 }
-
 
 // ReextractEdgesForWorkspace re-runs graph edge extraction for every file in
 // the workspace's collections, bypassing the content-hash early-exit. This is
@@ -848,7 +850,10 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 	var count int
 	for _, col := range cols {
 		_ = filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || ctx.Err() != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if err != nil || d.IsDir() {
 				return nil
 			}
 			if col.filter != nil && col.filter.shouldSkip(path, false) {

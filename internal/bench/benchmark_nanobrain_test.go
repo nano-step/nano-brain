@@ -91,8 +91,12 @@ func saveResults(t *testing.T, results *BenchmarkResults) {
 }
 
 func TestBenchmarkNanoBrain(t *testing.T) {
+	baseURL := os.Getenv("NANO_BRAIN_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:3199"
+	}
 	searcher := &httpSearcher{
-		baseURL:    "http://localhost:3100",
+		baseURL:    baseURL,
 		workspace:  "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
 		httpClient: &http.Client{Timeout: 90 * time.Second},
 	}
