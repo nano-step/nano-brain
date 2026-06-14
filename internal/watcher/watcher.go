@@ -92,7 +92,7 @@ type Watcher struct {
 	globalIgnore *gitignore.GitIgnore
 
 	summarizeNotify func()
-	flowNotify      func()
+	flowNotify      func(string)
 
 	fileCache   map[string]fileState
 	fileCacheMu sync.RWMutex
@@ -164,7 +164,7 @@ func (w *Watcher) WithSummarizeNotify(fn func()) *Watcher {
 	return w
 }
 
-func (w *Watcher) WithFlowNotify(fn func()) *Watcher {
+func (w *Watcher) WithFlowNotify(fn func(string)) *Watcher {
 	w.flowNotify = fn
 	return w
 }
@@ -664,7 +664,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	if w.graphRegistry != nil {
 		w.extractAndUpsertEdges(ctx, col, filePath, content)
 		if w.flowNotify != nil {
-			w.flowNotify()
+			w.flowNotify(col.workspaceHash)
 		}
 	}
 }

@@ -264,7 +264,7 @@ const getOutgoingEdgesBySymbol = `-- name: GetOutgoingEdgesBySymbol :many
 SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
 FROM graph_edges
 WHERE workspace_hash = $1
-  AND (source_node = $2 OR source_node LIKE '%::' || $2)
+  AND (source_node = $2 OR split_part(source_node, '::', 2) = $2)
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, target_node
 `

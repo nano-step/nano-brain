@@ -560,18 +560,8 @@ func startServer(configPath string) {
 	if cfg.Flow.Enabled {
 		enqueueFn := func(id uuid.UUID) { eq.Enqueue(id) }
 		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, logger)
-		fw.WithFlowNotify(func() {
-			// Materialize flows for every known workspace. We don't track which
-			// workspace triggered the edge change, so we run all — Materialize
-			// is fast when there are no http edges.
-			workspaces, err := queries.ListWorkspaces(gctx)
-			if err != nil {
-				return
-			}
-			for _, ws := range workspaces {
-				wsHash := ws.Hash
-				go mat.Trigger(gctx, wsHash)
-			}
+		fw.WithFlowNotify(func(wsHash string) {
+			go mat.Trigger(gctx, wsHash)
 		})
 		logger.Info().Int("max_depth", cfg.Flow.MaxDepth).Int("max_fanout", cfg.Flow.MaxFanout).Msg("flow materialization enabled")
 	}

@@ -106,7 +106,11 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 	}
 
 	nodeMap := make(map[string]FlowNode) // id → FlowNode (dedup)
-	edgeSet := make(map[[2]string]FlowEdge)
+	type edgeKey struct {
+		from, to, kind string
+		line           int
+	}
+	edgeSet := make(map[edgeKey]FlowEdge)
 	visited := make(map[string]bool) // resolved source node ids
 
 	addNode := func(n FlowNode) {
@@ -115,7 +119,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 		}
 	}
 	addEdge := func(e FlowEdge) {
-		key := [2]string{e.From, e.To}
+		key := edgeKey{from: e.From, to: e.To, kind: e.Kind, line: e.Line}
 		edgeSet[key] = e
 	}
 

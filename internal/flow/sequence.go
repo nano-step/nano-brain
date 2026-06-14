@@ -172,7 +172,7 @@ func RenderSequenceDiagram(f Flow) string {
 		if alias == label {
 			sb.WriteString(fmt.Sprintf("    participant %s\n", alias))
 		} else {
-			sb.WriteString(fmt.Sprintf("    participant %s as %s\n", alias, label))
+			sb.WriteString(fmt.Sprintf("    participant %s as \"%s\"\n", alias, label))
 		}
 	}
 

@@ -30,7 +30,7 @@ func (r *Registry) ExtractEdges(filePath string, content []byte) ([]Edge, error)
 			return nil, fmt.Errorf("extract edges %s: %w", filePath, err)
 		}
 		for _, e := range edges {
-			key := string(e.Kind) + "\x00" + e.SourceNode + "\x00" + e.TargetNode
+			key := fmt.Sprintf("%s:%s:%s:%d", e.Kind, e.SourceNode, e.TargetNode, e.Line)
 			if _, dup := seen[key]; dup {
 				continue
 			}

@@ -226,8 +226,9 @@ func stringArgOrVar(bt *gotreesitter.BoundTree, argList *gotreesitter.Node, lang
 	}
 	// Variable or expression: return a readable placeholder.
 	text := bt.NodeText(node)
-	if len(text) > 40 {
-		text = text[:40] + "…"
+	runes := []rune(text)
+	if len(runes) > 40 {
+		text = string(runes[:40]) + "…"
 	}
 	return "<var:" + text + ">"
 }
