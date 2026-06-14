@@ -1991,10 +1991,11 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_flow",
 			Description: "Visualize the execution flow for an HTTP entry point (e.g. 'POST /api/v1/write'). Shows the middleware chain, handler, and downstream call chain as a node list and optional Mermaid diagram. Returns found:false when the entry is not indexed or flow indexing is disabled.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"entry":     {"type": "string", "description": "HTTP entry point to visualize, e.g. 'POST /api/v1/write'"},
-				"max_depth": {"type": "number", "description": "Max call-chain depth 1-10 (default: config value)"},
-				"format":    {"type": "string", "description": "Output format: 'mermaid' (default), 'sequence' (sequence diagram), or 'json'"},
+				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
+				"entry":            {"type": "string", "description": "HTTP entry point to visualize, e.g. 'POST /api/v1/write'"},
+				"max_depth":        {"type": "number", "description": "Max call-chain depth 1-10 (default: config value)"},
+				"format":           {"type": "string", "description": "Output format: 'mermaid' (default), 'sequence' (sequence diagram), or 'json'"},
+				"stitch_workspaces": {"type": "array", "description": "Target workspace hashes to stitch cross-service integration edges against", "items": map[string]any{"type": "string"}},
 			}, []string{"workspace", "entry"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -2068,6 +2069,13 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 
 			f := flow.BuildFlow(edges, entry, maxDepth, a.flowCfg.MaxFanout)
 
+			stitchWorkspaces := argStringSlice(args, "stitch_workspaces")
+			if len(stitchWorkspaces) > 0 {
+				publishEdges := filterPublishEdges(edges)
+				stitched := flow.Stitch(ctx, publishEdges, stitchWorkspaces, a.queries)
+				appendStitchedToFlow(&f, stitched)
+			}
+
 			type nodeItem struct {
 				ID        string `json:"id"`
 				Name      string `json:"name"`
@@ -2111,4 +2119,38 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 			return textResult(result)
 		},
 	)
+}
+
+func filterPublishEdges(edges []graph.Edge) []graph.Edge {
+	var out []graph.Edge
+	for _, e := range edges {
+		if e.Kind != graph.EdgeIntegration {
+			continue
+		}
+		if topic, ok := e.Metadata["topic"].(string); ok && topic != "" {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func appendStitchedToFlow(f *flow.Flow, stitched []flow.FlowEdge) {
+	if len(stitched) == 0 {
+		return
+	}
+	existing := make(map[string]bool, len(f.Nodes))
+	for _, n := range f.Nodes {
+		existing[n.ID] = true
+	}
+	for _, se := range stitched {
+		if !existing[se.To] {
+			existing[se.To] = true
+			f.Nodes = append(f.Nodes, flow.FlowNode{
+				ID:   se.To,
+				Name: se.To,
+				Role: flow.RoleIntegration,
+			})
+		}
+		f.Edges = append(f.Edges, se)
+	}
 }

@@ -24,6 +24,15 @@ var integrationPublishMethods = map[string]bool{
 	"Push":      true,
 }
 
+// integrationConsumeMethods are method names that indicate consuming from a queue,
+// event bus, or message broker.
+var integrationConsumeMethods = map[string]bool{
+	"Subscribe": true,
+	"Consume":   true,
+	"Listen":    true,
+	"On":        true,
+}
+
 // httpShorthandMethods are stdlib http package functions that perform outbound calls.
 var httpShorthandMethods = map[string]bool{
 	"Get":    true,
@@ -39,6 +48,7 @@ var httpShorthandMethods = map[string]bool{
 //   - http.NewRequest / http.NewRequestWithContext → outbound HTTP edges
 //   - http.Get / http.Post / http.Put / http.Delete / http.Do → outbound HTTP edges
 //   - <receiver>.Publish / .Send / .Emit / .Enqueue / .Dispatch / etc. → queue/event edges
+//   - <receiver>.Subscribe / .Consume / .Listen / .On → queue/event consumer edges
 type IntegrationExtractor struct {
 	lang *gotreesitter.Language
 }
@@ -189,6 +199,23 @@ func (x *IntegrationExtractor) ExtractEdges(filePath string, content []byte) ([]
 					Language:   "go",
 					Metadata:   map[string]any{"kind": "queue_publish", "method": methodName, "receiver": receiverName, "topic": topic},
 				})
+				return
+			}
+
+			// <receiver>.Subscribe/Consume/Listen/On (topic, handler)
+			if integrationConsumeMethods[methodName] {
+				topic := stringArgOrVar(bt, argsNode, lang, 0)
+				target := source
+				sourceNode := "CONSUME " + topic
+				edges = append(edges, Edge{
+					SourceNode: sourceNode,
+					TargetNode: target,
+					Kind:       EdgeIntegration,
+					SourceFile: relFile,
+					Line:       line,
+					Language:   "go",
+					Metadata:   map[string]any{"kind": "queue_consumer", "method": methodName, "receiver": receiverName, "topic": topic},
+				})
 			}
 
 		case "identifier":
@@ -205,6 +232,22 @@ func (x *IntegrationExtractor) ExtractEdges(filePath string, content []byte) ([]
 					Line:       line,
 					Language:   "go",
 					Metadata:   map[string]any{"kind": "queue_publish", "method": methodName, "topic": topic},
+				})
+				return
+			}
+
+			if integrationConsumeMethods[methodName] {
+				topic := stringArgOrVar(bt, argsNode, lang, 0)
+				target := source
+				sourceNode := "CONSUME " + topic
+				edges = append(edges, Edge{
+					SourceNode: sourceNode,
+					TargetNode: target,
+					Kind:       EdgeIntegration,
+					SourceFile: relFile,
+					Line:       line,
+					Language:   "go",
+					Metadata:   map[string]any{"kind": "queue_consumer", "method": methodName, "topic": topic},
 				})
 			}
 		}

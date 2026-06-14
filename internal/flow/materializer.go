@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/graph"
@@ -38,6 +40,7 @@ type Materializer struct {
 	logger     zerolog.Logger
 	maxDepth   int
 	maxFanout  int
+	summarizer FlowSummarizer // optional LLM summarizer; nil = disabled
 
 	// single-flight guard per workspace
 	mu        sync.Mutex
@@ -46,20 +49,23 @@ type Materializer struct {
 }
 
 // NewMaterializer constructs a Materializer. enqueue may be nil (embedding skipped).
+// summarizer may be nil (flow summarization disabled).
 func NewMaterializer(
 	queries MaterializerQuerier,
 	enqueue func(uuid.UUID),
 	maxDepth, maxFanout int,
+	summarizer FlowSummarizer,
 	logger zerolog.Logger,
 ) *Materializer {
 	return &Materializer{
-		queries:   queries,
-		enqueue:   enqueue,
-		logger:    logger.With().Str("component", "flow.materializer").Logger(),
-		maxDepth:  maxDepth,
-		maxFanout: maxFanout,
-		inFlight:  make(map[string]bool),
-		pending:   make(map[string]bool),
+		queries:    queries,
+		enqueue:    enqueue,
+		logger:     logger.With().Str("component", "flow.materializer").Logger(),
+		maxDepth:   maxDepth,
+		maxFanout:  maxFanout,
+		summarizer: summarizer,
+		inFlight:   make(map[string]bool),
+		pending:    make(map[string]bool),
 	}
 }
 
@@ -117,11 +123,16 @@ func (m *Materializer) Materialize(ctx context.Context, workspaceHash string) er
 		})
 	}
 
-	// 2. Find all HTTP entry nodes.
+	// 2. Find all entry nodes (HTTP + consumer).
 	entrySet := make(map[string]struct{})
 	for _, e := range edges {
 		if e.Kind == graph.EdgeHTTP {
 			entrySet[e.SourceNode] = struct{}{}
+		}
+		if e.Kind == graph.EdgeIntegration {
+			if strings.HasPrefix(e.SourceNode, "CONSUME ") || strings.HasPrefix(e.SourceNode, "ON ") {
+				entrySet[e.SourceNode] = struct{}{}
+			}
 		}
 	}
 
@@ -132,9 +143,41 @@ func (m *Materializer) Materialize(ctx context.Context, workspaceHash string) er
 		currentSourcePaths[sourcePath] = struct{}{}
 
 		f := BuildFlow(edges, entry, m.maxDepth, m.maxFanout)
+
+		// Start with plain-text summary; optionally replace with LLM summary.
 		content := renderTextSummary(f)
 		sum := sha256.Sum256([]byte(content))
 		contentHash := hex.EncodeToString(sum[:])
+		metaRaw := pqtype.NullRawMessage{Valid: false}
+
+		if m.summarizer != nil {
+			chain := buildChain(f)
+			var integrations []string
+			for _, n := range f.Nodes {
+				if n.Role == RoleIntegration || n.Role == RoleExternal {
+					integrations = append(integrations, n.Name)
+				}
+			}
+
+			summaryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			summary, err := m.summarizer.Summarize(summaryCtx, entry, chain, integrations)
+			cancel() // release timer immediately — no defer inside loop
+			if err != nil {
+				m.logger.Warn().Err(err).Str("entry", entry).Msg("flow summarization failed, using text summary")
+			} else {
+				meta := map[string]any{"chain": chain}
+				metaBytes, _ := json.Marshal(meta)
+				metaRaw = pqtype.NullRawMessage{RawMessage: metaBytes, Valid: true}
+				content = summary
+				sum = sha256.Sum256([]byte(content))
+				contentHash = hex.EncodeToString(sum[:])
+			}
+		}
+
+		tags := []string{"flow"}
+		if strings.HasPrefix(entry, "CONSUME ") || strings.HasPrefix(entry, "ON ") {
+			tags = []string{"flow", "consumer"}
+		}
 
 		params := sqlc.UpsertDocumentBySourcePathParams{
 			WorkspaceHash: workspaceHash,
@@ -143,8 +186,8 @@ func (m *Materializer) Materialize(ctx context.Context, workspaceHash string) er
 			Content:       content,
 			SourcePath:    sourcePath,
 			Collection:    flowCollection,
-			Tags:          []string{"flow"},
-			Metadata:      pqtype.NullRawMessage{Valid: false},
+			Tags:          tags,
+			Metadata:      metaRaw,
 			SupersedesID:  uuid.NullUUID{Valid: false},
 		}
 

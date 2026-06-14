@@ -170,6 +170,89 @@ func TestRenderSequenceDiagramLineOrdering(t *testing.T) {
 	}
 }
 
+func seqFlowWithConditionalEdges() flow.Flow {
+	return flow.Flow{
+		Entry:  "POST /api/data",
+		Method: "POST",
+		Path:   "/api/data",
+		Nodes: []flow.FlowNode{
+			{ID: "POST /api/data", Name: "POST /api/data", Role: flow.RoleEntry},
+			{ID: "HandleData", Name: "HandleData", Role: flow.RoleHandler},
+			{ID: "IfBranch", Name: "IfBranch", Role: flow.RoleService},
+			{ID: "ElseBranch", Name: "ElseBranch", Role: flow.RoleService},
+			{ID: "NormalCall", Name: "NormalCall", Role: flow.RoleService},
+		},
+		Edges: []flow.FlowEdge{
+			{From: "POST /api/data", To: "HandleData", Kind: "http"},
+			{From: "HandleData", To: "IfBranch", Kind: "calls", Conditional: true},
+			{From: "HandleData", To: "ElseBranch", Kind: "calls", Conditional: true},
+			{From: "HandleData", To: "NormalCall", Kind: "calls", Conditional: false},
+		},
+	}
+}
+
+func TestRenderSequenceDiagramAltBlock(t *testing.T) {
+	f := seqFlowWithConditionalEdges()
+	out := flow.RenderSequenceDiagram(f)
+
+	if !strings.Contains(out, "alt conditional") {
+		t.Errorf("expected 'alt conditional' for consecutive conditional messages, output:\n%s", out)
+	}
+	if !strings.Contains(out, "end") {
+		t.Errorf("expected 'end' to close alt block, output:\n%s", out)
+	}
+	altPos := strings.Index(out, "alt conditional")
+	if altPos < 0 {
+		t.Fatal("missing 'alt conditional' in output")
+	}
+	ifArrow := strings.Index(out, "HandleData->>IfBranch")
+	elseArrow := strings.Index(out, "HandleData->>ElseBranch")
+	if ifArrow < 0 || elseArrow < 0 {
+		t.Fatalf("expected message arrows for IfBranch and ElseBranch in output:\n%s", out)
+	}
+	if ifArrow < altPos {
+		t.Errorf("IfBranch message arrow should appear after 'alt', output:\n%s", out)
+	}
+	if elseArrow < altPos {
+		t.Errorf("ElseBranch message arrow should appear after 'alt', output:\n%s", out)
+	}
+}
+
+func TestRenderSequenceDiagramOptBlock(t *testing.T) {
+	f := flow.Flow{
+		Entry:  "GET /api/check",
+		Method: "GET",
+		Path:   "/api/check",
+		Nodes: []flow.FlowNode{
+			{ID: "GET /api/check", Name: "GET /api/check", Role: flow.RoleEntry},
+			{ID: "H", Name: "H", Role: flow.RoleHandler},
+			{ID: "Maybe", Name: "Maybe", Role: flow.RoleService},
+			{ID: "Always", Name: "Always", Role: flow.RoleService},
+		},
+		Edges: []flow.FlowEdge{
+			{From: "GET /api/check", To: "H", Kind: "http"},
+			{From: "H", To: "Maybe", Kind: "calls", Conditional: true},
+			{From: "H", To: "Always", Kind: "calls", Conditional: false},
+		},
+	}
+	out := flow.RenderSequenceDiagram(f)
+
+	if !strings.Contains(out, "opt conditional") {
+		t.Errorf("expected 'opt conditional' for single conditional message, output:\n%s", out)
+	}
+	if !strings.Contains(out, "end") {
+		t.Errorf("expected 'end' to close opt block, output:\n%s", out)
+	}
+}
+
+func TestRenderSequenceDiagramNonConditionalUnchanged(t *testing.T) {
+	f := seqSimpleFlow()
+	out := flow.RenderSequenceDiagram(f)
+	if strings.Contains(out, "conditional") {
+		t.Errorf("flow with no conditional edges should not mention 'conditional', output:\n%s", out)
+	}
+}
+
 func TestRenderSequenceDiagramRoleLabels(t *testing.T) {
 	out := flow.RenderSequenceDiagram(seqSimpleFlow())
 	// Non-entry participants should include the role in their label.

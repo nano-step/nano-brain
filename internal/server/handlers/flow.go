@@ -16,12 +16,14 @@ import (
 // FlowQuerier is the storage interface used by GraphFlow.
 type FlowQuerier interface {
 	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
+	ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
 }
 
 type flowRequest struct {
-	Entry    string `json:"entry"`
-	MaxDepth int    `json:"max_depth"`
-	Format   string `json:"format"` // "mermaid" (default) | "json"
+	Entry            string   `json:"entry"`
+	MaxDepth         int      `json:"max_depth"`
+	Format           string   `json:"format"` // "mermaid" (default) | "json"
+	StitchWorkspaces []string `json:"stitch_workspaces"`
 }
 
 type flowNode struct {
@@ -92,6 +94,12 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 
 		f := flow.BuildFlow(edges, req.Entry, maxDepth, flowCfg.MaxFanout)
 
+		if len(req.StitchWorkspaces) > 0 {
+			publishEdges := filterPublishEdges(edges)
+			stitched := flow.Stitch(ctx, publishEdges, req.StitchWorkspaces, q)
+			appendStitchedToFlow(&f, stitched)
+		}
+
 		chain, externals := splitNodes(f.Nodes)
 
 		resp := flowResponse{
@@ -148,6 +156,42 @@ func convertEdges(rows []sqlc.GraphEdge) []graph.Edge {
 		out = append(out, e)
 	}
 	return out
+}
+
+// filterPublishEdges returns integration edges that carry a non-empty topic.
+func filterPublishEdges(edges []graph.Edge) []graph.Edge {
+	var out []graph.Edge
+	for _, e := range edges {
+		if e.Kind != graph.EdgeIntegration {
+			continue
+		}
+		if topic, ok := e.Metadata["topic"].(string); ok && topic != "" {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// appendStitchedToFlow adds cross-service edges and their target nodes to the flow.
+func appendStitchedToFlow(f *flow.Flow, stitched []flow.FlowEdge) {
+	if len(stitched) == 0 {
+		return
+	}
+	existing := make(map[string]bool, len(f.Nodes))
+	for _, n := range f.Nodes {
+		existing[n.ID] = true
+	}
+	for _, se := range stitched {
+		if !existing[se.To] {
+			existing[se.To] = true
+			f.Nodes = append(f.Nodes, flow.FlowNode{
+				ID:   se.To,
+				Name: se.To,
+				Role: flow.RoleIntegration,
+			})
+		}
+		f.Edges = append(f.Edges, se)
+	}
 }
 
 // splitNodes separates the flow nodes into regular chain nodes and external nodes.
