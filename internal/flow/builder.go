@@ -30,10 +30,15 @@ type FlowNode struct {
 
 // FlowEdge is a directed edge in the built flow.
 type FlowEdge struct {
-	From string
-	To   string
-	Kind string // "http" | "middleware" | "calls"
-	Line int    // source line of the call site (0 = unknown)
+	From        string
+	To          string
+	Kind        string // "http" | "middleware" | "calls" | "integration" | "cross_service"
+	Line        int    // source line of the call site (0 = unknown)
+	Conditional bool   // true when the call is inside an if/switch/select block
+
+	// CrossServiceWorkspace is set when Kind is "cross_service", indicating
+	// the target workspace hash (first 8 chars) the edge connects to.
+	CrossServiceWorkspace string
 }
 
 // Flow is the result of BuildFlow.
@@ -74,6 +79,18 @@ func classifyRole(name string) Role {
 type edgeIndex struct {
 	bySource map[string][]graph.Edge
 	bySymbol map[string][]graph.Edge
+}
+
+func edgeConditional(e graph.Edge) bool {
+	if e.Metadata == nil {
+		return false
+	}
+	v, ok := e.Metadata["conditional"]
+	if !ok {
+		return false
+	}
+	b, ok := v.(bool)
+	return ok && b
 }
 
 func buildIndex(edges []graph.Edge) edgeIndex {
@@ -212,7 +229,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 					if _, exists := nodeMap[target]; !exists {
 						addNode(FlowNode{ID: target, Name: target, Role: RoleIntegration})
 					}
-					addEdge(FlowEdge{From: item.bareName, To: target, Kind: "integration", Line: e.Line})
+					addEdge(FlowEdge{From: item.bareName, To: target, Kind: "integration", Line: e.Line, Conditional: edgeConditional(e)})
 					continue
 				}
 
@@ -261,7 +278,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 					addNode(targetNode)
 				}
 
-				addEdge(FlowEdge{From: item.bareName, To: target, Kind: "calls", Line: e.Line})
+				addEdge(FlowEdge{From: item.bareName, To: target, Kind: "calls", Line: e.Line, Conditional: edgeConditional(e)})
 
 				if targetRole != RoleExternal {
 					queue = append(queue, bfsItem{bareName: target, depth: item.depth + 1})

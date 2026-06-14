@@ -345,11 +345,35 @@ func startServer(configPath string) {
 			graphExtractors = append(graphExtractors, echoGE)
 			logger.Info().Msg("execution-flow: echo route extractor enabled")
 		}
+		if nethttpGE, err := graph.NewNetHTTPExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("net/http route extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, nethttpGE)
+			logger.Info().Msg("execution-flow: net/http route extractor enabled")
+		}
+		if ginGE, err := graph.NewGinExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("gin route extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, ginGE)
+			logger.Info().Msg("execution-flow: gin route extractor enabled")
+		}
 		if intGE, err := graph.NewIntegrationExtractor(); err != nil {
 			logger.Warn().Err(err).Msg("integration extractor init failed, skipping")
 		} else {
 			graphExtractors = append(graphExtractors, intGE)
 			logger.Info().Msg("execution-flow: integration extractor enabled")
+		}
+		if jsIntGE, err := graph.NewJSIntegrationExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("js integration extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, jsIntGE)
+			logger.Info().Msg("execution-flow: js integration extractor enabled")
+		}
+		if pyIntGE, err := graph.NewPythonIntegrationExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("python integration extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, pyIntGE)
+			logger.Info().Msg("execution-flow: python integration extractor enabled")
 		}
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
@@ -559,11 +583,18 @@ func startServer(configPath string) {
 	// Wire flow materializer (if enabled).
 	if cfg.Flow.Enabled {
 		enqueueFn := func(id uuid.UUID) { eq.Enqueue(id) }
-		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, logger)
+
+		var flowSummarizer flow.FlowSummarizer
+		if cfg.Flow.SummaryEnabled {
+			llmClient := summarize.New(cfg.Summarization, logger)
+			flowSummarizer = flow.NewLLMFlowSummarizer(llmClient, logger)
+		}
+
+		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, flowSummarizer, logger)
 		fw.WithFlowNotify(func(wsHash string) {
 			go mat.Trigger(gctx, wsHash)
 		})
-		logger.Info().Int("max_depth", cfg.Flow.MaxDepth).Int("max_fanout", cfg.Flow.MaxFanout).Msg("flow materialization enabled")
+		logger.Info().Int("max_depth", cfg.Flow.MaxDepth).Int("max_fanout", cfg.Flow.MaxFanout).Bool("summary_enabled", cfg.Flow.SummaryEnabled).Msg("flow materialization enabled")
 	}
 
 	g.Go(func() error {

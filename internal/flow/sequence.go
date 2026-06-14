@@ -114,6 +114,7 @@ func RenderSequenceDiagram(f Flow) string {
 	type msg struct {
 		from, to, label string
 		isNote          bool
+		isConditional   bool
 		isIntegration   bool // true → render as dotted async arrow (-->>)
 		noteOver        string // comma-separated participant aliases for Note over
 	}
@@ -146,11 +147,19 @@ func RenderSequenceDiagram(f Flow) string {
 				label = f.Entry
 			}
 			messages = append(messages, msg{
-				from:         fromAlias,
-				to:           toAlias,
-				label:        label,
+				from:          fromAlias,
+				to:            toAlias,
+				label:         label,
+				isConditional: e.Conditional,
 				isIntegration: e.Kind == "integration",
 			})
+			if e.Kind == "cross_service" && e.CrossServiceWorkspace != "" {
+				messages = append(messages, msg{
+					isNote:   true,
+					noteOver: toAlias,
+					label:    fmt.Sprintf("cross-service (%s)", e.CrossServiceWorkspace),
+				})
+			}
 			dfsMessages(e.To)
 		}
 	}
@@ -179,15 +188,45 @@ func RenderSequenceDiagram(f Flow) string {
 	sb.WriteString("\n")
 
 	// Messages.
-	for _, m := range messages {
+	i := 0
+	for i < len(messages) {
+		m := messages[i]
+
 		if m.isNote {
 			sb.WriteString(fmt.Sprintf("    Note over %s: %s\n", m.noteOver, m.label))
-		} else if m.isIntegration {
+			i++
+			continue
+		}
+
+		if m.isConditional {
+			j := i + 1
+			for j < len(messages) && messages[j].isConditional && messages[j].from == m.from {
+				j++
+			}
+			count := j - i
+
+			if count == 1 {
+				sb.WriteString("    opt conditional\n")
+				sb.WriteString(fmt.Sprintf("    %s->>%s: %s\n", m.from, m.to, m.label))
+				sb.WriteString("    end\n")
+			} else {
+				sb.WriteString("    alt conditional\n")
+				for k := i; k < j; k++ {
+					sb.WriteString(fmt.Sprintf("    %s->>%s: %s\n", messages[k].from, messages[k].to, messages[k].label))
+				}
+				sb.WriteString("    end\n")
+			}
+			i = j
+			continue
+		}
+
+		if m.isIntegration {
 			sb.WriteString(fmt.Sprintf("    %s->>%s: %s\n", m.from, m.to, m.label))
 			sb.WriteString(fmt.Sprintf("    Note right of %s: integration\n", m.to))
 		} else {
 			sb.WriteString(fmt.Sprintf("    %s->>%s: %s\n", m.from, m.to, m.label))
 		}
+		i++
 	}
 
 	return sb.String()

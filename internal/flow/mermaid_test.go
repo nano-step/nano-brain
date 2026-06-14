@@ -148,6 +148,68 @@ func TestIDSanitization(t *testing.T) {
 }
 
 // TestNonMiddlewareArrowIsNotDotted verifies calls/http edges use --> not -.->
+func flowWithConditionalEdge() flow.Flow {
+	return flow.Flow{
+		Entry:  "POST /api/check",
+		Method: "POST",
+		Path:   "/api/check",
+		Nodes: []flow.FlowNode{
+			{ID: "POST /api/check", Name: "POST /api/check", Role: flow.RoleEntry},
+			{ID: "HandleCheck", Name: "HandleCheck", Role: flow.RoleHandler},
+			{ID: "MaybeCall", Name: "MaybeCall", Role: flow.RoleService},
+		},
+		Edges: []flow.FlowEdge{
+			{From: "POST /api/check", To: "HandleCheck", Kind: "http"},
+			{From: "HandleCheck", To: "MaybeCall", Kind: "calls", Conditional: true},
+		},
+	}
+}
+
+func TestConditionalArrowIsDotted(t *testing.T) {
+	f := flowWithConditionalEdge()
+	out := flow.RenderFlowchart(f)
+	if !strings.Contains(out, "-.->") {
+		t.Errorf("expected dotted arrow (-.->) for conditional edge, output:\n%s", out)
+	}
+}
+
+func TestConditionalAndNonConditionalMixed(t *testing.T) {
+	f := flow.Flow{
+		Entry:  "POST /api/mix",
+		Method: "POST",
+		Path:   "/api/mix",
+		Nodes: []flow.FlowNode{
+			{ID: "POST /api/mix", Name: "POST /api/mix", Role: flow.RoleEntry},
+			{ID: "H", Name: "H", Role: flow.RoleHandler},
+			{ID: "A", Name: "A", Role: flow.RoleService},
+			{ID: "B", Name: "B", Role: flow.RoleService},
+		},
+		Edges: []flow.FlowEdge{
+			{From: "POST /api/mix", To: "H", Kind: "http"},
+			{From: "H", To: "A", Kind: "calls", Conditional: true},
+			{From: "H", To: "B", Kind: "calls", Conditional: false},
+		},
+	}
+	out := flow.RenderFlowchart(f)
+
+	lines := strings.Split(out, "\n")
+	var dottedCount, solidCount int
+	for _, line := range lines {
+		if strings.Contains(line, "-.->") {
+			dottedCount++
+		}
+		if strings.Contains(line, "-->") {
+			solidCount++
+		}
+	}
+	if dottedCount < 1 {
+		t.Errorf("expected at least 1 dotted arrow, got %d", dottedCount)
+	}
+	if solidCount < 2 {
+		t.Errorf("expected at least 2 solid arrows, got %d", solidCount)
+	}
+}
+
 func TestNonMiddlewareArrowIsNotDotted(t *testing.T) {
 	f := simpleFlow()
 	out := flow.RenderFlowchart(f)

@@ -207,17 +207,34 @@ func (e *GoGraphExtractor) extractCalls(bt *gotreesitter.BoundTree, tree *gotree
 				continue
 			}
 			seen[key] = true
-			edges = append(edges, Edge{
+			e := Edge{
 				SourceNode: filePath + "::" + enclosing,
 				TargetNode: callee,
 				Kind:       EdgeCalls,
 				SourceFile: filePath,
 				Line:       lineForByte(content, cap.Node.StartByte()),
 				Language:   "go",
-			})
+			}
+			if isInsideConditional(bt, cap.Node) {
+				e.Metadata = map[string]any{"conditional": true}
+			}
+			edges = append(edges, e)
 		}
 	}
 	return edges
+}
+
+func isInsideConditional(bt *gotreesitter.BoundTree, n *gotreesitter.Node) bool {
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		typ := bt.NodeType(p)
+		if typ == "function_declaration" || typ == "method_declaration" || typ == "func_literal" {
+			return false
+		}
+		if typ == "if_statement" || typ == "expression_switch_statement" || typ == "type_switch_statement" || typ == "select_statement" {
+			return true
+		}
+	}
+	return false
 }
 
 func enclosingFunc(funcs []funcRange, byteOffset uint32) string {

@@ -74,11 +74,21 @@ func RenderFlowchart(f Flow) string {
 		return nodes[i].ID < nodes[j].ID
 	})
 
+	// Identify cross-service target nodes.
+	crossServiceNodes := make(map[string]string)
+	for _, e := range f.Edges {
+		if e.Kind == "cross_service" && e.CrossServiceWorkspace != "" {
+			crossServiceNodes[e.To] = e.CrossServiceWorkspace
+		}
+	}
+
 	// Emit node declarations.
 	for _, n := range nodes {
 		id := sanitizeID(n.ID)
 		label := fmt.Sprintf("%s<br/>(%s)", n.Name, string(n.Role))
-		// Use square brackets for regular nodes.
+		if ws, ok := crossServiceNodes[n.ID]; ok {
+			label += fmt.Sprintf("<br/>ws: %s", ws)
+		}
 		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", id, label))
 	}
 
@@ -99,10 +109,18 @@ func RenderFlowchart(f Flow) string {
 	for _, e := range edges {
 		from := sanitizeID(e.From)
 		to := sanitizeID(e.To)
-		if e.Kind == "middleware" {
+		if e.Conditional || e.Kind == "middleware" {
 			sb.WriteString(fmt.Sprintf("    %s -.-> %s\n", from, to))
 		} else {
 			sb.WriteString(fmt.Sprintf("    %s --> %s\n", from, to))
+		}
+	}
+
+	// Cross-service class definition and assignments.
+	if len(crossServiceNodes) > 0 {
+		sb.WriteString("\n    classDef crossService fill:#f9f,stroke:#a0a\n")
+		for nodeID := range crossServiceNodes {
+			sb.WriteString(fmt.Sprintf("    class %s crossService\n", sanitizeID(nodeID)))
 		}
 	}
 

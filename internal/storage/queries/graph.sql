@@ -127,3 +127,11 @@ SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, met
 FROM graph_edges
 WHERE workspace_hash = $1
 ORDER BY edge_type, source_node, target_node;
+
+-- name: ListConsumerEntryNodesByWorkspace :many
+SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND edge_type = 'integration'
+  AND (source_node LIKE 'CONSUME %' OR source_node LIKE 'ON %')
+ORDER BY source_node;

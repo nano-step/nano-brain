@@ -112,9 +112,10 @@ func getDefaults() *Config {
 			RetryBackoffSeconds:  1,
 		},
 		Flow: FlowConfig{
-			Enabled:   false,
-			MaxDepth:  10,
-			MaxFanout: 8,
+			Enabled:        false,
+			MaxDepth:       10,
+			MaxFanout:      8,
+			SummaryEnabled: false,
 		},
 		Intelligence: IntelligenceConfig{
 			Enabled:          false,
