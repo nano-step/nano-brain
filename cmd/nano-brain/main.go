@@ -345,6 +345,12 @@ func startServer(configPath string) {
 			graphExtractors = append(graphExtractors, echoGE)
 			logger.Info().Msg("execution-flow: echo route extractor enabled")
 		}
+		if intGE, err := graph.NewIntegrationExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("integration extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, intGE)
+			logger.Info().Msg("execution-flow: integration extractor enabled")
+		}
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 

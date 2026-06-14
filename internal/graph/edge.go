@@ -6,8 +6,9 @@ const (
 	EdgeContains   EdgeKind = "contains"
 	EdgeImports    EdgeKind = "imports"
 	EdgeCalls      EdgeKind = "calls"
-	EdgeHTTP       EdgeKind = "http"       // "<METHOD> <path>" -> handler symbol name
-	EdgeMiddleware EdgeKind = "middleware" // middleware symbol -> handler symbol name
+	EdgeHTTP        EdgeKind = "http"        // "<METHOD> <path>" -> handler symbol name
+	EdgeMiddleware  EdgeKind = "middleware"  // middleware symbol -> handler symbol name
+	EdgeIntegration EdgeKind = "integration" // outbound HTTP calls, queue publishes, event emissions
 )
 
 type Edge struct {

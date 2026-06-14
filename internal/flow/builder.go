@@ -10,13 +10,14 @@ import (
 type Role string
 
 const (
-	RoleEntry      Role = "entry"
-	RoleMiddleware Role = "middleware"
-	RoleHandler    Role = "handler"
-	RoleService    Role = "service"
-	RoleRepo       Role = "repo"
-	RoleExternal   Role = "external"
-	RoleFunc       Role = "func"
+	RoleEntry       Role = "entry"
+	RoleMiddleware  Role = "middleware"
+	RoleHandler     Role = "handler"
+	RoleService     Role = "service"
+	RoleRepo        Role = "repo"
+	RoleExternal    Role = "external"
+	RoleFunc        Role = "func"
+	RoleIntegration Role = "integration" // outbound HTTP / queue / event call
 )
 
 // FlowNode is a node in the built flow.
@@ -197,10 +198,20 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 			}
 			visited[sourceID] = true
 
-			// Get outgoing calls edges from this source node.
+			// Get outgoing edges from this source node.
 			outEdges := idx.bySource[sourceID]
 			fanout := 0
 			for _, e := range outEdges {
+				// Integration edges: emit as leaf nodes, never traverse further.
+				if e.Kind == graph.EdgeIntegration {
+					target := e.TargetNode
+					if _, exists := nodeMap[target]; !exists {
+						addNode(FlowNode{ID: target, Name: target, Role: RoleIntegration})
+					}
+					addEdge(FlowEdge{From: item.bareName, To: target, Kind: "integration", Line: e.Line})
+					continue
+				}
+
 				if e.Kind != graph.EdgeCalls {
 					continue
 				}

@@ -114,6 +114,7 @@ func RenderSequenceDiagram(f Flow) string {
 	type msg struct {
 		from, to, label string
 		isNote          bool
+		isIntegration   bool // true → render as dotted async arrow (-->>)
 		noteOver        string // comma-separated participant aliases for Note over
 	}
 	var messages []msg
@@ -145,9 +146,10 @@ func RenderSequenceDiagram(f Flow) string {
 				label = f.Entry
 			}
 			messages = append(messages, msg{
-				from:  fromAlias,
-				to:    toAlias,
-				label: label,
+				from:         fromAlias,
+				to:           toAlias,
+				label:        label,
+				isIntegration: e.Kind == "integration",
 			})
 			dfsMessages(e.To)
 		}
@@ -180,6 +182,9 @@ func RenderSequenceDiagram(f Flow) string {
 	for _, m := range messages {
 		if m.isNote {
 			sb.WriteString(fmt.Sprintf("    Note over %s: %s\n", m.noteOver, m.label))
+		} else if m.isIntegration {
+			sb.WriteString(fmt.Sprintf("    %s->>%s: %s\n", m.from, m.to, m.label))
+			sb.WriteString(fmt.Sprintf("    Note right of %s: integration\n", m.to))
 		} else {
 			sb.WriteString(fmt.Sprintf("    %s->>%s: %s\n", m.from, m.to, m.label))
 		}
