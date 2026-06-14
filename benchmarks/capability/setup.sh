@@ -16,13 +16,17 @@ PORT=3199
 cd "$ROOT"
 [ -x "$BIN" ] || { echo "building nano-brain..."; CGO_ENABLED=0 go build -o "$BIN" ./cmd/nano-brain; }
 
-echo "==> Resetting clean nanobrain_test"
-psql "$PG_SUPER" -c "DROP DATABASE IF EXISTS nanobrain_test WITH (FORCE);"
-psql "$PG_SUPER" -c "CREATE DATABASE nanobrain_test OWNER nanobrain;"
-psql "$TEST_DB" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+DB_EXISTS=$(psql "$PG_SUPER" -tAc "SELECT 1 FROM pg_database WHERE datname='nanobrain_test'" 2>/dev/null || echo "")
 
-echo "==> Migrating"
-DATABASE_URL="$TEST_DB" "$BIN" db:migrate
+if [ "$DB_EXISTS" = "1" ]; then
+  echo "==> nanobrain_test exists, running pending migrations"
+  DATABASE_URL="$TEST_DB" "$BIN" db:migrate
+else
+  echo "==> Creating fresh nanobrain_test"
+  psql "$PG_SUPER" -c "CREATE DATABASE nanobrain_test OWNER nanobrain;"
+  psql "$TEST_DB" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+  DATABASE_URL="$TEST_DB" "$BIN" db:migrate
+fi
 
 echo "==> Starting isolated flow-enabled server on :$PORT"
 NANO_BRAIN_ALLOW_DUPLICATE_SERVER=1 NANO_BRAIN_SERVER_PORT=$PORT NANO_BRAIN_FLOW_ENABLED=true \
