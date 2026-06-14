@@ -22,8 +22,18 @@ func Stitch(ctx context.Context, publishEdges []graph.Edge, targetWorkspaces []s
 		return nil
 	}
 
-	consumers := make(map[string][]consumerEntry)
+	seen := make(map[string]struct{}, len(targetWorkspaces))
+	unique := make([]string, 0, len(targetWorkspaces))
 	for _, ws := range targetWorkspaces {
+		if _, dup := seen[ws]; dup {
+			continue
+		}
+		seen[ws] = struct{}{}
+		unique = append(unique, ws)
+	}
+
+	consumers := make(map[string][]consumerEntry)
+	for _, ws := range unique {
 		edges, err := querier.ListConsumerEntryNodesByWorkspace(ctx, ws)
 		if err != nil {
 			continue

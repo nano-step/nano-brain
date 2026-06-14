@@ -33,10 +33,11 @@ var pyPublishMethods = map[string]bool{
 }
 
 var pyConsumeMethods = map[string]bool{
-	"subscribe": true,
-	"consume":   true,
-	"listen":    true,
-	"on":        true,
+	"subscribe":     true,
+	"consume":       true,
+	"basic_consume": true,
+	"listen":        true,
+	"on":            true,
 }
 
 type PythonIntegrationExtractor struct {
@@ -135,6 +136,9 @@ func (x *PythonIntegrationExtractor) ExtractEdges(filePath string, content []byt
 
 			if methodName == "basic_publish" {
 				topic := pyKeywordArg(bt, argsNode, lang, "routing_key")
+				if topic == "" {
+					topic = pyStringArgOrVar(bt, argsNode, lang, 1)
+				}
 				target := "publish:" + topic
 				edges = append(edges, Edge{
 					SourceNode: source,

@@ -582,7 +582,10 @@ func startServer(configPath string) {
 
 	// Wire flow materializer (if enabled).
 	if cfg.Flow.Enabled {
-		enqueueFn := func(id uuid.UUID) { eq.Enqueue(id) }
+		var enqueueFn func(uuid.UUID)
+		if eq != nil {
+			enqueueFn = func(id uuid.UUID) { eq.Enqueue(id) }
+		}
 
 		var flowSummarizer flow.FlowSummarizer
 		if cfg.Flow.SummaryEnabled {

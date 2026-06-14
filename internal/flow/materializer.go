@@ -160,9 +160,8 @@ func (m *Materializer) Materialize(ctx context.Context, workspaceHash string) er
 			}
 
 			summaryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-
 			summary, err := m.summarizer.Summarize(summaryCtx, entry, chain, integrations)
+			cancel() // release timer immediately — no defer inside loop
 			if err != nil {
 				m.logger.Warn().Err(err).Str("entry", entry).Msg("flow summarization failed, using text summary")
 			} else {

@@ -116,10 +116,14 @@ func (x *JSIntegrationExtractor) ExtractEdges(filePath string, content []byte) (
 		})
 	})
 
-	// arrow_function assigned to variable: const foo = () => { ... }
+	// arrow_function assigned to variable: const foo = () => { ... } or const foo = () => expr
 	walkNodes(root, lang, "arrow_function", func(n *gotreesitter.Node) {
 		bodyNode := n.ChildByFieldName("body", lang)
-		if bodyNode == nil || bodyNode.Type(lang) != "statement_block" {
+		if bodyNode == nil {
+			return
+		}
+		bodyType := bodyNode.Type(lang)
+		if bodyType != "statement_block" && bodyType != "expression" {
 			return
 		}
 		parent := n.Parent()
@@ -128,8 +132,8 @@ func (x *JSIntegrationExtractor) ExtractEdges(filePath string, content []byte) (
 			if nameNode != nil {
 				funcs = append(funcs, funcRange{
 					name:      relFile + "::" + bt.NodeText(nameNode),
-					startByte: bodyNode.StartByte(),
-					endByte:   bodyNode.EndByte(),
+					startByte: n.StartByte(),
+					endByte:   n.EndByte(),
 				})
 			}
 		}
