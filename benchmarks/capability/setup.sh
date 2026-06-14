@@ -30,6 +30,7 @@ fi
 
 echo "==> Starting isolated flow-enabled server on :$PORT"
 NANO_BRAIN_ALLOW_DUPLICATE_SERVER=1 NANO_BRAIN_SERVER_PORT=$PORT NANO_BRAIN_FLOW_ENABLED=true \
+  NANO_BRAIN_HYDE_ENABLED=false NANO_BRAIN_QUERY_PREPROCESSING_ENABLED=false \
   DATABASE_URL="$TEST_DB" "$BIN" serve > /tmp/nb-bench.log 2>&1 &
 echo $! > /tmp/nb-bench.pid
 echo "    pid $(cat /tmp/nb-bench.pid) (log: /tmp/nb-bench.log)"
