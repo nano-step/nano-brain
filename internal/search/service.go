@@ -450,8 +450,9 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 	merged := DynamicRRFMerge(bm25Results, vectorResults, rrfK)
 	deduped := DeduplicateResults(merged)
 	codeAware := ApplyCodeAwareBoost(deduped, query, 1.2, 1.3)
+	extBoosted := ApplyExtensionBoost(codeAware, 1.1, 0.9)
 
-	boosted := ApplyRecencyBoost(codeAware, recencyWeight, recencyHalfLifeDays, time.Now())
+	boosted := ApplyRecencyBoost(extBoosted, recencyWeight, recencyHalfLifeDays, time.Now())
 
 	s.configMutex.RLock()
 	entityEnabled := s.config.EntityBoostEnabled
