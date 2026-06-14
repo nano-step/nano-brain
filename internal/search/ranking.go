@@ -48,6 +48,32 @@ func ApplyCodeAwareBoost(results []Result, query string, boostPathFactor, boostT
 	return results
 }
 
+// codeExtensions maps file extensions that should receive a code boost.
+var codeExtensions = map[string]bool{
+	".go": true, ".js": true, ".ts": true, ".py": true,
+	".jsx": true, ".tsx": true, ".rb": true, ".rs": true, ".java": true,
+}
+
+// docExtensions maps file extensions that should receive no boost (neutral or slight penalty).
+var docExtensions = map[string]bool{
+	".md": true, ".txt": true, ".rst": true,
+}
+
+// ApplyExtensionBoost applies a blanket multiplicative boost to code files over documentation.
+// Code files receive codeBoostFactor; doc files receive docBoostFactor (typically <= 1.0).
+func ApplyExtensionBoost(results []Result, codeBoostFactor, docBoostFactor float64) []Result {
+	for i := range results {
+		ext := strings.ToLower(path.Ext(results[i].SourcePath))
+		switch {
+		case codeExtensions[ext]:
+			results[i].Score *= codeBoostFactor
+		case docExtensions[ext]:
+			results[i].Score *= docBoostFactor
+		}
+	}
+	return results
+}
+
 // extractQueryKeywords extracts meaningful keywords from a search query.
 // It removes common stop words and short tokens, then lowercases.
 func extractQueryKeywords(query string) []string {

@@ -101,3 +101,30 @@ func TestExtractQueryKeywords_ShortTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyExtensionBoost_CodeAndDoc(t *testing.T) {
+	results := []Result{
+		{ID: "1", SourcePath: "service.go", Score: 1.0},
+		{ID: "2", SourcePath: "handler.ts", Score: 1.0},
+		{ID: "3", SourcePath: "README.md", Score: 1.0},
+		{ID: "4", SourcePath: "notes.txt", Score: 1.0},
+		{ID: "5", SourcePath: "data.json", Score: 1.0},
+	}
+	out := ApplyExtensionBoost(results, 1.1, 0.9)
+
+	if out[0].Score != 1.1 {
+		t.Errorf(".go: expected 1.1, got %f", out[0].Score)
+	}
+	if out[1].Score != 1.1 {
+		t.Errorf(".ts: expected 1.1, got %f", out[1].Score)
+	}
+	if out[2].Score != 0.9 {
+		t.Errorf(".md: expected 0.9, got %f", out[2].Score)
+	}
+	if out[3].Score != 0.9 {
+		t.Errorf(".txt: expected 0.9, got %f", out[3].Score)
+	}
+	if out[4].Score != 1.0 {
+		t.Errorf(".json: expected 1.0 (no change), got %f", out[4].Score)
+	}
+}
