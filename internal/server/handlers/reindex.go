@@ -364,17 +364,26 @@ func publishReindex(pub eventbus.Publisher, workspace, state string, enqueued, e
 	})
 }
 
-func TriggerUpdate(logger zerolog.Logger) echo.HandlerFunc {
+func TriggerUpdate(w *watcher.Watcher, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)
+		start := time.Now()
+
+		var count int
+		if w != nil {
+			count = w.ReextractEdgesForWorkspace(c.Request().Context(), workspace)
+		}
 
 		reqLog := LoggerFromCtx(c, logger)
 		reqLog.Info().
 			Str("workspace", workspace).
-			Msg("update queued for all collections")
+			Int("files_processed", count).
+			Dur("duration", time.Since(start)).
+			Msg("edge re-extraction complete")
 
 		return c.JSON(http.StatusAccepted, reindexResponse{
 			Status:  "queued",
+			Scanned: count,
 			Message: fmt.Sprintf("Update queued for all collections in workspace %s", workspace),
 		})
 	}

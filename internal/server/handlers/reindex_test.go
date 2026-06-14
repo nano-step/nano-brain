@@ -348,7 +348,7 @@ func TestTriggerUpdate(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.Set("workspace", "ws123")
 
-	h := handlers.TriggerUpdate(zerolog.Nop())
+	h := handlers.TriggerUpdate(nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
