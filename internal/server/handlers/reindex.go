@@ -367,25 +367,24 @@ func publishReindex(pub eventbus.Publisher, workspace, state string, enqueued, e
 func TriggerUpdate(w *watcher.Watcher, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)
-		start := time.Now()
 
-		var edgeCount, symCount int
 		if w != nil {
-			edgeCount = w.ReextractEdgesForWorkspace(c.Request().Context(), workspace)
-			symCount = w.ReextractSymbolsForWorkspace(c.Request().Context(), workspace)
+			go func() {
+				ctx := context.Background()
+				start := time.Now()
+				edgeCount := w.ReextractEdgesForWorkspace(ctx, workspace)
+				symCount := w.ReextractSymbolsForWorkspace(ctx, workspace)
+				logger.Info().
+					Str("workspace", workspace).
+					Int("edges_files", edgeCount).
+					Int("symbols_files", symCount).
+					Dur("duration", time.Since(start)).
+					Msg("update re-extraction complete")
+			}()
 		}
-
-		reqLog := LoggerFromCtx(c, logger)
-		reqLog.Info().
-			Str("workspace", workspace).
-			Int("edges_files", edgeCount).
-			Int("symbols_files", symCount).
-			Dur("duration", time.Since(start)).
-			Msg("update re-extraction complete")
 
 		return c.JSON(http.StatusAccepted, reindexResponse{
 			Status:  "queued",
-			Scanned: edgeCount,
 			Message: fmt.Sprintf("Update queued for all collections in workspace %s", workspace),
 		})
 	}
