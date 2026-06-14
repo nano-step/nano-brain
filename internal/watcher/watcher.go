@@ -826,6 +826,7 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 	return count
 }
 
+
 // ReextractEdgesForWorkspace re-runs graph edge extraction for every file in
 // the workspace's collections, bypassing the content-hash early-exit. This is
 // needed when a new extractor is added after the workspace was already indexed.
