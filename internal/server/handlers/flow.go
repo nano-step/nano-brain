@@ -139,6 +139,9 @@ func convertEdges(rows []sqlc.GraphEdge) []graph.Edge {
 				if lang, ok := meta["language"].(string); ok {
 					e.Language = lang
 				}
+				if line, ok := meta["line"].(float64); ok {
+					e.Line = int(line)
+				}
 				e.Metadata = meta
 			}
 		}

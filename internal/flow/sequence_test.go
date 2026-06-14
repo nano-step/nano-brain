@@ -136,6 +136,40 @@ func TestRenderSequenceDiagramEmptyFlow(t *testing.T) {
 	}
 }
 
+// TestRenderSequenceDiagramLineOrdering verifies that calls are ordered by source
+// line number when line info is present, not alphabetically.
+func TestRenderSequenceDiagramLineOrdering(t *testing.T) {
+	// HandleTopup calls ZService on line 10, then AService on line 20.
+	// Without line ordering, AService would come first (alphabetical).
+	f := flow.Flow{
+		Entry:  "POST /api/topup",
+		Method: "POST",
+		Path:   "/api/topup",
+		Nodes: []flow.FlowNode{
+			{ID: "POST /api/topup", Name: "POST /api/topup", Role: flow.RoleEntry},
+			{ID: "HandleTopup", Name: "HandleTopup", Role: flow.RoleHandler},
+			{ID: "ZService", Name: "ZService", Role: flow.RoleService},
+			{ID: "AService", Name: "AService", Role: flow.RoleService},
+		},
+		Edges: []flow.FlowEdge{
+			{From: "POST /api/topup", To: "HandleTopup", Kind: "http"},
+			{From: "HandleTopup", To: "ZService", Kind: "calls", Line: 10},
+			{From: "HandleTopup", To: "AService", Kind: "calls", Line: 20},
+		},
+	}
+	out := flow.RenderSequenceDiagram(f)
+
+	// ZService (line 10) must appear before AService (line 20).
+	zPos := strings.Index(out, "ZService")
+	aPos := strings.Index(out, "AService")
+	if zPos < 0 || aPos < 0 {
+		t.Fatalf("expected both ZService and AService in output:\n%s", out)
+	}
+	if zPos > aPos {
+		t.Errorf("ZService (line 10) should appear before AService (line 20) in output:\n%s", out)
+	}
+}
+
 func TestRenderSequenceDiagramRoleLabels(t *testing.T) {
 	out := flow.RenderSequenceDiagram(seqSimpleFlow())
 	// Non-entry participants should include the role in their label.

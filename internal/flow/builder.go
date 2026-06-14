@@ -32,6 +32,7 @@ type FlowEdge struct {
 	From string
 	To   string
 	Kind string // "http" | "middleware" | "calls"
+	Line int    // source line of the call site (0 = unknown)
 }
 
 // Flow is the result of BuildFlow.
@@ -245,7 +246,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 					addNode(targetNode)
 				}
 
-				addEdge(FlowEdge{From: item.bareName, To: target, Kind: "calls"})
+				addEdge(FlowEdge{From: item.bareName, To: target, Kind: "calls", Line: e.Line})
 
 				if targetRole != RoleExternal {
 					queue = append(queue, bfsItem{bareName: target, depth: item.depth + 1})

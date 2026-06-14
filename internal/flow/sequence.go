@@ -57,9 +57,13 @@ func RenderSequenceDiagram(f Flow) string {
 		}
 	}
 
-	// Sort adjacency slices for deterministic output.
+	// Sort adjacency slices: by source line when known, then alphabetically for determinism.
 	for k := range adj {
 		sort.Slice(adj[k], func(i, j int) bool {
+			li, lj := adj[k][i].Line, adj[k][j].Line
+			if li != lj && li > 0 && lj > 0 {
+				return li < lj
+			}
 			return adj[k][i].To < adj[k][j].To
 		})
 	}
