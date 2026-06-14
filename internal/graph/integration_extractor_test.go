@@ -219,3 +219,169 @@ func outerFunc() {
 		}
 	}
 }
+
+func TestIntegrationExtractorConsumeSubscribe(t *testing.T) {
+	src := []byte(`package main
+
+type Bus struct{}
+func (b *Bus) Subscribe(topic string, handler func()) {}
+
+func setupEvents(b *Bus) {
+	b.Subscribe("user.created", func() {})
+}
+`)
+	ex := newIntegrationExtractor(t)
+	edges, err := ex.ExtractEdges("internal/events.go", src)
+	if err != nil {
+		t.Fatalf("ExtractEdges: %v", err)
+	}
+
+	var found bool
+	for _, e := range edges {
+		if e.Kind == graph.EdgeIntegration && e.Metadata["kind"] == "queue_consumer" {
+			found = true
+			if e.SourceNode != "CONSUME user.created" {
+				t.Errorf("expected SourceNode 'CONSUME user.created', got %q", e.SourceNode)
+			}
+			if e.TargetNode != "internal/events.go::setupEvents" {
+				t.Errorf("expected TargetNode 'internal/events.go::setupEvents', got %q", e.TargetNode)
+			}
+			if e.Metadata["method"] != "Subscribe" {
+				t.Errorf("expected method=Subscribe, got %v", e.Metadata["method"])
+			}
+			if e.Metadata["topic"] != "user.created" {
+				t.Errorf("expected topic=user.created, got %v", e.Metadata["topic"])
+			}
+			if e.Metadata["receiver"] != "b" {
+				t.Errorf("expected receiver=b, got %v", e.Metadata["receiver"])
+			}
+		}
+	}
+	if !found {
+		t.Error("expected queue_consumer edge for .Subscribe call")
+	}
+}
+
+func TestIntegrationExtractorConsumeConsume(t *testing.T) {
+	src := []byte(`package main
+
+type Queue struct{}
+func (q *Queue) Consume(name string, handler func()) {}
+
+func setupQueue(q *Queue) {
+	q.Consume("orders", func() {})
+}
+`)
+	ex := newIntegrationExtractor(t)
+	edges, err := ex.ExtractEdges("internal/queue.go", src)
+	if err != nil {
+		t.Fatalf("ExtractEdges: %v", err)
+	}
+
+	var found bool
+	for _, e := range edges {
+		if e.Kind == graph.EdgeIntegration && e.Metadata["kind"] == "queue_consumer" {
+			found = true
+			if e.Metadata["method"] != "Consume" {
+				t.Errorf("expected method=Consume, got %v", e.Metadata["method"])
+			}
+			if e.Metadata["topic"] != "orders" {
+				t.Errorf("expected topic=orders, got %v", e.Metadata["topic"])
+			}
+		}
+	}
+	if !found {
+		t.Error("expected queue_consumer edge for .Consume call")
+	}
+}
+
+func TestIntegrationExtractorConsumeListen(t *testing.T) {
+	src := []byte(`package main
+
+type Router struct{}
+func (r *Router) Listen(path string, handler func()) {}
+
+func setupRoutes(r *Router) {
+	r.Listen("/events", func() {})
+}
+`)
+	ex := newIntegrationExtractor(t)
+	edges, err := ex.ExtractEdges("internal/router.go", src)
+	if err != nil {
+		t.Fatalf("ExtractEdges: %v", err)
+	}
+
+	var found bool
+	for _, e := range edges {
+		if e.Kind == graph.EdgeIntegration && e.Metadata["kind"] == "queue_consumer" {
+			found = true
+			if e.Metadata["method"] != "Listen" {
+				t.Errorf("expected method=Listen, got %v", e.Metadata["method"])
+			}
+		}
+	}
+	if !found {
+		t.Error("expected queue_consumer edge for .Listen call")
+	}
+}
+
+func TestIntegrationExtractorConsumeOn(t *testing.T) {
+	src := []byte(`package main
+
+type Emitter struct{}
+func (e *Emitter) On(event string, handler func()) {}
+
+func registerHandlers(e *Emitter) {
+	e.On("message.received", func() {})
+}
+`)
+	ex := newIntegrationExtractor(t)
+	edges, err := ex.ExtractEdges("internal/emitter.go", src)
+	if err != nil {
+		t.Fatalf("ExtractEdges: %v", err)
+	}
+
+	var found bool
+	for _, e := range edges {
+		if e.Kind == graph.EdgeIntegration && e.Metadata["kind"] == "queue_consumer" {
+			found = true
+			if e.Metadata["method"] != "On" {
+				t.Errorf("expected method=On, got %v", e.Metadata["method"])
+			}
+		}
+	}
+	if !found {
+		t.Error("expected queue_consumer edge for .On call")
+	}
+}
+
+func TestIntegrationExtractorConsumeVariableTopic(t *testing.T) {
+	src := []byte(`package main
+
+type Bus struct{}
+func (b *Bus) Subscribe(topic string, handler func()) {}
+
+func setup(b *Bus, topic string) {
+	b.Subscribe(topic, func() {})
+}
+`)
+	ex := newIntegrationExtractor(t)
+	edges, err := ex.ExtractEdges("internal/var.go", src)
+	if err != nil {
+		t.Fatalf("ExtractEdges: %v", err)
+	}
+
+	var found bool
+	for _, e := range edges {
+		if e.Kind == graph.EdgeIntegration && e.Metadata["kind"] == "queue_consumer" {
+			found = true
+			topic := e.Metadata["topic"].(string)
+			if topic == "" || topic[0] != '<' {
+				t.Errorf("expected variable placeholder topic, got %q", topic)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected queue_consumer edge for variable topic")
+	}
+}

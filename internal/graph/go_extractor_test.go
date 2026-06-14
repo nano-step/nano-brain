@@ -101,6 +101,114 @@ func TestGoGraphExtractor_Fixture(t *testing.T) {
 	}
 }
 
+func TestGoGraphExtractor_ConditionalInsideIf(t *testing.T) {
+	ex, err := graph.NewGoGraphExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	src := []byte(`package main
+
+func doIf(x int) {
+	if x > 0 {
+		conditionalCall()
+	}
+	unconditionalCall()
+}
+
+func conditionalCall() {}
+func unconditionalCall() {}
+`)
+
+	edges, err := ex.ExtractEdges("main.go", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var foundConditional, foundUnconditional bool
+	for _, e := range edges {
+		if e.Kind != graph.EdgeCalls {
+			continue
+		}
+		switch e.TargetNode {
+		case "conditionalCall":
+			foundConditional = true
+			if e.Metadata == nil {
+				t.Error("expected conditionalCall edge to have Metadata set")
+			} else if v, ok := e.Metadata["conditional"]; !ok || !v.(bool) {
+				t.Errorf("expected conditionalCall Metadata['conditional']=true, got %v", v)
+			}
+		case "unconditionalCall":
+			foundUnconditional = true
+			if e.Metadata != nil {
+				t.Errorf("expected unconditionalCall edge to have nil Metadata, got %v", e.Metadata)
+			}
+		}
+	}
+	if !foundConditional {
+		t.Error("expected calls edge for conditionalCall")
+	}
+	if !foundUnconditional {
+		t.Error("expected calls edge for unconditionalCall")
+	}
+}
+
+func TestGoGraphExtractor_ConditionalInsideSwitch(t *testing.T) {
+	ex, err := graph.NewGoGraphExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	src := []byte(`package main
+
+func doSwitch(v string) {
+	switch v {
+	case "a":
+		switchCall()
+	default:
+		defaultCall()
+	}
+}
+
+func switchCall() {}
+func defaultCall() {}
+`)
+
+	edges, err := ex.ExtractEdges("main.go", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var foundSwitch, foundDefault bool
+	for _, e := range edges {
+		if e.Kind != graph.EdgeCalls {
+			continue
+		}
+		switch e.TargetNode {
+		case "switchCall":
+			foundSwitch = true
+			if e.Metadata == nil {
+				t.Error("expected switchCall edge to have Metadata['conditional']")
+			} else if v, ok := e.Metadata["conditional"]; !ok || !v.(bool) {
+				t.Errorf("expected switchCall Metadata['conditional']=true, got %v", v)
+			}
+		case "defaultCall":
+			foundDefault = true
+			if e.Metadata == nil {
+				t.Error("expected defaultCall edge to have Metadata['conditional']")
+			} else if v, ok := e.Metadata["conditional"]; !ok || !v.(bool) {
+				t.Errorf("expected defaultCall Metadata['conditional']=true, got %v", v)
+			}
+		}
+	}
+	if !foundSwitch {
+		t.Error("expected calls edge for switchCall")
+	}
+	if !foundDefault {
+		t.Error("expected calls edge for defaultCall")
+	}
+}
+
 func TestGoGraphExtractor_NoPanic_LargeFile(t *testing.T) {
 	ex, err := graph.NewGoGraphExtractor()
 	if err != nil {

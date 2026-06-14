@@ -4,7 +4,10 @@ package handlers_test
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,9 +19,6 @@ import (
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/testutil"
 	"github.com/rs/zerolog"
-
-	"crypto/sha256"
-	"fmt"
 )
 
 func setupFlowTest(t *testing.T) (string, *sqlc.Queries) {
@@ -28,7 +28,7 @@ func setupFlowTest(t *testing.T) (string, *sqlc.Queries) {
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
-	ctx := t.Context()
+	ctx := context.Background()
 
 	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("flow_test_ws")))
 	wsPath := "/tmp/flow-test-ws"

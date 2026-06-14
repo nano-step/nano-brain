@@ -9,3 +9,6 @@ embedding:
   provider: "ollama"
   url: "http://host.docker.internal:11434"
   model: "nomic-embed-text"
+
+flow:
+  enabled: true

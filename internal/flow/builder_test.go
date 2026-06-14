@@ -290,3 +290,32 @@ func TestUnresolvedHandler(t *testing.T) {
 		t.Error("expected entry to be set")
 	}
 }
+
+// TestConditionalPropagation verifies that conditional=true from graph edge
+// Metadata is propagated to FlowEdge.Conditional.
+func TestConditionalPropagation(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "POST /api/pay", TargetNode: "HandlePay", Kind: graph.EdgeHTTP},
+		{SourceNode: "handlers/pay.go::HandlePay", TargetNode: "NormalCall", Kind: graph.EdgeCalls, SourceFile: "handlers/pay.go"},
+		{SourceNode: "handlers/pay.go::HandlePay", TargetNode: "CondCall", Kind: graph.EdgeCalls, SourceFile: "handlers/pay.go",
+			Metadata: map[string]any{"conditional": true}},
+	}
+
+	f := flow.BuildFlow(edges, "POST /api/pay", 10, 10)
+
+	hasConditional := func(from, to, kind string) bool {
+		for _, e := range f.Edges {
+			if e.From == from && e.To == to && e.Kind == kind && e.Conditional {
+				return true
+			}
+		}
+		return false
+	}
+
+	if hasConditional("HandlePay", "NormalCall", "calls") {
+		t.Error("NormalCall edge should NOT be conditional")
+	}
+	if !hasConditional("HandlePay", "CondCall", "calls") {
+		t.Error("CondCall edge should be conditional")
+	}
+}
