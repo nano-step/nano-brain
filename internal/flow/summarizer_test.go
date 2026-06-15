@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/graph"
@@ -67,7 +68,7 @@ func TestSummarizerCalledWithCorrectArgs(t *testing.T) {
 		},
 	}
 
-	mat := NewMaterializer(q, nil, 10, 10, ms, zerolog.Nop())
+	mat := NewMaterializer(q, nil, 10, 10, 10*time.Minute, ms, zerolog.Nop())
 	if err := mat.Materialize(context.Background(), "test_ws"); err != nil {
 		t.Fatalf("Materialize: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestFallbackToTextOnSummarizerError(t *testing.T) {
 		},
 	}
 
-	mat := NewMaterializer(q, nil, 10, 10, ms, zerolog.Nop())
+	mat := NewMaterializer(q, nil, 10, 10, 10*time.Minute, ms, zerolog.Nop())
 	if err := mat.Materialize(context.Background(), "test_ws"); err != nil {
 		t.Fatalf("Materialize: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestDocumentContentMatchesSummary(t *testing.T) {
 		},
 	}
 
-	mat := NewMaterializer(q, nil, 10, 10, ms, zerolog.Nop())
+	mat := NewMaterializer(q, nil, 10, 10, 10*time.Minute, ms, zerolog.Nop())
 	if err := mat.Materialize(context.Background(), "test_ws"); err != nil {
 		t.Fatalf("Materialize: %v", err)
 	}
@@ -151,7 +152,7 @@ func TestTextSummaryWhenNoSummarizer(t *testing.T) {
 		},
 	}
 
-	mat := NewMaterializer(q, nil, 10, 10, nil, zerolog.Nop())
+	mat := NewMaterializer(q, nil, 10, 10, 10*time.Minute, nil, zerolog.Nop())
 	if err := mat.Materialize(context.Background(), "test_ws"); err != nil {
 		t.Fatalf("Materialize: %v", err)
 	}

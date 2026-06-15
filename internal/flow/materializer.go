@@ -35,17 +35,17 @@ type MaterializerQuerier interface {
 // one document per HTTP entry point. Documents are stored in the "flows"
 // collection so they don't pollute default search results.
 type Materializer struct {
-	queries    MaterializerQuerier
-	enqueue    func(uuid.UUID) // called after each chunk upsert to trigger embedding
-	logger     zerolog.Logger
-	maxDepth   int
-	maxFanout  int
-	summarizer FlowSummarizer // optional LLM summarizer; nil = disabled
+	queries         MaterializerQuerier
+	enqueue         func(uuid.UUID)
+	logger          zerolog.Logger
+	maxDepth        int
+	maxFanout       int
+	summaryTimeout  time.Duration
+	summarizer      FlowSummarizer
 
-	// single-flight guard per workspace
 	mu        sync.Mutex
-	inFlight  map[string]bool   // workspace → currently running
-	pending   map[string]bool   // workspace → re-run queued
+	inFlight  map[string]bool
+	pending   map[string]bool
 }
 
 // NewMaterializer constructs a Materializer. enqueue may be nil (embedding skipped).
@@ -54,18 +54,20 @@ func NewMaterializer(
 	queries MaterializerQuerier,
 	enqueue func(uuid.UUID),
 	maxDepth, maxFanout int,
+	summaryTimeout time.Duration,
 	summarizer FlowSummarizer,
 	logger zerolog.Logger,
 ) *Materializer {
 	return &Materializer{
-		queries:    queries,
-		enqueue:    enqueue,
-		logger:     logger.With().Str("component", "flow.materializer").Logger(),
-		maxDepth:   maxDepth,
-		maxFanout:  maxFanout,
-		summarizer: summarizer,
-		inFlight:   make(map[string]bool),
-		pending:    make(map[string]bool),
+		queries:        queries,
+		enqueue:        enqueue,
+		logger:         logger.With().Str("component", "flow.materializer").Logger(),
+		maxDepth:       maxDepth,
+		maxFanout:      maxFanout,
+		summaryTimeout: summaryTimeout,
+		summarizer:     summarizer,
+		inFlight:       make(map[string]bool),
+		pending:        make(map[string]bool),
 	}
 }
 
@@ -159,7 +161,7 @@ func (m *Materializer) Materialize(ctx context.Context, workspaceHash string) er
 				}
 			}
 
-			summaryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			summaryCtx, cancel := context.WithTimeout(ctx, m.summaryTimeout)
 			summary, err := m.summarizer.Summarize(summaryCtx, entry, chain, integrations)
 			cancel() // release timer immediately — no defer inside loop
 			if err != nil {
