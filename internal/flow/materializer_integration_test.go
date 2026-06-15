@@ -70,7 +70,7 @@ func TestMaterializer_Integration_Upsert(t *testing.T) {
 	insertEdge(t, db, wsHash, "POST /api/topup", "TopupHandler", "http", "routes.go")
 	insertEdge(t, db, wsHash, "TopupHandler", "PaymentService", "calls", "handler.go")
 
-	mat := flow.NewMaterializer(queries, nil, 5, 5, nil, zerolog.Nop())
+	mat := flow.NewMaterializer(queries, nil, 5, 5, nil, 600, zerolog.Nop())
 	if err := mat.Materialize(ctx, wsHash); err != nil {
 		t.Fatalf("Materialize: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestMaterializer_Integration_DeleteStale(t *testing.T) {
 	// Seed an http entry.
 	insertEdge(t, db, wsHash, "POST /api/topup", "TopupHandler", "http", "routes.go")
 
-	mat := flow.NewMaterializer(queries, nil, 5, 5, nil, zerolog.Nop())
+	mat := flow.NewMaterializer(queries, nil, 5, 5, nil, 600, zerolog.Nop())
 	if err := mat.Materialize(ctx, wsHash); err != nil {
 		t.Fatalf("Materialize (first): %v", err)
 	}
@@ -141,7 +141,7 @@ func TestMaterializer_Integration_EmbedEnqueue(t *testing.T) {
 	var enqueuedCount atomic.Int32
 	enqueueFn := func(_ uuid.UUID) { enqueuedCount.Add(1) }
 
-	mat := flow.NewMaterializer(queries, enqueueFn, 5, 5, nil, zerolog.Nop())
+	mat := flow.NewMaterializer(queries, enqueueFn, 5, 5, nil, 600, zerolog.Nop())
 	if err := mat.Materialize(ctx, wsHash); err != nil {
 		t.Fatalf("Materialize: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestMaterializer_SingleFlight_Coalescing(t *testing.T) {
 	_, queries, wsHash := setupDB(t)
 
 	// No edges → Materialize is a lightweight no-op, good for concurrency test.
-	mat := flow.NewMaterializer(queries, nil, 5, 5, nil, zerolog.Nop())
+	mat := flow.NewMaterializer(queries, nil, 5, 5, nil, 600, zerolog.Nop())
 
 	ctx := context.Background()
 	const goroutines = 20
@@ -188,7 +188,7 @@ func TestMaterializer_Integration_ConsumerFlow(t *testing.T) {
 	insertEdge(t, db, wsHash, "CONSUME trade.created", "TradeCreatedHandler", "integration", "handlers.go")
 	insertEdge(t, db, wsHash, "TradeCreatedHandler", "TradeService", "calls", "handlers.go")
 
-	mat := flow.NewMaterializer(queries, nil, 5, 5, nil, zerolog.Nop())
+	mat := flow.NewMaterializer(queries, nil, 5, 5, nil, 600, zerolog.Nop())
 	if err := mat.Materialize(ctx, wsHash); err != nil {
 		t.Fatalf("Materialize: %v", err)
 	}

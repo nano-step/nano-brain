@@ -593,8 +593,11 @@ func startServer(configPath string) {
 			flowSummarizer = flow.NewLLMFlowSummarizer(llmClient, logger)
 		}
 
-		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, flowSummarizer, logger)
+		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, flowSummarizer, cfg.Flow.SummaryTimeoutS, logger)
 		fw.WithFlowNotify(func(wsHash string) {
+			go mat.Trigger(gctx, wsHash)
+		})
+		srv.SetFlowTrigger(func(wsHash string) {
 			go mat.Trigger(gctx, wsHash)
 		})
 		logger.Info().Int("max_depth", cfg.Flow.MaxDepth).Int("max_fanout", cfg.Flow.MaxFanout).Bool("summary_enabled", cfg.Flow.SummaryEnabled).Msg("flow materialization enabled")

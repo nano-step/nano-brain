@@ -235,10 +235,11 @@ func (s SummarizationConfig) IsWriteToDiskEnabled() bool {
 // is not registered, no http/middleware edges are produced, and flow
 // materialization is skipped.
 type FlowConfig struct {
-	Enabled        bool `koanf:"enabled" json:"enabled"`
-	MaxDepth       int  `koanf:"max_depth" json:"max_depth"`
-	MaxFanout      int  `koanf:"max_fanout" json:"max_fanout"`
-	SummaryEnabled bool `koanf:"summary_enabled" json:"summary_enabled"`
+	Enabled         bool   `koanf:"enabled" json:"enabled"`
+	MaxDepth        int    `koanf:"max_depth" json:"max_depth"`
+	MaxFanout       int    `koanf:"max_fanout" json:"max_fanout"`
+	SummaryEnabled  bool   `koanf:"summary_enabled" json:"summary_enabled"`
+	SummaryTimeoutS int    `koanf:"summary_timeout_s" json:"summary_timeout_s"`
 }
 
 // CodeSummarizationConfig holds code symbol summarization configuration.
@@ -497,6 +498,9 @@ func validate(cfg *Config) error {
 		}
 		if cfg.Flow.SummaryEnabled && !cfg.Summarization.Enabled {
 			errs = append(errs, errors.New("flow.summary_enabled requires summarization.enabled to be true"))
+		}
+		if cfg.Flow.SummaryTimeoutS <= 0 {
+			cfg.Flow.SummaryTimeoutS = 600
 		}
 	}
 
