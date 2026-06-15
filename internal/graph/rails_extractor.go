@@ -88,12 +88,8 @@ func (c *railsCtx) clone() *railsCtx {
 
 func (c *railsCtx) urlPrefix() string {
 	var parts []string
-	for _, ns := range c.namespace {
-		parts = append(parts, ns)
-	}
-	for _, s := range c.scope {
-		parts = append(parts, s)
-	}
+	parts = append(parts, c.namespace...)
+	parts = append(parts, c.scope...)
 	return strings.Join(parts, "/")
 }
 
