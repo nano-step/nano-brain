@@ -2,6 +2,7 @@ package graph_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/nano-brain/nano-brain/internal/graph"
@@ -82,6 +83,21 @@ func TestRailsExtractor_RoutesFixture(t *testing.T) {
 	checkEdge(t, edges, "GET /api/v1/payments/billing", "Api::V1::PaymentsController#billing")
 	checkEdge(t, edges, "GET /users", "UsersController#index")
 	checkEdge(t, edges, "GET /users/token_check", "UsersController#token_check")
+	checkEdge(t, edges, "GET /", "HomeController#index")
+	checkEdge(t, edges, "POST /users/sign_in", "UsersController#create")
+	checkEdge(t, edges, "DELETE /users/sign_out", "UsersController#destroy")
+	checkEdge(t, edges, "GET /users", "UsersController#index")
+	checkEdge(t, edges, "GET /users/:id", "UsersController#show")
+
+_redirectsSkipped := 0
+	for _, e := range edges {
+		if strings.Contains(e.TargetNode, "redirect") {
+			_redirectsSkipped++
+		}
+	}
+	if _redirectsSkipped != 0 {
+		t.Errorf("redirect routes should be skipped, got %d", _redirectsSkipped)
+	}
 }
 
 func TestRailsExtractor_EdgeMetadata(t *testing.T) {
@@ -136,8 +152,8 @@ func TestRailsExtractor_LineNumbers(t *testing.T) {
 	if len(hits) == 0 {
 		t.Fatalf("expected http edge for POST /api/v1/signup")
 	}
-	if hits[0].Line != 6 {
-		t.Errorf("expected line 6 for POST /api/v1/signup, got %d", hits[0].Line)
+	if hits[0].Line != 7 {
+		t.Errorf("expected line 7 for POST /api/v1/signup, got %d", hits[0].Line)
 	}
 }
 
