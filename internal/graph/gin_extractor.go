@@ -29,6 +29,10 @@ func (e *GinExtractor) Supports(ext string) bool {
 	return ext == ".go"
 }
 
+func (e *GinExtractor) RequiresFrameworks() []string {
+	return []string{"gin"}
+}
+
 func (e *GinExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
 	parser := gotreesitter.NewParser(e.lang)
 	tree, err := parser.Parse(content)

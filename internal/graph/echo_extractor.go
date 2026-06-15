@@ -31,6 +31,10 @@ func (e *EchoRouteExtractor) Supports(ext string) bool {
 	return ext == ".go"
 }
 
+func (e *EchoRouteExtractor) RequiresFrameworks() []string {
+	return []string{"echo"}
+}
+
 // ExtractEdges parses content as Go source and returns http + middleware edges
 // for any Echo route/group/Use registrations found.
 func (e *EchoRouteExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
