@@ -34,6 +34,7 @@ var DefaultRules = []FrameworkRule{
 	{Framework: "echo", Detect: detectEcho},
 	{Framework: "gin", Detect: detectGin},
 	{Framework: "express", Detect: detectExpress},
+	{Framework: "nestjs", Detect: detectNestJS},
 	{Framework: "go", Detect: detectGoModExists},
 }
 
@@ -132,6 +133,33 @@ func detectExpress(dir string) bool {
 		}
 	}
 	return false
+}
+
+func detectNestJS(dir string) bool {
+	if checkPackageJSONForNestJSDep(dir) {
+		return true
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if name == "node_modules" || name == ".git" || name == ".opencode" || name == "vendor" {
+			continue
+		}
+		if checkPackageJSONForNestJSDep(filepath.Join(dir, name)) {
+			return true
+		}
+	}
+	return false
+}
+
+func checkPackageJSONForNestJSDep(dir string) bool {
+	return checkPackageJSONForDep(dir, "@nestjs/common") || checkPackageJSONForDep(dir, "@nestjs/core")
 }
 
 func checkPackageJSONForDep(dir string, dep string) bool {
