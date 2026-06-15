@@ -375,6 +375,12 @@ func startServer(configPath string) {
 			graphExtractors = append(graphExtractors, pyIntGE)
 			logger.Info().Msg("execution-flow: python integration extractor enabled")
 		}
+		if expressGE, err := graph.NewExpressExtractor(logger); err != nil {
+			logger.Warn().Err(err).Msg("express route extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, expressGE)
+			logger.Info().Msg("execution-flow: express route extractor enabled")
+		}
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 
