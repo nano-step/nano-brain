@@ -135,9 +135,7 @@ func TestExpressExtractor_MiddlewareExtraction(t *testing.T) {
 	src := []byte(`import express from 'express';
 const app = express();
 
-app.use(authMiddleware);
-app.use(corsMiddleware);
-app.get('/protected', handleProtected);
+app.use('/api', authMiddleware, handleRequest);
 `)
 	ex := newExpressExtractor(t)
 	edges, err := ex.ExtractEdges("routes.ts", src)
@@ -145,9 +143,14 @@ app.get('/protected', handleProtected);
 		t.Fatal(err)
 	}
 
-	mwEdges := findEdges(edges, graph.EdgeMiddleware, "<app.use>", "authMiddleware")
+	httpEdges := findEdges(edges, graph.EdgeHTTP, "USE /api", "handleRequest")
+	if len(httpEdges) == 0 {
+		t.Fatalf("expected http edge USE /api → handleRequest; got %+v", edges)
+	}
+
+	mwEdges := findEdges(edges, graph.EdgeMiddleware, "authMiddleware", "handleRequest")
 	if len(mwEdges) == 0 {
-		t.Fatalf("expected middleware edge <app.use> → authMiddleware; got %+v", edges)
+		t.Fatalf("expected middleware edge authMiddleware → handleRequest; got %+v", edges)
 	}
 }
 
@@ -163,9 +166,9 @@ app.get('/admin', requireAdmin, handleAdmin);
 		t.Fatal(err)
 	}
 
-	mwEdges := findEdges(edges, graph.EdgeMiddleware, "GET /admin", "requireAdmin")
+	mwEdges := findEdges(edges, graph.EdgeMiddleware, "requireAdmin", "handleAdmin")
 	if len(mwEdges) == 0 {
-		t.Fatalf("expected middleware edge GET /admin → requireAdmin; got %+v", edges)
+		t.Fatalf("expected middleware edge requireAdmin → handleAdmin; got %+v", edges)
 	}
 }
 

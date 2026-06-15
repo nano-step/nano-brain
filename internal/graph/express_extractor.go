@@ -93,86 +93,18 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 		})
 
 		for _, mw := range middleware {
-			edgeKey := "middleware:" + source + "->" + mw
+			edgeKey := "middleware:" + mw + "->" + handler
 			if !seen[edgeKey] {
 				seen[edgeKey] = true
 				edges = append(edges, Edge{
-					SourceNode: source,
-					TargetNode: mw,
+					SourceNode: mw,
+					TargetNode: handler,
 					Kind:       EdgeMiddleware,
 					SourceFile: relFile,
 					Line:       lineForByte(content, n.StartByte()),
 					Language:   langStr,
 				})
 			}
-		}
-	}
-
-	extractMiddleware := func(n *gotreesitter.Node) {
-		fnNode := n.ChildByFieldName("function", lang)
-		if fnNode == nil || fnNode.Type(lang) != "member_expression" {
-			return
-		}
-		objectNode := fnNode.ChildByFieldName("object", lang)
-		if objectNode == nil {
-			return
-		}
-		receiver := bt.NodeText(objectNode)
-		if receiver == "" {
-			return
-		}
-		method := tsExtractHTTPMethod(bt, n, lang)
-		if method != "USE" {
-			return
-		}
-
-		argsNode := n.ChildByFieldName("arguments", lang)
-		if argsNode == nil {
-			return
-		}
-		argCount := tsCountArgs(argsNode, lang)
-		if argCount == 0 {
-			return
-		}
-
-		// Determine if first arg is a path string (path-prefix form).
-		// app.use("/api", mw1, mw2) → skip path string and handler (last arg)
-		// app.use(mw1, mw2)         → emit all args
-		hasPathPrefix := false
-		if firstNode := tsArgNode(argsNode, lang, 0); firstNode != nil {
-			t := firstNode.Type(lang)
-			hasPathPrefix = t == "string" || t == "template_string"
-		}
-		maxIdx := argCount
-		if hasPathPrefix && argCount > 1 {
-			maxIdx = argCount - 1
-		}
-
-		for i := 0; i < maxIdx; i++ {
-			handlerNode := tsArgNode(argsNode, lang, i)
-			if handlerNode == nil {
-				continue
-			}
-			handlerName := tsResolveMiddlewareName(bt, handlerNode, lang)
-			if handlerName == "" {
-				continue
-			}
-
-			source := "<" + receiver + ".use>"
-			edgeKey := "middleware:" + source + "->" + handlerName
-			if seen[edgeKey] {
-				continue
-			}
-			seen[edgeKey] = true
-
-			edges = append(edges, Edge{
-				SourceNode: source,
-				TargetNode: handlerName,
-				Kind:       EdgeMiddleware,
-				SourceFile: relFile,
-				Line:       lineForByte(content, n.StartByte()),
-				Language:   langStr,
-			})
 		}
 	}
 
@@ -185,9 +117,6 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 			method := tsExtractHTTPMethod(bt, n, lang)
 			if method != "" {
 				extractHTTP(n)
-			}
-			if method == "USE" {
-				extractMiddleware(n)
 			}
 		} else if fnNode.Type(lang) == "identifier" && bt.NodeText(fnNode) == "express" {
 			handler := tsExtractHandlerName(bt, n, lang, "USE", "/")
