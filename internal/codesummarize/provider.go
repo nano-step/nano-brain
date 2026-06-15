@@ -24,9 +24,13 @@ type LLMProvider struct {
 }
 
 func NewLLMProvider(cfg config.CodeSummarizationConfig, logger zerolog.Logger) *LLMProvider {
+	timeout := 600 * time.Second
+	if cfg.RequestTimeout > 0 {
+		timeout = time.Duration(cfg.RequestTimeout) * time.Second
+	}
 	return &LLMProvider{
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
+			Timeout: timeout,
 		},
 		providerURL:     strings.TrimRight(cfg.ProviderURL, "/"),
 		apiKey:          cfg.APIKey,
