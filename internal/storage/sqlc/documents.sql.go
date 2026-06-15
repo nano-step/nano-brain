@@ -296,6 +296,80 @@ func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash st
 	return items, nil
 }
 
+const listDocumentsByWorkspacePaginated = `-- name: ListDocumentsByWorkspacePaginated :many
+SELECT d.id, d.workspace_hash, d.content_hash, d.title, d.source_path, d.collection, d.tags, d.created_at, d.updated_at,
+       d.supersedes_id,
+       (SELECT s.id FROM documents s WHERE s.supersedes_id = d.id LIMIT 1) AS superseded_by_id
+FROM documents d
+WHERE d.workspace_hash = $1
+  AND ($4::bool OR ($2::timestamptz, $3::uuid) > (d.updated_at, d.id))
+ORDER BY d.updated_at DESC, d.id DESC
+LIMIT $5
+`
+
+type ListDocumentsByWorkspacePaginatedParams struct {
+	WorkspaceHash string
+	Column2       time.Time
+	Column3       uuid.UUID
+	Column4       bool
+	Limit         int32
+}
+
+type ListDocumentsByWorkspacePaginatedRow struct {
+	ID             uuid.UUID
+	WorkspaceHash  string
+	ContentHash    string
+	Title          string
+	SourcePath     string
+	Collection     string
+	Tags           []string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	SupersedesID   uuid.NullUUID
+	SupersededByID uuid.UUID
+}
+
+func (q *Queries) ListDocumentsByWorkspacePaginated(ctx context.Context, arg ListDocumentsByWorkspacePaginatedParams) ([]ListDocumentsByWorkspacePaginatedRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDocumentsByWorkspacePaginated,
+		arg.WorkspaceHash,
+		arg.Column2,
+		arg.Column3,
+		arg.Column4,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDocumentsByWorkspacePaginatedRow
+	for rows.Next() {
+		var i ListDocumentsByWorkspacePaginatedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceHash,
+			&i.ContentHash,
+			&i.Title,
+			&i.SourcePath,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SupersedesID,
+			&i.SupersededByID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSessionDocumentsByWorkspace = `-- name: ListSessionDocumentsByWorkspace :many
 SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, content, created_at, updated_at
 FROM documents

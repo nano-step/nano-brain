@@ -123,6 +123,16 @@ WHERE workspace_hash = $1
   AND source_path != ''
 ORDER BY source_path;
 
+-- name: ListDocumentsByWorkspacePaginated :many
+SELECT d.id, d.workspace_hash, d.content_hash, d.title, d.source_path, d.collection, d.tags, d.created_at, d.updated_at,
+       d.supersedes_id,
+       (SELECT s.id FROM documents s WHERE s.supersedes_id = d.id LIMIT 1) AS superseded_by_id
+FROM documents d
+WHERE d.workspace_hash = $1
+  AND ($4::bool OR ($2::timestamptz, $3::uuid) > (d.updated_at, d.id))
+ORDER BY d.updated_at DESC, d.id DESC
+LIMIT $5;
+
 -- name: DeleteFlowDocumentsByWorkspace :exec
 DELETE FROM documents
 WHERE workspace_hash = $1

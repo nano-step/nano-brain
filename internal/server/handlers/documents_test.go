@@ -25,6 +25,10 @@ func (m *mockDocumentsQuerier) ListDocumentsByWorkspace(_ context.Context, _ str
 	return m.rows, nil
 }
 
+func (m *mockDocumentsQuerier) ListDocumentsByWorkspacePaginated(_ context.Context, _ sqlc.ListDocumentsByWorkspacePaginatedParams) ([]sqlc.ListDocumentsByWorkspacePaginatedRow, error) {
+	return nil, nil
+}
+
 func (m *mockDocumentsQuerier) DeleteDocumentByIDAndWorkspace(_ context.Context, _ sqlc.DeleteDocumentByIDAndWorkspaceParams) (int64, error) {
 	if !m.deleteOK {
 		return 0, errors.New("db error")

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog"
 )
 
 // RegisterUIRoutes mounts the SPA at /ui and /ui/* with SPA fallback.
@@ -48,6 +49,12 @@ func serveIndex(fsys http.FileSystem) echo.HandlerFunc {
 func spaFallback(fsys http.FileSystem) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		p := strings.TrimPrefix(c.Request().URL.Path, "/ui/")
+
+		// Exclude standalone routes that have their own handlers
+		if p == "flows" {
+			return echo.NewHTTPError(http.StatusNotFound)
+		}
+
 		f, err := fsys.Open(p)
 		if err == nil {
 			f.Close()
@@ -107,4 +114,16 @@ func isHashedAsset(p string) bool {
 	ext := filepath.Ext(p)
 	base := strings.TrimSuffix(filepath.Base(p), ext)
 	return strings.ContainsAny(base, "-.")
+}
+
+// RegisterFlowDashboardRoute registers GET /ui/flows serving the standalone
+// flow dashboard HTML page. The page loads workspace and flow data via JS
+// fetches to the REST API, so no server-side workspace context is needed.
+func RegisterFlowDashboardRoute(e *echo.Echo, securityMW echo.MiddlewareFunc, logger zerolog.Logger) {
+	e.GET("/ui/flows", func(c echo.Context) error {
+		c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+		c.Response().WriteHeader(http.StatusOK)
+		_, err := io.WriteString(c.Response().Writer, FlowDashboardHTML)
+		return err
+	}, securityMW)
 }

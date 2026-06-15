@@ -12,6 +12,7 @@ TEST_DB="postgres://nanobrain:nanobrain@localhost:5432/nanobrain_test"
 ROOT="$(git rev-parse --show-toplevel)"
 BIN="$ROOT/nano-brain"
 PORT=3199
+LOG="${BENCH_LOG:-/tmp/nb-bench.log}"
 
 cd "$ROOT"
 [ -x "$BIN" ] || { echo "building nano-brain..."; CGO_ENABLED=0 go build -o "$BIN" ./cmd/nano-brain; }
@@ -28,12 +29,12 @@ else
   DATABASE_URL="$TEST_DB" "$BIN" db:migrate
 fi
 
-echo "==> Starting isolated flow-enabled server on :$PORT"
+echo "==> Starting isolated flow-enabled server on :$PORT (log: $LOG)"
 NANO_BRAIN_ALLOW_DUPLICATE_SERVER=1 NANO_BRAIN_SERVER_PORT=$PORT NANO_BRAIN_FLOW_ENABLED=true \
   NANO_BRAIN_HYDE_ENABLED=false NANO_BRAIN_QUERY_PREPROCESSING_ENABLED=false \
-  DATABASE_URL="$TEST_DB" "$BIN" serve > /tmp/nb-bench.log 2>&1 &
+  DATABASE_URL="$TEST_DB" "$BIN" serve > "$LOG" 2>&1 &
 echo $! > /tmp/nb-bench.pid
-echo "    pid $(cat /tmp/nb-bench.pid) (log: /tmp/nb-bench.log)"
+echo "    pid $(cat /tmp/nb-bench.pid)"
 
 echo "==> Waiting for server health"
 until curl -sf -m 3 "http://localhost:$PORT/api/v1/health" >/dev/null 2>&1 || \

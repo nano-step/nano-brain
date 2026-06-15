@@ -23,7 +23,7 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
+		"Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; script-src 'self' https://cdn.jsdelivr.net; frame-ancestors 'none'",
 		"X-Content-Type-Options":  "nosniff",
 		"X-Frame-Options":         "DENY",
 		"Referrer-Policy":         "same-origin",

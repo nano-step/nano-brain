@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 
 type DocumentsQuerier interface {
 	ListDocumentsByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.ListDocumentsByWorkspaceRow, error)
+	ListDocumentsByWorkspacePaginated(ctx context.Context, arg sqlc.ListDocumentsByWorkspacePaginatedParams) ([]sqlc.ListDocumentsByWorkspacePaginatedRow, error)
 	DeleteDocumentByIDAndWorkspace(ctx context.Context, arg sqlc.DeleteDocumentByIDAndWorkspaceParams) (int64, error)
 }
 
@@ -34,7 +37,8 @@ type documentListItem struct {
 }
 
 type listDocumentsResponse struct {
-	Documents []documentListItem `json:"documents"`
+	Documents  []documentListItem `json:"documents"`
+	NextCursor *string            `json:"next_cursor,omitempty"`
 }
 
 func ListDocuments(q DocumentsQuerier, logger zerolog.Logger) echo.HandlerFunc {
@@ -45,11 +49,8 @@ func ListDocuments(q DocumentsQuerier, logger zerolog.Logger) echo.HandlerFunc {
 		}
 		ctx := c.Request().Context()
 
-		rows, err := q.ListDocumentsByWorkspace(ctx, workspace)
-		if err != nil {
-			logger.Error().Err(err).Str("workspace", workspace).Msg("list documents failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to list documents")
-		}
+		cursorStr := strings.TrimSpace(c.QueryParam("cursor"))
+		limitStr := strings.TrimSpace(c.QueryParam("limit"))
 
 		textFilter := strings.ToLower(strings.TrimSpace(c.QueryParam("text")))
 		collectionFilter := strings.TrimSpace(c.QueryParam("collection"))
@@ -60,6 +61,64 @@ func ListDocuments(q DocumentsQuerier, logger zerolog.Logger) echo.HandlerFunc {
 					tagFilter = append(tagFilter, tag)
 				}
 			}
+		}
+
+		limit := int32(100)
+		if limitStr != "" {
+			n, err := strconv.ParseInt(limitStr, 10, 32)
+			if err != nil || n < 1 || n > 500 {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid limit (1-500)")
+			}
+			limit = int32(n)
+		}
+
+		if cursorStr == "" {
+			rows, err := q.ListDocumentsByWorkspace(ctx, workspace)
+			if err != nil {
+				logger.Error().Err(err).Str("workspace", workspace).Msg("list documents failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to list documents")
+			}
+
+			items := make([]documentListItem, 0, len(rows))
+			for _, r := range rows {
+				if collectionFilter != "" && r.Collection != collectionFilter {
+					continue
+				}
+				if textFilter != "" && !strings.Contains(strings.ToLower(r.Title), textFilter) {
+					continue
+				}
+				if len(tagFilter) > 0 && !anyTagMatches(r.Tags, tagFilter) {
+					continue
+				}
+			items = append(items, toDocumentItemFromRow(r))
+		}
+
+		return c.JSON(http.StatusOK, listDocumentsResponse{Documents: items})
+	}
+
+		cursorParts := strings.SplitN(cursorStr, ",", 2)
+		if len(cursorParts) != 2 {
+			return echo.NewHTTPError(http.StatusBadRequest, "cursor must be <timestamp>,<id>")
+		}
+		cursorTS, err := time.Parse(time.RFC3339Nano, cursorParts[0])
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor timestamp")
+		}
+		cursorID, err := uuid.Parse(cursorParts[1])
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor id")
+		}
+
+		rows, err := q.ListDocumentsByWorkspacePaginated(ctx, sqlc.ListDocumentsByWorkspacePaginatedParams{
+			WorkspaceHash: workspace,
+			Column2:       cursorTS,
+			Column3:       cursorID,
+			Column4:       false,
+			Limit:         limit,
+		})
+		if err != nil {
+			logger.Error().Err(err).Str("workspace", workspace).Msg("list documents paginated failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to list documents")
 		}
 
 		items := make([]documentListItem, 0, len(rows))
@@ -73,10 +132,17 @@ func ListDocuments(q DocumentsQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			if len(tagFilter) > 0 && !anyTagMatches(r.Tags, tagFilter) {
 				continue
 			}
-			items = append(items, toDocumentListItem(r))
+			items = append(items, toDocumentItemFromPaginatedRow(r))
 		}
 
-		return c.JSON(http.StatusOK, listDocumentsResponse{Documents: items})
+		var nextCursor *string
+		if len(items) > 0 {
+			last := items[len(items)-1]
+			s := fmt.Sprintf("%s,%s", last.UpdatedAt.Format(time.RFC3339Nano), last.ID.String())
+			nextCursor = &s
+		}
+
+		return c.JSON(http.StatusOK, listDocumentsResponse{Documents: items, NextCursor: nextCursor})
 	}
 }
 
@@ -119,26 +185,41 @@ func anyTagMatches(docTags, filter []string) bool {
 	return false
 }
 
-func toDocumentListItem(r sqlc.ListDocumentsByWorkspaceRow) documentListItem {
+func toDocumentListItem(
+	id uuid.UUID,
+	title, collection, sourcePath string,
+	tags []string,
+	createdAt, updatedAt time.Time,
+	supersedesID uuid.NullUUID,
+	supersededByID uuid.UUID,
+) documentListItem {
 	item := documentListItem{
-		ID:         r.ID,
-		Title:      r.Title,
-		Collection: r.Collection,
-		SourcePath: r.SourcePath,
-		Tags:       r.Tags,
-		CreatedAt:  r.CreatedAt,
-		UpdatedAt:  r.UpdatedAt,
+		ID:         id,
+		Title:      title,
+		Collection: collection,
+		SourcePath: sourcePath,
+		Tags:       tags,
+		CreatedAt:  createdAt,
+		UpdatedAt:  updatedAt,
 	}
 	if item.Tags == nil {
 		item.Tags = []string{}
 	}
-	if r.SupersedesID.Valid {
-		s := r.SupersedesID.UUID.String()
+	if supersedesID.Valid {
+		s := supersedesID.UUID.String()
 		item.SupersedesID = &s
 	}
-	if r.SupersededByID != uuid.Nil {
-		s := r.SupersededByID.String()
+	if supersededByID != uuid.Nil {
+		s := supersededByID.String()
 		item.SupersededByID = &s
 	}
 	return item
+}
+
+func toDocumentItemFromRow(r sqlc.ListDocumentsByWorkspaceRow) documentListItem {
+	return toDocumentListItem(r.ID, r.Title, r.Collection, r.SourcePath, r.Tags, r.CreatedAt, r.UpdatedAt, r.SupersedesID, r.SupersededByID)
+}
+
+func toDocumentItemFromPaginatedRow(r sqlc.ListDocumentsByWorkspacePaginatedRow) documentListItem {
+	return toDocumentListItem(r.ID, r.Title, r.Collection, r.SourcePath, r.Tags, r.CreatedAt, r.UpdatedAt, r.SupersedesID, r.SupersededByID)
 }

@@ -176,6 +176,13 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
   ```
   (`NANO_BRAIN_ALLOW_DUPLICATE_SERVER=1` bypasses the single-instance guard so it coexists with `:3100`.)
 - The capability benchmark bootstraps this automatically: `benchmarks/capability/setup.sh` (clean `nanobrain_test` → migrate → :3199 server → index only this repo). The harness defaults to `http://localhost:3199`.
+- **Benchmark server env**: Always disable HyDE and preprocess for benchmarks:
+  ```bash
+  NANO_BRAIN_HYDE_ENABLED=false NANO_BRAIN_QUERY_PREPROCESSING_ENABLED=false
+  ```
+  These cause LLM calls that timeout when no provider is configured, blocking hybrid search.
+- **Benchmark log path**: Configure via `BENCH_LOG` env var (default: `/tmp/nb-bench.log`).
+- **Non-destructive benchmarks**: `setup.sh` checks if `nanobrain_test` exists before dropping — preserves existing data between runs.
 - **NEVER** run `POST /api/v1/reindex`, `force_wipe`, or destructive ops against the **dev** workspace to set up a test — index into `nanobrain_test` instead.
 - **NEVER kill processes with broad `pkill -f`/`lsof | xargs kill` patterns.** They can take down Postgres (the Docker container `nanobrain-pg`) or Docker itself. Capture the exact PID when you launch a server (e.g. `echo $! > /tmp/nb-bench.pid`) and kill only that PID.
 - Postgres runs as a **Docker container** (`nanobrain-pg`, image `pgvector/pgvector:pg17`, volume `docker_nanobrain_pgdata`) via `docker compose`. Data survives container restarts; if 5432 is down, bring it back with `docker compose up -d postgres` — do not start a stray brew/native cluster on 5432.

@@ -1,0 +1,12 @@
+{
+  "scale": 110,
+  "workspace_hash": "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
+  "timestamp": "2026-06-11T15:39:17Z",
+  "version": "post-embed-fix-snippet",
+  "precision_at_5": 0.603,
+  "recall_at_10": 63.94,
+  "mrr": 0.7412121212121212,
+  "query_p50_ms": 3.216,
+  "query_p95_ms": 5.824,
+  "query_count": 110
+}

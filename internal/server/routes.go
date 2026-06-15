@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -26,6 +27,7 @@ func registerRoutes(s *Server) {
 	s.healthHandler = h
 
 	s.echo.GET("/health", h.Health)
+	s.echo.GET("/api/v1/health", h.Health)
 	s.echo.GET("/api/status", h.Status)
 
 	api := s.echo.Group("/api/v1", contentTypeMiddleware())
@@ -97,6 +99,15 @@ func registerRoutes(s *Server) {
 	data.POST("/graph/trace", handlers.GraphTrace(s.queries, s.logger))
 	data.POST("/graph/flow", handlers.GraphFlow(s.queries, s.currentConfig().Flow, s.logger))
 
+	data.POST("/flow/materialize", func(c echo.Context) error {
+		workspace := c.Get("workspace").(string)
+		if s.flowTriggerFn == nil {
+			return c.JSON(http.StatusOK, map[string]string{"status": "disabled", "message": "flow materialization not enabled"})
+		}
+		go s.flowTriggerFn(workspace)
+		return c.JSON(http.StatusAccepted, map[string]string{"status": "queued", "workspace": workspace})
+	})
+
 	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger, s.recorder))
 	data.POST("/search", handlers.BM25Search(s.queries, s.logger, s.recorder))
 
@@ -133,6 +144,7 @@ func registerRoutes(s *Server) {
 	s.echo.DELETE("/mcp", echo.WrapHandler(streamableHandler))
 
 	webui.RegisterUIRoutes(s.echo, webui.EmbedFS, middleware.SecurityHeaders())
+	webui.RegisterFlowDashboardRoute(s.echo, middleware.SecurityHeaders(), s.logger)
 }
 
 const defaultMaxFileSize int64 = 307200

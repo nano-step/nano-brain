@@ -71,6 +71,7 @@ type Server struct {
 	concreteLinkRes    *links.Resolver
 	concreteLinkExt    *links.Extractor
 	eventBus           *eventbus.Bus
+	flowTriggerFn      func(string)
 }
 
 func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, bus *eventbus.Bus, logger zerolog.Logger, version string, migrationVersion int64) *Server {
@@ -243,6 +244,10 @@ func (s *Server) getCodeSummarizer() handlers.CodeSummarizer {
 	s.codeSummarizeMu.RLock()
 	defer s.codeSummarizeMu.RUnlock()
 	return s.codeSummarizer
+}
+
+func (s *Server) SetFlowTrigger(fn func(string)) {
+	s.flowTriggerFn = fn
 }
 
 // EventBus returns the server's event bus for producer wiring. May be nil.

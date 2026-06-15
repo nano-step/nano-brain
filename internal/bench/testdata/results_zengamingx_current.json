@@ -1,0 +1,16 @@
+{
+  "dataset_version": "v1",
+  "scale": 20,
+  "workspace_hash": "d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+  "timestamp": "2026-06-13T06:23:21Z",
+  "version": "v0.3.0-dedup+ranking",
+  "precision_at_5": 0,
+  "recall_at_10": 0,
+  "mrr": 0,
+  "precision_at_5_paths": 0.02,
+  "recall_at_10_paths": 0.075,
+  "mrr_paths": 0.029166666666666664,
+  "query_p50_ms": 16933.999258,
+  "query_p95_ms": 36561.599267,
+  "query_count": 20
+}

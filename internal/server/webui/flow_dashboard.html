@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>nano-brain - Flows</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+:root[data-theme=dark]{--bg-0:#0d0d0d;--bg-1:#141414;--bg-2:#1a1a1a;--bg-hover:rgba(255,255,255,.04);--bg-active:rgba(255,255,255,.08);--text-1:rgba(255,255,255,.95);--text-2:rgba(255,255,255,.65);--text-3:rgba(255,255,255,.45);--text-4:rgba(255,255,255,.28);--border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.14);--accent:#0070f3;--ok:#10b981;--warn:#f59e0b;--err:#ef4444;--shadow-elev:0 1px 0 rgba(255,255,255,.04) inset,0 8px 24px rgba(0,0,0,.5)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg-0);color:var(--text-1);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px;line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased;height:100%}
+code,pre,.mono{font-family:JetBrains Mono,Fira Code,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+a{color:var(--accent);text-decoration:none}
+.app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+.sidebar{border-right:1px solid var(--border);padding:16px 0;display:flex;flex-direction:column;gap:4px;background:var(--bg-0);position:sticky;top:0;height:100vh;overflow-y:auto}
+.brand{padding:0 16px 16px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.brand-name{font-weight:700;letter-spacing:-.03em;font-size:15px}
+.brand-sub{color:var(--text-3);font-size:11px;margin-top:2px;font-family:JetBrains Mono,monospace}
+.nav{padding:0 8px;display:flex;flex-direction:column;gap:2px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:7px 10px;color:var(--text-2);transition:background .1s,color .1s;cursor:pointer;-webkit-user-select:none;user-select:none;text-decoration:none;border-radius:0}
+.nav-item:hover{background:var(--bg-hover);color:var(--text-1)}
+.nav-item.active{background:var(--bg-active);color:var(--text-1)}
+.nav-item-icon{width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{display:flex;align-items:center;gap:16px;padding:12px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg-0);z-index:10}
+.topbar-title{font-weight:600;font-size:14px;letter-spacing:-.02em}
+.topbar-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+.panel{padding:24px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.surface{border:1px solid var(--border);background:var(--bg-0)}
+.surface-head{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--text-2);font-weight:500}
+.filter-bar{display:flex;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)}
+.filter-input{background:var(--bg-1);border:1px solid var(--border);padding:6px 10px;outline:none;min-width:220px;transition:border-color .15s;color:var(--text-1)}
+.filter-input:focus-visible{border-color:var(--accent)}
+select{background:var(--bg-1);border:1px solid var(--border);padding:6px 10px;color:var(--text-1);min-width:200px}
+select:focus{outline:none;border-color:var(--accent)}
+.btn{padding:6px 12px;border:1px solid var(--border-strong);color:var(--text-1);font-size:12px;transition:background .1s,border-color .1s}
+.btn:hover{background:var(--bg-hover)}
+.table{width:100%;border-collapse:collapse;font-size:12px}
+.table th{text-align:left;font-weight:500;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;font-size:10px;padding:8px 12px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg-0)}
+.table td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+.table tr{cursor:pointer}
+.table tr:hover td{background:var(--bg-hover)}
+.table tr.active td{background:var(--bg-active)}
+.method{font-weight:700;font-size:11px;text-transform:uppercase;font-family:JetBrains Mono,monospace}
+.method-GET{color:#58a6ff}
+.method-POST{color:#3fb950}
+.method-PUT{color:#d29922}
+.method-DELETE{color:#f85149}
+.path{font-family:JetBrains Mono,monospace;font-size:12px}
+.flow-meta{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:12px;margin-bottom:16px}
+.flow-meta dt{color:var(--text-3)}
+.flow-meta dd{color:var(--text-1);font-family:JetBrains Mono,monospace}
+.externals{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.external-tag{background:var(--bg-2);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;color:var(--text-3);font-family:JetBrains Mono,monospace}
+.mermaid-container{overflow-x:auto;padding:16px;min-height:200px}
+.loading{text-align:center;padding:48px;color:var(--text-3);font-size:13px}
+.error{color:var(--err);padding:12px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.3);font-size:12px}
+.empty{color:var(--text-3);text-align:center;padding:32px;font-size:13px}
+.scrollable{max-height:400px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar">
+    <div class="brand">
+      <div class="brand-name">nano-brain</div>
+      <div class="brand-sub">memory server</div>
+    </div>
+    <div class="nav">
+      <a href="/ui" class="nav-item">
+        <span class="nav-item-icon">📊</span>
+        <span>Dashboard</span>
+      </a>
+      <a href="/ui/flows" class="nav-item active">
+        <span class="nav-item-icon">🔀</span>
+        <span>Flows</span>
+      </a>
+    </div>
+  </nav>
+  <div class="main">
+    <div class="topbar">
+      <span class="topbar-title">Execution Flows</span>
+      <div class="topbar-actions">
+        <select id="workspace-select"><option value="">Loading workspaces...</option></select>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="surface">
+        <div class="surface-head">
+          <span>Endpoints with flow data</span>
+          <span id="endpoint-count"></span>
+        </div>
+        <div class="filter-bar">
+          <input type="text" class="filter-input" id="search-input" placeholder="Filter endpoints...">
+        </div>
+        <div class="scrollable">
+          <table class="table">
+            <thead>
+              <tr><th style="width:60px">Method</th><th>Path</th></tr>
+            </thead>
+            <tbody id="endpoint-list">
+              <tr><td colspan="2" class="empty">Select a workspace to load endpoints.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="surface">
+        <div class="surface-head">
+          <span>Flow Diagram</span>
+        </div>
+        <div id="flow-meta" class="flow-meta" style="padding:16px 16px 0"></div>
+        <div id="externals-container" style="padding:0 16px"></div>
+        <div id="mermaid-container" class="mermaid-container">
+          <div class="empty">Select an endpoint to view its execution flow.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+const wsSelect = document.getElementById('workspace-select');
+const searchInput = document.getElementById('search-input');
+const endpointList = document.getElementById('endpoint-list');
+const endpointCount = document.getElementById('endpoint-count');
+const mermaidContainer = document.getElementById('mermaid-container');
+const flowMeta = document.getElementById('flow-meta');
+const externalsContainer = document.getElementById('externals-container');
+
+let currentEntries = [];
+let currentWorkspace = '';
+
+async function loadWorkspaces() {
+  try {
+    const r = await fetch('/api/v1/workspaces');
+    const data = await r.json();
+    const workspaces = data.workspaces || data;
+    wsSelect.innerHTML = '<option value="">Select workspace...</option>';
+    for (const ws of workspaces) {
+      const opt = document.createElement('option');
+      opt.value = ws.hash;
+      opt.textContent = ws.name || ws.hash;
+      wsSelect.appendChild(opt);
+    }
+  } catch (e) {
+    wsSelect.innerHTML = '<option value="">Failed to load workspaces</option>';
+  }
+}
+
+async function loadEndpoints(workspace) {
+  currentWorkspace = workspace;
+  try {
+    const r = await fetch(`/api/v1/documents?collection=flows&workspace=${encodeURIComponent(workspace)}`);
+    if (!r.ok) throw new Error('Failed to fetch flows');
+    const data = await r.json();
+    let entries = [];
+    for (const doc of data.documents || []) {
+      const sourcePath = doc.source_path || '';
+      const path = sourcePath.replace(/^flow:\/\//, '');
+      const methodMatch = path.match(/^(GET|POST|PUT|DELETE|PATCH)\s+/);
+      const method = methodMatch ? methodMatch[1] : 'GET';
+      const pathOnly = path.replace(/^(GET|POST|PUT|DELETE|PATCH)\s+/, '');
+      entries.push({ method, path: pathOnly, fullPath: path, docId: doc.id, title: doc.title });
+    }
+    entries.sort((a, b) => a.path.localeCompare(b.path));
+    currentEntries = entries;
+    endpointCount.textContent = `${entries.length} endpoints`;
+    renderEndpoints(entries);
+  } catch (e) {
+    endpointList.innerHTML = `<tr><td colspan="2" class="error">Error loading endpoints: ${e.message}</td></tr>`;
+  }
+}
+
+function renderEndpoints(entries) {
+  const q = searchInput.value.toLowerCase();
+  const filtered = q ? entries.filter(e => e.path.toLowerCase().includes(q) || e.method.toLowerCase().includes(q)) : entries;
+  if (filtered.length === 0) {
+    endpointList.innerHTML = '<tr><td colspan="2" class="empty">No matching endpoints found.</td></tr>';
+    return;
+  }
+  endpointList.innerHTML = filtered.map(e =>
+    `<tr data-entry="${e.fullPath}" onclick="selectEndpoint(this)">
+      <td><span class="method method-${e.method}">${e.method}</span></td>
+      <td class="path">${e.path}</td>
+    </tr>`
+  ).join('');
+}
+
+async function selectEndpoint(el) {
+  document.querySelectorAll('#endpoint-list tr').forEach(r => r.classList.remove('active'));
+  el.classList.add('active');
+  const entry = el.dataset.entry;
+  await loadFlow(currentWorkspace, entry);
+}
+
+async function loadFlow(workspace, entry) {
+  mermaidContainer.innerHTML = '<div class="loading">Loading flow diagram...</div>';
+  try {
+    const r = await fetch('/api/v1/graph/flow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, entry, max_depth: 5, format: 'mermaid' })
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (!data.found) {
+      mermaidContainer.innerHTML = `<div class="empty">No flow found for "${entry}".</div>`;
+      flowMeta.innerHTML = '';
+      externalsContainer.innerHTML = '';
+      return;
+    }
+    flowMeta.innerHTML = `<dt>Entry</dt><dd>${data.entry}</dd>${data.method ? `<dt>Method</dt><dd>${data.method}</dd>` : ''}${data.path ? `<dt>Path</dt><dd>${data.path}</dd>` : ''}`;
+    if (data.externals && data.externals.length > 0) {
+      externalsContainer.innerHTML = '<div style="margin-bottom:8px;font-size:11px;color:var(--text-3)">External dependencies:</div><div class="externals">' +
+        data.externals.map(n => `<span class="external-tag">${n.name}</span>`).join('') + '</div>';
+    } else {
+      externalsContainer.innerHTML = '';
+    }
+    if (data.mermaid) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'mermaid';
+      wrapper.textContent = data.mermaid;
+      mermaidContainer.innerHTML = '';
+      mermaidContainer.appendChild(wrapper);
+      try { await mermaid.run({ nodes: [wrapper] }); } catch(e2) {
+        mermaidContainer.innerHTML = `<div class="error">Failed to render diagram: ${e2.message}</div><pre style="font-size:11px;margin-top:8px;color:var(--text-3);overflow-x:auto">${data.mermaid}</pre>`;
+      }
+    } else {
+      mermaidContainer.innerHTML = '<div class="empty">No diagram available.</div>';
+    }
+  } catch (e) {
+    mermaidContainer.innerHTML = `<div class="error">Error loading flow: ${e.message}</div>`;
+  }
+}
+
+wsSelect.addEventListener('change', () => {
+  const ws = wsSelect.value;
+  if (!ws) {
+    endpointList.innerHTML = '<tr><td colspan="2" class="empty">Select a workspace to load endpoints.</td></tr>';
+    endpointCount.textContent = '';
+    mermaidContainer.innerHTML = '<div class="empty">Select an endpoint to view its execution flow.</div>';
+    flowMeta.innerHTML = '';
+    externalsContainer.innerHTML = '';
+    return;
+  }
+  loadEndpoints(ws);
+});
+
+searchInput.addEventListener('input', () => renderEndpoints(currentEntries));
+
+loadWorkspaces();
+</script>
+</body>
+</html>

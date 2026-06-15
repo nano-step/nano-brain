@@ -1,6 +1,8 @@
 package webui
 
-import "embed"
+import (
+	"embed"
+)
 
 // EmbedFS contains the built frontend SPA assets.
 // The dist/ directory must contain at least .gitkeep so go:embed compiles
@@ -9,3 +11,8 @@ import "embed"
 //
 //go:embed all:dist
 var EmbedFS embed.FS
+
+// FlowDashboardHTML is the standalone flow dashboard HTML template.
+//
+//go:embed flow_dashboard.html
+var FlowDashboardHTML string

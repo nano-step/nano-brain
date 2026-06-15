@@ -14,6 +14,7 @@ import { HarvestPanel } from '../panels/HarvestPanel'
 import { SettingsPanel } from '../panels/SettingsPanel'
 import { WorkspacesPanel } from '../panels/WorkspacesPanel'
 import { CodeSummarizePanel } from '../panels/CodeSummarizePanel'
+import { FlowsPanel } from '../panels/FlowsPanel'
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -81,11 +82,18 @@ const codeSummarizeRoute = createRoute({
   component: CodeSummarizePanel,
 })
 
+const flowsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/flows',
+  component: FlowsPanel,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   dashboardRoute,
   memoryRoute,
   graphRoute,
+  flowsRoute,
   symbolsRoute,
   harvestRoute,
   settingsRoute,
