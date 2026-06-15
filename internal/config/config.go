@@ -260,7 +260,6 @@ type CodeSummarizationConfig struct {
 	MaxRetries            int    `koanf:"max_retries" json:"max_retries"`
 	RetryBackoffSeconds   int    `koanf:"retry_backoff_seconds" json:"retry_backoff_seconds"`
 	Workers               int    `koanf:"workers" json:"workers"`
-	RequestTimeout        int    `koanf:"request_timeout" json:"request_timeout"`
 }
 
 // IntelligenceConfig holds memory consolidation and LLM categorization configuration.

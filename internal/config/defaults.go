@@ -110,7 +110,6 @@ func getDefaults() *Config {
 			MaxBatchTokens:       100000,
 			MaxRetries:           3,
 			RetryBackoffSeconds:  1,
-			RequestTimeout:       600,
 		},
 		Flow: FlowConfig{
 			Enabled:         false,

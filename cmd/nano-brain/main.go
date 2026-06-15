@@ -393,12 +393,6 @@ func startServer(configPath string) {
 			graphExtractors = append(graphExtractors, nuxtGE)
 			logger.Info().Msg("execution-flow: nuxt route extractor enabled")
 		}
-		if railsGE, err := graph.NewRailsExtractor(logger); err != nil {
-			logger.Warn().Err(err).Msg("rails route extractor init failed, skipping")
-		} else {
-			graphExtractors = append(graphExtractors, railsGE)
-			logger.Info().Msg("execution-flow: rails route extractor enabled")
-		}
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 

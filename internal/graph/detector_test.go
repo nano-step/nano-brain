@@ -121,60 +121,6 @@ func TestDetect_NoManifests(t *testing.T) {
 	}
 }
 
-func TestDetect_GemfileWithRails(t *testing.T) {
-	dir := createTempDir(t)
-	writeTempFile(t, dir, "Gemfile", `source "https://rubygems.org"
-
-gem "rails", "~> 7.1"
-`)
-	d := newDetector(t)
-	fws := d.Detect(dir)
-	expectContains(t, fws, "rails")
-}
-
-func TestDetect_GemfileRailsSingleQuotes(t *testing.T) {
-	dir := createTempDir(t)
-	writeTempFile(t, dir, "Gemfile", `source 'https://rubygems.org'
-
-gem 'rails', '~> 7.1'
-`)
-	d := newDetector(t)
-	fws := d.Detect(dir)
-	expectContains(t, fws, "rails")
-}
-
-func TestDetect_GemfileRailsInSubdir(t *testing.T) {
-	dir := createTempDir(t)
-	subdir := dir + "/api"
-	if err := os.Mkdir(subdir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	writeTempFile(t, subdir, "Gemfile", `gem 'rails', '~> 7.1'`)
-	d := newDetector(t)
-	fws := d.Detect(dir)
-	expectContains(t, fws, "rails")
-}
-
-func TestDetect_NoGemfile(t *testing.T) {
-	dir := createTempDir(t)
-	writeTempFile(t, dir, "package.json", `{"dependencies":{"express":"^4"}}`)
-	d := newDetector(t)
-	fws := d.Detect(dir)
-	if hasFramework(fws, "rails") {
-		t.Errorf("expected no 'rails' without Gemfile, got %v", fws)
-	}
-}
-
-func TestDetect_MalformedGemfile(t *testing.T) {
-	dir := createTempDir(t)
-	writeTempFile(t, dir, "Gemfile", string([]byte{0xff, 0xfe, 0x00}))
-	d := newDetector(t)
-	fws := d.Detect(dir)
-	if hasFramework(fws, "rails") {
-		t.Errorf("expected no 'rails' for malformed Gemfile, got %v", fws)
-	}
-}
-
 func TestDetect_MalformedGoMod(t *testing.T) {
 	dir := createTempDir(t)
 	writeTempFile(t, dir, "go.mod", string([]byte{0xff, 0xfe, 0x00}))
