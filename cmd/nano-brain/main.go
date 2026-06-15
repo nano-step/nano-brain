@@ -387,6 +387,12 @@ func startServer(configPath string) {
 			graphExtractors = append(graphExtractors, nestjsGE)
 			logger.Info().Msg("execution-flow: nestjs route extractor enabled")
 		}
+		if nuxtGE, err := graph.NewNuxtExtractor(logger); err != nil {
+			logger.Warn().Err(err).Msg("nuxt route extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, nuxtGE)
+			logger.Info().Msg("execution-flow: nuxt route extractor enabled")
+		}
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 

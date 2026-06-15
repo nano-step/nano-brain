@@ -35,6 +35,7 @@ var DefaultRules = []FrameworkRule{
 	{Framework: "gin", Detect: detectGin},
 	{Framework: "express", Detect: detectExpress},
 	{Framework: "nestjs", Detect: detectNestJS},
+	{Framework: "nuxt", Detect: detectNuxt},
 	{Framework: "go", Detect: detectGoModExists},
 }
 
@@ -129,6 +130,29 @@ func detectExpress(dir string) bool {
 			continue
 		}
 		if checkPackageJSONForDep(filepath.Join(dir, name), "express") {
+			return true
+		}
+	}
+	return false
+}
+
+func detectNuxt(dir string) bool {
+	if checkPackageJSONForDep(dir, "nuxt") {
+		return true
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if name == "node_modules" || name == ".git" || name == ".opencode" || name == "vendor" {
+			continue
+		}
+		if checkPackageJSONForDep(filepath.Join(dir, name), "nuxt") {
 			return true
 		}
 	}
