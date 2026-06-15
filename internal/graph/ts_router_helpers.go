@@ -57,7 +57,7 @@ func tsExtractPath(bt *gotreesitter.BoundTree, callNode *gotreesitter.Node, lang
 		return ""
 	}
 	t := node.Type(lang)
-	if t == "string" || t == "template_string" {
+	if t == "string" || (t == "template_string" && !strings.Contains(bt.NodeText(node), "${")) {
 		path := strings.Trim(bt.NodeText(node), "\"'`")
 		return cleanRoutePath(path)
 	}
