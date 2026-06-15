@@ -1,4 +1,5 @@
 Rails.application.routes.draw do
+  root to: "home#index"
   resources :story_statuses
 
   namespace :api do
@@ -14,9 +15,13 @@ Rails.application.routes.draw do
     end
   end
 
+  devise_for :users
+
   resources :users do
     collection do
       get 'token_check'
     end
   end
+
+  get "/app" => redirect("https://example.com")
 end

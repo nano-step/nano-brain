@@ -132,6 +132,10 @@ func (e *RailsExtractor) walkBody(body *gotreesitter.Node, lang *gotreesitter.La
 			edges = append(edges, e.extractScope(bt, child, lang, ctx, content, relFile)...)
 		case "mount":
 			edges = append(edges, e.extractMount(bt, child, lang, ctx, content, relFile)...)
+		case "root":
+			edges = append(edges, e.extractRoot(bt, child, lang, ctx, content, relFile)...)
+		case "devise_for":
+			edges = append(edges, e.extractDeviseFor(bt, child, lang, ctx, content, relFile)...)
 		}
 	}
 
@@ -266,6 +270,9 @@ func (e *RailsExtractor) extractDirectRoute(bt *gotreesitter.BoundTree, call *go
 	if routePath == "" || handler == "" {
 		return nil
 	}
+	if strings.HasPrefix(handler, "redirect") {
+		return nil
+	}
 
 	prefix := ctx.urlPrefix()
 	fullPath := routePath
@@ -382,6 +389,116 @@ func (e *RailsExtractor) extractMount(bt *gotreesitter.BoundTree, call *gotreesi
 		Language:   "ruby",
 		Metadata:   map[string]any{"method": "ALL", "path": path},
 	}}
+}
+
+func (e *RailsExtractor) extractRoot(bt *gotreesitter.BoundTree, call *gotreesitter.Node, lang *gotreesitter.Language, ctx *railsCtx, content []byte, relFile string) []Edge {
+	handler := extractRootHandler(bt, call, lang)
+	if handler == "" {
+		return nil
+	}
+	fullPath := "/"
+	if p := ctx.urlPrefix(); p != "" {
+		fullPath = "/" + p + "/"
+	}
+	ctrlHandler := qualifyHandler(ctx.modulePrefix(), handler)
+	source := "GET " + fullPath
+	return []Edge{{
+		SourceNode: source,
+		TargetNode: ctrlHandler,
+		Kind:       EdgeHTTP,
+		SourceFile: relFile,
+		Line:       lineForByte(content, call.StartByte()),
+		Language:   "ruby",
+		Metadata:   map[string]any{"method": "GET", "path": fullPath},
+	}}
+}
+
+func extractRootHandler(bt *gotreesitter.BoundTree, call *gotreesitter.Node, lang *gotreesitter.Language) string {
+	args := call.ChildByFieldName("arguments", lang)
+	if args == nil {
+		return ""
+	}
+	for i := 0; i < int(args.ChildCount()); i++ {
+		child := args.Child(i)
+		if child == nil || child.Type(lang) != "pair" {
+			continue
+		}
+		keyNode := child.ChildByFieldName("key", lang)
+		valNode := child.ChildByFieldName("value", lang)
+		if keyNode == nil || valNode == nil {
+			continue
+		}
+		if bt.NodeText(keyNode) == "to" {
+			if valNode.Type(lang) == "string" {
+				return unquote(bt.NodeText(valNode))
+			}
+		}
+	}
+	return ""
+}
+
+func (e *RailsExtractor) extractDeviseFor(bt *gotreesitter.BoundTree, call *gotreesitter.Node, lang *gotreesitter.Language, ctx *railsCtx, content []byte, relFile string) []Edge {
+	resName := rubyFirstSymbol(bt, call, lang)
+	if resName == "" {
+		return nil
+	}
+	prefix := ctx.urlPrefix()
+	fullPrefix := prefix
+	if fullPrefix != "" {
+		fullPrefix += "/"
+	}
+	fullPrefix += resName
+	line := lineForByte(content, call.StartByte())
+
+	deviseRoutes := []struct {
+		Method string
+		Path   string
+		Action string
+	}{
+		{"GET", "/new", "new"},
+		{"POST", "", "create"},
+		{"GET", "/:id/edit", "edit"},
+		{"PATCH", "/:id", "update"},
+		{"DELETE", "/:id", "destroy"},
+		{"GET", "", "index"},
+		{"GET", "/:id", "show"},
+		{"POST", "/sign_in", "create"},
+		{"DELETE", "/sign_out", "destroy"},
+		{"POST", "/password", "create"},
+		{"GET", "/password/new", "new"},
+		{"GET", "/password/edit", "edit"},
+		{"PATCH", "/password", "update"},
+		{"PUT", "/password", "update"},
+		{"POST", "/confirmation", "create"},
+		{"GET", "/confirmation/new", "new"},
+		{"GET", "/confirmation", "show"},
+		{"POST", "/unlock", "create"},
+		{"GET", "/unlock/new", "new"},
+		{"GET", "/unlock", "show"},
+		{"GET", "/registration/new", "new"},
+		{"POST", "/registration", "create"},
+		{"DELETE", "/registration", "destroy"},
+		{"GET", "/registration", "edit"},
+		{"PATCH", "/registration", "update"},
+		{"PUT", "/registration", "update"},
+	}
+
+	var edges []Edge
+	for _, dr := range deviseRoutes {
+		path := "/" + fullPrefix + dr.Path
+		source := dr.Method + " " + path
+		handler := controllerName(ctx.modulePrefix(), resName) + "#" + dr.Action
+		edges = append(edges, Edge{
+			SourceNode: source,
+			TargetNode: handler,
+			Kind:       EdgeHTTP,
+			SourceFile: relFile,
+			Line:       line,
+			Language:   "ruby",
+			Metadata:   map[string]any{"method": dr.Method, "path": path},
+		})
+	}
+	return edges
 }
 
 func isRoutesFile(filePath string) bool {
