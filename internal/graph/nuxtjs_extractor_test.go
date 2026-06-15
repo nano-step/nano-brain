@@ -268,3 +268,27 @@ func TestNuxtExtractor_PagesInSubdir(t *testing.T) {
 		t.Fatalf("expected http edge for pages in subdir; got %+v", edges)
 	}
 }
+
+func TestNuxtExtractor_APIRouteIndex(t *testing.T) {
+	ex := newNuxtExtractor(t)
+	edges, err := ex.ExtractEdges("server/api/users/index.get.ts", []byte("export default defineEventHandler(() => {})"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hits := findEdges(edges, graph.EdgeHTTP, "GET /api/users", "server/api/users/index.get.ts")
+	if len(hits) == 0 {
+		t.Fatalf("expected http edge GET /api/users; got %+v", edges)
+	}
+}
+
+func TestNuxtExtractor_APIRouteNoMethodSuffix(t *testing.T) {
+	ex := newNuxtExtractor(t)
+	edges, err := ex.ExtractEdges("server/api/users.ts", []byte("export default defineEventHandler(() => {})"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hits := findEdges(edges, graph.EdgeHTTP, "GET /api/users", "server/api/users.ts")
+	if len(hits) == 0 {
+		t.Fatalf("expected http edge GET /api/users for non-suffixed route; got %+v", edges)
+	}
+}

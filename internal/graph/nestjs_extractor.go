@@ -60,10 +60,6 @@ func (e *NestJSExtractor) ExtractEdges(filePath string, content []byte) ([]Edge,
 
 	rootNode := tree.RootNode()
 
-	if !tsHasNestJSPatterns(rootNode, lang, bt) {
-		return nil, nil
-	}
-
 	controllers := make(map[string]string)
 
 	walkNodes(rootNode, lang, "decorator", func(n *gotreesitter.Node) {
@@ -146,28 +142,6 @@ func (e *NestJSExtractor) ExtractEdges(filePath string, content []byte) ([]Edge,
 	return edges, nil
 }
 
-func tsHasNestJSPatterns(root *gotreesitter.Node, lang *gotreesitter.Language, bt *gotreesitter.BoundTree) bool {
-	found := false
-	walkNodes(root, lang, "decorator", func(n *gotreesitter.Node) {
-		if found {
-			return
-		}
-		callExpr := decoratorCallExpr(n, lang)
-		if callExpr == nil {
-			return
-		}
-		name := callExprFuncName(bt, callExpr, lang)
-		if _, ok := nestJSHTTPDecorators[name]; ok {
-			found = true
-			return
-		}
-		if name == "Controller" {
-			found = true
-		}
-	})
-	return found
-}
-
 func decoratorCallExpr(decorator *gotreesitter.Node, lang *gotreesitter.Language) *gotreesitter.Node {
 	for i := 0; i < int(decorator.ChildCount()); i++ {
 		child := decorator.Child(i)
@@ -197,8 +171,9 @@ func callExprStringArg(bt *gotreesitter.BoundTree, callExpr *gotreesitter.Node, 
 	if arg == nil {
 		return ""
 	}
-	if arg.Type(lang) == "string" {
-		return cleanRoutePath(strings.Trim(bt.NodeText(arg), "\"'"))
+	t := arg.Type(lang)
+	if t == "string" || (t == "template_string" && !strings.Contains(bt.NodeText(arg), "${")) {
+		return cleanRoutePath(strings.Trim(bt.NodeText(arg), "\"'`"))
 	}
 	return ""
 }
@@ -208,7 +183,22 @@ func classFromDecorator(decorator *gotreesitter.Node, lang *gotreesitter.Languag
 	if parent == nil {
 		return ""
 	}
+	// If decorator is a direct child of class_declaration
+	if parent.Type(lang) == "class_declaration" {
+		return className(bt, parent, lang)
+	}
+	// Otherwise, search siblings after the decorator
+	decIdx := -1
 	for i := 0; i < int(parent.ChildCount()); i++ {
+		if parent.Child(i) == decorator {
+			decIdx = i
+			break
+		}
+	}
+	if decIdx < 0 {
+		return ""
+	}
+	for i := decIdx + 1; i < int(parent.ChildCount()); i++ {
 		child := parent.Child(i)
 		if child != nil && child.Type(lang) == "class_declaration" {
 			return className(bt, child, lang)
@@ -235,6 +225,9 @@ func methodFromDecorator(decorator *gotreesitter.Node, lang *gotreesitter.Langua
 	parent := decorator.Parent()
 	if parent == nil {
 		return nil
+	}
+	if parent.Type(lang) == "method_definition" {
+		return parent
 	}
 	decIdx := -1
 	for i := 0; i < int(parent.ChildCount()); i++ {

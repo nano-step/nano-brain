@@ -159,12 +159,12 @@ func parseNuxtAPIRoute(relPath string) (method string, routePart string) {
 
 	lastDot := strings.LastIndex(noExt, ".")
 	if lastDot < 0 {
-		return "", ""
+		return "GET", noExt
 	}
 
 	method = strings.ToUpper(noExt[lastDot+1:])
 	if !httpVerbs[method] {
-		return "", ""
+		return "GET", noExt
 	}
 
 	routePart = noExt[:lastDot]
@@ -175,6 +175,9 @@ func nuxtPathToSegments(relPath string) []string {
 	segments := strings.Split(relPath, "/")
 	var result []string
 	for _, seg := range segments {
+		if seg == "index" {
+			continue
+		}
 		converted := nuxtSegmentToRouteParam(seg)
 		result = append(result, converted)
 	}
