@@ -28,3 +28,8 @@ type Extractor interface {
 	ExtractEdges(filePath string, content []byte) ([]Edge, error)
 	Supports(ext string) bool
 }
+
+type FrameworkAwareExtractor interface {
+	Extractor
+	RequiresFrameworks() []string
+}

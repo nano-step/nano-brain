@@ -384,6 +384,11 @@ func startServer(configPath string) {
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 
+	var frameworkDetector *graph.FrameworkDetector
+	if cfg.Flow.Enabled {
+		frameworkDetector = graph.NewFrameworkDetector(graph.DefaultRules)
+	}
+
 	fixedChunker := chunker.NewFixedChunker()
 	headingChunker := chunker.NewHeadingChunker()
 	symbolChunker, scErr := chunker.NewSymbolAwareChunker(fixedChunker, logger)
@@ -400,6 +405,7 @@ func startServer(configPath string) {
 	fw := watcher.New(db, queries, logger, *cfg).
 		WithSymbolRegistry(symRegistry).
 		WithGraphRegistry(graphRegistry, queries).
+		WithFrameworkDetector(frameworkDetector).
 		WithDispatcher(dispatcher)
 
 	if homeDir, hErr := os.UserHomeDir(); hErr == nil {

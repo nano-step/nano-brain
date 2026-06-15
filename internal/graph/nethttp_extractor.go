@@ -24,6 +24,10 @@ func (e *NetHTTPExtractor) Supports(ext string) bool {
 	return ext == ".go"
 }
 
+func (e *NetHTTPExtractor) RequiresFrameworks() []string {
+	return []string{"go"}
+}
+
 func (e *NetHTTPExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
 	parser := gotreesitter.NewParser(e.lang)
 	tree, err := parser.Parse(content)

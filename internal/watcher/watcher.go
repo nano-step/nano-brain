@@ -49,13 +49,14 @@ type WatcherQuerier interface {
 }
 
 type watchedCollection struct {
-	name              string
-	dirPath           string
-	workspaceHash     string
-	globPattern       string
-	excludePatterns   []string
-	allowedExtensions []string
-	filter            *fileFilter
+	name               string
+	dirPath            string
+	workspaceHash      string
+	globPattern        string
+	excludePatterns    []string
+	allowedExtensions  []string
+	filter             *fileFilter
+	detectedFrameworks []string
 }
 
 type fileState struct {
@@ -73,9 +74,10 @@ type Watcher struct {
 	pollInterval   int
 	maxFileSize    int64
 	chunkOverlap   int
-	symbolRegistry *symbol.Registry
-	graphRegistry  *graph.Registry
-	embedQueue     *embed.Queue
+	symbolRegistry    *symbol.Registry
+	graphRegistry     *graph.Registry
+	frameworkDetector *graph.FrameworkDetector
+	embedQueue        *embed.Queue
 	dispatcher     *chunker.Dispatcher
 
 	fsw         *fsnotify.Watcher
@@ -149,6 +151,11 @@ func (w *Watcher) WithGraphRegistry(r *graph.Registry, gq GraphQuerier) *Watcher
 	return w
 }
 
+func (w *Watcher) WithFrameworkDetector(fd *graph.FrameworkDetector) *Watcher {
+	w.frameworkDetector = fd
+	return w
+}
+
 func (w *Watcher) WithEmbedQueue(eq *embed.Queue) *Watcher {
 	w.embedQueue = eq
 	return w
@@ -188,14 +195,26 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 	} else if filter.localIgnore != nil {
 		w.logger.Debug().Str("dir", absPath).Str("collection", collectionName).Msg("loaded workspace .nano-brainignore")
 	}
+	var detectedFrameworks []string
+	if w.frameworkDetector != nil {
+		detectedFrameworks = w.frameworkDetector.Detect(absPath)
+		if len(detectedFrameworks) > 0 {
+			w.logger.Debug().Strs("frameworks", detectedFrameworks).Str("dir", absPath).Msg("detected frameworks")
+		}
+	}
+	if len(detectedFrameworks) > 0 && w.graphRegistry != nil {
+		w.graphRegistry.SetActiveFrameworks(detectedFrameworks)
+	}
+
 	w.collections[absPath] = watchedCollection{
-		name:              collectionName,
-		dirPath:           absPath,
-		workspaceHash:     workspaceHash,
-		globPattern:       globPattern,
-		excludePatterns:   excludePatterns,
-		allowedExtensions: allowedExtensions,
-		filter:            filter,
+		name:               collectionName,
+		dirPath:            absPath,
+		workspaceHash:      workspaceHash,
+		globPattern:        globPattern,
+		excludePatterns:    excludePatterns,
+		allowedExtensions:  allowedExtensions,
+		filter:             filter,
+		detectedFrameworks: detectedFrameworks,
 	}
 
 	if w.fsw != nil {
@@ -558,6 +577,20 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 
 	if info.IsDir() {
 		return
+	}
+
+	// Re-detect frameworks when manifest files change (go.mod, package.json).
+	if w.frameworkDetector != nil && w.graphRegistry != nil {
+		if base := filepath.Base(filePath); base == "go.mod" || base == "package.json" {
+			fws := w.frameworkDetector.Detect(col.dirPath)
+			w.logger.Debug().Strs("frameworks", fws).Str("file", filePath).Msg("framework re-detection triggered by manifest change")
+			w.mu.Lock()
+			updated := w.collections[col.dirPath]
+			updated.detectedFrameworks = fws
+			w.collections[col.dirPath] = updated
+			w.mu.Unlock()
+			w.graphRegistry.SetActiveFrameworks(fws)
+		}
 	}
 
 	// Fast-path: skip if mtime+size unchanged (biggest perf win from issue #375)

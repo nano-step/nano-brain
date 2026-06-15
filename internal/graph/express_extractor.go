@@ -26,6 +26,10 @@ func (e *ExpressExtractor) Supports(ext string) bool {
 	return ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".jsx"
 }
 
+func (e *ExpressExtractor) RequiresFrameworks() []string {
+	return []string{"express"}
+}
+
 func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
 	ext := filepath.Ext(filePath)
 	lang := grammars.TypescriptLanguage()
