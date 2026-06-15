@@ -599,7 +599,11 @@ func startServer(configPath string) {
 			flowSummarizer = flow.NewLLMFlowSummarizer(llmClient, logger)
 		}
 
-		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, flowSummarizer, logger)
+		summaryTimeout := time.Duration(cfg.Flow.SummaryTimeout) * time.Second
+		if summaryTimeout <= 0 {
+			summaryTimeout = 10 * time.Minute
+		}
+		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, summaryTimeout, flowSummarizer, logger)
 		fw.WithFlowNotify(func(wsHash string) {
 			go mat.Trigger(gctx, wsHash)
 		})
