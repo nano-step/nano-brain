@@ -36,6 +36,7 @@ var DefaultRules = []FrameworkRule{
 	{Framework: "express", Detect: detectExpress},
 	{Framework: "nestjs", Detect: detectNestJS},
 	{Framework: "nuxt", Detect: detectNuxt},
+	{Framework: "rails", Detect: detectRails},
 	{Framework: "go", Detect: detectGoModExists},
 }
 
@@ -157,6 +158,38 @@ func detectNuxt(dir string) bool {
 		}
 	}
 	return false
+}
+
+func detectRails(dir string) bool {
+	if checkGemfileForRails(dir) {
+		return true
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if name == "node_modules" || name == ".git" || name == ".opencode" || name == "vendor" {
+			continue
+		}
+		if checkGemfileForRails(filepath.Join(dir, name)) {
+			return true
+		}
+	}
+	return false
+}
+
+func checkGemfileForRails(dir string) bool {
+	data, err := os.ReadFile(filepath.Join(dir, "Gemfile"))
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	return strings.Contains(content, "'rails'") || strings.Contains(content, "\"rails\"")
 }
 
 func detectNestJS(dir string) bool {
