@@ -20,12 +20,12 @@ func newExpressExtractor(t *testing.T) *graph.ExpressExtractor {
 func TestExpressExtractor_Supports(t *testing.T) {
 	ex := newExpressExtractor(t)
 	for _, ext := range []string{".ts", ".tsx", ".js", ".jsx"} {
-		if !ex.Supports("routes" + ext) {
+		if !ex.Supports(ext) {
 			t.Errorf("should support %q", ext)
 		}
 	}
 	for _, ext := range []string{".py", ".go", ".rb", ".java", ""} {
-		if ex.Supports("routes"+ext) {
+		if ex.Supports(ext) {
 			t.Errorf("should not support %q", ext)
 		}
 	}
@@ -242,5 +242,77 @@ app.get('/js-route', handleJsRoute);
 	hits := findEdges(edges, graph.EdgeHTTP, "GET /js-route", "handleJsRoute")
 	if len(hits) == 0 {
 		t.Fatalf("expected http edge GET /js-route → handleJsRoute; got %+v", edges)
+	}
+	if hits[0].Language != "javascript" {
+		t.Errorf("expected Language 'javascript' for .js file, got %q", hits[0].Language)
+	}
+}
+
+func TestExpressExtractor_LineField(t *testing.T) {
+	src := []byte(`import express from 'express';
+const app = express();
+
+app.get('/users', listUsers);
+`)
+	ex := newExpressExtractor(t)
+	edges, err := ex.ExtractEdges("routes.ts", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hits := findEdges(edges, graph.EdgeHTTP, "GET /users", "listUsers")
+	if len(hits) == 0 {
+		t.Fatalf("expected http edge; got %+v", edges)
+	}
+	if hits[0].Line == 0 {
+		t.Errorf("expected non-zero Line field; got 0")
+	}
+}
+
+func TestExpressExtractor_MetadataField(t *testing.T) {
+	src := []byte(`import express from 'express';
+const app = express();
+
+app.get('/users', listUsers);
+`)
+	ex := newExpressExtractor(t)
+	edges, err := ex.ExtractEdges("routes.ts", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hits := findEdges(edges, graph.EdgeHTTP, "GET /users", "listUsers")
+	if len(hits) == 0 {
+		t.Fatalf("expected http edge; got %+v", edges)
+	}
+	if hits[0].Metadata == nil {
+		t.Fatalf("expected non-nil Metadata; got nil")
+	}
+	if hits[0].Metadata["method"] != "GET" {
+		t.Errorf("expected Metadata method=GET, got %v", hits[0].Metadata["method"])
+	}
+	if hits[0].Metadata["path"] != "/users" {
+		t.Errorf("expected Metadata path=/users, got %v", hits[0].Metadata["path"])
+	}
+}
+
+func TestExpressExtractor_SourceFileNormalized(t *testing.T) {
+	src := []byte(`import express from 'express';
+const app = express();
+
+app.get('/users', listUsers);
+`)
+	ex := newExpressExtractor(t)
+	edges, err := ex.ExtractEdges("src/routes.ts", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hits := findEdges(edges, graph.EdgeHTTP, "GET /users", "listUsers")
+	if len(hits) == 0 {
+		t.Fatalf("expected http edge; got %+v", edges)
+	}
+	if hits[0].SourceFile != "src/routes.ts" {
+		t.Errorf("expected SourceFile 'src/routes.ts', got %q", hits[0].SourceFile)
 	}
 }

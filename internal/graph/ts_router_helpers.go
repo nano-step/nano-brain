@@ -70,7 +70,7 @@ func tsExtractPath(bt *gotreesitter.BoundTree, callNode *gotreesitter.Node, lang
 }
 
 // tsExtractHandlerName extracts the handler function/variable name from a call expression.
-func tsExtractHandlerName(bt *gotreesitter.BoundTree, callNode *gotreesitter.Node, lang *gotreesitter.Language, method, path string, anonymousCounter *int) string {
+func tsExtractHandlerName(bt *gotreesitter.BoundTree, callNode *gotreesitter.Node, lang *gotreesitter.Language, method, path string) string {
 	if callNode == nil {
 		return "<anonymous_" + method + " " + path + ">"
 	}
@@ -86,11 +86,11 @@ func tsExtractHandlerName(bt *gotreesitter.BoundTree, callNode *gotreesitter.Nod
 	if handlerNode == nil {
 		return "<anonymous_" + method + " " + path + ">"
 	}
-	return tsResolveHandlerName(bt, handlerNode, lang, method, path, anonymousCounter)
+	return tsResolveHandlerName(bt, handlerNode, lang, method, path)
 }
 
 // tsResolveHandlerName resolves a handler name from an expression node.
-func tsResolveHandlerName(bt *gotreesitter.BoundTree, node *gotreesitter.Node, lang *gotreesitter.Language, method, path string, anonymousCounter *int) string {
+func tsResolveHandlerName(bt *gotreesitter.BoundTree, node *gotreesitter.Node, lang *gotreesitter.Language, method, path string) string {
 	if node == nil {
 		return "<anonymous_" + method + " " + path + ">"
 	}
@@ -106,18 +106,16 @@ func tsResolveHandlerName(bt *gotreesitter.BoundTree, node *gotreesitter.Node, l
 		}
 		return bt.NodeText(node)
 	case "arrow_function", "function":
-		*anonymousCounter++
 		return "<anonymous_" + method + " " + path + ">"
 	case "call_expression":
 		fnNode := node.ChildByFieldName("function", lang)
 		if fnNode != nil {
-			return tsResolveHandlerName(bt, fnNode, lang, method, path, anonymousCounter)
+			return tsResolveHandlerName(bt, fnNode, lang, method, path)
 		}
 	}
 
 	name := bt.NodeText(node)
 	if name == "" {
-		*anonymousCounter++
 		return "<anonymous_" + method + " " + path + ">"
 	}
 	return name
@@ -187,7 +185,7 @@ func tsArgNode(argList *gotreesitter.Node, lang *gotreesitter.Language, n int) *
 			continue
 		}
 		t := child.Type(lang)
-		if t == "," || t == "(" || t == ")" || t == ";" {
+		if t == "," || t == "(" || t == ")" || t == ";" || t == "comment" {
 			continue
 		}
 		if idx == n {
@@ -198,7 +196,7 @@ func tsArgNode(argList *gotreesitter.Node, lang *gotreesitter.Language, n int) *
 	return nil
 }
 
-// tsCountArgs counts the number of value arguments in an argument list (skipping punctuation).
+// tsCountArgs counts the number of value arguments in an argument list (skipping punctuation and comments).
 func tsCountArgs(argList *gotreesitter.Node, lang *gotreesitter.Language) int {
 	if argList == nil {
 		return 0
@@ -210,7 +208,7 @@ func tsCountArgs(argList *gotreesitter.Node, lang *gotreesitter.Language) int {
 			continue
 		}
 		t := child.Type(lang)
-		if t == "," || t == "(" || t == ")" || t == ";" {
+		if t == "," || t == "(" || t == ")" || t == ";" || t == "comment" {
 			continue
 		}
 		count++

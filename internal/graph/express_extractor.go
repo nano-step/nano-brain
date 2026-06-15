@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -8,6 +9,8 @@ import (
 	"github.com/odvcencio/gotreesitter/grammars"
 	zerolog "github.com/rs/zerolog"
 )
+
+var _ Extractor = (*ExpressExtractor)(nil)
 
 type ExpressExtractor struct {
 	logger zerolog.Logger
@@ -19,27 +22,24 @@ func NewExpressExtractor(logger zerolog.Logger) (*ExpressExtractor, error) {
 	}, nil
 }
 
-func (e *ExpressExtractor) Supports(filePath string) bool {
-	idx := strings.LastIndex(filePath, ".")
-	if idx == -1 {
-		return false
-	}
-	ext := strings.ToLower(filePath[idx:])
+func (e *ExpressExtractor) Supports(ext string) bool {
 	return ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".jsx"
 }
 
 func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
 	ext := filepath.Ext(filePath)
 	lang := grammars.TypescriptLanguage()
+	langStr := "typescript"
 	if ext == ".js" || ext == ".jsx" {
 		lang = grammars.JavascriptLanguage()
+		langStr = "javascript"
 	}
+	relFile := filepath.ToSlash(filePath)
 
 	parser := gotreesitter.NewParser(lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
-		e.logger.Warn().Err(err).Str("file", filePath).Msg("failed to parse file")
-		return nil, nil
+		return nil, fmt.Errorf("express parse %s: %w", filePath, err)
 	}
 	bt := gotreesitter.Bind(tree)
 	defer bt.Release()
@@ -51,7 +51,6 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 
 	var edges []Edge
 	seen := make(map[string]bool)
-	anonymousCounter := 0
 
 	extractHTTP := func(n *gotreesitter.Node) {
 		method := tsExtractHTTPMethod(bt, n, lang)
@@ -74,7 +73,7 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 			return
 		}
 
-		handler := tsExtractHandlerName(bt, n, lang, method, path, &anonymousCounter)
+		handler := tsExtractHandlerName(bt, n, lang, method, path)
 		middleware := tsExtractMiddleware(bt, n, lang)
 
 		source := strings.TrimSpace(method + " " + path)
@@ -87,8 +86,10 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 			SourceNode: source,
 			TargetNode: handler,
 			Kind:       EdgeHTTP,
-			SourceFile: filePath,
-			Language:   "typescript",
+			SourceFile: relFile,
+			Line:       lineForByte(content, n.StartByte()),
+			Language:   langStr,
+			Metadata:   map[string]any{"method": method, "path": path},
 		})
 
 		for _, mw := range middleware {
@@ -99,8 +100,9 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 					SourceNode: source,
 					TargetNode: mw,
 					Kind:       EdgeMiddleware,
-					SourceFile: filePath,
-					Language:   "typescript",
+					SourceFile: relFile,
+					Line:       lineForByte(content, n.StartByte()),
+					Language:   langStr,
 				})
 			}
 		}
@@ -133,7 +135,20 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 			return
 		}
 
-		for i := 0; i < argCount; i++ {
+		// Determine if first arg is a path string (path-prefix form).
+		// app.use("/api", mw1, mw2) → skip path string and handler (last arg)
+		// app.use(mw1, mw2)         → emit all args
+		hasPathPrefix := false
+		if firstNode := tsArgNode(argsNode, lang, 0); firstNode != nil {
+			t := firstNode.Type(lang)
+			hasPathPrefix = t == "string" || t == "template_string"
+		}
+		maxIdx := argCount
+		if hasPathPrefix && argCount > 1 {
+			maxIdx = argCount - 1
+		}
+
+		for i := 0; i < maxIdx; i++ {
 			handlerNode := tsArgNode(argsNode, lang, i)
 			if handlerNode == nil {
 				continue
@@ -154,8 +169,9 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 				SourceNode: source,
 				TargetNode: handlerName,
 				Kind:       EdgeMiddleware,
-				SourceFile: filePath,
-				Language:   "typescript",
+				SourceFile: relFile,
+				Line:       lineForByte(content, n.StartByte()),
+				Language:   langStr,
 			})
 		}
 	}
@@ -174,7 +190,7 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 				extractMiddleware(n)
 			}
 		} else if fnNode.Type(lang) == "identifier" && bt.NodeText(fnNode) == "express" {
-			handler := tsExtractHandlerName(bt, n, lang, "USE", "/", &anonymousCounter)
+			handler := tsExtractHandlerName(bt, n, lang, "USE", "/")
 			if strings.HasPrefix(handler, "<anonymous_") {
 				return
 			}
@@ -185,8 +201,9 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 					SourceNode: "<express.use>",
 					TargetNode: handler,
 					Kind:       EdgeMiddleware,
-					SourceFile: filePath,
-					Language:   "typescript",
+					SourceFile: relFile,
+					Line:       lineForByte(content, n.StartByte()),
+					Language:   langStr,
 				})
 			}
 		}
