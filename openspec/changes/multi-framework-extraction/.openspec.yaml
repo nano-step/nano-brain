@@ -1,0 +1,14 @@
+name: multi-framework-extraction
+description: Add HTTP route extractors for NestJS, Express.js, and Nuxt.js frameworks
+status: proposed
+created: 2026-06-15
+author: Sisyphus
+tags:
+  - graph
+  - flow
+  - typescript
+  - nestjs
+  - express
+  - nuxt
+priority: high
+estimated_effort: 6-10 days
