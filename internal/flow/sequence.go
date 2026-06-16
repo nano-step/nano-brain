@@ -20,7 +20,7 @@ func participantLabel(n FlowNode) string {
 	if n.Role == RoleEntry {
 		return "Client"
 	}
-	return fmt.Sprintf("%s (%s)", n.Name, string(n.Role))
+	return fmt.Sprintf("%s (%s)", sanitizeLabel(n.Name), string(n.Role))
 }
 
 // msgAlias returns the participant alias used in arrow lines for a given node id.
@@ -135,7 +135,7 @@ func RenderSequenceDiagram(f Flow) string {
 			messages = append(messages, msg{
 				isNote:   true,
 				noteOver: fmt.Sprintf("%s,%s", mwAlias, handlerAlias),
-				label:    fmt.Sprintf("guarded by %s", nodeByID[mwID].Name),
+				label:    fmt.Sprintf("guarded by %s", sanitizeLabel(nodeByID[mwID].Name)),
 			})
 		}
 
@@ -149,7 +149,7 @@ func RenderSequenceDiagram(f Flow) string {
 			messages = append(messages, msg{
 				from:          fromAlias,
 				to:            toAlias,
-				label:         label,
+				label:         sanitizeLabel(label),
 				isConditional: e.Conditional,
 				isIntegration: e.Kind == "integration",
 			})

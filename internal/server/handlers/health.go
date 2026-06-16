@@ -193,3 +193,19 @@ func (h *Health) Status(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, resp)
 }
+
+type versionResponse struct {
+	Version           string `json:"version"`
+	MigrationVersion int    `json:"migration_version"`
+	APIMin            int    `json:"api_min"`
+	APIMax            int    `json:"api_max"`
+}
+
+func (h *Health) Version(c echo.Context) error {
+	return c.JSON(http.StatusOK, versionResponse{
+		Version:           h.version,
+		MigrationVersion: int(h.migrationVersion),
+		APIMin:            1,
+		APIMax:            1,
+	})
+}

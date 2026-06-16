@@ -83,6 +83,42 @@ var defaultExcludeDirs = map[string]bool{
 	"coverage":     true,
 	".terraform":   true,
 	"target":       true,
+	".worktrees":   true,
+	".pr-reviews":  true,
+	".opencode":    true,
+	".output":      true,
+	// Common framework build/vendor output dirs (Nuxt/Next/Svelte/Angular/
+	// Astro/Turbo/Vercel/Netlify/Parcel and legacy JS package dirs).
+	"_nuxt":            true,
+	"_next":            true,
+	".svelte-kit":      true,
+	".angular":         true,
+	".astro":           true,
+	".turbo":           true,
+	".vercel":          true,
+	".netlify":         true,
+	".parcel-cache":    true,
+	"bower_components": true,
+	"jspm_packages":    true,
+	"web_modules":      true,
+}
+
+// defaultExcludeFiles are generated lock / resolved manifest files (by basename)
+// that bloat the index with no search value. Files ending in ".lock" are also
+// excluded (covers yarn.lock, Cargo.lock, Gemfile.lock, composer.lock,
+// poetry.lock, Pipfile.lock, pubspec.lock, mix.lock, flake.lock, …).
+var defaultExcludeFiles = map[string]bool{
+	"package-lock.json":    true, // npm
+	"npm-shrinkwrap.json":  true, // npm
+	"pnpm-lock.yaml":       true, // pnpm
+	"bun.lockb":            true, // bun
+	"packages.lock.json":   true, // .NET
+	"go.sum":               true, // Go
+	"Package.resolved":     true, // Swift
+	"gradle.lockfile":      true, // Gradle
+	".terraform.lock.hcl":  true, // Terraform
+	"Podfile.lock":         true, // CocoaPods (also .lock, kept explicit)
+	"composer.lock":        true, // PHP (also .lock)
 }
 
 type fileFilter struct {
@@ -144,6 +180,15 @@ func (f *fileFilter) shouldSkip(absPath string, isDir bool) bool {
 	parts := strings.Split(filepath.ToSlash(rel), "/")
 	for _, part := range parts {
 		if defaultExcludeDirs[part] {
+			return true
+		}
+	}
+
+	// Exclude generated lock / resolved manifest files (by basename, plus any
+	// *.lock). These bloat the index with no search value.
+	if !isDir && len(parts) > 0 {
+		base := parts[len(parts)-1]
+		if defaultExcludeFiles[base] || strings.HasSuffix(base, ".lock") {
 			return true
 		}
 	}

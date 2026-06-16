@@ -628,6 +628,7 @@ func startServer(configPath string) {
 			summaryTimeout = 10 * time.Minute
 		}
 		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, summaryTimeout, flowSummarizer, logger)
+		srv.SetFlowMaterializer(mat)
 		fw.WithFlowNotify(func(wsHash string) {
 			go mat.Trigger(gctx, wsHash)
 		})

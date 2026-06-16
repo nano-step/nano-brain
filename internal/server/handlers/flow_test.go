@@ -167,3 +167,27 @@ func TestGraphFlow_JSONFormat_OmitsMermaid(t *testing.T) {
 		t.Error("expected mermaid field to be absent in json format")
 	}
 }
+
+func TestGraphFlow_NodesAndEdges_Present(t *testing.T) {
+	wsHash, q := setupFlowTest(t)
+
+	flowCfg := config.FlowConfig{Enabled: true, MaxDepth: 5, MaxFanout: 10}
+	resp := callFlowHandler(t, q, flowCfg, wsHash, map[string]any{
+		"entry": "POST /api/v1/items",
+	})
+
+	nodes, ok := resp["nodes"].([]any)
+	if !ok || len(nodes) == 0 {
+		t.Errorf("expected non-empty nodes array, got %v", resp["nodes"])
+	}
+	edges, ok := resp["edges"].([]any)
+	if !ok || len(edges) == 0 {
+		t.Errorf("expected non-empty edges array, got %v", resp["edges"])
+	}
+	if len(nodes) < 2 {
+		t.Errorf("expected at least 2 nodes (entry + handler), got %d", len(nodes))
+	}
+	if len(edges) < 1 {
+		t.Errorf("expected at least 1 edge, got %d", len(edges))
+	}
+}

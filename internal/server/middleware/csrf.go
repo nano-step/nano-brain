@@ -96,11 +96,11 @@ func extractHost(raw string) string {
 }
 
 func hostsMatch(a, b string) bool {
-	ah, ap := splitHostPort(a)
-	bh, bp := splitHostPort(b)
+	ah, _ := splitHostPort(a)
+	bh, _ := splitHostPort(b)
 
 	if isLoopback(ah) && isLoopback(bh) {
-		return ap == bp
+		return true
 	}
 	return strings.EqualFold(a, b)
 }

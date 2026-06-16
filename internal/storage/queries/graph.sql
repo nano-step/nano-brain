@@ -135,3 +135,10 @@ WHERE workspace_hash = $1
   AND edge_type = 'integration'
   AND (source_node LIKE 'CONSUME %' OR source_node LIKE 'ON %')
 ORDER BY source_node;
+
+-- name: ListHTTPEndpointsByWorkspace :many
+SELECT DISTINCT source_node, target_node
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND edge_type = 'http'
+ORDER BY source_node;

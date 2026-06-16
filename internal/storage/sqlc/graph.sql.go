@@ -584,6 +584,42 @@ func (q *Queries) ListEdgesTouchingNodes(ctx context.Context, arg ListEdgesTouch
 	return items, nil
 }
 
+const listHTTPEndpointsByWorkspace = `-- name: ListHTTPEndpointsByWorkspace :many
+SELECT DISTINCT source_node, target_node
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND edge_type = 'http'
+ORDER BY source_node
+`
+
+type ListHTTPEndpointsByWorkspaceRow struct {
+	SourceNode string
+	TargetNode string
+}
+
+func (q *Queries) ListHTTPEndpointsByWorkspace(ctx context.Context, workspaceHash string) ([]ListHTTPEndpointsByWorkspaceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listHTTPEndpointsByWorkspace, workspaceHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHTTPEndpointsByWorkspaceRow
+	for rows.Next() {
+		var i ListHTTPEndpointsByWorkspaceRow
+		if err := rows.Scan(&i.SourceNode, &i.TargetNode); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReferenceEdgesBySource = `-- name: ListReferenceEdgesBySource :many
 SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at FROM graph_edges
 WHERE workspace_hash = $1 AND source_node = $2 AND edge_type = 'references'

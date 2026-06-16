@@ -202,9 +202,6 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 			w.logger.Debug().Strs("frameworks", detectedFrameworks).Str("dir", absPath).Msg("detected frameworks")
 		}
 	}
-	if len(detectedFrameworks) > 0 && w.graphRegistry != nil {
-		w.graphRegistry.SetActiveFrameworks(detectedFrameworks)
-	}
 
 	w.collections[absPath] = watchedCollection{
 		name:               collectionName,
@@ -580,7 +577,9 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	}
 
 	// Re-detect frameworks when manifest files change (go.mod, package.json).
-	if w.frameworkDetector != nil && w.graphRegistry != nil {
+	// The refreshed list is stored on the collection and consumed per-file by
+	// ExtractEdgesForFrameworks; no global extractor state is mutated.
+	if w.frameworkDetector != nil {
 		if base := filepath.Base(filePath); base == "go.mod" || base == "package.json" {
 			fws := w.frameworkDetector.Detect(col.dirPath)
 			w.logger.Debug().Strs("frameworks", fws).Str("file", filePath).Msg("framework re-detection triggered by manifest change")
@@ -589,7 +588,6 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 			updated.detectedFrameworks = fws
 			w.collections[col.dirPath] = updated
 			w.mu.Unlock()
-			w.graphRegistry.SetActiveFrameworks(fws)
 		}
 	}
 
@@ -773,7 +771,7 @@ func buildEdgeMetadata(e graph.Edge) ([]byte, error) {
 }
 
 func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollection, filePath string, content []byte) {
-	edges, err := w.graphRegistry.ExtractEdges(filePath, content)
+	edges, err := w.graphRegistry.ExtractEdgesForFrameworks(filePath, content, col.detectedFrameworks)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph edge extraction failed")
 		return

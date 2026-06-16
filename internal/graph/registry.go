@@ -3,6 +3,7 @@ package graph
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 )
 
@@ -52,7 +53,14 @@ func hasIntersection(a, b []string) bool {
 // extractors may claim the same extension (e.g. the Go call-graph extractor
 // and the Echo route extractor both handle ".go"); each contributes its own
 // edge kinds.
+//
+// NOTE: ExtractEdges uses the global activeExtractors set, which can be
+// incorrect when collections have different frameworks (last-write-wins bug).
+// Prefer ExtractEdgesForFrameworks for per-collection correctness.
 func (r *Registry) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
+	if isMinified(filePath, content) {
+		return nil, nil
+	}
 	ext := filepath.Ext(filePath)
 	var all []Edge
 	seen := make(map[string]struct{})
@@ -62,6 +70,77 @@ func (r *Registry) ExtractEdges(filePath string, content []byte) ([]Edge, error)
 		extractors = *ae
 	}
 
+	return r.extractWith(filePath, content, ext, extractors, seen, all)
+}
+
+// ExtractEdgesForFrameworks runs extractors filtered by the given collection's
+// detected frameworks instead of the global activeExtractors set. This avoids
+// the last-write-wins bug where SetActiveFrameworks called for one collection
+// filters out extractors needed by another.
+func (r *Registry) ExtractEdgesForFrameworks(filePath string, content []byte, frameworks []string) ([]Edge, error) {
+	if isMinified(filePath, content) {
+		return nil, nil
+	}
+	ext := filepath.Ext(filePath)
+	var all []Edge
+	seen := make(map[string]struct{})
+
+	var extractors []Extractor
+	for _, ex := range r.extractors {
+		if fa, ok := ex.(FrameworkAwareExtractor); ok {
+			if req := fa.RequiresFrameworks(); len(req) > 0 && !hasIntersection(req, frameworks) {
+				continue
+			}
+		}
+		extractors = append(extractors, ex)
+	}
+	if len(extractors) == 0 {
+		extractors = r.extractors
+	}
+
+	return r.extractWith(filePath, content, ext, extractors, seen, all)
+}
+
+// isMinified reports whether a file looks like minified/generated output that
+// would only add noise to the graph (webpack/nuxt bundles, *.min.js, etc.).
+// Minified files pack everything onto a few extremely long lines, so a very
+// long maximum line length is a reliable signal.
+func isMinified(filePath string, content []byte) bool {
+	lower := strings.ToLower(filePath)
+	for _, suf := range []string{".min.js", ".min.mjs", ".min.cjs", ".min.css", ".bundle.js", ".chunk.js", ".chunk.mjs", ".umd.js"} {
+		if strings.HasSuffix(lower, suf) {
+			return true
+		}
+	}
+	if len(content) == 0 {
+		return false
+	}
+	maxLine, cur, newlines := 0, 0, 0
+	for _, b := range content {
+		if b == '\n' {
+			if cur > maxLine {
+				maxLine = cur
+			}
+			cur = 0
+			newlines++
+			continue
+		}
+		cur++
+	}
+	if cur > maxLine {
+		maxLine = cur
+	}
+	if maxLine > 2000 {
+		return true
+	}
+	// Large file with very few line breaks (avg line length very high).
+	if len(content) > 50000 && len(content)/(newlines+1) > 400 {
+		return true
+	}
+	return false
+}
+
+func (r *Registry) extractWith(filePath string, content []byte, ext string, extractors []Extractor, seen map[string]struct{}, all []Edge) ([]Edge, error) {
 	for _, ex := range extractors {
 		if !ex.Supports(ext) {
 			continue

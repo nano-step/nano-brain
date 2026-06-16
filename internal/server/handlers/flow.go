@@ -17,6 +17,12 @@ import (
 type FlowQuerier interface {
 	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
 	ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
+	ListHTTPEndpointsByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.ListHTTPEndpointsByWorkspaceRow, error)
+}
+
+// FlowMaterializer is the interface for triggering flow materialization.
+type FlowMaterializer interface {
+	Trigger(ctx context.Context, workspaceHash string)
 }
 
 type flowRequest struct {
@@ -33,14 +39,24 @@ type flowNode struct {
 	Ambiguous bool   `json:"ambiguous,omitempty"`
 }
 
+type flowGraphEdge struct {
+	From        string `json:"from"`
+	To          string `json:"to"`
+	Kind        string `json:"kind"`
+	Line        int    `json:"line,omitempty"`
+	Conditional bool   `json:"conditional,omitempty"`
+}
+
 type flowResponse struct {
-	Found     bool       `json:"found"`
-	Entry     string     `json:"entry"`
-	Method    string     `json:"method,omitempty"`
-	Path      string     `json:"path,omitempty"`
-	Chain     []flowNode `json:"chain"`
-	Externals []flowNode `json:"externals"`
-	Mermaid   string     `json:"mermaid,omitempty"`
+	Found     bool           `json:"found"`
+	Entry     string         `json:"entry"`
+	Method    string         `json:"method,omitempty"`
+	Path      string         `json:"path,omitempty"`
+	Chain     []flowNode     `json:"chain"`
+	Externals []flowNode     `json:"externals"`
+	Nodes     []flowNode     `json:"nodes"`
+	Edges     []flowGraphEdge `json:"edges"`
+	Mermaid   string         `json:"mermaid,omitempty"`
 }
 
 // GraphFlow handles POST /api/v1/graph/flow.
@@ -102,6 +118,26 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 
 		chain, externals := splitNodes(f.Nodes)
 
+		nodes := make([]flowNode, 0, len(f.Nodes))
+		for _, n := range f.Nodes {
+			nodes = append(nodes, flowNode{
+				ID:        n.ID,
+				Name:      n.Name,
+				Role:      string(n.Role),
+				Ambiguous: n.Ambiguous,
+			})
+		}
+		graphEdges := make([]flowGraphEdge, 0, len(f.Edges))
+		for _, e := range f.Edges {
+			graphEdges = append(graphEdges, flowGraphEdge{
+				From:        e.From,
+				To:          e.To,
+				Kind:        e.Kind,
+				Line:        e.Line,
+				Conditional: e.Conditional,
+			})
+		}
+
 		resp := flowResponse{
 			Found:     true,
 			Entry:     f.Entry,
@@ -109,6 +145,8 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 			Path:      f.Path,
 			Chain:     chain,
 			Externals: externals,
+			Nodes:     nodes,
+			Edges:     graphEdges,
 		}
 		if diagram := flow.Render(f, req.Format); diagram != "" {
 			resp.Mermaid = diagram
@@ -118,7 +156,74 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 	}
 }
 
-// hasHTTPEntry reports whether any http edge originates from the given entry node.
+func FlowMaterialize(getMat func() FlowMaterializer, flowCfg config.FlowConfig, logger zerolog.Logger) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if !flowCfg.Enabled {
+			return c.JSON(http.StatusOK, map[string]any{
+				"status":  "skipped",
+				"message": "flow indexing disabled",
+			})
+		}
+
+		workspace, _ := c.Get("workspace").(string)
+		if workspace == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "workspace is required")
+		}
+
+		mat := getMat()
+		if mat == nil {
+			return echo.NewHTTPError(http.StatusServiceUnavailable, "flow materialization not configured")
+		}
+
+		// Detach from the request context: this goroutine outlives the HTTP
+		// response, so c.Request().Context() would be cancelled immediately
+		// after we return, aborting materialization mid-run.
+		go mat.Trigger(context.Background(), workspace)
+		logger.Info().Str("workspace", workspace).Msg("flow materialization triggered")
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"status":  "queued",
+			"message": "flow materialization triggered",
+		})
+	}
+}
+
+type httpEndpoint struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+func ListFlowEndpoints(q FlowQuerier, logger zerolog.Logger) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		workspace := c.QueryParam("workspace")
+		if workspace == "" {
+			workspace, _ = c.Get("workspace").(string)
+		}
+		if workspace == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "workspace is required")
+		}
+
+		ctx := c.Request().Context()
+		rows, err := q.ListHTTPEndpointsByWorkspace(ctx, workspace)
+		if err != nil {
+			logger.Error().Err(err).Str("workspace", workspace).Msg("list flow endpoints failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "list flow endpoints failed")
+		}
+
+		endpoints := make([]httpEndpoint, 0, len(rows))
+		for _, r := range rows {
+			endpoints = append(endpoints, httpEndpoint{
+				Source: r.SourceNode,
+				Target: r.TargetNode,
+			})
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"endpoints": endpoints,
+		})
+	}
+}
+
 func hasHTTPEntry(edges []graph.Edge, entry string) bool {
 	for _, e := range edges {
 		if e.Kind == graph.EdgeHTTP && e.SourceNode == entry {

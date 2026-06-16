@@ -27,6 +27,7 @@ func registerRoutes(s *Server) {
 
 	s.echo.GET("/health", h.Health)
 	s.echo.GET("/api/status", h.Status)
+	s.echo.GET("/api/version", h.Version)
 
 	api := s.echo.Group("/api/v1", contentTypeMiddleware())
 	api.POST("/init", handlers.InitWorkspace(s.queries, s.db, s.watcher, s.currentConfig().Watcher, s.logger))
@@ -96,6 +97,8 @@ func registerRoutes(s *Server) {
 	data.POST("/graph/impact", handlers.GraphImpact(s.queries, s.logger))
 	data.POST("/graph/trace", handlers.GraphTrace(s.queries, s.logger))
 	data.POST("/graph/flow", handlers.GraphFlow(s.queries, s.currentConfig().Flow, s.logger))
+	data.GET("/graph/flow/endpoints", handlers.ListFlowEndpoints(s.queries, s.logger))
+	write.POST("/flow/materialize", handlers.FlowMaterialize(s.getFlowMaterializer, s.currentConfig().Flow, s.logger))
 
 	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger, s.recorder))
 	data.POST("/search", handlers.BM25Search(s.queries, s.logger, s.recorder))
