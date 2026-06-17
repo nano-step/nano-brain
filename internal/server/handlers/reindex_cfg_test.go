@@ -44,6 +44,10 @@ func (m *mockReindexCFGQuerier) DeleteFunctionFlowchartsByFile(_ context.Context
 	return m.deleteErr
 }
 
+func (m *mockReindexCFGQuerier) DeleteAllFunctionFlowcharts(_ context.Context, _ string) error {
+	return nil
+}
+
 func (m *mockReindexCFGQuerier) UpsertFunctionFlowchart(_ context.Context, _ sqlc.UpsertFunctionFlowchartParams) error {
 	m.upsertCount++
 	return m.upsertErr
