@@ -602,6 +602,68 @@ function test(x) {
 	}
 }
 
+func TestJSControlFlowExtractor_NestedArrowFunctionNames(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+const outer = () => {
+  const inner = () => {
+    doSomething();
+  };
+};
+`
+	cfgs, err := ex.ExtractCFGs("f.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 2 {
+		t.Fatalf("expected 2 CFGs (outer + inner), got %d", len(cfgs))
+	}
+	names := make(map[string]bool)
+	for _, c := range cfgs {
+		names[c.Entry] = true
+	}
+	if !names["f.js::outer"] {
+		t.Error("expected a CFG for outer")
+	}
+	if !names["f.js::inner"] {
+		t.Error("expected a CFG for inner")
+	}
+}
+
+func TestJSControlFlowExtractor_TryCatchEmptyBlocks(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function test() {
+  try {
+  } catch (e) {
+  }
+}
+`
+	cfgs, err := ex.ExtractCFGs("f.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	cfg := cfgs[0]
+	if len(cfg.Nodes) < 2 {
+		t.Fatalf("expected at least 2 nodes (start + try/catch), got %d", len(cfg.Nodes))
+	}
+	if len(cfg.Edges) < 1 {
+		t.Fatal("expected at least 1 edge (start -> try/catch), got 0")
+	}
+	tryCatchNode := false
+	for _, n := range cfg.Nodes {
+		if n.Type == "decision" && n.Label == "try/catch" {
+			tryCatchNode = true
+		}
+	}
+	if !tryCatchNode {
+		t.Error("expected a try/catch decision node")
+	}
+}
+
 func TestJSControlFlowExtractor_TryCatchBranchLabels(t *testing.T) {
 	ex := newCFGExtractor(t)
 	src := `

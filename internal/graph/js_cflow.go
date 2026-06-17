@@ -578,10 +578,10 @@ func (b *cfgbuilder) buildTry(stmt *gotreesitter.Node, preds map[string]bool) ma
 	var tryExits map[string]bool
 	if tryBody != nil {
 		tryExits = b.buildBlock(tryBody, map[string]bool{tryID: true}, map[string]string{tryID: "try"})
+		tryExits = b.relabelPreds(tryExits, tryID)
 	} else {
 		tryExits = map[string]bool{tryID: true}
 	}
-	tryExits = b.relabelPreds(tryExits, tryID)
 
 	var catchExits map[string]bool
 	catchClause := stmt.ChildByFieldName("handler", b.lang)
@@ -589,13 +589,13 @@ func (b *cfgbuilder) buildTry(stmt *gotreesitter.Node, preds map[string]bool) ma
 		catchBody := catchClause.ChildByFieldName("body", b.lang)
 		if catchBody != nil {
 			catchExits = b.buildBlock(catchBody, map[string]bool{tryID: true}, map[string]string{tryID: "catch"})
+			catchExits = b.relabelPreds(catchExits, tryID)
 		} else {
 			catchExits = map[string]bool{tryID: true}
 		}
 	} else {
 		catchExits = map[string]bool{tryID: true}
 	}
-	catchExits = b.relabelPreds(catchExits, tryID)
 
 	merged := mergePreds(tryExits, catchExits)
 
@@ -852,9 +852,14 @@ func isIgnoredStatement(stmtType string) bool {
 }
 
 func findAssignedName(bt *gotreesitter.BoundTree, n *gotreesitter.Node, lang *gotreesitter.Language) string {
-	cur := n
+	cur := n.Parent()
 	for cur != nil {
-		if cur.Type(lang) == "variable_declarator" {
+		nodeType := cur.Type(lang)
+		if nodeType == "function_declaration" || nodeType == "function" ||
+			nodeType == "arrow_function" || nodeType == "method_definition" {
+			break
+		}
+		if nodeType == "variable_declarator" {
 			nameNode := cur.ChildByFieldName("name", lang)
 			if nameNode != nil {
 				return bt.NodeText(nameNode)
