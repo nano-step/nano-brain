@@ -10,6 +10,15 @@ import (
 	"encoding/json"
 )
 
+const deleteAllFunctionFlowcharts = `-- name: DeleteAllFunctionFlowcharts :exec
+DELETE FROM function_flowcharts WHERE workspace_hash = $1
+`
+
+func (q *Queries) DeleteAllFunctionFlowcharts(ctx context.Context, workspaceHash string) error {
+	_, err := q.db.ExecContext(ctx, deleteAllFunctionFlowcharts, workspaceHash)
+	return err
+}
+
 const deleteFunctionFlowchartsByFile = `-- name: DeleteFunctionFlowchartsByFile :exec
 DELETE FROM function_flowcharts WHERE workspace_hash = $1 AND source_file = $2
 `

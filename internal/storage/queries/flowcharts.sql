@@ -22,3 +22,6 @@ LIMIT 1;
 
 -- name: DeleteFunctionFlowchartsByFile :exec
 DELETE FROM function_flowcharts WHERE workspace_hash = $1 AND source_file = $2;
+
+-- name: DeleteAllFunctionFlowcharts :exec
+DELETE FROM function_flowcharts WHERE workspace_hash = $1;

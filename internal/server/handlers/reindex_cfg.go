@@ -23,12 +23,14 @@ type ReindexCFGQuerier interface {
 	ListCollections(ctx context.Context, workspaceHash string) ([]sqlc.Collection, error)
 	ListDocumentsByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.ListDocumentsByWorkspaceRow, error)
 	DeleteFunctionFlowchartsByFile(ctx context.Context, arg sqlc.DeleteFunctionFlowchartsByFileParams) error
+	DeleteAllFunctionFlowcharts(ctx context.Context, workspaceHash string) error
 	UpsertFunctionFlowchart(ctx context.Context, arg sqlc.UpsertFunctionFlowchartParams) error
 }
 
 type reindexCFGRequest struct {
 	Workspace string `json:"workspace"`
 	Full     bool   `json:"full"`
+	Wipe     bool   `json:"wipe"`
 }
 
 type reindexCFGResponse struct {
@@ -80,6 +82,13 @@ func ReindexCFG(queries ReindexCFGQuerier, graphReg *graph.Registry, logger zero
 		}
 
 		var filesProcessed, cfgsExtracted int
+
+		if req.Wipe {
+			if wipeErr := queries.DeleteAllFunctionFlowcharts(ctx, workspace); wipeErr != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("wipe flowcharts: %v", wipeErr))
+			}
+			reqLog.Info().Str("workspace", workspace).Msg("reindex-cfg: wiped all flowcharts")
+		}
 
 		if req.Full {
 			reqLog.Info().Str("root", codeRoot).Msg("reindex-cfg: starting full filesystem walk")
@@ -188,6 +197,7 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 		if filter.ShouldSkip(path, d.IsDir()) || ignoreStack.Matches(path) {
 			skipped++
 			if d.IsDir() {
+				reqLog.Debug().Str("dir", path).Msg("reindex-cfg: skipping dir")
 				return filepath.SkipDir
 			}
 			return nil
@@ -197,6 +207,7 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 			ext := strings.ToLower(filepath.Ext(path))
 			if jsTSExts[ext] {
 				filesProcessed++
+				reqLog.Debug().Str("file", path).Int("processed", filesProcessed).Msg("reindex-cfg: processing file")
 				if err := processFile(ctx, workspace, path, codeRoot, graphReg, queries); err != nil {
 					reqLog.Warn().Err(err).Str("file", path).Msg("reindex-cfg: failed")
 				} else {
