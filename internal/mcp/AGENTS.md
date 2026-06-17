@@ -1,6 +1,6 @@
 # internal/mcp — MCP Protocol Server
 
-MCP (Model Context Protocol) server — 13 tools for AI agent memory and code intelligence access.
+MCP (Model Context Protocol) server — 16 tools for AI agent memory and code intelligence access.
 
 ## Transport
 
@@ -14,7 +14,8 @@ MCP (Model Context Protocol) server — 13 tools for AI agent memory and code in
 |------|---------|
 | `server.go` | `NewMCPServer()` — creates mcp-go `*Server` with name + keep-alive |
 | `adapter.go` | `Adapter` — bridges mcp package to storage/search/embed deps |
-| `tools.go` | **1206 lines** — all 13 tool definitions + handlers in ONE file |
+| `tools.go` | most tool definitions + handlers + shared helpers |
+| `flowchart.go` | `memory_flowchart` tool — CFG lookup by `file::startLine-endLine` |
 | `streamable.go` | Streamable HTTP transport handler |
 | `sse.go` | SSE transport handler (legacy) |
 
@@ -35,6 +36,9 @@ MCP (Model Context Protocol) server — 13 tools for AI agent memory and code in
 | `memory_graph` | Dependency graph traversal |
 | `memory_impact` | Cross-repo impact analysis |
 | `memory_trace` | Trace symbol usage across workspace |
+| `memory_flow` | Execution flow for an HTTP entry (chain + Mermaid) |
+| `memory_flowchart` | Control-flow graph for a function (`file::startLine-endLine`) |
+| `memory_workspaces_resolve` | Resolve a workspace name to its hash |
 
 ## tools.go Structure
 

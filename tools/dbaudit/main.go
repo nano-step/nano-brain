@@ -11,6 +11,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -29,6 +30,8 @@ var noiseSuffixes = []string{".min.js", ".min.mjs", ".min.css", ".bundle.js", ".
 	"packages.lock.json", "go.sum", "Package.resolved", "gradle.lockfile", ".terraform.lock.hcl"}
 
 func main() {
+	wsDrill := flag.String("ws", "", "drill into one workspace hash: chunks by collection + top files")
+	flag.Parse()
 	dsn := defaultDSN
 	if v := os.Getenv("DATABASE_URL"); v != "" {
 		dsn = v
@@ -129,7 +132,41 @@ func main() {
 		er.Close()
 	}
 
+	// ---- Optional per-workspace drill-down (explains a high chunk/doc ratio) ----
+	if *wsDrill != "" {
+		section("WS drill: chunks by collection")
+		printAgg(ctx, pool, `SELECT coalesce(d.collection,'(none)'), count(ch.id) c
+			FROM documents d JOIN chunks ch ON ch.document_id=d.id
+			WHERE d.workspace_hash=$1 GROUP BY 1 ORDER BY c DESC`, *wsDrill)
+
+		section("WS drill: top 15 source files by chunk count")
+		printAgg(ctx, pool, `SELECT d.source_path, count(ch.id) c
+			FROM documents d JOIN chunks ch ON ch.document_id=d.id
+			WHERE d.workspace_hash=$1 GROUP BY 1 ORDER BY c DESC LIMIT 15`, *wsDrill)
+
+		section("WS drill: docs by collection (incl. 0-chunk)")
+		printAgg(ctx, pool, `SELECT coalesce(collection,'(none)'), count(*) c
+			FROM documents WHERE workspace_hash=$1 GROUP BY 1 ORDER BY c DESC`, *wsDrill)
+	}
+
 	fmt.Println("\nNote: high chunk/doc ratios + large noise counts usually mean minified/build files were indexed — run tools/ignorecleanup -all -delete, then reindex.")
+}
+
+// printAgg prints a two-column (label, count) aggregate query.
+func printAgg(ctx context.Context, pool *pgxpool.Pool, q string, args ...any) {
+	rows, err := pool.Query(ctx, q, args...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "agg query failed: %v\n", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var label string
+		var n int64
+		if rows.Scan(&label, &n) == nil {
+			fmt.Printf("  %10d  %s\n", n, label)
+		}
+	}
 }
 
 // noiseCountSQL counts rows whose path matches a noise dir ($2) or suffix ($3).

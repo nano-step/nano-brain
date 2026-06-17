@@ -10,7 +10,7 @@ storage.go   — package doc; package-level declarations
 workspace.go — WorkspaceHash: SHA-256 of absolute root path → hex string
 migrate.go   — RunMigrations: goose v3 via embedded migrations.FS
 queries/     — raw SQL (INPUT to sqlc): chunks, collections, documents, embeddings, graph,
-               search, telemetry, wakeup, workspaces
+               flowcharts, search, telemetry, wakeup, workspaces
 sqlc/        — generated Go (DO NOT EDIT)
 ```
 

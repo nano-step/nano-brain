@@ -9,7 +9,7 @@ HTTP handler functions for all REST API endpoints. One file per endpoint group.
 | Search | `query.go` (hybrid BM25+vector+RRF), `search.go`/`bm25.go` (BM25), `symbols.go` |
 | Documents | `document.go`, `embed.go`, `reindex.go`, `reload.go`, `summarize.go` |
 | Workspace | `workspace.go` (init/list), `reset_workspace.go`, `collection.go`, `tags.go`, `wakeup.go` |
-| Graph | `graph.go`, `impact.go`, `trace.go` |
+| Graph | `graph.go`, `impact.go`, `trace.go`, `flow.go`, `flowchart.go` |
 | Infra | `health.go` (`/health` + `/api/status`), `harvest.go`, `context.go` |
 
 ## Handler Pattern

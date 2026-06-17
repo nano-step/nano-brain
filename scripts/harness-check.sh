@@ -606,40 +606,8 @@ phase_pre_merge() {
         add_check "SKIP" "3.12 Cannot determine story ID for smoke:e2e check"
     fi
 
-    # 3.13 smoke:ui evidence (issue #285)
-    # If PR diff touches web/, server handlers, or webui embed FS — require
-    # a fresh smoke-ui-output.log evidence file containing "smoke:ui PASS".
-    # Scope search to branch slug to avoid false positives from archived logs.
-    if ! cmd_exists git; then
-        add_check "SKIP" "3.13 git not installed"
-    else
-        web_touched=$(git diff --name-only origin/master...HEAD 2>/dev/null \
-            | grep -E '^(web/src/|web/package\.json|internal/server/handlers/|internal/server/webui/|internal/server/routes\.go)' || true)
-        if [[ -z "$web_touched" ]]; then
-            add_check "SKIP" "3.13 no web change in PR diff (smoke:ui not required)"
-        else
-            current_branch=$(git branch --show-current 2>/dev/null || echo "")
-            slug=$(echo "$current_branch" | sed 's|^[^/]*/||')
-
-            smoke_ui_file=""
-            if [[ -n "$slug" ]]; then
-                smoke_ui_file=$(find docs/evidence -name "smoke-ui-output.log" -type f -path "*${slug}*" 2>/dev/null | head -1)
-            fi
-            if [[ -z "$smoke_ui_file" ]]; then
-                smoke_ui_file=$(find docs/evidence -name "smoke-ui-output.log" -type f 2>/dev/null | head -1)
-            fi
-
-            if [[ -z "$smoke_ui_file" ]]; then
-                add_check "FAIL" "3.13 web change but no docs/evidence/*/smoke-ui-output.log (#285)"
-            elif [[ -f scripts/smoke-ui.sh ]] && [[ scripts/smoke-ui.sh -nt "$smoke_ui_file" ]]; then
-                add_check "FAIL" "3.13 $smoke_ui_file is older than scripts/smoke-ui.sh — re-run smoke:ui"
-            elif ! grep -q "smoke:ui PASS" "$smoke_ui_file"; then
-                add_check "FAIL" "3.13 $smoke_ui_file does not contain 'smoke:ui PASS'"
-            else
-                add_check "PASS" "3.13 smoke:ui evidence: $smoke_ui_file"
-            fi
-        fi
-    fi
+    # 3.13 smoke:ui — REMOVED (UI migrated to standalone dashboard repo)
+    add_check "SKIP" "3.13 smoke:ui deprecated (dashboard split complete)"
 }
 
 phase_post_merge() {
