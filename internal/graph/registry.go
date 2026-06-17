@@ -10,10 +10,45 @@ import (
 type Registry struct {
 	extractors       []Extractor
 	activeExtractors atomic.Pointer[[]Extractor]
+	cfgExtractors    []ControlFlowExtractor
 }
 
 func NewRegistry(extractors ...Extractor) *Registry {
 	return &Registry{extractors: extractors}
+}
+
+// RegisterControlFlowExtractor adds a control-flow (CFG) extractor. CFG
+// extractors run independently of edge extractors and are invoked via
+// ExtractCFGs.
+func (r *Registry) RegisterControlFlowExtractor(ce ControlFlowExtractor) {
+	r.cfgExtractors = append(r.cfgExtractors, ce)
+}
+
+// HasControlFlowExtractors reports whether any CFG extractor is registered.
+func (r *Registry) HasControlFlowExtractors() bool {
+	return len(r.cfgExtractors) > 0
+}
+
+// ExtractCFGs runs every registered control-flow extractor that supports the
+// file's extension and concatenates their CFGs. Minified/generated files are
+// skipped (same guard as ExtractEdges).
+func (r *Registry) ExtractCFGs(filePath string, content []byte) ([]CFG, error) {
+	if isMinified(filePath, content) {
+		return nil, nil
+	}
+	ext := filepath.Ext(filePath)
+	var all []CFG
+	for _, ce := range r.cfgExtractors {
+		if !ce.SupportsCFG(ext) {
+			continue
+		}
+		cfgs, err := ce.ExtractCFGs(filePath, content)
+		if err != nil {
+			return nil, fmt.Errorf("extract cfgs %s: %w", filePath, err)
+		}
+		all = append(all, cfgs...)
+	}
+	return all, nil
 }
 
 // SetActiveFrameworks filters the extractor list to only those whose

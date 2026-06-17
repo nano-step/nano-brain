@@ -40,11 +40,12 @@ type flowNode struct {
 }
 
 type flowGraphEdge struct {
-	From        string `json:"from"`
-	To          string `json:"to"`
-	Kind        string `json:"kind"`
-	Line        int    `json:"line,omitempty"`
-	Conditional bool   `json:"conditional,omitempty"`
+	From           string `json:"from"`
+	To             string `json:"to"`
+	Kind           string `json:"kind"`
+	Line           int    `json:"line,omitempty"`
+	Conditional    bool   `json:"conditional,omitempty"`
+	ConditionLabel string `json:"condition_label,omitempty"`
 }
 
 type flowResponse struct {
@@ -130,11 +131,12 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 		graphEdges := make([]flowGraphEdge, 0, len(f.Edges))
 		for _, e := range f.Edges {
 			graphEdges = append(graphEdges, flowGraphEdge{
-				From:        e.From,
-				To:          e.To,
-				Kind:        e.Kind,
-				Line:        e.Line,
-				Conditional: e.Conditional,
+				From:           e.From,
+				To:             e.To,
+				Kind:           e.Kind,
+				Line:           e.Line,
+				Conditional:    e.Conditional,
+				ConditionLabel: e.ConditionLabel,
 			})
 		}
 

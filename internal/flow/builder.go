@@ -36,6 +36,10 @@ type FlowEdge struct {
 	Line        int    // source line of the call site (0 = unknown)
 	Conditional bool   // true when the call is inside an if/switch/select block
 
+	// ConditionLabel holds the predicate text for conditional edges (e.g. "err !== null").
+	// Populated from graph_edges.metadata["condition_label"] during BuildFlow.
+	ConditionLabel string
+
 	// CrossServiceWorkspace is set when Kind is "cross_service", indicating
 	// the target workspace hash (first 8 chars) the edge connects to.
 	CrossServiceWorkspace string
@@ -168,6 +172,18 @@ func edgeConditional(e graph.Edge) bool {
 	}
 	b, ok := v.(bool)
 	return ok && b
+}
+
+func edgeConditionLabel(e graph.Edge) string {
+	if e.Metadata == nil {
+		return ""
+	}
+	v, ok := e.Metadata["condition_label"]
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	return s
 }
 
 func buildIndex(edges []graph.Edge) edgeIndex {
@@ -327,7 +343,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 					if _, exists := nodeMap[target]; !exists {
 						addNode(FlowNode{ID: target, Name: target, Role: RoleIntegration})
 					}
-					addEdge(FlowEdge{From: item.bareName, To: target, Kind: "integration", Line: e.Line, Conditional: edgeConditional(e)})
+					addEdge(FlowEdge{From: item.bareName, To: target, Kind: "integration", Line: e.Line, Conditional: edgeConditional(e), ConditionLabel: edgeConditionLabel(e)})
 					continue
 				}
 
@@ -386,7 +402,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 					addNode(targetNode)
 				}
 
-				addEdge(FlowEdge{From: item.bareName, To: target, Kind: "calls", Line: e.Line, Conditional: edgeConditional(e)})
+				addEdge(FlowEdge{From: item.bareName, To: target, Kind: "calls", Line: e.Line, Conditional: edgeConditional(e), ConditionLabel: edgeConditionLabel(e)})
 
 				if targetRole != RoleExternal {
 					queue = append(queue, bfsItem{bareName: target, depth: item.depth + 1, parentFile: callerFile})

@@ -402,6 +402,15 @@ func startServer(configPath string) {
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 
+	if cfg.Flow.Enabled {
+		if jsCFG, err := graph.NewJSControlFlowExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("js control-flow extractor init failed, skipping")
+		} else {
+			graphRegistry.RegisterControlFlowExtractor(jsCFG)
+			logger.Info().Msg("execution-flow: js control-flow extractor enabled")
+		}
+	}
+
 	var frameworkDetector *graph.FrameworkDetector
 	if cfg.Flow.Enabled {
 		frameworkDetector = graph.NewFrameworkDetector(graph.DefaultRules)

@@ -40,6 +40,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryImpact(server, a)
 	registerMemoryTrace(server, a)
 	registerMemoryFlow(server, a)
+	registerMemoryFlowchart(server, a)
 	registerMemoryWorkspacesResolve(server, a)
 }
 

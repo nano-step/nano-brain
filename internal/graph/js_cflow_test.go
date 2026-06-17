@@ -1,0 +1,309 @@
+package graph_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/nano-brain/nano-brain/internal/graph"
+)
+
+func newCFGExtractor(t *testing.T) *graph.JSControlFlowExtractor {
+	t.Helper()
+	ex, err := graph.NewJSControlFlowExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ex
+}
+
+// countNodeTypes returns a map of node Type -> count across one CFG.
+func countNodeTypes(cfg graph.CFG) map[string]int {
+	m := make(map[string]int)
+	for _, n := range cfg.Nodes {
+		m[n.Type]++
+	}
+	return m
+}
+
+func TestJSControlFlowExtractor_SupportsCFG(t *testing.T) {
+	ex := newCFGExtractor(t)
+	tests := []struct {
+		ext  string
+		want bool
+	}{
+		{".js", true},
+		{".jsx", true},
+		{".ts", true},
+		{".tsx", true},
+		{".go", false},
+		{".py", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := ex.SupportsCFG(tt.ext); got != tt.want {
+			t.Errorf("SupportsCFG(%q) = %v, want %v", tt.ext, got, tt.want)
+		}
+	}
+}
+
+func TestJSControlFlowExtractor_NoFunctions(t *testing.T) {
+	ex := newCFGExtractor(t)
+	cfgs, err := ex.ExtractCFGs("empty.js", []byte("const x = 1;\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 0 {
+		t.Errorf("expected 0 CFGs from a file with no functions, got %d", len(cfgs))
+	}
+}
+
+func TestJSControlFlowExtractor_EmptyFile(t *testing.T) {
+	ex := newCFGExtractor(t)
+	cfgs, err := ex.ExtractCFGs("empty.js", []byte(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 0 {
+		t.Errorf("expected 0 CFGs from empty file, got %d", len(cfgs))
+	}
+}
+
+func TestJSControlFlowExtractor_SyntaxError(t *testing.T) {
+	ex := newCFGExtractor(t)
+	// Partial/broken source must not error or panic.
+	if _, err := ex.ExtractCFGs("broken.js", []byte("function broken( { return")); err != nil {
+		t.Fatalf("should not error on partial parse: %v", err)
+	}
+}
+
+func TestJSControlFlowExtractor_GuardClauseProducesDecisionAndTerminals(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function purchase(req, res) {
+  if (!req.id) {
+    return res.status(400);
+  }
+  return res.status(200);
+}
+`
+	cfgs, err := ex.ExtractCFGs("handlers/purchase.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	cfg := cfgs[0]
+
+	if want := "handlers/purchase.ts::purchase"; cfg.Entry != want {
+		t.Errorf("Entry = %q, want %q", cfg.Entry, want)
+	}
+	if cfg.SourceFile != "handlers/purchase.ts" {
+		t.Errorf("SourceFile = %q, want handlers/purchase.ts", cfg.SourceFile)
+	}
+
+	counts := countNodeTypes(cfg)
+	if counts["decision"] < 1 {
+		t.Errorf("expected at least 1 decision node, got %d", counts["decision"])
+	}
+	if counts["terminal"] < 1 {
+		t.Errorf("expected at least 1 terminal node, got %d", counts["terminal"])
+	}
+
+	// At least one return terminal must carry a descriptive, non-empty label.
+	foundLabeledReturn := false
+	for _, n := range cfg.Nodes {
+		if n.Type == "terminal" && n.Kind == "return" && strings.HasPrefix(n.Label, "return") {
+			foundLabeledReturn = true
+		}
+	}
+	if !foundLabeledReturn {
+		t.Error("expected a return terminal with a 'return ...' label")
+	}
+}
+
+func TestJSControlFlowExtractor_ThrowTerminal(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function validate(x) {
+  if (!x) {
+    throw new Error("missing x");
+  }
+  return x;
+}
+`
+	cfgs, err := ex.ExtractCFGs("v.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+
+	foundError := false
+	for _, n := range cfgs[0].Nodes {
+		if n.Type == "terminal" && n.Kind == "error" && strings.HasPrefix(n.Label, "throw") {
+			foundError = true
+		}
+	}
+	if !foundError {
+		t.Error("expected a throw terminal with kind=error and a 'throw ...' label")
+	}
+}
+
+func TestJSControlFlowExtractor_SwitchProducesDecision(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function route(x) {
+  switch (x) {
+    case 1: return "a";
+    case 2: return "b";
+    default: return "c";
+  }
+}
+`
+	cfgs, err := ex.ExtractCFGs("r.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+
+	foundSwitch := false
+	for _, n := range cfgs[0].Nodes {
+		if n.Type == "decision" && strings.HasPrefix(n.Label, "switch (") {
+			foundSwitch = true
+		}
+	}
+	if !foundSwitch {
+		t.Error("expected a decision node labeled 'switch (...)'")
+	}
+}
+
+func TestJSControlFlowExtractor_BatchFiveFunctions(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function a() { return 1; }
+function b() { return 2; }
+function c() { return 3; }
+function d() { return 4; }
+function e() { return 5; }
+`
+	cfgs, err := ex.ExtractCFGs("multi.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 5 {
+		t.Fatalf("expected 5 CFGs (one per function), got %d", len(cfgs))
+	}
+	for _, cfg := range cfgs {
+		if len(cfg.Nodes) == 0 {
+			t.Errorf("CFG %q has no nodes", cfg.Entry)
+		}
+		if cfg.Status != "complete" {
+			t.Errorf("CFG %q status = %q, want complete", cfg.Entry, cfg.Status)
+		}
+	}
+}
+
+func TestJSControlFlowExtractor_LargeFunctionTruncated(t *testing.T) {
+	ex := newCFGExtractor(t)
+	var b strings.Builder
+	b.WriteString("function big() {\n")
+	for i := 0; i < 700; i++ {
+		b.WriteString("  doThing();\n")
+	}
+	b.WriteString("}\n")
+
+	cfgs, err := ex.ExtractCFGs("big.js", []byte(b.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	cfg := cfgs[0]
+	if cfg.Status != "truncated" {
+		t.Errorf("status = %q, want truncated", cfg.Status)
+	}
+	if len(cfg.Nodes) > 500 {
+		t.Errorf("node count %d exceeds the 500 cap", len(cfg.Nodes))
+	}
+}
+
+func TestJSControlFlowExtractor_NoBranchesYieldsEmptyCFG(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `function identity(x) { let y = x + 1; return y; }`
+	cfgs, err := ex.ExtractCFGs("simple.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	cfg := cfgs[0]
+	if cfg.Status != "complete" {
+		t.Errorf("status = %q, want complete", cfg.Status)
+	}
+	counts := countNodeTypes(cfg)
+	if counts["decision"] > 0 {
+		t.Errorf("expected 0 decision nodes for a function with no branches, got %d", counts["decision"])
+	}
+}
+
+func TestJSControlFlowExtractor_EarlyReturnIdiom(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function handler(req, res) {
+  if (err) return;
+  res.json({ ok: true });
+}
+`
+	cfgs, err := ex.ExtractCFGs("handler.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	cfg := cfgs[0]
+	foundDecision := false
+	foundTerminal := false
+	for _, n := range cfg.Nodes {
+		if n.Type == "decision" {
+			foundDecision = true
+		}
+		if n.Type == "terminal" {
+			foundTerminal = true
+		}
+	}
+	if !foundDecision {
+		t.Error("expected a decision node for the early-return guard")
+	}
+	if !foundTerminal {
+		t.Error("expected a terminal node for the early return")
+	}
+}
+
+func TestJSControlFlowExtractor_ArrowFunctionAssigned(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+const handler = (req, res) => {
+  if (!req.ok) {
+    return res.status(400);
+  }
+  res.send("ok");
+};
+`
+	cfgs, err := ex.ExtractCFGs("a.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG for the assigned arrow function, got %d", len(cfgs))
+	}
+	if cfgs[0].Entry != "a.ts::handler" {
+		t.Errorf("Entry = %q, want a.ts::handler", cfgs[0].Entry)
+	}
+}

@@ -694,6 +694,9 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	}
 	if w.graphRegistry != nil {
 		w.extractAndUpsertEdges(ctx, col, filePath, content)
+		if w.graphRegistry.HasControlFlowExtractors() {
+			w.extractAndUpsertCFGs(ctx, col, filePath, content)
+		}
 		if w.flowNotify != nil {
 			w.flowNotify(col.workspaceHash)
 		}
@@ -819,6 +822,67 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		Msg("graph edges extracted")
 }
 
+// extractAndUpsertCFGs extracts per-function control-flow graphs for a JS/TS
+// file and replaces any previously stored flowcharts for that file. Mirrors
+// extractAndUpsertEdges: delete-by-file then upsert, all inside one tx.
+func (w *Watcher) extractAndUpsertCFGs(ctx context.Context, col watchedCollection, filePath string, content []byte) {
+	cfgs, err := w.graphRegistry.ExtractCFGs(filePath, content)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("cfg extraction failed")
+		return
+	}
+
+	relFile := filepath.ToSlash(filePath)
+
+	tx, err := w.db.BeginTx(ctx, nil)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("cfg tx begin failed")
+		return
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	tq := sqlc.New(tx)
+	if err := tq.DeleteFunctionFlowchartsByFile(ctx, sqlc.DeleteFunctionFlowchartsByFileParams{
+		WorkspaceHash: col.workspaceHash,
+		SourceFile:    relFile,
+	}); err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("cfg delete failed")
+		return
+	}
+
+	for _, cfg := range cfgs {
+		cfgJSON, mErr := json.Marshal(cfg)
+		if mErr != nil {
+			w.logger.Warn().Err(mErr).Str("entry", cfg.Entry).Msg("cfg marshal failed, skipping")
+			continue
+		}
+		if err := tq.UpsertFunctionFlowchart(ctx, sqlc.UpsertFunctionFlowchartParams{
+			WorkspaceHash: col.workspaceHash,
+			Entry:         cfg.Entry,
+			SourceFile:    relFile,
+			StartLine:     int32(cfg.StartLine),
+			EndLine:       int32(cfg.EndLine),
+			Status:        cfg.Status,
+			Cfg:           cfgJSON,
+		}); err != nil {
+			w.logger.Warn().Err(err).Str("entry", cfg.Entry).Msg("cfg upsert failed, rolling back")
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("cfg tx commit failed")
+		return
+	}
+
+	if len(cfgs) > 0 {
+		w.logger.Info().
+			Str("file", filePath).
+			Int("flowcharts", len(cfgs)).
+			Msg("control-flow graphs extracted")
+	}
+}
+
 // ReextractSymbolsForWorkspace re-runs symbol extraction for every file in the
 // workspace's collections, bypassing the content-hash early-exit. Returns the
 // number of files processed.
@@ -895,6 +959,9 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 				return nil
 			}
 			w.extractAndUpsertEdges(ctx, col, path, content)
+			if w.graphRegistry.HasControlFlowExtractors() {
+				w.extractAndUpsertCFGs(ctx, col, path, content)
+			}
 			count++
 			return nil
 		})

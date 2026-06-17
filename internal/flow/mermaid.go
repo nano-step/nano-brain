@@ -105,6 +105,14 @@ func sanitizeLabel(name string) string {
 	return replacer.Replace(name)
 }
 
+func truncateLabel(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen-1]) + "…"
+}
+
 // RenderFlowchart renders a Flow as a Mermaid graph TD diagram.
 // Output is deterministic: nodes and edges are sorted before emission.
 func RenderFlowchart(f Flow) string {
@@ -168,7 +176,15 @@ func RenderFlowchart(f Flow) string {
 			continue
 		}
 		emittedEdges[key] = true
-		sb.WriteString(fmt.Sprintf("    %s %s %s\n", from, arrow, to))
+
+		// Add condition label for conditional edges
+		if e.Conditional && e.ConditionLabel != "" {
+			label := truncateLabel(e.ConditionLabel, 80)
+			sb.WriteString(fmt.Sprintf("    %s %s %s\n", from, arrow, to))
+			sb.WriteString(fmt.Sprintf("    link 0,%s,%s,%s\n", from, to, sanitizeLabel(label)))
+		} else {
+			sb.WriteString(fmt.Sprintf("    %s %s %s\n", from, arrow, to))
+		}
 	}
 
 	// Cross-service class definition and assignments.
