@@ -374,10 +374,10 @@ func (b *cfgbuilder) buildIf(stmt *gotreesitter.Node, preds map[string]bool) map
 		} else {
 			elseExits = b.buildBlock(wrapInBlock(alternative), map[string]bool{decisionID: true}, map[string]string{decisionID: "no"})
 		}
+		elseExits = b.relabelPreds(elseExits, decisionID)
 	} else {
 		elseExits = map[string]bool{decisionID: true}
 	}
-	elseExits = b.relabelPreds(elseExits, decisionID)
 
 	merged := mergePreds(thenExits, elseExits)
 	return merged
