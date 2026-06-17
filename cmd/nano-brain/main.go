@@ -402,6 +402,15 @@ func startServer(configPath string) {
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 
+	if cfg.Flow.Enabled {
+		if jsCFG, err := graph.NewJSControlFlowExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("js control-flow extractor init failed, skipping")
+		} else {
+			graphRegistry.RegisterControlFlowExtractor(jsCFG)
+			logger.Info().Msg("execution-flow: js control-flow extractor enabled")
+		}
+	}
+
 	var frameworkDetector *graph.FrameworkDetector
 	if cfg.Flow.Enabled {
 		frameworkDetector = graph.NewFrameworkDetector(graph.DefaultRules)
@@ -628,6 +637,7 @@ func startServer(configPath string) {
 			summaryTimeout = 10 * time.Minute
 		}
 		mat := flow.NewMaterializer(queries, enqueueFn, cfg.Flow.MaxDepth, cfg.Flow.MaxFanout, summaryTimeout, flowSummarizer, logger)
+		srv.SetFlowMaterializer(mat)
 		fw.WithFlowNotify(func(wsHash string) {
 			go mat.Trigger(gctx, wsHash)
 		})

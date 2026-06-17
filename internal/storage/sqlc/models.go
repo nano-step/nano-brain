@@ -105,6 +105,19 @@ type Embedding struct {
 	UpdatedAt     time.Time
 }
 
+type FunctionFlowchart struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+	Entry         string
+	SourceFile    string
+	StartLine     int32
+	EndLine       int32
+	Status        string
+	Cfg           json.RawMessage
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type GraphEdge struct {
 	ID            uuid.UUID
 	WorkspaceHash string

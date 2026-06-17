@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kenya Hara — nano-brain dashboard</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --white:#ffffff;
+  --paper:#fafaf9;
+  --ink:#1a1a1a;
+  --ink-light:#888888;
+  --ink-faint:#b0b0b0;
+  --hairline:#e6e6e4;
+  --hairline-warm:#eae8e5;
+  --accent:#2c2c2c;
+  --sidebar-w:240px;
+  --font:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Segoe UI",sans-serif;
+}
+html{font-size:15px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:var(--font);background:var(--white);color:var(--ink);display:flex;min-height:100vh;line-height:1.6;letter-spacing:0.01em}
+
+aside{
+  width:var(--sidebar-w);min-height:100vh;background:var(--paper);
+  border-right:1px solid var(--hairline);display:flex;flex-direction:column;
+  padding:48px 0 48px 0;position:fixed;left:0;top:0;bottom:0;z-index:10;
+}
+.logo{
+  padding:0 36px 56px 36px;font-size:13px;font-weight:200;letter-spacing:0.18em;
+  text-transform:uppercase;color:var(--ink);line-height:1.4;
+}
+.logo span{display:block;font-weight:300;font-size:10px;letter-spacing:0.28em;
+  color:var(--ink-faint);margin-top:4px;text-transform:uppercase;}
+nav{flex:1;padding:0 0;}
+nav a{
+  display:flex;align-items:center;gap:12px;padding:13px 36px;
+  font-size:13px;font-weight:300;color:var(--ink-light);letter-spacing:0.06em;
+  text-decoration:none;transition:color 0.3s ease,background 0.3s ease;
+  position:relative;
+}
+nav a:hover{color:var(--ink);background:rgba(0,0,0,0.015);}
+nav a.active{color:var(--ink);font-weight:400;background:rgba(0,0,0,0.025);}
+nav a.active::before{
+  content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:2px;height:20px;background:var(--ink);border-radius:1px;
+}
+nav a .dot{
+  width:4px;height:4px;border-radius:50%;background:var(--ink-faint);
+  flex-shrink:0;opacity:0.5;
+}
+nav a.active .dot{background:var(--ink);opacity:1;}
+.sidebar-footer{
+  padding:0 36px;border-top:1px solid var(--hairline);padding-top:24px;
+  font-size:10px;font-weight:300;color:var(--ink-faint);letter-spacing:0.12em;
+}
+
+main{margin-left:var(--sidebar-w);flex:1;min-height:100vh;}
+
+.header{
+  padding:52px 72px 0 72px;display:flex;align-items:flex-end;justify-content:space-between;
+}
+.header h1{
+  font-size:26px;font-weight:200;letter-spacing:0.04em;color:var(--ink);line-height:1.2;
+}
+.header-date{
+  font-size:11px;font-weight:300;color:var(--ink-faint);letter-spacing:0.14em;
+  text-transform:uppercase;padding-bottom:4px;
+}
+
+.content{padding:40px 72px 80px 72px;max-width:1120px;}
+
+.stats{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+  background:var(--hairline);border:1px solid var(--hairline);margin-bottom:56px;
+}
+.stat-card{
+  background:var(--white);padding:36px 40px;display:flex;flex-direction:column;
+  gap:8px;
+}
+.stat-label{
+  font-size:10px;font-weight:400;letter-spacing:0.22em;text-transform:uppercase;
+  color:var(--ink-faint);
+}
+.stat-value{
+  font-size:32px;font-weight:200;letter-spacing:-0.02em;color:var(--ink);line-height:1;
+}
+.stat-sub{
+  font-size:11px;font-weight:300;color:var(--ink-faint);letter-spacing:0.04em;
+  margin-top:4px;
+}
+
+.section-label{
+  font-size:10px;font-weight:400;letter-spacing:0.22em;text-transform:uppercase;
+  color:var(--ink-faint);margin-bottom:20px;
+}
+
+.search-wrap{
+  margin-bottom:56px;position:relative;
+}
+.search-wrap input{
+  width:100%;padding:16px 20px;font-family:var(--font);font-size:14px;
+  font-weight:300;letter-spacing:0.04em;color:var(--ink);
+  background:var(--paper);border:1px solid var(--hairline);outline:none;
+  transition:border-color 0.3s ease;
+}
+.search-wrap input::placeholder{color:var(--ink-faint);font-weight:300;letter-spacing:0.06em;}
+.search-wrap input:focus{border-color:var(--ink-faint);}
+.search-icon{
+  position:absolute;right:20px;top:50%;transform:translateY(-50%);
+  color:var(--ink-faint);font-size:14px;font-weight:200;
+}
+
+.recent{margin-bottom:56px;}
+table{width:100%;border-collapse:collapse;}
+thead th{
+  text-align:left;font-size:10px;font-weight:400;letter-spacing:0.22em;
+  text-transform:uppercase;color:var(--ink-faint);padding:0 0 14px 0;
+  border-bottom:1px solid var(--hairline);
+}
+tbody td{
+  padding:18px 0;border-bottom:1px solid var(--hairline-warm);
+  font-size:13px;font-weight:300;color:var(--ink);letter-spacing:0.02em;
+  vertical-align:top;
+}
+tbody tr:last-child td{border-bottom:1px solid var(--hairline);}
+.doc-name{font-weight:400;color:var(--ink);letter-spacing:0.01em;}
+.doc-meta{font-size:11px;color:var(--ink-faint);margin-top:3px;font-weight:300;letter-spacing:0.04em;}
+.doc-tag{
+  display:inline-block;font-size:9px;font-weight:400;letter-spacing:0.16em;
+  text-transform:uppercase;color:var(--ink-faint);border:1px solid var(--hairline);
+  padding:3px 10px;margin-right:6px;
+}
+.doc-time{font-size:11px;color:var(--ink-faint);font-weight:300;white-space:nowrap;}
+
+.graph-area{
+  border:1px solid var(--hairline);background:var(--paper);min-height:280px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;position:relative;overflow:hidden;
+}
+.graph-area .graph-label{
+  font-size:10px;font-weight:400;letter-spacing:0.22em;text-transform:uppercase;
+  color:var(--ink-faint);z-index:2;
+}
+.graph-area .graph-sub{
+  font-size:12px;font-weight:300;color:var(--ink-faint);letter-spacing:0.04em;z-index:2;
+}
+.graph-dots{position:absolute;inset:0;z-index:1;}
+.graph-dot{
+  position:absolute;width:3px;height:3px;border-radius:50%;background:var(--ink);
+}
+.graph-line{
+  position:absolute;height:1px;background:var(--hairline);transform-origin:left center;
+}
+
+@media(max-width:900px){
+  aside{width:200px;}
+  :root{--sidebar-w:200px;}
+  .content{padding:32px 36px 60px 36px;}
+  .header{padding:36px 36px 0 36px;}
+  .stats{grid-template-columns:1fr;}
+}
+@media(max-width:600px){
+  aside{display:none;}
+  :root{--sidebar-w:0px;}
+  main{margin-left:0;}
+  .content{padding:24px 20px 48px 20px;}
+  .header{padding:28px 20px 0 20px;}
+  .header h1{font-size:20px;}
+}
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="logo">nano-brain<span>persistent memory</span></div>
+  <nav>
+    <a href="#" class="active"><span class="dot"></span>Dashboard</a>
+    <a href="#"><span class="dot"></span>Memory</a>
+    <a href="#"><span class="dot"></span>Graph</a>
+    <a href="#"><span class="dot"></span>Flow</a>
+    <a href="#"><span class="dot"></span>Symbols</a>
+    <a href="#"><span class="dot"></span>Harvest</a>
+    <a href="#"><span class="dot"></span>Workspaces</a>
+    <a href="#"><span class="dot"></span>Code Summarize</a>
+    <a href="#"><span class="dot"></span>Settings</a>
+  </nav>
+  <div class="sidebar-footer">v2026.6.14</div>
+</aside>
+
+<main>
+  <div class="header">
+    <h1>Dashboard</h1>
+    <div class="header-date">June 14, 2026</div>
+  </div>
+
+  <div class="content">
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-label">Documents</div>
+        <div class="stat-value">1,247</div>
+        <div class="stat-sub">+23 this week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sessions</div>
+        <div class="stat-value">89</div>
+        <div class="stat-sub">+6 this week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Searches</div>
+        <div class="stat-value">2,341</div>
+        <div class="stat-sub">+182 this week</div>
+      </div>
+    </div>
+
+    <div class="section-label">Search</div>
+    <div class="search-wrap">
+      <input type="text" placeholder="Search across all indexed documents...">
+      <span class="search-icon">&#8984;K</span>
+    </div>
+
+    <div class="recent">
+      <div class="section-label">Recent Documents</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:45%">Document</th>
+            <th style="width:25%">Collection</th>
+            <th style="width:15%">Chunks</th>
+            <th style="width:15%;text-align:right">Indexed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="doc-name">internal/mcp/handler.go</div>
+              <div class="doc-meta">MCP protocol tool implementations</div>
+            </td>
+            <td><span class="doc-tag">code</span></td>
+            <td style="font-variant-numeric:tabular-nums">34</td>
+            <td class="doc-time" style="text-align:right">2 hours ago</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="doc-name">Search Pipeline Architecture</div>
+              <div class="doc-meta">Hybrid BM25 + vector + RRF ranking strategy</div>
+            </td>
+            <td><span class="doc-tag">memory</span></td>
+            <td style="font-variant-numeric:tabular-nums">12</td>
+            <td class="doc-time" style="text-align:right">5 hours ago</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="doc-name">internal/harvest/opencode.go</div>
+              <div class="doc-meta">OpenCode session harvesting adapter</div>
+            </td>
+            <td><span class="doc-tag">code</span></td>
+            <td style="font-variant-numeric:tabular-nums">21</td>
+            <td class="doc-time" style="text-align:right">Yesterday</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-label">Knowledge Graph</div>
+    <div class="graph-area">
+      <div class="graph-dots" id="graphDots"></div>
+      <div class="graph-label">Graph Overview</div>
+      <div class="graph-sub">142 nodes · 387 edges · 4 communities</div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+(function(){
+  var c=document.getElementById("graphDots");
+  if(!c)return;
+  var nodes=[
+    {x:12,y:18},{x:25,y:35},{x:8,y:52},{x:18,y:68},{x:35,y:22},
+    {x:42,y:48},{x:55,y:15},{x:48,y:72},{x:62,y:38},{x:72,y:55},
+    {x:68,y:20},{x:80,y:42},{x:88,y:28},{x:78,y:68},{x:52,y:85},
+    {x:30,y:82},{x:92,y:62},{x:15,y:38},{x:65,y:62},{x:45,y:58},
+    {x:58,y:75},{x:85,y:78},{x:38,y:12},{x:75,y:12},{x:22,y:92},
+    {x:60,y:48},{x:95,y:45},{x:5,y:78},{x:42,y:92},{x:28,y:55}
+  ];
+  var edges=[
+    [0,1],[1,2],[2,3],[0,4],[4,5],[5,6],[6,8],[8,9],[9,10],
+    [10,11],[11,12],[12,16],[9,13],[5,8],[3,7],[7,14],[3,15],
+    [15,22],[17,0],[17,1],[18,9],[18,13],[19,5],[19,8],[20,7],
+    [20,13],[21,12],[21,16],[23,10],[24,15],[25,8],[25,19],[26,11]
+  ];
+  nodes.forEach(function(n){
+    var d=document.createElement("div");
+    d.className="graph-dot";
+    d.style.left=n.x+"%";
+    d.style.top=n.y+"%";
+    c.appendChild(d);
+  });
+  edges.forEach(function(e){
+    var a=nodes[e[0]],b=nodes[e[1]];
+    var dx=b.x-a.x,dy=b.y-a.y;
+    var len=Math.sqrt(dx*dx+dy*dy);
+    var ang=Math.atan2(dy,dx)*180/Math.PI;
+    var l=document.createElement("div");
+    l.className="graph-line";
+    l.style.left=a.x+"%";
+    l.style.top=a.y+"%";
+    l.style.width=len+"%";
+    l.style.transform="rotate("+ang+"deg)";
+    c.appendChild(l);
+  });
+})();
+</script>
+
+</body>
+</html>

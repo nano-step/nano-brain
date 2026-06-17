@@ -40,6 +40,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryImpact(server, a)
 	registerMemoryTrace(server, a)
 	registerMemoryFlow(server, a)
+	registerMemoryFlowchart(server, a)
 	registerMemoryWorkspacesResolve(server, a)
 }
 
@@ -2104,6 +2105,33 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				externals = []nodeItem{}
 			}
 
+			type edgeItem struct {
+				From        string `json:"from"`
+				To          string `json:"to"`
+				Kind        string `json:"kind"`
+				Line        int    `json:"line,omitempty"`
+				Conditional bool   `json:"conditional,omitempty"`
+			}
+			allNodes := make([]nodeItem, 0, len(f.Nodes))
+			for _, n := range f.Nodes {
+				allNodes = append(allNodes, nodeItem{
+					ID:        n.ID,
+					Name:      n.Name,
+					Role:      string(n.Role),
+					Ambiguous: n.Ambiguous,
+				})
+			}
+			graphEdges := make([]edgeItem, 0, len(f.Edges))
+			for _, e := range f.Edges {
+				graphEdges = append(graphEdges, edgeItem{
+					From:        e.From,
+					To:          e.To,
+					Kind:        e.Kind,
+					Line:        e.Line,
+					Conditional: e.Conditional,
+				})
+			}
+
 			result := map[string]any{
 				"found":     true,
 				"entry":     f.Entry,
@@ -2111,6 +2139,8 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				"path":      f.Path,
 				"chain":     chain,
 				"externals": externals,
+				"nodes":     allNodes,
+				"edges":     graphEdges,
 			}
 			if diagram := flow.Render(f, format); diagram != "" {
 				result["mermaid"] = diagram

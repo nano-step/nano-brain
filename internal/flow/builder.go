@@ -36,6 +36,10 @@ type FlowEdge struct {
 	Line        int    // source line of the call site (0 = unknown)
 	Conditional bool   // true when the call is inside an if/switch/select block
 
+	// ConditionLabel holds the predicate text for conditional edges (e.g. "err !== null").
+	// Populated from graph_edges.metadata["condition_label"] during BuildFlow.
+	ConditionLabel string
+
 	// CrossServiceWorkspace is set when Kind is "cross_service", indicating
 	// the target workspace hash (first 8 chars) the edge connects to.
 	CrossServiceWorkspace string
@@ -73,6 +77,83 @@ func classifyRole(name string) Role {
 	return RoleFunc
 }
 
+// noiseExternalPrefixes / Suffixes identify logging and language-builtin calls
+// (console.log, logger.Info, log.Println, fmt.Println, …) that add noise to
+// flows. They are ONLY applied to external leaf calls — any callee defined in
+// the workspace is always kept. Extend these lists to tune what's hidden.
+var (
+	noiseExternalPrefixes = []string{
+		"console.", "log.", "fmt.print", "fmt.sprint", "fmt.fprint",
+		"process.stdout", "process.stderr", "system.out", "system.err",
+	}
+	noiseExternalSuffixes = []string{".log", ".debug", ".trace", ".info", ".warn", ".warning", ".error"}
+)
+
+// isNoiseExternal reports whether an external callee is a logging/builtin call
+// that should be hidden from flows.
+func isNoiseExternal(name string) bool {
+	if name == "" {
+		return false
+	}
+	lower := strings.ToLower(name)
+	if strings.Contains(lower, "logger") {
+		return true
+	}
+	for _, p := range noiseExternalPrefixes {
+		if strings.HasPrefix(lower, p) {
+			return true
+		}
+	}
+	for _, s := range noiseExternalSuffixes {
+		if strings.HasSuffix(lower, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// maxReconcileFiles caps how widely a bare call name may reconcile. Above this,
+// the name is treated as too generic to traverse (avoids graph explosion from
+// names like get/find/handle defined in dozens of files).
+const maxReconcileFiles = 8
+
+// bareLoggingNames are method names hidden from flows regardless of role: they
+// are almost always logging and frequently collide with a workspace symbol of
+// the same name (so they would otherwise surface as a "func" node).
+var bareLoggingNames = map[string]bool{
+	"log": true, "info": true, "warn": true, "warning": true,
+	"error": true, "debug": true, "trace": true, "fatal": true,
+	"calllog": true, "addlog": true, "addlogstripe": true, "getlogprefix": true,
+}
+
+func isLoggingName(name string) bool {
+	return bareLoggingNames[strings.ToLower(name)]
+}
+
+// isNoiseIntegration reports whether an integration target is a dynamic
+// placeholder (<var:…>) or a multi-line code block mis-extracted as a topic.
+func isNoiseIntegration(target string) bool {
+	return strings.Contains(target, "<var:") || strings.ContainsAny(target, "\n\r")
+}
+
+// sameFileIDs returns the subset of ids whose defining file equals parentFile.
+// It returns nil when parentFile is empty (no scoping possible).
+func sameFileIDs(ids map[string]bool, fileByID map[string]string, parentFile string) map[string]bool {
+	if parentFile == "" {
+		return nil
+	}
+	var same map[string]bool
+	for id := range ids {
+		if fileByID[id] == parentFile {
+			if same == nil {
+				same = make(map[string]bool)
+			}
+			same[id] = true
+		}
+	}
+	return same
+}
+
 // edgeIndex holds two indices over a slice of edges:
 //   - bySource: exact SourceNode → []Edge
 //   - bySymbol: symbolPart(SourceNode) → []Edge (for reconciliation)
@@ -91,6 +172,18 @@ func edgeConditional(e graph.Edge) bool {
 	}
 	b, ok := v.(bool)
 	return ok && b
+}
+
+func edgeConditionLabel(e graph.Edge) string {
+	if e.Metadata == nil {
+		return ""
+	}
+	v, ok := e.Metadata["condition_label"]
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	return s
 }
 
 func buildIndex(edges []graph.Edge) edgeIndex {
@@ -177,10 +270,12 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 	}
 
 	// Step 4: BFS over calls edges with symbol-name reconciliation.
-	// Each BFS item is a bare name to expand and its current depth.
+	// Each BFS item is a bare name to expand, its depth, and the file of the
+	// caller that referenced it (used to scope reconciliation).
 	type bfsItem struct {
-		bareName string
-		depth    int
+		bareName   string
+		depth      int
+		parentFile string
 	}
 
 	queue := make([]bfsItem, 0, len(handlerNames))
@@ -204,13 +299,26 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 			continue
 		}
 
-		// Collect unique source node ids that call from this symbol.
-		// We need to visit each unique source node (file::symbol).
+		// Collect unique source node ids (file::symbol) that call from this
+		// symbol, along with the file each is defined in.
 		sourceNodeIDs := make(map[string]bool)
+		fileByID := make(map[string]string)
+		fileSet := make(map[string]bool)
 		for _, e := range sourceNodes {
 			if e.Kind == graph.EdgeCalls {
 				sourceNodeIDs[e.SourceNode] = true
+				fileByID[e.SourceNode] = e.SourceFile
+				fileSet[e.SourceFile] = true
 			}
+		}
+
+		// Scope reconciliation: prefer a definition in the caller's own file.
+		// If none match and the bare name resolves across too many files, it's a
+		// generic name (get/find/handle/…) — skip it to avoid graph explosion.
+		if same := sameFileIDs(sourceNodeIDs, fileByID, item.parentFile); len(same) > 0 {
+			sourceNodeIDs = same
+		} else if len(fileSet) > maxReconcileFiles {
+			continue
 		}
 
 		for sourceID := range sourceNodeIDs {
@@ -218,6 +326,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 				continue
 			}
 			visited[sourceID] = true
+			callerFile := fileByID[sourceID]
 
 			// Get outgoing edges from this source node.
 			outEdges := idx.bySource[sourceID]
@@ -226,25 +335,40 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 				// Integration edges: emit as leaf nodes, never traverse further.
 				if e.Kind == graph.EdgeIntegration {
 					target := e.TargetNode
+					// Skip dynamic placeholders (<var:…>) and multi-line code
+					// blocks mis-extracted as topics — they're noise, not routes.
+					if isNoiseIntegration(target) {
+						continue
+					}
 					if _, exists := nodeMap[target]; !exists {
 						addNode(FlowNode{ID: target, Name: target, Role: RoleIntegration})
 					}
-					addEdge(FlowEdge{From: item.bareName, To: target, Kind: "integration", Line: e.Line, Conditional: edgeConditional(e)})
+					addEdge(FlowEdge{From: item.bareName, To: target, Kind: "integration", Line: e.Line, Conditional: edgeConditional(e), ConditionLabel: edgeConditionLabel(e)})
 					continue
 				}
 
 				if e.Kind != graph.EdgeCalls {
 					continue
 				}
-				if fanout >= maxFanout {
-					break
-				}
-				fanout++
 
 				target := e.TargetNode
 
 				// Determine if target is external (no source node with that symbol).
 				targetSources := idx.bySymbol[target]
+
+				// Skip logging noise before the fanout check so it doesn't consume
+				// budget. Bare logging names (log/info/warn/error/debug) are hidden
+				// regardless of role — they frequently collide with a workspace
+				// symbol. Qualified logging/builtin externals (console.*, logger.*,
+				// …) are hidden too.
+				if isLoggingName(target) || (len(targetSources) == 0 && isNoiseExternal(target)) {
+					continue
+				}
+
+				if fanout >= maxFanout {
+					break
+				}
+				fanout++
 				var targetRole Role
 				if len(targetSources) == 0 {
 					targetRole = RoleExternal
@@ -278,10 +402,10 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 					addNode(targetNode)
 				}
 
-				addEdge(FlowEdge{From: item.bareName, To: target, Kind: "calls", Line: e.Line, Conditional: edgeConditional(e)})
+				addEdge(FlowEdge{From: item.bareName, To: target, Kind: "calls", Line: e.Line, Conditional: edgeConditional(e), ConditionLabel: edgeConditionLabel(e)})
 
 				if targetRole != RoleExternal {
-					queue = append(queue, bfsItem{bareName: target, depth: item.depth + 1})
+					queue = append(queue, bfsItem{bareName: target, depth: item.depth + 1, parentFile: callerFile})
 				}
 			}
 		}

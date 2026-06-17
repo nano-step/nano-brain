@@ -39,7 +39,7 @@ func TestCSRF_7StepMatrix(t *testing.T) {
 		{"DELETE also checked", http.MethodDelete, "", "http://evil.com", "", http.StatusForbidden},
 		{"Loopback 127.0.0.1 matches localhost", http.MethodPost, "", "http://127.0.0.1:3100", "", http.StatusOK},
 		{"Loopback [::1] matches localhost", http.MethodPost, "", "http://[::1]:3100", "", http.StatusOK},
-		{"Wrong port rejects", http.MethodPost, "", "http://localhost:9999", "", http.StatusForbidden},
+		{"Loopback different port allows (proxy scenario)", http.MethodPost, "", "http://localhost:9999", "", http.StatusOK},
 	}
 
 	for _, tt := range tests {

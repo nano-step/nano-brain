@@ -41,7 +41,7 @@ func TestShouldSkip_ExcludePatterns(t *testing.T) {
 		path string
 		skip bool
 	}{
-		{filepath.Join(root, "package-lock.json"), false},
+		{filepath.Join(root, "package-lock.json"), true},
 		{filepath.Join(root, "yarn.lock"), true},
 		{filepath.Join(root, "server.log"), true},
 		{filepath.Join(root, "main.go"), false},

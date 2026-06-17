@@ -9,7 +9,6 @@ import (
 	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/server/middleware"
-	"github.com/nano-brain/nano-brain/internal/server/webui"
 )
 
 func registerRoutes(s *Server) {
@@ -27,6 +26,7 @@ func registerRoutes(s *Server) {
 
 	s.echo.GET("/health", h.Health)
 	s.echo.GET("/api/status", h.Status)
+	s.echo.GET("/api/version", h.Version)
 
 	api := s.echo.Group("/api/v1", contentTypeMiddleware())
 	api.POST("/init", handlers.InitWorkspace(s.queries, s.db, s.watcher, s.currentConfig().Watcher, s.logger))
@@ -96,6 +96,9 @@ func registerRoutes(s *Server) {
 	data.POST("/graph/impact", handlers.GraphImpact(s.queries, s.logger))
 	data.POST("/graph/trace", handlers.GraphTrace(s.queries, s.logger))
 	data.POST("/graph/flow", handlers.GraphFlow(s.queries, s.currentConfig().Flow, s.logger))
+	data.POST("/graph/flowchart", handlers.GraphFlowchart(s.queries, s.currentConfig().Flow, s.logger))
+	data.GET("/graph/flow/endpoints", handlers.ListFlowEndpoints(s.queries, s.logger))
+	write.POST("/flow/materialize", handlers.FlowMaterialize(s.getFlowMaterializer, s.currentConfig().Flow, s.logger))
 
 	data.POST("/vsearch", handlers.VectorSearch(s.queries, s.embedder, s.logger, s.recorder))
 	data.POST("/search", handlers.BM25Search(s.queries, s.logger, s.recorder))
@@ -132,7 +135,18 @@ func registerRoutes(s *Server) {
 	s.echo.POST("/mcp", echo.WrapHandler(streamableHandler))
 	s.echo.DELETE("/mcp", echo.WrapHandler(streamableHandler))
 
-	webui.RegisterUIRoutes(s.echo, webui.EmbedFS, middleware.SecurityHeaders())
+	s.echo.GET("/ui", func(c echo.Context) error {
+		return c.HTML(200, `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>nano-brain dashboard</title></head>
+<body style="font-family:system-ui;max-width:480px;margin:4rem auto;text-align:center">
+<h1>nano-brain dashboard has moved</h1>
+<p>The built-in UI has been replaced by a standalone dashboard.</p>
+<pre style="text-align:left;background:#f5f5f5;padding:1rem;border-radius:6px">npx @nano-step/nano-brain-dashboard</pre>
+<p><a href="https://github.com/nano-step/nano-brain-dashboard">Documentation &rarr;</a></p>
+</body>
+</html>`)
+	})
 }
 
 const defaultMaxFileSize int64 = 307200

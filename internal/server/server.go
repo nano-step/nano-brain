@@ -50,6 +50,8 @@ type Server struct {
 	summarizer        handlers.SummarizeSummarizer
 	codeSummarizeMu   sync.RWMutex
 	codeSummarizer    handlers.CodeSummarizer
+	flowMaterializeMu sync.RWMutex
+	flowMaterializer  handlers.FlowMaterializer
 	configMu          sync.RWMutex
 	fullCfg        *config.Config
 	configPath     string
@@ -243,6 +245,18 @@ func (s *Server) getCodeSummarizer() handlers.CodeSummarizer {
 	s.codeSummarizeMu.RLock()
 	defer s.codeSummarizeMu.RUnlock()
 	return s.codeSummarizer
+}
+
+func (s *Server) SetFlowMaterializer(fm handlers.FlowMaterializer) {
+	s.flowMaterializeMu.Lock()
+	defer s.flowMaterializeMu.Unlock()
+	s.flowMaterializer = fm
+}
+
+func (s *Server) getFlowMaterializer() handlers.FlowMaterializer {
+	s.flowMaterializeMu.RLock()
+	defer s.flowMaterializeMu.RUnlock()
+	return s.flowMaterializer
 }
 
 // EventBus returns the server's event bus for producer wiring. May be nil.
