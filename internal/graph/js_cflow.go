@@ -362,10 +362,12 @@ func (b *cfgbuilder) buildIf(stmt *gotreesitter.Node, preds map[string]bool) map
 		} else {
 			thenExits = b.buildBlock(wrapInBlock(consequence), map[string]bool{decisionID: true}, map[string]string{decisionID: "yes"})
 		}
+		if len(thenExits) > 1 || (len(thenExits) == 1 && !thenExits[decisionID]) {
+			thenExits = b.relabelPreds(thenExits, decisionID)
+		}
 	} else {
 		thenExits = map[string]bool{decisionID: true}
 	}
-	thenExits = b.relabelPreds(thenExits, decisionID)
 
 	var elseExits map[string]bool
 	if alternative != nil {
@@ -374,7 +376,9 @@ func (b *cfgbuilder) buildIf(stmt *gotreesitter.Node, preds map[string]bool) map
 		} else {
 			elseExits = b.buildBlock(wrapInBlock(alternative), map[string]bool{decisionID: true}, map[string]string{decisionID: "no"})
 		}
-		elseExits = b.relabelPreds(elseExits, decisionID)
+		if len(elseExits) > 1 || (len(elseExits) == 1 && !elseExits[decisionID]) {
+			elseExits = b.relabelPreds(elseExits, decisionID)
+		}
 	} else {
 		elseExits = map[string]bool{decisionID: true}
 	}

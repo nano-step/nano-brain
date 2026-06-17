@@ -819,3 +819,38 @@ function test() {
 		t.Error("expected at least 1 'catch' branch edge")
 	}
 }
+
+func TestJSControlFlowExtractor_EmptyElseBlock(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function compute(x) {
+  if (x > 0) {
+    x = x * 2;
+  } else {
+  }
+  return x;
+}
+`
+	cfgs, err := ex.ExtractCFGs("test.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) == 0 {
+		t.Fatal("expected at least 1 CFG")
+	}
+	cfg := cfgs[0]
+	if len(cfg.Nodes) < 4 {
+		t.Errorf("expected at least 4 nodes, got %d", len(cfg.Nodes))
+	}
+	hasIncoming := map[string]bool{}
+	for _, e := range cfg.Edges {
+		hasIncoming[e.To] = true
+	}
+	for _, n := range cfg.Nodes {
+		if n.Type == "terminal" {
+			if !hasIncoming[n.ID] {
+				t.Errorf("terminal node %s has no incoming edge — unreachable", n.ID)
+			}
+		}
+	}
+}
