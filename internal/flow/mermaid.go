@@ -180,8 +180,7 @@ func RenderFlowchart(f Flow) string {
 		// Add condition label for conditional edges
 		if e.Conditional && e.ConditionLabel != "" {
 			label := truncateLabel(e.ConditionLabel, 80)
-			sb.WriteString(fmt.Sprintf("    %s %s %s\n", from, arrow, to))
-			sb.WriteString(fmt.Sprintf("    link 0,%s,%s,%s\n", from, to, sanitizeLabel(label)))
+			sb.WriteString(fmt.Sprintf("    %s %s|%s| %s\n", from, arrow, sanitizeLabel(label), to))
 		} else {
 			sb.WriteString(fmt.Sprintf("    %s %s %s\n", from, arrow, to))
 		}

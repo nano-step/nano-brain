@@ -826,13 +826,17 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 // file and replaces any previously stored flowcharts for that file. Mirrors
 // extractAndUpsertEdges: delete-by-file then upsert, all inside one tx.
 func (w *Watcher) extractAndUpsertCFGs(ctx context.Context, col watchedCollection, filePath string, content []byte) {
-	cfgs, err := w.graphRegistry.ExtractCFGs(filePath, content)
+	relPath, err := filepath.Rel(col.dirPath, filePath)
+	if err != nil {
+		relPath = filePath
+	}
+	relFile := filepath.ToSlash(relPath)
+
+	cfgs, err := w.graphRegistry.ExtractCFGs(relFile, content)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("cfg extraction failed")
 		return
 	}
-
-	relFile := filepath.ToSlash(filePath)
 
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {

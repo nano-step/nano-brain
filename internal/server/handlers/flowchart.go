@@ -48,7 +48,10 @@ func GraphFlowchart(q FlowchartQuerier, flowCfg config.FlowConfig, logger zerolo
 			})
 		}
 
-		workspace := c.Get("workspace").(string)
+		workspace, ok := c.Get("workspace").(string)
+		if !ok || workspace == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "workspace is required")
+		}
 
 		var req flowchartRequest
 		if err := c.Bind(&req); err != nil {
