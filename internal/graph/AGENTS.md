@@ -49,6 +49,18 @@ start node produce no CFG.
   `go_extractor.go`). `gotreesitter.Node` has **no** `StartLine`/`EndLine` —
   always derive lines from byte offsets.
 
+### Fixed (v2)
+
+- **Junk nodes:** `buildBlock` now skips punctuation tokens (`{`, `}`, `;`) and
+  comment nodes (`comment`, `line_comment`, `block_comment`) via
+  `isIgnoredStatement()`. CFGs no longer contain step nodes for non-statements.
+- **Absolute paths:** `ExtractCFGs` strips absolute paths to the basename, and
+  the start node label is now the function name (not the full `file::func`
+  entry). The `Entry` field still stores `relfile::funcName` for lookup.
+- **Wrapped handlers:** `findAssignedName()` walks up the AST from an
+  `arrow_function` to find the nearest `variable_declarator` ancestor, enabling
+  extraction of wrapped idioms like `const fn = catchAsync(async () => {...})`.
+
 ## Registry (`registry.go`)
 
 `NewRegistry(extractors...)` holds edge extractors; CFG extractors are added

@@ -307,3 +307,353 @@ const handler = (req, res) => {
 		t.Errorf("Entry = %q, want a.ts::handler", cfgs[0].Entry)
 	}
 }
+
+func TestJSControlFlowExtractor_NoJunkNodes(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function clean(req, res) {
+  // just a last line of defense
+  if (!req.id) {
+    return res.status(400);
+  }
+  return res.status(200);
+}
+`
+	cfgs, err := ex.ExtractCFGs("clean.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	for _, n := range cfgs[0].Nodes {
+		if n.Label == "{" || n.Label == "}" || n.Label == ";" {
+			t.Errorf("junk node found: type=%q label=%q", n.Type, n.Label)
+		}
+		if n.Type == "step" && strings.HasPrefix(n.Label, "//") {
+			t.Errorf("comment node found as step: label=%q", n.Label)
+		}
+	}
+}
+
+func TestJSControlFlowExtractor_StartNodeLabelIsFunctionName(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `function foo() { return 1; }`
+	cfgs, err := ex.ExtractCFGs("handlers/test.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	startNodes := 0
+	for _, n := range cfgs[0].Nodes {
+		if n.Type == "start" {
+			startNodes++
+			if n.Label != "foo" {
+				t.Errorf("start node label = %q, want %q", n.Label, "foo")
+			}
+		}
+	}
+	if startNodes != 1 {
+		t.Errorf("expected 1 start node, got %d", startNodes)
+	}
+}
+
+func TestJSControlFlowExtractor_AbsolutePathStripped(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `function bar() { return 2; }`
+	cfgs, err := ex.ExtractCFGs("/Users/test/work/project/src/handler.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	if cfgs[0].SourceFile != "handler.ts" {
+		t.Errorf("SourceFile = %q, want handler.ts", cfgs[0].SourceFile)
+	}
+	if cfgs[0].Entry != "handler.ts::bar" {
+		t.Errorf("Entry = %q, want handler.ts::bar", cfgs[0].Entry)
+	}
+}
+
+func TestJSControlFlowExtractor_WrappedArrowHandler(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+const getBalance = catchAsync(async (req, res) => {
+  if (!req.user) {
+    return res.status(401);
+  }
+  res.json({ balance: 100 });
+});
+`
+	cfgs, err := ex.ExtractCFGs("routes.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG for wrapped arrow handler, got %d", len(cfgs))
+	}
+	if cfgs[0].Entry != "routes.ts::getBalance" {
+		t.Errorf("Entry = %q, want routes.ts::getBalance", cfgs[0].Entry)
+	}
+	counts := countNodeTypes(cfgs[0])
+	if counts["decision"] < 1 {
+		t.Error("expected at least 1 decision node for the guard clause")
+	}
+}
+
+// countEdgeBranches returns a map of branch label -> count across one CFG.
+func countEdgeBranches(cfg graph.CFG) map[string]int {
+	m := make(map[string]int)
+	for _, e := range cfg.Edges {
+		m[e.Branch]++
+	}
+	return m
+}
+
+func TestJSControlFlowExtractor_IfElseBranchLabels(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function test(x) {
+  if (x > 0) {
+    console.log("pos");
+  } else {
+    console.log("neg");
+  }
+}
+`
+	cfgs, err := ex.ExtractCFGs("f.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	branches := countEdgeBranches(cfgs[0])
+	if branches["yes"] < 1 {
+		t.Error("expected at least 1 'yes' branch edge for if-then")
+	}
+	if branches["no"] < 1 {
+		t.Error("expected at least 1 'no' branch edge for if-else")
+	}
+}
+
+func TestJSControlFlowExtractor_IfOnlyBranchLabels(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function test(x) {
+  if (x > 0) {
+    console.log("pos");
+  }
+  console.log("done");
+}
+`
+	cfgs, err := ex.ExtractCFGs("f.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	branches := countEdgeBranches(cfgs[0])
+	if branches["yes"] < 1 {
+		t.Error("expected at least 1 'yes' branch edge for if-then")
+	}
+	// No else block means no "no" edge — the decision falls through implicitly.
+	if branches["no"] > 0 {
+		t.Error("expected 0 'no' branch edges when there is no else block")
+	}
+}
+
+func TestJSControlFlowExtractor_IfElseIfBranchLabels(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function test(x) {
+  if (x > 0) {
+    console.log("pos");
+  } else if (x < 0) {
+    console.log("neg");
+  } else {
+    console.log("zero");
+  }
+}
+`
+	cfgs, err := ex.ExtractCFGs("f.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	branches := countEdgeBranches(cfgs[0])
+	if branches["yes"] < 2 {
+		t.Error("expected at least 2 'yes' branch edges for chained decisions")
+	}
+	if branches["no"] < 1 {
+		t.Error("expected at least 1 'no' branch edge for else/else-if")
+	}
+}
+
+func TestJSControlFlowExtractor_SwitchBranchLabels(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function route(x) {
+  switch (x) {
+    case 1: return "a";
+    case 2: return "b";
+    default: return "c";
+  }
+}
+`
+	cfgs, err := ex.ExtractCFGs("r.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	branches := countEdgeBranches(cfgs[0])
+	if branches["case:1"] < 1 {
+		t.Error("expected 'case:1' branch edge")
+	}
+	if branches["case:2"] < 1 {
+		t.Error("expected 'case:2' branch edge")
+	}
+}
+
+func TestJSControlFlowExtractor_SwitchDefaultBranchLabels(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function route(x) {
+  switch (x) {
+    case 1: return "a";
+    default: return "b";
+  }
+}
+`
+	cfgs, err := ex.ExtractCFGs("r.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	branches := countEdgeBranches(cfgs[0])
+	if branches["case:1"] < 1 {
+		t.Error("expected 'case:1' branch edge")
+	}
+	if branches["default"] < 1 {
+		t.Error("expected 'default' branch edge")
+	}
+}
+
+func TestJSControlFlowExtractor_SwitchNoDefaultBranchLabels(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function route(x) {
+  switch (x) {
+    case 1: return "a";
+    case 2: return "b";
+  }
+}
+`
+	cfgs, err := ex.ExtractCFGs("r.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	branches := countEdgeBranches(cfgs[0])
+	if branches["case:1"] < 1 {
+		t.Error("expected 'case:1' branch edge")
+	}
+	if branches["case:2"] < 1 {
+		t.Error("expected 'case:2' branch edge")
+	}
+	// No default case and no explicit default edge.
+	if branches["default"] > 0 {
+		t.Error("expected no 'default' branch edge when no default case exists")
+	}
+}
+
+func TestJSControlFlowExtractor_TernaryBranchLabels(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function test(x) {
+  x > 0 ? console.log("pos") : console.log("neg");
+}
+`
+	cfgs, err := ex.ExtractCFGs("f.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	branches := countEdgeBranches(cfgs[0])
+	if branches["yes"] < 1 {
+		t.Error("expected at least 1 'yes' branch edge for ternary then-branch")
+	}
+	if branches["no"] < 1 {
+		t.Error("expected at least 1 'no' branch edge for ternary else-branch")
+	}
+}
+
+func TestJSControlFlowExtractor_TryCatchBranchLabels(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function test() {
+  try {
+    risky();
+  } catch (e) {
+    handle(e);
+  }
+}
+`
+	cfgs, err := ex.ExtractCFGs("f.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	branches := countEdgeBranches(cfgs[0])
+	if branches["try"] < 1 {
+		t.Error("expected at least 1 'try' branch edge")
+	}
+	if branches["catch"] < 1 {
+		t.Error("expected at least 1 'catch' branch edge")
+	}
+}
+
+func TestJSControlFlowExtractor_TryCatchFinallyBranchLabels(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function test() {
+  try {
+    risky();
+  } catch (e) {
+    handle(e);
+  } finally {
+    cleanup();
+  }
+}
+`
+	cfgs, err := ex.ExtractCFGs("f.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	branches := countEdgeBranches(cfgs[0])
+	if branches["try"] < 1 {
+		t.Error("expected at least 1 'try' branch edge")
+	}
+	if branches["catch"] < 1 {
+		t.Error("expected at least 1 'catch' branch edge")
+	}
+}

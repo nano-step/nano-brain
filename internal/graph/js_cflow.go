@@ -54,6 +54,9 @@ func (x *JSControlFlowExtractor) ExtractCFGs(filePath string, content []byte) ([
 
 	root := tree.RootNode()
 	relFile := filepath.ToSlash(filePath)
+	if filepath.IsAbs(relFile) {
+		relFile = filepath.Base(relFile)
+	}
 
 	var funcs []funcDef
 
@@ -100,18 +103,17 @@ func (x *JSControlFlowExtractor) ExtractCFGs(filePath string, content []byte) ([
 		if bodyType != "statement_block" && bodyType != "expression" {
 			return
 		}
-		parent := n.Parent()
-		if parent != nil && parent.Type(lang) == "variable_declarator" {
-			nameNode := parent.ChildByFieldName("name", lang)
-			if nameNode != nil {
-				funcs = append(funcs, funcDef{
-					name:      bt.NodeText(nameNode),
-					startLine: lineForByte(content, n.StartByte()),
-					endLine:   lineForByte(content, n.EndByte()),
-					bodyNode:  n,
-				})
-			}
+
+		varName := findAssignedName(bt, n, lang)
+		if varName == "" {
+			return
 		}
+		funcs = append(funcs, funcDef{
+			name:      varName,
+			startLine: lineForByte(content, n.StartByte()),
+			endLine:   lineForByte(content, n.EndByte()),
+			bodyNode:  n,
+		})
 	})
 
 	var cfgs []CFG
@@ -151,14 +153,14 @@ func (x *JSControlFlowExtractor) extractOne(bt *gotreesitter.BoundTree, lang *go
 
 	startNode := builder.addNode(CFGNode{
 		Type:  "start",
-		Label: entry,
+		Label: fd.name,
 		Line:  fd.startLine,
 	})
 
 	if fd.bodyNode.Type(lang) == "arrow_function" {
 		bodyNode := fd.bodyNode.ChildByFieldName("body", lang)
 		if bodyNode != nil && bodyNode.Type(lang) == "statement_block" {
-			exits := builder.buildBlock(bodyNode, map[string]bool{startNode: true})
+			exits := builder.buildBlock(bodyNode, map[string]bool{startNode: true}, nil)
 			if len(exits) > 0 {
 				builder.addMergeToTerminal(exits)
 			}
@@ -177,7 +179,7 @@ func (x *JSControlFlowExtractor) extractOne(bt *gotreesitter.BoundTree, lang *go
 			builder.addEdge(stepID, termID, "next")
 		}
 	} else {
-		exits := builder.buildBlock(fd.bodyNode, map[string]bool{startNode: true})
+		exits := builder.buildBlock(fd.bodyNode, map[string]bool{startNode: true}, nil)
 		if len(exits) > 0 {
 			builder.addMergeToTerminal(exits)
 		}
@@ -195,14 +197,15 @@ func (x *JSControlFlowExtractor) extractOne(bt *gotreesitter.BoundTree, lang *go
 }
 
 type cfgbuilder struct {
-	bt      *gotreesitter.BoundTree
-	lang    *gotreesitter.Language
-	content []byte
-	relFile string
-	entry   string
-	nodeID  int
-	cfg     *CFG
-	capped  bool
+	bt              *gotreesitter.BoundTree
+	lang            *gotreesitter.Language
+	content         []byte
+	relFile         string
+	entry           string
+	nodeID          int
+	cfg             *CFG
+	capped          bool
+	branchOverrides map[string]string // temporary: override branch labels for from→to edges
 }
 
 // lineOf returns the 1-based source line of a node's start.
@@ -232,6 +235,11 @@ func (b *cfgbuilder) addNode(n CFGNode) string {
 func (b *cfgbuilder) addEdge(from, to, branch string) {
 	if from == "" || to == "" {
 		return
+	}
+	if b.branchOverrides != nil {
+		if override, ok := b.branchOverrides[from]; ok {
+			branch = override
+		}
 	}
 	b.cfg.Edges = append(b.cfg.Edges, CFGEdge{
 		From:   from,
@@ -268,10 +276,13 @@ func (b *cfgbuilder) addMergeToStep(preds map[string]bool, label string, line in
 	return mergeID
 }
 
-func (b *cfgbuilder) buildBlock(block *gotreesitter.Node, preds map[string]bool) map[string]bool {
+func (b *cfgbuilder) buildBlock(block *gotreesitter.Node, preds map[string]bool, branchOverrides map[string]string) map[string]bool {
 	if block == nil {
 		return preds
 	}
+
+	oldOverrides := b.branchOverrides
+	b.branchOverrides = branchOverrides
 
 	cur := preds
 	childCount := int(block.ChildCount())
@@ -282,6 +293,10 @@ func (b *cfgbuilder) buildBlock(block *gotreesitter.Node, preds map[string]bool)
 			continue
 		}
 		stmtType := stmt.Type(b.lang)
+
+		if isIgnoredStatement(stmtType) {
+			continue
+		}
 
 		switch stmtType {
 		case "if_statement":
@@ -313,6 +328,7 @@ func (b *cfgbuilder) buildBlock(block *gotreesitter.Node, preds map[string]bool)
 		}
 	}
 
+	b.branchOverrides = oldOverrides
 	return cur
 }
 
@@ -342,9 +358,9 @@ func (b *cfgbuilder) buildIf(stmt *gotreesitter.Node, preds map[string]bool) map
 	var thenExits map[string]bool
 	if consequence != nil {
 		if consequence.Type(b.lang) == "statement_block" {
-			thenExits = b.buildBlock(consequence, map[string]bool{decisionID: true})
+			thenExits = b.buildBlock(consequence, map[string]bool{decisionID: true}, map[string]string{decisionID: "yes"})
 		} else {
-			thenExits = b.buildBlock(wrapInBlock(consequence), map[string]bool{decisionID: true})
+			thenExits = b.buildBlock(wrapInBlock(consequence), map[string]bool{decisionID: true}, map[string]string{decisionID: "yes"})
 		}
 	} else {
 		thenExits = map[string]bool{decisionID: true}
@@ -354,9 +370,9 @@ func (b *cfgbuilder) buildIf(stmt *gotreesitter.Node, preds map[string]bool) map
 	var elseExits map[string]bool
 	if alternative != nil {
 		if altBlock, ok := isBlock(alternative, b.lang); ok {
-			elseExits = b.buildBlock(altBlock, map[string]bool{decisionID: true})
+			elseExits = b.buildBlock(altBlock, map[string]bool{decisionID: true}, map[string]string{decisionID: "no"})
 		} else {
-			elseExits = b.buildBlock(wrapInBlock(alternative), map[string]bool{decisionID: true})
+			elseExits = b.buildBlock(wrapInBlock(alternative), map[string]bool{decisionID: true}, map[string]string{decisionID: "no"})
 		}
 	} else {
 		elseExits = map[string]bool{decisionID: true}
@@ -407,23 +423,16 @@ func (b *cfgbuilder) buildSwitch(stmt *gotreesitter.Node, preds map[string]bool)
 				continue
 			}
 			switch child.Type(b.lang) {
-			case "case":
-				hasDefault = false
+			case "switch_case":
 				valNode := child.ChildByFieldName("value", b.lang)
-				caseLabel := ""
-				if valNode != nil {
-					caseLabel = "case:" + truncateLabel(b.bt.NodeText(valNode))
-				} else {
-					caseLabel = "default"
-					hasDefault = true
-				}
-				caseExits[caseLabel] = b.buildSwitchCase(child, decisionID)
+				caseLabel := "case:" + truncateLabel(b.bt.NodeText(valNode))
+				caseExits[caseLabel] = b.buildSwitchCase(child, decisionID, map[string]string{decisionID: caseLabel})
 				caseOrder = append(caseOrder, len(caseOrder))
 
-			case "default":
+			case "switch_default":
 				hasDefault = true
 				caseLabel := "default"
-				caseExits[caseLabel] = b.buildSwitchCase(child, decisionID)
+				caseExits[caseLabel] = b.buildSwitchCase(child, decisionID, map[string]string{decisionID: "default"})
 				caseOrder = append(caseOrder, len(caseOrder))
 			}
 		}
@@ -455,8 +464,11 @@ func (b *cfgbuilder) buildSwitch(stmt *gotreesitter.Node, preds map[string]bool)
 	return result
 }
 
-func (b *cfgbuilder) buildSwitchCase(caseNode *gotreesitter.Node, decisionID string) map[string]bool {
+func (b *cfgbuilder) buildSwitchCase(caseNode *gotreesitter.Node, decisionID string, branchOverrides map[string]string) map[string]bool {
 	exits := map[string]bool{decisionID: true}
+
+	oldOverrides := b.branchOverrides
+	b.branchOverrides = branchOverrides
 
 	for i := 0; i < int(caseNode.ChildCount()); i++ {
 		child := caseNode.Child(i)
@@ -465,7 +477,7 @@ func (b *cfgbuilder) buildSwitchCase(caseNode *gotreesitter.Node, decisionID str
 		}
 		switch child.Type(b.lang) {
 		case "statement_block":
-			exits = b.buildBlock(child, exits)
+			exits = b.buildBlock(child, exits, branchOverrides)
 		case "return_statement":
 			exits = b.buildReturn(child, exits)
 		case "break_statement":
@@ -479,6 +491,7 @@ func (b *cfgbuilder) buildSwitchCase(caseNode *gotreesitter.Node, decisionID str
 		}
 	}
 
+	b.branchOverrides = oldOverrides
 	return exits
 }
 
@@ -553,14 +566,48 @@ func (b *cfgbuilder) buildThrow(stmt *gotreesitter.Node, preds map[string]bool) 
 
 func (b *cfgbuilder) buildTry(stmt *gotreesitter.Node, preds map[string]bool) map[string]bool {
 	tryID := b.addNode(CFGNode{
-		Type:  "step",
+		Type:  "decision",
 		Label: "try/catch",
 		Line:  b.lineOf(stmt),
 	})
 	for p := range preds {
 		b.addEdge(p, tryID, "next")
 	}
-	return map[string]bool{tryID: true}
+
+	tryBody := stmt.ChildByFieldName("body", b.lang)
+	var tryExits map[string]bool
+	if tryBody != nil {
+		tryExits = b.buildBlock(tryBody, map[string]bool{tryID: true}, map[string]string{tryID: "try"})
+	} else {
+		tryExits = map[string]bool{tryID: true}
+	}
+	tryExits = b.relabelPreds(tryExits, tryID)
+
+	var catchExits map[string]bool
+	catchClause := stmt.ChildByFieldName("handler", b.lang)
+	if catchClause != nil {
+		catchBody := catchClause.ChildByFieldName("body", b.lang)
+		if catchBody != nil {
+			catchExits = b.buildBlock(catchBody, map[string]bool{tryID: true}, map[string]string{tryID: "catch"})
+		} else {
+			catchExits = map[string]bool{tryID: true}
+		}
+	} else {
+		catchExits = map[string]bool{tryID: true}
+	}
+	catchExits = b.relabelPreds(catchExits, tryID)
+
+	merged := mergePreds(tryExits, catchExits)
+
+	finallyClause := stmt.ChildByFieldName("finalizer", b.lang)
+	if finallyClause != nil {
+		finallyBody := finallyClause.ChildByFieldName("body", b.lang)
+		if finallyBody != nil && len(merged) > 0 {
+			merged = b.buildBlock(finallyBody, merged, nil)
+		}
+	}
+
+	return merged
 }
 
 func (b *cfgbuilder) buildExpression(stmt *gotreesitter.Node, preds map[string]bool) map[string]bool {
@@ -614,7 +661,37 @@ func (b *cfgbuilder) buildExpression(stmt *gotreesitter.Node, preds map[string]b
 		for p := range preds {
 			b.addEdge(p, ternaryID, "next")
 		}
-		return map[string]bool{ternaryID: true}
+
+		consequence := expr.ChildByFieldName("consequence", b.lang)
+		alternative := expr.ChildByFieldName("alternative", b.lang)
+
+		var thenExits map[string]bool
+		if consequence != nil {
+			consStepID := b.addNode(CFGNode{
+				Type:  "step",
+				Label: truncateLabel(b.bt.NodeText(consequence)),
+				Line:  b.lineOf(consequence),
+			})
+			b.addEdge(ternaryID, consStepID, "yes")
+			thenExits = map[string]bool{consStepID: true}
+		} else {
+			thenExits = map[string]bool{ternaryID: true}
+		}
+
+		var elseExits map[string]bool
+		if alternative != nil {
+			altStepID := b.addNode(CFGNode{
+				Type:  "step",
+				Label: truncateLabel(b.bt.NodeText(alternative)),
+				Line:  b.lineOf(alternative),
+			})
+			b.addEdge(ternaryID, altStepID, "no")
+			elseExits = map[string]bool{altStepID: true}
+		} else {
+			elseExits = map[string]bool{ternaryID: true}
+		}
+
+		return mergePreds(thenExits, elseExits)
 	}
 
 	text := b.bt.NodeText(stmt)
@@ -763,4 +840,28 @@ func extractCallName(text string) string {
 		return name[dotIdx+1:]
 	}
 	return name
+}
+
+func isIgnoredStatement(stmtType string) bool {
+	switch stmtType {
+	case "{", "}", ";", "comment", "line_comment", "block_comment":
+		return true
+	default:
+		return false
+	}
+}
+
+func findAssignedName(bt *gotreesitter.BoundTree, n *gotreesitter.Node, lang *gotreesitter.Language) string {
+	cur := n
+	for cur != nil {
+		if cur.Type(lang) == "variable_declarator" {
+			nameNode := cur.ChildByFieldName("name", lang)
+			if nameNode != nil {
+				return bt.NodeText(nameNode)
+			}
+			return ""
+		}
+		cur = cur.Parent()
+	}
+	return ""
 }
