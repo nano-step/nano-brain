@@ -14,6 +14,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/eventbus"
+	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/links"
 	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/search"
@@ -73,9 +74,10 @@ type Server struct {
 	concreteLinkRes    *links.Resolver
 	concreteLinkExt    *links.Extractor
 	eventBus           *eventbus.Bus
+	graphRegistry      *graph.Registry
 }
 
-func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, bus *eventbus.Bus, logger zerolog.Logger, version string, migrationVersion int64) *Server {
+func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB, queries *sqlc.Queries, fw *watcher.Watcher, eq *embed.Queue, embedder embed.Embedder, bus *eventbus.Bus, logger zerolog.Logger, version string, migrationVersion int64, graphReg *graph.Registry) *Server {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -156,6 +158,7 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		concreteLinkRes:    concRes,
 		concreteLinkExt:    concExt,
 		eventBus:           bus,
+		graphRegistry:      graphReg,
 	}
 
 	registerMiddleware(s)

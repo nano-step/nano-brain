@@ -471,7 +471,7 @@ func startServer(configPath string) {
 	}
 	fw.WithPublisher(bus)
 
-	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, bus, logger, Version, migrationVersion)
+	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, bus, logger, Version, migrationVersion, graphRegistry)
 
 	if cfg.Server.ServeOnly {
 		logger.Info().Msg("serve_only mode — skipping collection watcher registration")

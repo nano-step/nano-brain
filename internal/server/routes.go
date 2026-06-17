@@ -72,6 +72,7 @@ func registerRoutes(s *Server) {
 		reindexPub = s.eventBus
 	}
 	write.POST("/reindex", handlers.TriggerReindex(s.queries, s.watcher, s.embedQueue, reindexPub, s.logger))
+	write.POST("/reindex-cfg", handlers.ReindexCFG(s.queries, s.graphRegistry, s.logger))
 	write.POST("/update", handlers.TriggerUpdate(s.watcher, s.logger))
 	write.POST("/summarize", handlers.TriggerSummarize(s.getSummarizer, s.queries, s.logger))
 	write.POST("/code/summarize", handlers.TriggerCodeSummarize(s.getCodeSummarizer, s.currentConfig().CodeSummarization, s.logger))
