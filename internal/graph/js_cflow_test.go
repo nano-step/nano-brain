@@ -691,6 +691,106 @@ function test() {
 	}
 }
 
+func TestJSControlFlowExtractor_GuardClauseContinuation(t *testing.T) {
+	src := []byte(`
+function example(req) {
+  if (!req.id) {
+    return { success: false };
+  }
+  const data = fetchData(req.id);
+  return { success: true, data };
+}`)
+	extractor := newCFGExtractor(t)
+	cfgs, err := extractor.ExtractCFGs("test.js", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) == 0 {
+		t.Fatal("expected at least 1 CFG")
+	}
+	cfg := cfgs[0]
+	if len(cfg.Nodes) < 4 {
+		t.Errorf("expected at least 4 nodes, got %d", len(cfg.Nodes))
+	}
+
+	hasIncoming := map[string]bool{}
+	for _, e := range cfg.Edges {
+		hasIncoming[e.To] = true
+	}
+	hasStep := false
+	for _, n := range cfg.Nodes {
+		if n.Type == "step" {
+			hasStep = true
+			if !hasIncoming[n.ID] {
+				t.Errorf("step node %s has no incoming edge — continuation is disconnected", n.ID)
+			}
+		}
+	}
+	if !hasStep {
+		t.Error("expected at least one step node for fetchData")
+	}
+}
+
+func TestJSControlFlowExtractor_NestedGuardClauses(t *testing.T) {
+	src := []byte(`
+function validate(a, b) {
+  if (!a) { return { error: 'a missing' }; }
+  if (!b) { return { error: 'b missing' }; }
+  return { ok: true, a, b };
+}`)
+	extractor := newCFGExtractor(t)
+	cfgs, err := extractor.ExtractCFGs("test.js", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) == 0 {
+		t.Fatal("expected at least 1 CFG")
+	}
+	cfg := cfgs[0]
+	terminals := 0
+	for _, n := range cfg.Nodes {
+		if n.Type == "terminal" {
+			terminals++
+		}
+	}
+	if terminals < 3 {
+		t.Errorf("expected at least 3 terminal nodes (2 guard returns + 1 success), got %d", terminals)
+	}
+}
+
+func TestJSControlFlowExtractor_IfWithoutElseThenContinues(t *testing.T) {
+	src := []byte(`
+function compute(x) {
+  if (x > 0) {
+    x = x * 2;
+  }
+  return x;
+}`)
+	extractor := newCFGExtractor(t)
+	cfgs, err := extractor.ExtractCFGs("test.js", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) == 0 {
+		t.Fatal("expected at least 1 CFG")
+	}
+	cfg := cfgs[0]
+	if len(cfg.Nodes) < 4 {
+		t.Errorf("expected at least 4 nodes, got %d", len(cfg.Nodes))
+	}
+	hasIncoming := map[string]bool{}
+	for _, e := range cfg.Edges {
+		hasIncoming[e.To] = true
+	}
+	for _, n := range cfg.Nodes {
+		if n.Type == "terminal" {
+			if !hasIncoming[n.ID] {
+				t.Errorf("terminal node %s has no incoming edge — unreachable", n.ID)
+			}
+		}
+	}
+}
+
 func TestJSControlFlowExtractor_TryCatchFinallyBranchLabels(t *testing.T) {
 	ex := newCFGExtractor(t)
 	src := `
@@ -717,5 +817,40 @@ function test() {
 	}
 	if branches["catch"] < 1 {
 		t.Error("expected at least 1 'catch' branch edge")
+	}
+}
+
+func TestJSControlFlowExtractor_EmptyElseBlock(t *testing.T) {
+	ex := newCFGExtractor(t)
+	src := `
+function compute(x) {
+  if (x > 0) {
+    x = x * 2;
+  } else {
+  }
+  return x;
+}
+`
+	cfgs, err := ex.ExtractCFGs("test.js", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) == 0 {
+		t.Fatal("expected at least 1 CFG")
+	}
+	cfg := cfgs[0]
+	if len(cfg.Nodes) < 4 {
+		t.Errorf("expected at least 4 nodes, got %d", len(cfg.Nodes))
+	}
+	hasIncoming := map[string]bool{}
+	for _, e := range cfg.Edges {
+		hasIncoming[e.To] = true
+	}
+	for _, n := range cfg.Nodes {
+		if n.Type == "terminal" {
+			if !hasIncoming[n.ID] {
+				t.Errorf("terminal node %s has no incoming edge — unreachable", n.ID)
+			}
+		}
 	}
 }
