@@ -11,7 +11,7 @@ import (
 
 func TestShouldSkip_DefaultExcludeDirs(t *testing.T) {
 	root := t.TempDir()
-	f, _ := newFileFilter(root, nil, nil, nil)
+	f, _ := NewFileFilter(root, nil, nil, nil)
 
 	cases := []struct {
 		path string
@@ -26,7 +26,7 @@ func TestShouldSkip_DefaultExcludeDirs(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := f.shouldSkip(tc.path, false)
+		got := f.ShouldSkip(tc.path, false)
 		if got != tc.skip {
 			t.Errorf("shouldSkip(%q) = %v, want %v", tc.path, got, tc.skip)
 		}
@@ -35,7 +35,7 @@ func TestShouldSkip_DefaultExcludeDirs(t *testing.T) {
 
 func TestShouldSkip_ExcludePatterns(t *testing.T) {
 	root := t.TempDir()
-	f, _ := newFileFilter(root, []string{"*.lock", "*.log"}, nil, nil)
+	f, _ := NewFileFilter(root, []string{"*.lock", "*.log"}, nil, nil)
 
 	cases := []struct {
 		path string
@@ -48,7 +48,7 @@ func TestShouldSkip_ExcludePatterns(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := f.shouldSkip(tc.path, false)
+		got := f.ShouldSkip(tc.path, false)
 		if got != tc.skip {
 			t.Errorf("shouldSkip(%q) = %v, want %v", tc.path, got, tc.skip)
 		}
@@ -57,7 +57,7 @@ func TestShouldSkip_ExcludePatterns(t *testing.T) {
 
 func TestShouldSkip_AllowedExtensions(t *testing.T) {
 	root := t.TempDir()
-	f, _ := newFileFilter(root, nil, []string{".go", ".md"}, nil)
+	f, _ := NewFileFilter(root, nil, []string{".go", ".md"}, nil)
 
 	cases := []struct {
 		path string
@@ -71,7 +71,7 @@ func TestShouldSkip_AllowedExtensions(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := f.shouldSkip(tc.path, false)
+		got := f.ShouldSkip(tc.path, false)
 		if got != tc.skip {
 			t.Errorf("shouldSkip(%q) = %v, want %v", tc.path, got, tc.skip)
 		}
@@ -80,12 +80,12 @@ func TestShouldSkip_AllowedExtensions(t *testing.T) {
 
 func TestShouldSkip_AllowedExtensionsNoDot(t *testing.T) {
 	root := t.TempDir()
-	f, _ := newFileFilter(root, nil, []string{"go", "ts"}, nil)
+	f, _ := NewFileFilter(root, nil, []string{"go", "ts"}, nil)
 
-	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+	if f.ShouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should not be skipped when go is allowed")
 	}
-	if !f.shouldSkip(filepath.Join(root, "index.js"), false) {
+	if !f.ShouldSkip(filepath.Join(root, "index.js"), false) {
 		t.Error("index.js should be skipped when only go,ts are allowed")
 	}
 }
@@ -97,7 +97,7 @@ func TestShouldSkip_Gitignore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f, _ := newFileFilter(root, nil, nil, nil)
+	f, _ := NewFileFilter(root, nil, nil, nil)
 
 	cases := []struct {
 		path string
@@ -109,7 +109,7 @@ func TestShouldSkip_Gitignore(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := f.shouldSkip(tc.path, false)
+		got := f.ShouldSkip(tc.path, false)
 		if got != tc.skip {
 			t.Errorf("shouldSkip(%q) = %v, want %v", tc.path, got, tc.skip)
 		}
@@ -118,9 +118,9 @@ func TestShouldSkip_Gitignore(t *testing.T) {
 
 func TestShouldSkip_NoGitignore(t *testing.T) {
 	root := t.TempDir()
-	f, _ := newFileFilter(root, nil, nil, nil)
+	f, _ := NewFileFilter(root, nil, nil, nil)
 
-	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+	if f.ShouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should not be skipped when no .gitignore")
 	}
 }
@@ -186,11 +186,11 @@ func TestFileFilter_GlobalIgnoreApplies(t *testing.T) {
 		t.Fatalf("setup: %v, gi=%v", err, gi)
 	}
 
-	f, _ := newFileFilter(root, nil, nil, gi)
-	if !f.shouldSkip(filepath.Join(root, "screenshot.png"), false) {
+	f, _ := NewFileFilter(root, nil, nil, gi)
+	if !f.ShouldSkip(filepath.Join(root, "screenshot.png"), false) {
 		t.Error("screenshot.png should be skipped via global ignore")
 	}
-	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+	if f.ShouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should NOT be skipped (no global match)")
 	}
 }
@@ -211,14 +211,14 @@ func TestFileFilter_GlobalIgnoreMatchesDirectoryWithTrailingSlash(t *testing.T) 
 		t.Fatalf("setup: %v", err)
 	}
 
-	f, _ := newFileFilter(root, nil, nil, gi)
-	if !f.shouldSkip(filepath.Join(root, "custom_build"), true) {
+	f, _ := NewFileFilter(root, nil, nil, gi)
+	if !f.ShouldSkip(filepath.Join(root, "custom_build"), true) {
 		t.Error("custom_build directory must be skipped (gitignore 'custom_build/' pattern requires trailing slash)")
 	}
-	if !f.shouldSkip(filepath.Join(root, "custom_build", "output.bin"), false) {
+	if !f.ShouldSkip(filepath.Join(root, "custom_build", "output.bin"), false) {
 		t.Error("file inside custom_build/ should also be skipped")
 	}
-	if f.shouldSkip(filepath.Join(root, "src"), true) {
+	if f.ShouldSkip(filepath.Join(root, "src"), true) {
 		t.Error("src directory should NOT be skipped")
 	}
 }
@@ -241,14 +241,14 @@ func TestFileFilter_GlobalIgnoreCombinesWithPerCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f, _ := newFileFilter(root, nil, nil, gi)
-	if !f.shouldSkip(filepath.Join(root, "app.log"), false) {
+	f, _ := NewFileFilter(root, nil, nil, gi)
+	if !f.ShouldSkip(filepath.Join(root, "app.log"), false) {
 		t.Error("app.log should be skipped via global ignore")
 	}
-	if !f.shouldSkip(filepath.Join(root, "temp", "cache.json"), false) {
+	if !f.ShouldSkip(filepath.Join(root, "temp", "cache.json"), false) {
 		t.Error("temp/cache.json should be skipped via per-collection .gitignore")
 	}
-	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+	if f.ShouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should NOT be skipped")
 	}
 }
@@ -259,17 +259,17 @@ func TestFileFilter_LocalNanoBrainIgnoreApplies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f, err := newFileFilter(root, nil, nil, nil)
+	f, err := NewFileFilter(root, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if f.localIgnore == nil {
 		t.Fatal("expected non-nil localIgnore matcher")
 	}
-	if !f.shouldSkip(filepath.Join(root, "foo.tmp"), false) {
+	if !f.ShouldSkip(filepath.Join(root, "foo.tmp"), false) {
 		t.Error("foo.tmp should be skipped via workspace .nano-brainignore")
 	}
-	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+	if f.ShouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should NOT be skipped")
 	}
 }
@@ -277,14 +277,14 @@ func TestFileFilter_LocalNanoBrainIgnoreApplies(t *testing.T) {
 func TestFileFilter_LocalNanoBrainIgnoreMissing(t *testing.T) {
 	root := t.TempDir()
 
-	f, err := newFileFilter(root, nil, nil, nil)
+	f, err := NewFileFilter(root, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error when file absent: %v", err)
 	}
 	if f.localIgnore != nil {
 		t.Error("expected nil localIgnore matcher when file missing")
 	}
-	if f.shouldSkip(filepath.Join(root, "anything.tmp"), false) {
+	if f.ShouldSkip(filepath.Join(root, "anything.tmp"), false) {
 		t.Error("anything.tmp must NOT be skipped without a local matcher")
 	}
 }
@@ -307,17 +307,17 @@ func TestFileFilter_LocalNanoBrainIgnoreCombinesWithGlobal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f, err := newFileFilter(root, nil, nil, gi)
+	f, err := NewFileFilter(root, nil, nil, gi)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !f.shouldSkip(filepath.Join(root, "app.log"), false) {
+	if !f.ShouldSkip(filepath.Join(root, "app.log"), false) {
 		t.Error("app.log should be skipped via global ignore")
 	}
-	if !f.shouldSkip(filepath.Join(root, "scratch.tmp"), false) {
+	if !f.ShouldSkip(filepath.Join(root, "scratch.tmp"), false) {
 		t.Error("scratch.tmp should be skipped via local ignore")
 	}
-	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+	if f.ShouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should NOT be skipped")
 	}
 }
@@ -331,17 +331,17 @@ func TestFileFilter_LocalNanoBrainIgnoreCombinesWithGitignore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f, err := newFileFilter(root, nil, nil, nil)
+	f, err := NewFileFilter(root, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !f.shouldSkip(filepath.Join(root, "tmp", "x.go"), false) {
+	if !f.ShouldSkip(filepath.Join(root, "tmp", "x.go"), false) {
 		t.Error("tmp/x.go should be skipped via .gitignore")
 	}
-	if !f.shouldSkip(filepath.Join(root, "fixture.snap"), false) {
+	if !f.ShouldSkip(filepath.Join(root, "fixture.snap"), false) {
 		t.Error("fixture.snap should be skipped via workspace .nano-brainignore")
 	}
-	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+	if f.ShouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should NOT be skipped")
 	}
 }
@@ -352,7 +352,7 @@ func TestFileFilter_LocalNanoBrainIgnoreUnreadable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f, err := newFileFilter(root, nil, nil, nil)
+	f, err := NewFileFilter(root, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected IO error when .nano-brainignore is a directory")
 	}
@@ -362,7 +362,7 @@ func TestFileFilter_LocalNanoBrainIgnoreUnreadable(t *testing.T) {
 	if f.localIgnore != nil {
 		t.Error("localIgnore must be nil when file load failed")
 	}
-	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+	if f.ShouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should NOT be skipped — other filter layers still operate")
 	}
 }
@@ -385,7 +385,7 @@ func TestFileFilter_LocalNanoBrainIgnorePermissionDenied(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(ignPath, 0o644) })
 
-	f, err := newFileFilter(root, nil, nil, nil)
+	f, err := NewFileFilter(root, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected IO error when .nano-brainignore is unreadable (chmod 0000)")
 	}
@@ -395,14 +395,14 @@ func TestFileFilter_LocalNanoBrainIgnorePermissionDenied(t *testing.T) {
 	if f.localIgnore != nil {
 		t.Error("localIgnore must be nil when file load failed")
 	}
-	if f.shouldSkip(filepath.Join(root, "main.go"), false) {
+	if f.ShouldSkip(filepath.Join(root, "main.go"), false) {
 		t.Error("main.go should NOT be skipped — other filter layers still operate")
 	}
 }
 
 func TestGitignoreStack_Push(t *testing.T) {
 	root := t.TempDir()
-	stack := &gitignoreStack{}
+	stack := &GitignoreStack{}
 
 	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("*.tmp\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -427,7 +427,7 @@ func TestGitignoreStack_PopAbove(t *testing.T) {
 	subdir := filepath.Join(root, "sub")
 	deepdir := filepath.Join(subdir, "deep")
 
-	stack := &gitignoreStack{}
+	stack := &GitignoreStack{}
 	gi1 := gitignore.CompileIgnoreLines("*.a")
 	gi2 := gitignore.CompileIgnoreLines("*.b")
 	gi3 := gitignore.CompileIgnoreLines("*.c")
@@ -460,7 +460,7 @@ func TestGitignoreStack_Matches(t *testing.T) {
 	root := t.TempDir()
 	subdir := filepath.Join(root, "sub")
 
-	stack := &gitignoreStack{}
+	stack := &GitignoreStack{}
 	gi1 := gitignore.CompileIgnoreLines("*.log")
 	gi2 := gitignore.CompileIgnoreLines("*.tmp")
 
@@ -500,7 +500,7 @@ func TestGitignoreStack_NestedGitignoreExclusion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stack := &gitignoreStack{}
+	stack := &GitignoreStack{}
 	giRoot, _ := gitignore.CompileIgnoreFile(filepath.Join(root, ".gitignore"))
 	giSub, _ := gitignore.CompileIgnoreFile(filepath.Join(subRepo, ".gitignore"))
 

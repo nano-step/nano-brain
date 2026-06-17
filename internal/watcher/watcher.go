@@ -55,7 +55,7 @@ type watchedCollection struct {
 	globPattern        string
 	excludePatterns    []string
 	allowedExtensions  []string
-	filter             *fileFilter
+	filter             *FileFilter
 	detectedFrameworks []string
 }
 
@@ -189,7 +189,7 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 		return fmt.Errorf("resolve path %s: %w", dirPath, err)
 	}
 
-	filter, ferr := newFileFilter(absPath, excludePatterns, allowedExtensions, w.globalIgnore)
+	filter, ferr := NewFileFilter(absPath, excludePatterns, allowedExtensions, w.globalIgnore)
 	if ferr != nil {
 		w.logger.Warn().Err(ferr).Str("dir", absPath).Str("collection", collectionName).Msg("workspace .nano-brainignore failed to load, continuing without local matcher")
 	} else if filter.localIgnore != nil {
@@ -421,7 +421,7 @@ func (w *Watcher) processAll(ctx context.Context) {
 }
 
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
-	stack := &gitignoreStack{}
+	stack := &GitignoreStack{}
 
 	err := filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -442,9 +442,15 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 					w.logger.Debug().Str("path", gitignorePath).Msg("loaded nested .gitignore")
 				}
 			}
+			localIgnorePath := filepath.Join(path, ".nano-brainignore")
+			if info, err := os.Stat(localIgnorePath); err == nil && !info.IsDir() {
+				if li, err := gitignore.CompileIgnoreFile(localIgnorePath); err == nil {
+					stack.Push(path, li)
+				}
+			}
 		}
 
-		if col.filter != nil && col.filter.shouldSkip(path, d.IsDir()) {
+		if col.filter != nil && col.filter.ShouldSkip(path, d.IsDir()) {
 			if d.IsDir() {
 				w.cleanupPathPrefix(ctx, col, path)
 				return filepath.SkipDir
@@ -481,7 +487,7 @@ func (w *Watcher) ShouldSkipPath(collectionName, workspaceHash, absPath string, 
 	for _, col := range w.collections {
 		if col.name == collectionName && col.workspaceHash == workspaceHash {
 			if col.filter != nil {
-				return col.filter.shouldSkip(absPath, isDir)
+				return col.filter.ShouldSkip(absPath, isDir)
 			}
 			return false
 		}
@@ -913,7 +919,7 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 			if err != nil || d.IsDir() {
 				return nil
 			}
-			if col.filter != nil && col.filter.shouldSkip(path, false) {
+			if col.filter != nil && col.filter.ShouldSkip(path, false) {
 				return nil
 			}
 			content, err := os.ReadFile(path)
@@ -955,7 +961,7 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 			if err != nil || d.IsDir() {
 				return nil
 			}
-			if col.filter != nil && col.filter.shouldSkip(path, false) {
+			if col.filter != nil && col.filter.ShouldSkip(path, false) {
 				return nil
 			}
 			content, err := os.ReadFile(path)

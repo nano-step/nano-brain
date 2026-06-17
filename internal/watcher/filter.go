@@ -9,21 +9,21 @@ import (
 	gitignore "github.com/sabhiram/go-gitignore"
 )
 
-// gitignoreStack maintains a stack of .gitignore matchers discovered during
+// GitignoreStack maintains a stack of .gitignore matchers discovered during
 // directory traversal. Each entry tracks the directory path and its associated
 // gitignore matcher. The stack is used to apply nested .gitignore files in
 // multi-repo workspaces (issue #379).
-type gitignoreStack struct {
-	entries []gitignoreEntry
+type GitignoreStack struct {
+	entries []GitignoreEntry
 }
 
-type gitignoreEntry struct {
+type GitignoreEntry struct {
 	dirPath string
 	matcher *gitignore.GitIgnore
 }
 
-func (s *gitignoreStack) Push(dirPath string, matcher *gitignore.GitIgnore) {
-	s.entries = append(s.entries, gitignoreEntry{
+func (s *GitignoreStack) Push(dirPath string, matcher *gitignore.GitIgnore) {
+	s.entries = append(s.entries, GitignoreEntry{
 		dirPath: dirPath,
 		matcher: matcher,
 	})
@@ -31,7 +31,7 @@ func (s *gitignoreStack) Push(dirPath string, matcher *gitignore.GitIgnore) {
 
 // PopAbove removes stack entries that are not ancestors of the given path.
 // This is called when ascending from a subdirectory during tree traversal.
-func (s *gitignoreStack) PopAbove(currentPath string) {
+func (s *GitignoreStack) PopAbove(currentPath string) {
 	i := 0
 	for _, entry := range s.entries {
 		rel, err := filepath.Rel(entry.dirPath, currentPath)
@@ -45,7 +45,7 @@ func (s *gitignoreStack) PopAbove(currentPath string) {
 
 // Matches checks if the given path matches any .gitignore pattern in the stack.
 // Returns true if the path should be excluded.
-func (s *gitignoreStack) Matches(path string) bool {
+func (s *GitignoreStack) Matches(path string) bool {
 	for _, entry := range s.entries {
 		rel, err := filepath.Rel(entry.dirPath, path)
 		if err != nil {
@@ -121,7 +121,7 @@ var defaultExcludeFiles = map[string]bool{
 	"composer.lock":        true, // PHP (also .lock)
 }
 
-type fileFilter struct {
+type FileFilter struct {
 	gitignoreMatcher  *gitignore.GitIgnore
 	globalIgnore      *gitignore.GitIgnore
 	localIgnore       *gitignore.GitIgnore
@@ -130,12 +130,12 @@ type fileFilter struct {
 	rootDir           string
 }
 
-// newFileFilter returns a filter for rootDir. The error reports IO failures
+// NewFileFilter returns a filter for rootDir. The error reports IO failures
 // while loading <rootDir>/.nano-brainignore (permission denied, is-a-directory,
-// etc.). The returned *fileFilter is always valid; callers should log the
+// etc.). The returned *FileFilter is always valid, callers should log the
 // error and continue with localIgnore unset.
-func newFileFilter(rootDir string, excludePatterns, allowedExtensions []string, globalIgnore *gitignore.GitIgnore) (*fileFilter, error) {
-	f := &fileFilter{
+func NewFileFilter(rootDir string, excludePatterns, allowedExtensions []string, globalIgnore *gitignore.GitIgnore) (*FileFilter, error) {
+	f := &FileFilter{
 		rootDir:         rootDir,
 		excludePatterns: excludePatterns,
 		globalIgnore:    globalIgnore,
@@ -171,7 +171,7 @@ func newFileFilter(rootDir string, excludePatterns, allowedExtensions []string, 
 	return f, nil
 }
 
-func (f *fileFilter) shouldSkip(absPath string, isDir bool) bool {
+func (f *FileFilter) shouldSkip(absPath string, isDir bool) bool {
 	rel, err := filepath.Rel(f.rootDir, absPath)
 	if err != nil {
 		rel = absPath
@@ -231,6 +231,10 @@ func (f *fileFilter) shouldSkip(absPath string, isDir bool) bool {
 	}
 
 	return false
+}
+
+func (f *FileFilter) ShouldSkip(absPath string, isDir bool) bool {
+	return f.shouldSkip(absPath, isDir)
 }
 
 // LoadGlobalIgnore reads `<homeDir>/.nano-brain/.nano-brainignore` and returns
