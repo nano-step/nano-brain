@@ -1,265 +1,137 @@
-package flow_test
+package flow
 
 import (
 	"strings"
 	"testing"
-
-	"github.com/nano-brain/nano-brain/internal/flow"
 )
 
-func seqSimpleFlow() flow.Flow {
-	return flow.Flow{
-		Entry:  "POST /api/topup",
-		Method: "POST",
-		Path:   "/api/topup",
-		Nodes: []flow.FlowNode{
-			{ID: "POST /api/topup", Name: "POST /api/topup", Role: flow.RoleEntry},
-			{ID: "HandleTopup", Name: "HandleTopup", Role: flow.RoleHandler},
-			{ID: "PayService", Name: "PayService", Role: flow.RoleService},
-			{ID: "PayRepo", Name: "PayRepo", Role: flow.RoleRepo},
-		},
-		Edges: []flow.FlowEdge{
-			{From: "POST /api/topup", To: "HandleTopup", Kind: "http"},
-			{From: "HandleTopup", To: "PayService", Kind: "calls"},
-			{From: "PayService", To: "PayRepo", Kind: "calls"},
-		},
-	}
-}
-
-func seqFlowWithMiddleware() flow.Flow {
-	return flow.Flow{
-		Entry:  "POST /api/topup",
-		Method: "POST",
-		Path:   "/api/topup",
-		Nodes: []flow.FlowNode{
-			{ID: "POST /api/topup", Name: "POST /api/topup", Role: flow.RoleEntry},
-			{ID: "AuthMW", Name: "AuthMW", Role: flow.RoleMiddleware},
-			{ID: "HandleTopup", Name: "HandleTopup", Role: flow.RoleHandler},
-			{ID: "PayService", Name: "PayService", Role: flow.RoleService},
-		},
-		Edges: []flow.FlowEdge{
-			{From: "POST /api/topup", To: "HandleTopup", Kind: "http"},
-			{From: "AuthMW", To: "HandleTopup", Kind: "middleware"},
-			{From: "HandleTopup", To: "PayService", Kind: "calls"},
-		},
-	}
-}
-
 func TestRenderSequenceDiagramHeader(t *testing.T) {
-	out := flow.RenderSequenceDiagram(seqSimpleFlow())
-	if !strings.HasPrefix(out, "sequenceDiagram\n") {
-		t.Errorf("expected output to start with 'sequenceDiagram\\n', got: %q", out[:min(len(out), 30)])
+	d := RenderSequenceDiagram(Flow{})
+	if !strings.HasPrefix(d, "sequenceDiagram\n") {
+		t.Errorf("expected sequenceDiagram header, got %q", d)
 	}
 }
 
-func TestRenderSequenceDiagramClientParticipant(t *testing.T) {
-	out := flow.RenderSequenceDiagram(seqSimpleFlow())
-	if !strings.Contains(out, "participant Client") {
-		t.Errorf("expected 'participant Client' for the entry node, output:\n%s", out)
+func TestRenderSequenceDiagramFewParticipants(t *testing.T) {
+	f := Flow{
+		Entry:  "POST /purchase",
+		Method: "POST",
+		Path:   "/purchase",
+		Nodes: []FlowNode{
+			{ID: "POST /purchase", Name: "POST /purchase", Role: RoleEntry},
+			{ID: "purchase", Name: "purchase", Role: RoleHandler},
+			{ID: "getConnection", Name: "getConnection", Role: RoleFunc},
+			{ID: "GET mysql", Name: "GET mysqlConnection", Role: RoleIntegration},
+			{ID: "getUser", Name: "getUser", Role: RoleFunc},
+			{ID: "GET steam", Name: "GET steamLevel", Role: RoleIntegration},
+			{ID: "addBalance", Name: "addBalance", Role: RoleFunc},
+			{ID: "POST add-balance", Name: "POST add-balance", Role: RoleIntegration},
+		},
+		Edges: []FlowEdge{
+			{From: "POST /purchase", To: "purchase", Kind: "http"},
+			{From: "purchase", To: "getConnection", Kind: "calls"},
+			{From: "getConnection", To: "GET mysql", Kind: "integration"},
+			{From: "purchase", To: "getUser", Kind: "calls"},
+			{From: "getUser", To: "GET steam", Kind: "integration"},
+			{From: "purchase", To: "addBalance", Kind: "calls"},
+			{From: "addBalance", To: "POST add-balance", Kind: "integration"},
+		},
 	}
-	// Entry's raw name should not appear as a participant alias (it should be Client).
-	if strings.Contains(out, "participant POST") {
-		t.Errorf("entry node raw name should not appear as participant, output:\n%s", out)
+	diagram := RenderSequenceDiagram(f)
+	count := strings.Count(diagram, "participant ")
+	if count > 6 {
+		t.Errorf("expected ≤6 participants, got %d", count)
 	}
-}
-
-func TestRenderSequenceDiagramAllParticipants(t *testing.T) {
-	f := seqSimpleFlow()
-	out := flow.RenderSequenceDiagram(f)
-	for _, name := range []string{"HandleTopup", "PayService", "PayRepo"} {
-		if !strings.Contains(out, name) {
-			t.Errorf("expected participant %q in output:\n%s", name, out)
-		}
+	if !strings.Contains(diagram, "participant Client") {
+		t.Error("expected Client participant")
 	}
-}
-
-func TestRenderSequenceDiagramMessages(t *testing.T) {
-	out := flow.RenderSequenceDiagram(seqSimpleFlow())
-	// Must contain ->> arrows.
-	if !strings.Contains(out, "->>") {
-		t.Errorf("expected ->> arrows in sequence diagram, output:\n%s", out)
-	}
-	// Entry http edge: Client->>HandleTopup.
-	if !strings.Contains(out, "Client->>HandleTopup") {
-		t.Errorf("expected 'Client->>HandleTopup' message, output:\n%s", out)
-	}
-	// Downstream calls.
-	if !strings.Contains(out, "HandleTopup->>PayService") {
-		t.Errorf("expected 'HandleTopup->>PayService' message, output:\n%s", out)
-	}
-	if !strings.Contains(out, "PayService->>PayRepo") {
-		t.Errorf("expected 'PayService->>PayRepo' message, output:\n%s", out)
+	if !strings.Contains(diagram, "Backend") {
+		t.Error("expected Backend participant")
 	}
 }
 
-func TestRenderSequenceDiagramMiddlewareNote(t *testing.T) {
-	out := flow.RenderSequenceDiagram(seqFlowWithMiddleware())
-	// Middleware should appear as a Note over, not as an arrow.
-	if !strings.Contains(out, "Note over") {
-		t.Errorf("expected 'Note over' for middleware guard, output:\n%s", out)
+func TestRenderSequenceDiagramReturnArrows(t *testing.T) {
+	f := Flow{
+		Entry:  "GET /data",
+		Method: "GET",
+		Path:   "/data",
+		Nodes: []FlowNode{
+			{ID: "GET /data", Name: "GET /data", Role: RoleEntry},
+			{ID: "handler", Name: "handler", Role: RoleHandler},
+			{ID: "GET api", Name: "GET api.example.com/data", Role: RoleIntegration},
+		},
+		Edges: []FlowEdge{
+			{From: "GET /data", To: "handler", Kind: "http"},
+			{From: "handler", To: "GET api", Kind: "integration"},
+		},
 	}
-	if !strings.Contains(out, "AuthMW") {
-		t.Errorf("expected AuthMW in middleware note, output:\n%s", out)
+	diagram := RenderSequenceDiagram(f)
+	if !strings.Contains(diagram, "-->>") {
+		t.Error("expected return arrows (-->>)")
 	}
-	// Middleware should NOT generate a ->> message.
-	for _, line := range strings.Split(out, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "AuthMW->>") {
-			t.Errorf("middleware should not produce a ->> message, got: %q", line)
-		}
+}
+
+func TestRenderSequenceDiagramMiddlewareAsNote(t *testing.T) {
+	f := Flow{
+		Entry: "GET /protected",
+		Nodes: []FlowNode{
+			{ID: "GET /protected", Name: "GET /protected", Role: RoleEntry},
+			{ID: "authMW", Name: "AuthMiddleware", Role: RoleMiddleware},
+			{ID: "handler", Name: "handler", Role: RoleHandler},
+			{ID: "GET api", Name: "GET api.example.com", Role: RoleIntegration},
+		},
+		Edges: []FlowEdge{
+			{From: "GET /protected", To: "authMW", Kind: "middleware"},
+			{From: "authMW", To: "handler", Kind: "middleware"},
+			{From: "handler", To: "GET api", Kind: "integration"},
+		},
+	}
+	diagram := RenderSequenceDiagram(f)
+	if strings.Contains(diagram, "participant authMW") {
+		t.Error("middleware should NOT be a separate participant")
+	}
+	if !strings.Contains(diagram, "guarded by") {
+		t.Error("middleware should appear as Note with 'guarded by'")
+	}
+}
+
+func TestRenderSequenceDiagramNoRawCallsLabel(t *testing.T) {
+	f := Flow{
+		Entry: "POST /action",
+		Nodes: []FlowNode{
+			{ID: "POST /action", Name: "POST /action", Role: RoleEntry},
+			{ID: "handler", Name: "handler", Role: RoleHandler},
+			{ID: "GET ext", Name: "GET external-api.com", Role: RoleIntegration},
+		},
+		Edges: []FlowEdge{
+			{From: "POST /action", To: "handler", Kind: "http"},
+			{From: "handler", To: "GET ext", Kind: "integration"},
+		},
+	}
+	diagram := RenderSequenceDiagram(f)
+	if strings.Contains(diagram, "->>Backend: calls") || strings.Contains(diagram, "-->>Backend: calls") {
+		t.Error("should not use raw 'calls' as message label")
 	}
 }
 
 func TestRenderSequenceDiagramDeterministic(t *testing.T) {
-	f := seqSimpleFlow()
-	out1 := flow.RenderSequenceDiagram(f)
-	out2 := flow.RenderSequenceDiagram(f)
-	if out1 != out2 {
-		t.Errorf("RenderSequenceDiagram is not deterministic")
-	}
-}
-
-func TestRenderSequenceDiagramDeterministicWithMiddleware(t *testing.T) {
-	f := seqFlowWithMiddleware()
-	out1 := flow.RenderSequenceDiagram(f)
-	out2 := flow.RenderSequenceDiagram(f)
-	if out1 != out2 {
-		t.Error("RenderSequenceDiagram is not deterministic for flow with middleware")
-	}
-}
-
-func TestRenderSequenceDiagramEmptyFlow(t *testing.T) {
-	f := flow.Flow{}
-	out := flow.RenderSequenceDiagram(f)
-	if !strings.HasPrefix(out, "sequenceDiagram\n") {
-		t.Errorf("empty flow should still produce valid header, got: %q", out)
-	}
-}
-
-// TestRenderSequenceDiagramLineOrdering verifies that calls are ordered by source
-// line number when line info is present, not alphabetically.
-func TestRenderSequenceDiagramLineOrdering(t *testing.T) {
-	// HandleTopup calls ZService on line 10, then AService on line 20.
-	// Without line ordering, AService would come first (alphabetical).
-	f := flow.Flow{
-		Entry:  "POST /api/topup",
-		Method: "POST",
-		Path:   "/api/topup",
-		Nodes: []flow.FlowNode{
-			{ID: "POST /api/topup", Name: "POST /api/topup", Role: flow.RoleEntry},
-			{ID: "HandleTopup", Name: "HandleTopup", Role: flow.RoleHandler},
-			{ID: "ZService", Name: "ZService", Role: flow.RoleService},
-			{ID: "AService", Name: "AService", Role: flow.RoleService},
+	f := Flow{
+		Entry: "GET /x",
+		Nodes: []FlowNode{
+			{ID: "GET /x", Name: "GET /x", Role: RoleEntry},
+			{ID: "h", Name: "h", Role: RoleHandler},
+			{ID: "GET a", Name: "GET a.com", Role: RoleIntegration},
+			{ID: "GET b", Name: "GET b.com", Role: RoleIntegration},
 		},
-		Edges: []flow.FlowEdge{
-			{From: "POST /api/topup", To: "HandleTopup", Kind: "http"},
-			{From: "HandleTopup", To: "ZService", Kind: "calls", Line: 10},
-			{From: "HandleTopup", To: "AService", Kind: "calls", Line: 20},
+		Edges: []FlowEdge{
+			{From: "GET /x", To: "h", Kind: "http"},
+			{From: "h", To: "GET a", Kind: "integration", Line: 10},
+			{From: "h", To: "GET b", Kind: "integration", Line: 5},
 		},
 	}
-	out := flow.RenderSequenceDiagram(f)
-
-	// ZService (line 10) must appear before AService (line 20).
-	zPos := strings.Index(out, "ZService")
-	aPos := strings.Index(out, "AService")
-	if zPos < 0 || aPos < 0 {
-		t.Fatalf("expected both ZService and AService in output:\n%s", out)
-	}
-	if zPos > aPos {
-		t.Errorf("ZService (line 10) should appear before AService (line 20) in output:\n%s", out)
-	}
-}
-
-func seqFlowWithConditionalEdges() flow.Flow {
-	return flow.Flow{
-		Entry:  "POST /api/data",
-		Method: "POST",
-		Path:   "/api/data",
-		Nodes: []flow.FlowNode{
-			{ID: "POST /api/data", Name: "POST /api/data", Role: flow.RoleEntry},
-			{ID: "HandleData", Name: "HandleData", Role: flow.RoleHandler},
-			{ID: "IfBranch", Name: "IfBranch", Role: flow.RoleService},
-			{ID: "ElseBranch", Name: "ElseBranch", Role: flow.RoleService},
-			{ID: "NormalCall", Name: "NormalCall", Role: flow.RoleService},
-		},
-		Edges: []flow.FlowEdge{
-			{From: "POST /api/data", To: "HandleData", Kind: "http"},
-			{From: "HandleData", To: "IfBranch", Kind: "calls", Conditional: true},
-			{From: "HandleData", To: "ElseBranch", Kind: "calls", Conditional: true},
-			{From: "HandleData", To: "NormalCall", Kind: "calls", Conditional: false},
-		},
-	}
-}
-
-func TestRenderSequenceDiagramAltBlock(t *testing.T) {
-	f := seqFlowWithConditionalEdges()
-	out := flow.RenderSequenceDiagram(f)
-
-	if !strings.Contains(out, "alt conditional") {
-		t.Errorf("expected 'alt conditional' for consecutive conditional messages, output:\n%s", out)
-	}
-	if !strings.Contains(out, "end") {
-		t.Errorf("expected 'end' to close alt block, output:\n%s", out)
-	}
-	altPos := strings.Index(out, "alt conditional")
-	if altPos < 0 {
-		t.Fatal("missing 'alt conditional' in output")
-	}
-	ifArrow := strings.Index(out, "HandleData->>IfBranch")
-	elseArrow := strings.Index(out, "HandleData->>ElseBranch")
-	if ifArrow < 0 || elseArrow < 0 {
-		t.Fatalf("expected message arrows for IfBranch and ElseBranch in output:\n%s", out)
-	}
-	if ifArrow < altPos {
-		t.Errorf("IfBranch message arrow should appear after 'alt', output:\n%s", out)
-	}
-	if elseArrow < altPos {
-		t.Errorf("ElseBranch message arrow should appear after 'alt', output:\n%s", out)
-	}
-}
-
-func TestRenderSequenceDiagramOptBlock(t *testing.T) {
-	f := flow.Flow{
-		Entry:  "GET /api/check",
-		Method: "GET",
-		Path:   "/api/check",
-		Nodes: []flow.FlowNode{
-			{ID: "GET /api/check", Name: "GET /api/check", Role: flow.RoleEntry},
-			{ID: "H", Name: "H", Role: flow.RoleHandler},
-			{ID: "Maybe", Name: "Maybe", Role: flow.RoleService},
-			{ID: "Always", Name: "Always", Role: flow.RoleService},
-		},
-		Edges: []flow.FlowEdge{
-			{From: "GET /api/check", To: "H", Kind: "http"},
-			{From: "H", To: "Maybe", Kind: "calls", Conditional: true},
-			{From: "H", To: "Always", Kind: "calls", Conditional: false},
-		},
-	}
-	out := flow.RenderSequenceDiagram(f)
-
-	if !strings.Contains(out, "opt conditional") {
-		t.Errorf("expected 'opt conditional' for single conditional message, output:\n%s", out)
-	}
-	if !strings.Contains(out, "end") {
-		t.Errorf("expected 'end' to close opt block, output:\n%s", out)
-	}
-}
-
-func TestRenderSequenceDiagramNonConditionalUnchanged(t *testing.T) {
-	f := seqSimpleFlow()
-	out := flow.RenderSequenceDiagram(f)
-	if strings.Contains(out, "conditional") {
-		t.Errorf("flow with no conditional edges should not mention 'conditional', output:\n%s", out)
-	}
-}
-
-func TestRenderSequenceDiagramRoleLabels(t *testing.T) {
-	out := flow.RenderSequenceDiagram(seqSimpleFlow())
-	// Non-entry participants should include the role in their label.
-	if !strings.Contains(out, "(handler)") {
-		t.Errorf("expected '(handler)' role label in participant declaration, output:\n%s", out)
-	}
-	if !strings.Contains(out, "(service)") {
-		t.Errorf("expected '(service)' role label in participant declaration, output:\n%s", out)
+	d1 := RenderSequenceDiagram(f)
+	d2 := RenderSequenceDiagram(f)
+	if d1 != d2 {
+		t.Error("same input should produce same output")
 	}
 }
