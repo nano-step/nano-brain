@@ -800,12 +800,14 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 	defer tx.Rollback() //nolint:errcheck
 
 	tq := sqlc.New(tx)
-	if err := tq.DeleteGraphEdgesByFile(ctx, sqlc.DeleteGraphEdgesByFileParams{
-		WorkspaceHash: col.workspaceHash,
-		SourceFile:    relFile,
-	}); err != nil {
-		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph edge delete failed")
-		return
+	for _, sf := range []string{relFile, filePath} {
+		if err := tq.DeleteGraphEdgesByFile(ctx, sqlc.DeleteGraphEdgesByFileParams{
+			WorkspaceHash: col.workspaceHash,
+			SourceFile:    sf,
+		}); err != nil {
+			w.logger.Warn().Err(err).Str("file", filePath).Msg("graph edge delete failed")
+			return
+		}
 	}
 
 	for _, e := range edges {
