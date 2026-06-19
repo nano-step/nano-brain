@@ -18,6 +18,7 @@ type FlowQuerier interface {
 	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
 	ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
 	ListHTTPEndpointsByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.ListHTTPEndpointsByWorkspaceRow, error)
+	GetFunctionFlowchartByHandler(ctx context.Context, arg sqlc.GetFunctionFlowchartByHandlerParams) (sqlc.FunctionFlowchart, error)
 }
 
 // FlowMaterializer is the interface for triggering flow materialization.
@@ -150,7 +151,7 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 			Nodes:     nodes,
 			Edges:     graphEdges,
 		}
-		if diagram := flow.Render(f, req.Format); diagram != "" {
+		if diagram := flow.Render(f, req.Format, loadCFGsForSequence(ctx, q, workspace, req.Format, f)...); diagram != "" {
 			resp.Mermaid = diagram
 		}
 
@@ -323,4 +324,15 @@ func splitNodes(nodes []flow.FlowNode) (chain []flowNode, externals []flowNode) 
 		externals = []flowNode{}
 	}
 	return chain, externals
+}
+
+func loadCFGsForSequence(ctx context.Context, q FlowQuerier, workspace, format string, f flow.Flow) []flow.FlowCFGs {
+	if format != "sequence" {
+		return nil
+	}
+	cfgs, err := flow.LoadFlowCFGs(ctx, q, workspace, f.Entry)
+	if err != nil || cfgs == nil {
+		return nil
+	}
+	return []flow.FlowCFGs{cfgs}
 }

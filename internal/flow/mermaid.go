@@ -74,9 +74,12 @@ var mermaidReservedIDs = map[string]bool{
 //   - "sequence" → Mermaid sequenceDiagram
 //   - "json" → empty string (caller handles JSON separately)
 //   - anything else (including "mermaid") → Mermaid graph TD
-func Render(f Flow, format string) string {
+func Render(f Flow, format string, cfgs ...FlowCFGs) string {
 	switch format {
 	case "sequence":
+		if len(cfgs) > 0 && cfgs[0] != nil {
+			return RenderSequenceDiagramWithCFG(f, cfgs[0])
+		}
 		return RenderSequenceDiagram(f)
 	case "json":
 		return ""
