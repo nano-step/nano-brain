@@ -44,6 +44,84 @@ var jsHTTPMethodNames = map[string]bool{
 	"options": true,
 }
 
+// jsRedisMethods contains all Redis method names that the extractor recognizes.
+var jsRedisMethods = map[string]bool{
+	"get":       true,
+	"set":       true,
+	"setEx":     true,
+	"expire":    true,
+	"del":       true,
+	"ttl":       true,
+	"publish":   true,
+	"subscribe": true,
+	"lpush":     true,
+	"rpush":     true,
+	"sadd":      true,
+	"srem":      true,
+	"incr":      true,
+	"decr":      true,
+	"hget":      true,
+	"hset":      true,
+}
+
+// jsRedisReadMethods are Redis methods that perform read operations.
+var jsRedisReadMethods = map[string]bool{
+	"get":  true,
+	"ttl":  true,
+	"hget": true,
+}
+
+// jsRedisWriteMethods are Redis methods that perform write operations.
+var jsRedisWriteMethods = map[string]bool{
+	"set":    true,
+	"setEx":  true,
+	"expire": true,
+	"lpush":  true,
+	"rpush":  true,
+	"sadd":   true,
+	"srem":   true,
+	"incr":   true,
+	"decr":   true,
+	"hset":   true,
+}
+
+// jsRedisDeleteMethods are Redis methods that perform delete operations.
+var jsRedisDeleteMethods = map[string]bool{
+	"del": true,
+}
+
+// jsRedisPubSubMethods are Redis methods that perform pub/sub operations.
+var jsRedisPubSubMethods = map[string]bool{
+	"publish":   true,
+	"subscribe": true,
+}
+
+// jsRedisUnambiguousMethods are Redis methods that don't overlap with HTTP/queue method names.
+var jsRedisUnambiguousMethods = map[string]bool{
+	"setEx":  true,
+	"expire": true,
+	"ttl":    true,
+	"lpush":  true,
+	"rpush":  true,
+	"sadd":   true,
+	"srem":   true,
+	"incr":   true,
+	"decr":   true,
+	"hget":   true,
+	"hset":   true,
+}
+
+// jsRedisReceivers are known Redis client variable names used to disambiguate
+// methods that overlap with HTTP/queue (get, set, del, publish, subscribe).
+var jsRedisReceivers = map[string]bool{
+	"redis":       true,
+	"r":           true,
+	"client":      true,
+	"redisClient": true,
+	"cache":       true,
+	"db":          true,
+}
+
 // JSIntegrationExtractor implements graph.Extractor for JS/TS outbound
 // integration calls (HTTP, queue publish, event emit, consumer patterns).
 type JSIntegrationExtractor struct {
@@ -262,6 +340,52 @@ func (x *JSIntegrationExtractor) handleIdentifier(bt *gotreesitter.BoundTree, ca
 	}
 }
 
+// handleRedisCall emits a cache integration edge for a Redis method call.
+func (x *JSIntegrationExtractor) handleRedisCall(bt *gotreesitter.BoundTree, callNode *gotreesitter.Node, methodName, receiverName string, argsNode *gotreesitter.Node, lang *gotreesitter.Language, langLabel, relFile, source string, line int, edges *[]Edge) string {
+	key := jsStringArgOrVar(bt, argsNode, lang, 0)
+	target := "REDIS " + methodName + " " + key
+
+	var kind string
+	switch {
+	case jsRedisReadMethods[methodName]:
+		kind = "cache_read"
+	case jsRedisWriteMethods[methodName]:
+		kind = "cache_write"
+	case jsRedisDeleteMethods[methodName]:
+		kind = "cache_delete"
+	case jsRedisPubSubMethods[methodName]:
+		kind = "cache_pubsub"
+	default:
+		kind = "cache_write"
+	}
+
+	if kind == "cache_pubsub" {
+		topic := jsStringArgOrVar(bt, argsNode, lang, 0)
+		target = methodName + ":" + topic
+		*edges = append(*edges, Edge{
+			SourceNode: source,
+			TargetNode: target,
+			Kind:       EdgeIntegration,
+			SourceFile: relFile,
+			Line:       line,
+			Language:   langLabel,
+			Metadata:   map[string]any{"kind": kind, "method": methodName, "receiver": receiverName, "topic": topic},
+		})
+		return target
+	}
+
+	*edges = append(*edges, Edge{
+		SourceNode: source,
+		TargetNode: target,
+		Kind:       EdgeIntegration,
+		SourceFile: relFile,
+		Line:       line,
+		Language:   langLabel,
+		Metadata:   map[string]any{"kind": kind, "method": methodName, "receiver": receiverName, "key": key},
+	})
+	return target
+}
+
 // handleMemberExpression processes method calls like axios.get(url) or emitter.emit("topic").
 func (x *JSIntegrationExtractor) handleMemberExpression(bt *gotreesitter.BoundTree, callNode, fnNode, argsNode *gotreesitter.Node, lang *gotreesitter.Language, langLabel, relFile, source string, line int, edges *[]Edge) {
 	objectNode := fnNode.ChildByFieldName("object", lang)
@@ -272,7 +396,15 @@ func (x *JSIntegrationExtractor) handleMemberExpression(bt *gotreesitter.BoundTr
 	methodName := bt.NodeText(propertyNode)
 	receiverName := jsReceiverText(bt, objectNode, lang)
 
-	// HTTP method shorthand: <any>.get(url) / <any>.post(url)
+	if jsRedisMethods[methodName] {
+		isUnambiguous := jsRedisUnambiguousMethods[methodName]
+		isKnownReceiver := jsRedisReceivers[receiverName]
+		if isUnambiguous || isKnownReceiver {
+			x.handleRedisCall(bt, callNode, methodName, receiverName, argsNode, lang, langLabel, relFile, source, line, edges)
+			return
+		}
+	}
+
 	if jsHTTPMethodNames[methodName] {
 		url := jsStringArgOrVar(bt, argsNode, lang, 0)
 		target := strings.ToUpper(methodName) + " " + url
