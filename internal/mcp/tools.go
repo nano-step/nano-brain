@@ -2142,13 +2142,24 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				"nodes":     allNodes,
 				"edges":     graphEdges,
 			}
-			if diagram := flow.Render(f, format); diagram != "" {
+			if diagram := flow.Render(f, format, loadCFGsForFlow(ctx, a.queries, ws, format, f)...); diagram != "" {
 				result["mermaid"] = diagram
 			}
 
 			return textResult(result)
 		},
 	)
+}
+
+func loadCFGsForFlow(ctx context.Context, q flow.CFGQuerier, ws, format string, f flow.Flow) []flow.FlowCFGs {
+	if format != "sequence" {
+		return nil
+	}
+	cfgs, err := flow.LoadFlowCFGs(ctx, q, ws, f.Entry)
+	if err != nil || cfgs == nil {
+		return nil
+	}
+	return []flow.FlowCFGs{cfgs}
 }
 
 func filterPublishEdges(edges []graph.Edge) []graph.Edge {
