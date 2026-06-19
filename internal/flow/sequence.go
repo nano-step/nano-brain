@@ -32,22 +32,22 @@ func msgAlias(nodeID string, nodeByID map[string]FlowNode) string {
 }
 
 // groupActors maps each node ID to a system-level actor alias.
-func groupActors(f Flow) map[string]string {
+func groupActors(f Flow, serviceName string) map[string]string {
 	actorForNode := make(map[string]string, len(f.Nodes))
 	for _, n := range f.Nodes {
 		switch n.Role {
 		case RoleEntry:
 			actorForNode[n.ID] = "Client"
 		case RoleMiddleware:
-			actorForNode[n.ID] = "Backend"
+			actorForNode[n.ID] = serviceName
 		case RoleHandler, RoleFunc, RoleRepo, RoleService:
-			actorForNode[n.ID] = "Backend"
+			actorForNode[n.ID] = serviceName
 		case RoleIntegration:
 			actorForNode[n.ID] = extractSystemName(n.Name)
 		case RoleExternal:
-			actorForNode[n.ID] = extractSystemName(n.Name)
-		default:
 			actorForNode[n.ID] = "Backend"
+		default:
+			actorForNode[n.ID] = serviceName
 		}
 	}
 	// Cross-service edges assign target to Service actor
@@ -138,7 +138,7 @@ func extractSystemName(name string) string {
 
 // RenderSequenceDiagram renders a Flow as a Mermaid sequenceDiagram.
 func RenderSequenceDiagram(f Flow) string {
-	actorForNode := groupActors(f)
+	actorForNode := groupActors(f, f.ServiceName)
 	nodeByID := make(map[string]FlowNode, len(f.Nodes))
 	for _, n := range f.Nodes {
 		nodeByID[n.ID] = n

@@ -47,11 +47,12 @@ type FlowEdge struct {
 
 // Flow is the result of BuildFlow.
 type Flow struct {
-	Entry  string
-	Method string
-	Path   string
-	Nodes  []FlowNode
-	Edges  []FlowEdge
+	Entry       string
+	Method      string
+	Path        string
+	ServiceName string // derived from source file path (e.g., "tradeit-backend")
+	Nodes       []FlowNode
+	Edges       []FlowEdge
 }
 
 // symbolPart returns the symbol portion of a source node id.
@@ -419,5 +420,37 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 		flow.Edges = append(flow.Edges, e)
 	}
 
+	// Derive service name from the source file paths of handler edges.
+	if flow.ServiceName == "" {
+		flow.ServiceName = deriveServiceName(edges)
+	}
+
 	return flow
+}
+
+// deriveServiceName extracts a service name from the source file paths of edges.
+// It looks at the first edge's SourceFile and extracts the first path component
+// after the workspace root (e.g., "tradeit-backend/server/controllers/trade.js" → "tradeit-backend").
+func deriveServiceName(edges []graph.Edge) string {
+	fileCounts := make(map[string]int)
+	for _, e := range edges {
+		if e.SourceFile != "" {
+			parts := strings.SplitN(e.SourceFile, "/", 2)
+			if len(parts) > 0 {
+				fileCounts[parts[0]]++
+			}
+		}
+	}
+	best := ""
+	bestCount := 0
+	for name, count := range fileCounts {
+		if count > bestCount {
+			best = name
+			bestCount = count
+		}
+	}
+	if best != "" {
+		return best
+	}
+	return "Backend"
 }
