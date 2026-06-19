@@ -431,14 +431,26 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 // deriveServiceName extracts a service name from the source file paths of edges.
 // It looks at the first edge's SourceFile and extracts the first path component
 // after the workspace root (e.g., "tradeit-backend/server/controllers/trade.js" → "tradeit-backend").
+// Handles absolute paths (Unix and Windows) by stripping the prefix before splitting.
 func deriveServiceName(edges []graph.Edge) string {
 	fileCounts := make(map[string]int)
 	for _, e := range edges {
-		if e.SourceFile != "" {
-			parts := strings.SplitN(e.SourceFile, "/", 2)
-			if len(parts) > 0 {
-				fileCounts[parts[0]]++
-			}
+		if e.SourceFile == "" {
+			continue
+		}
+		sf := e.SourceFile
+		// Handle Windows drive-letter paths (e.g. "C:/Users/..." → strip "C:")
+		if len(sf) >= 2 && sf[1] == ':' {
+			sf = sf[2:]
+		}
+		// Strip leading slashes (handles both "/" and "//" and "///")
+		sf = strings.TrimLeft(sf, "/")
+		if sf == "" {
+			continue
+		}
+		parts := strings.SplitN(sf, "/", 2)
+		if len(parts) > 0 {
+			fileCounts[parts[0]]++
 		}
 	}
 	best := ""

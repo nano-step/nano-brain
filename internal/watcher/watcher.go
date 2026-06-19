@@ -780,7 +780,13 @@ func buildEdgeMetadata(e graph.Edge) ([]byte, error) {
 }
 
 func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollection, filePath string, content []byte) {
-	edges, err := w.graphRegistry.ExtractEdgesForFrameworks(filePath, content, col.detectedFrameworks)
+	relPath, err := filepath.Rel(col.dirPath, filePath)
+	if err != nil {
+		relPath = filePath
+	}
+	relFile := filepath.ToSlash(relPath)
+
+	edges, err := w.graphRegistry.ExtractEdgesForFrameworks(relFile, content, col.detectedFrameworks)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph edge extraction failed")
 		return
@@ -794,12 +800,14 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 	defer tx.Rollback() //nolint:errcheck
 
 	tq := sqlc.New(tx)
-	if err := tq.DeleteGraphEdgesByFile(ctx, sqlc.DeleteGraphEdgesByFileParams{
-		WorkspaceHash: col.workspaceHash,
-		SourceFile:    filePath,
-	}); err != nil {
-		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph edge delete failed")
-		return
+	for _, sf := range []string{relFile, filePath} {
+		if err := tq.DeleteGraphEdgesByFile(ctx, sqlc.DeleteGraphEdgesByFileParams{
+			WorkspaceHash: col.workspaceHash,
+			SourceFile:    sf,
+		}); err != nil {
+			w.logger.Warn().Err(err).Str("file", filePath).Msg("graph edge delete failed")
+			return
+		}
 	}
 
 	for _, e := range edges {

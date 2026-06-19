@@ -45,7 +45,7 @@ func groupActors(f Flow, serviceName string) map[string]string {
 		case RoleIntegration:
 			actorForNode[n.ID] = extractSystemName(n.Name)
 		case RoleExternal:
-			actorForNode[n.ID] = "Backend"
+			actorForNode[n.ID] = serviceName
 		default:
 			actorForNode[n.ID] = serviceName
 		}
