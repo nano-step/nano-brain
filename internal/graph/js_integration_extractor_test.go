@@ -342,24 +342,28 @@ func TestJSIntegrationExtractor_Consumer(t *testing.T) {
 		src        string
 		wantSource string
 		wantTopic  string
+		wantKind   string
 	}{
 		{
 			name:       "emitter.on event",
 			src:        `function setup() { emitter.on("user.created", (user) => { console.log(user); }); }`,
 			wantSource: "CONSUME user.created",
 			wantTopic:  "user.created",
+			wantKind:   "queue_consumer",
 		},
 		{
 			name:       "channel.consume queue",
 			src:        `function start() { channel.consume("orders", (msg) => { process(msg); }); }`,
 			wantSource: "CONSUME orders",
 			wantTopic:  "orders",
+			wantKind:   "queue_consumer",
 		},
 		{
 			name:       "redis.subscribe channel",
 			src:        `function listen() { redis.subscribe("updates", (data) => { handle(data); }); }`,
-			wantSource: "CONSUME updates",
+			wantSource: "test.js::listen",
 			wantTopic:  "updates",
+			wantKind:   "cache_pubsub",
 		},
 	}
 
@@ -386,8 +390,8 @@ func TestJSIntegrationExtractor_Consumer(t *testing.T) {
 			if !ok || meta != tt.wantTopic {
 				t.Errorf("Metadata[topic] = %v, want %q", e.Metadata["topic"], tt.wantTopic)
 			}
-			if e.Metadata["kind"] != "queue_consumer" {
-				t.Errorf("Metadata[kind] = %v, want %q", e.Metadata["kind"], "queue_consumer")
+			if e.Metadata["kind"] != tt.wantKind {
+				t.Errorf("Metadata[kind] = %v, want %q", e.Metadata["kind"], tt.wantKind)
 			}
 		})
 	}
@@ -489,16 +493,12 @@ function handler() {
 	}
 
 	seen := make(map[string]bool)
-	consumerSeen := false
 	for _, e := range integrationEdges {
 		if e.Kind != graph.EdgeIntegration {
 			t.Errorf("edge Kind = %v, want EdgeIntegration", e.Kind)
 		}
 		seen[e.TargetNode] = true
-		if e.SourceNode == "CONSUME events" {
-			consumerSeen = true
-		}
-		if e.SourceNode != "test.js::handler" && e.SourceNode != "CONSUME events" {
+		if e.SourceNode != "test.js::handler" {
 			t.Errorf("unexpected SourceNode = %q", e.SourceNode)
 		}
 	}
@@ -508,8 +508,8 @@ function handler() {
 	if !seen["emit:user.fetched"] {
 		t.Error("missing emit queue publish edge")
 	}
-	if !consumerSeen {
-		t.Error("missing subscribe consumer edge (source=CONSUME events)")
+	if !seen["subscribe:events"] {
+		t.Error("missing redis subscribe cache_pubsub edge")
 	}
 }
 
@@ -582,6 +582,129 @@ func metadataContains(meta map[string]any, want map[string]any) bool {
 		}
 	}
 	return true
+}
+
+func TestJSIntegrationExtractor_RedisEdges(t *testing.T) {
+	ex, err := graph.NewJSIntegrationExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		src        string
+		wantTarget string
+		wantKind   string
+		wantMeta   map[string]any
+	}{
+		{
+			name:       "redis.get cache_read",
+			src:        `function load() { redis.get("user:123"); }`,
+			wantTarget: "REDIS get user:123",
+			wantKind:   "cache_read",
+			wantMeta:   map[string]any{"kind": "cache_read", "method": "get", "receiver": "redis", "key": "user:123"},
+		},
+		{
+			name:       "redis.set cache_write",
+			src:        `function save() { redis.set("user:123", data); }`,
+			wantTarget: "REDIS set user:123",
+			wantKind:   "cache_write",
+			wantMeta:   map[string]any{"kind": "cache_write", "method": "set", "receiver": "redis", "key": "user:123"},
+		},
+		{
+			name:       "redis.setEx cache_write",
+			src:        `function cache() { redis.setEx("session:abc", 3600, JSON.stringify(data)); }`,
+			wantTarget: "REDIS setEx session:abc",
+			wantKind:   "cache_write",
+			wantMeta:   map[string]any{"kind": "cache_write", "method": "setEx", "receiver": "redis", "key": "session:abc"},
+		},
+		{
+			name:       "redis.del cache_delete",
+			src:        `function remove() { redis.del("lockTrade:asset1"); }`,
+			wantTarget: "REDIS del lockTrade:asset1",
+			wantKind:   "cache_delete",
+			wantMeta:   map[string]any{"kind": "cache_delete", "method": "del", "receiver": "redis", "key": "lockTrade:asset1"},
+		},
+		{
+			name:       "redis.publish cache_pubsub",
+			src:        `function broadcast() { redis.publish("notifications", msg); }`,
+			wantTarget: "publish:notifications",
+			wantKind:   "cache_pubsub",
+			wantMeta:   map[string]any{"kind": "cache_pubsub", "method": "publish", "receiver": "redis", "topic": "notifications"},
+		},
+		{
+			name:       "redis.expire cache_write",
+			src:        `function refresh() { redis.expire("key:ttl", 300); }`,
+			wantTarget: "REDIS expire key:ttl",
+			wantKind:   "cache_write",
+			wantMeta:   map[string]any{"kind": "cache_write", "method": "expire", "receiver": "redis", "key": "key:ttl"},
+		},
+		{
+			name:       "redis.set with NX EX options",
+			src:        `function lock() { redis.set("lockTrade:asset1", 1, {NX: true, EX: 900}); }`,
+			wantTarget: "REDIS set lockTrade:asset1",
+			wantKind:   "cache_write",
+			wantMeta:   map[string]any{"kind": "cache_write", "method": "set", "receiver": "redis", "key": "lockTrade:asset1"},
+		},
+		{
+			name:       "redis.get with template string",
+			src:        "function load(botId) { redis.get(`caskets730:${botId}`); }",
+			wantTarget: "REDIS get caskets730:${botId}",
+			wantKind:   "cache_read",
+			wantMeta:   map[string]any{"kind": "cache_read", "method": "get", "receiver": "redis"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			edges, err := ex.ExtractEdges("test.js", []byte(tt.src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var matching []graph.Edge
+			for _, e := range edges {
+				if e.Kind == graph.EdgeIntegration {
+					matching = append(matching, e)
+				}
+			}
+			if len(matching) == 0 {
+				t.Fatal("expected at least one EdgeIntegration edge")
+			}
+			e := matching[0]
+			if e.TargetNode != tt.wantTarget {
+				t.Errorf("TargetNode = %q, want %q", e.TargetNode, tt.wantTarget)
+			}
+			if e.Metadata["kind"] != tt.wantKind {
+				t.Errorf("Metadata[kind] = %v, want %q", e.Metadata["kind"], tt.wantKind)
+			}
+			if !metadataContains(e.Metadata, tt.wantMeta) {
+				t.Errorf("Metadata = %v, want to contain %v", e.Metadata, tt.wantMeta)
+			}
+		})
+	}
+}
+
+func TestJSIntegrationExtractor_RedisGetNotHTTP(t *testing.T) {
+	ex, err := graph.NewJSIntegrationExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	src := []byte(`function load() { redis.get("key"); }`)
+	edges, err := ex.ExtractEdges("test.js", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range edges {
+		if e.Kind == graph.EdgeIntegration {
+			if e.Metadata["kind"] == "http_call" {
+				t.Errorf("redis.get misclassified as HTTP: %v", e.Metadata)
+			}
+			if e.Metadata["kind"] != "cache_read" {
+				t.Errorf("Metadata[kind] = %v, want cache_read", e.Metadata["kind"])
+			}
+		}
+	}
 }
 
 func TestJSIntegrationExtractor_FixtureFile(t *testing.T) {
