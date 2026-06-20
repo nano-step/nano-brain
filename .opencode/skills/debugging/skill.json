@@ -1,0 +1,22 @@
+{
+    "name": "debugging",
+    "version": "1.0.0",
+    "description": "Debugging workflow for AI agents. Uses mode=debugging to search code, sessions, and config in parallel with source labels.",
+    "compatibility": "OpenCode, Claude Code, any MCP-aware agent",
+    "agent": null,
+    "commands": [],
+    "mcp": {
+        "nano-brain": {
+            "type": "remote",
+            "url": "{env:NANO_BRAIN_MCP_URL}",
+            "enabled": true
+        }
+    },
+    "tags": [
+        "debugging",
+        "search",
+        "diagnostics",
+        "error-investigation",
+        "mcp"
+    ]
+}
