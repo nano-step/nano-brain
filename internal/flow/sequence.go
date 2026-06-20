@@ -3,6 +3,7 @@ package flow
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/graph"
@@ -363,7 +364,9 @@ func renderInternalLogic(
 
 	switch node.Type {
 	case "step", "merge", "start":
-		selfMsg(node.Label)
+		if cleaned, ok := simplifyStepLabel(node.Label); ok {
+			selfMsg(cleaned)
+		}
 		for _, e := range adj[entryID] {
 			lines = append(lines, renderInternalLogic(e.To, nodes, adj, actor, depth, msgCount, visited)...)
 			if *msgCount >= maxSeqMessages {
@@ -477,6 +480,56 @@ func renderLoopBlock(
 	}
 	lines = append(lines, "    end")
 	return lines
+}
+
+func isLiteral(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return true
+	}
+	if (strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'")) ||
+		(strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"")) ||
+		(strings.HasPrefix(s, "`") && strings.HasSuffix(s, "`")) {
+		return true
+	}
+	if _, err := strconv.ParseFloat(s, 64); err == nil {
+		return true
+	}
+	if s == "true" || s == "false" || s == "null" || s == "nil" || s == "undefined" {
+		return true
+	}
+	if s == "{}" || s == "[]" {
+		return true
+	}
+	return false
+}
+
+func rhsAfterAssignment(s string) string {
+	idx := strings.Index(s, " = ")
+	if idx < 0 {
+		return s
+	}
+	return strings.TrimSpace(s[idx+3:])
+}
+
+func simplifyStepLabel(label string) (string, bool) {
+	for _, prefix := range []string{"const ", "let ", "var "} {
+		if strings.HasPrefix(label, prefix) {
+			rhs := strings.TrimPrefix(rhsAfterAssignment(label[len(prefix):]), "await ")
+			if isLiteral(rhs) {
+				return "", false
+			}
+			return rhs, true
+		}
+	}
+	if idx := strings.Index(label, " = "); idx >= 0 {
+		rhs := strings.TrimSpace(strings.TrimPrefix(label[idx+3:], "await "))
+		if isLiteral(rhs) {
+			return "", false
+		}
+		return rhs, true
+	}
+	return label, true
 }
 
 func RenderSequenceDiagramWithCFG(f Flow, cfgs FlowCFGs) string {

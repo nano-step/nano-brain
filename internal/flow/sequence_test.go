@@ -459,6 +459,32 @@ func TestRenderSequenceDiagramWithCFG_DepthLimit(t *testing.T) {
 	}
 }
 
+func TestSimplifyStepLabel(t *testing.T) {
+	tests := []struct {
+		input    string
+		want     string
+		wantOK   bool
+	}{
+		{`const redis = Redis.init()`, "Redis.init()", true},
+		{`const redisKey = 'revertTradeScanKey'`, "", false},
+		{`let lastScanId = await redis.get(redisKey)`, "redis.get(redisKey)", true},
+		{`lastScanId = 0`, "", false},
+		{`for loop`, "for loop", true},
+		{`return res.success({})`, "return res.success({})", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, ok := simplifyStepLabel(tt.input)
+			if ok != tt.wantOK {
+				t.Errorf("simplifyStepLabel(%q) ok=%v, want %v", tt.input, ok, tt.wantOK)
+			}
+			if got != tt.want {
+				t.Errorf("simplifyStepLabel(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRenderInternalLogic_ErrorTerminal(t *testing.T) {
 	cfg := &graph.CFG{
 		Nodes: []graph.CFGNode{
