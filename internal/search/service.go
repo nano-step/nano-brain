@@ -516,3 +516,343 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 
 	return reranked, nil
 }
+
+// DebugSearchMode is the mode parameter for debugging-aware search.
+const DebugSearchMode = "debugging"
+
+// DebugSearch runs 3 parallel searches (code, session, config) with source labels,
+// merges them using RRF fusion, and returns results with a source field.
+// Each sub-search has a 2s timeout. Partial failures are handled gracefully.
+func (s *SearchService) DebugSearch(ctx context.Context, query string, workspace string, maxResults int, timeRange *TimeRangeFilter, chunkType string) ([]Result, error) {
+	s.configMutex.RLock()
+	rrfK := s.config.RrfK
+	recencyWeight := s.config.RecencyWeight
+	recencyHalfLifeDays := s.config.RecencyHalfLifeDays
+	s.configMutex.RUnlock()
+
+	type subResult struct {
+		results []Result
+	}
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	var (
+		codeResults   subResult
+		sessionResults subResult
+		configResults subResult
+	)
+
+	// Sub-search 1: code results (original query)
+	g.Go(func() error {
+		codeCtx, cancel := context.WithTimeout(gctx, 2*time.Second)
+		defer cancel()
+		results, err := s.hybridSearchInner(codeCtx, query, workspace, maxResults, nil, timeRange, chunkType)
+		if err != nil {
+			s.logger.Warn().Err(err).Msg("debug: code search leg failed")
+			return nil
+		}
+		codeResults = subResult{results: results}
+		return nil
+	})
+
+	// Sub-search 2: session results (query + debug terms)
+	g.Go(func() error {
+		sessionCtx, cancel := context.WithTimeout(gctx, 2*time.Second)
+		defer cancel()
+		sessionQuery := query + " debug session error"
+		results, err := s.hybridSearchInner(sessionCtx, sessionQuery, workspace, maxResults, nil, timeRange, chunkType)
+		if err != nil {
+			s.logger.Warn().Err(err).Msg("debug: session search leg failed")
+			return nil
+		}
+		sessionResults = subResult{results: results}
+		return nil
+	})
+
+	// Sub-search 3: config results (query, filtered to config/memory collections)
+	g.Go(func() error {
+		configCtx, cancel := context.WithTimeout(gctx, 2*time.Second)
+		defer cancel()
+		configTags := []string{"config", "memory"}
+		results, err := s.hybridSearchInner(configCtx, query, workspace, maxResults, configTags, timeRange, chunkType)
+		if err != nil {
+			s.logger.Warn().Err(err).Msg("debug: config search leg failed")
+			return nil
+		}
+		configResults = subResult{results: results}
+		return nil
+	})
+
+	_ = g.Wait()
+
+	var allResultSets [][]Result
+	if len(codeResults.results) > 0 {
+		allResultSets = append(allResultSets, codeResults.results)
+	}
+	if len(sessionResults.results) > 0 {
+		allResultSets = append(allResultSets, sessionResults.results)
+	}
+	if len(configResults.results) > 0 {
+		allResultSets = append(allResultSets, configResults.results)
+	}
+
+	if len(allResultSets) == 0 {
+		return nil, nil
+	}
+
+	merged := allResultSets[0]
+	for i := 1; i < len(allResultSets); i++ {
+		merged = DynamicRRFMerge(merged, allResultSets[i], rrfK)
+	}
+
+	merged = DeduplicateResults(merged)
+	codeAware := ApplyCodeAwareBoost(merged, query, 1.2, 1.3)
+	extBoosted := ApplyExtensionBoost(codeAware, 1.1, 0.9)
+	boosted := ApplyRecencyBoost(extBoosted, recencyWeight, recencyHalfLifeDays, time.Now())
+
+	if len(boosted) > maxResults {
+		boosted = boosted[:maxResults]
+	}
+
+	for i := range boosted {
+		boosted[i].Snippet = ExtractRelevantSnippet(boosted[i].Content, query, MaxSnippetLen)
+	}
+
+	return boosted, nil
+}
+
+// hybridSearchInner is the core BM25+Vector search without full pipeline features
+// (entity boost, pagerank, reranking). Used by DebugSearch for sub-searches.
+func (s *SearchService) hybridSearchInner(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *TimeRangeFilter, chunkType string) ([]Result, error) {
+	s.configMutex.RLock()
+	rrfK := s.config.RrfK
+	recencyWeight := s.config.RecencyWeight
+	recencyHalfLifeDays := s.config.RecencyHalfLifeDays
+	s.configMutex.RUnlock()
+
+	var chunkTypeNullStr sql.NullString
+	if chunkType != "" {
+		chunkTypeNullStr = sql.NullString{String: chunkType, Valid: true}
+	}
+
+	fetchLimit := int32(maxResults * 3)
+	if fetchLimit < 30 {
+		fetchLimit = 30
+	}
+
+	var (
+		bm25Results   []Result
+		vectorResults []Result
+		bm25Err       error
+		vectorErr     error
+	)
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		ca, cb, ua, ub := timeRange.ToSqlNullTimes()
+		if workspace == "all" {
+			if len(tags) > 0 {
+				rows, err := s.queries.BM25SearchAllWithTags(gctx, sqlc.BM25SearchAllWithTagsParams{
+					Query: query, Tags: tags, ChunkType: chunkTypeNullStr,
+					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					UpdatedAfter: ua, UpdatedBefore: ub,
+				})
+				if err != nil {
+					bm25Err = err
+					s.logger.Warn().Err(err).Msg("debug bm25 leg failed, degrading")
+					return nil
+				}
+				bm25Results = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					bm25Results = append(bm25Results, Result{
+						ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+						Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+						SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
+			} else {
+				rows, err := s.queries.BM25SearchAll(gctx, sqlc.BM25SearchAllParams{
+					Query: query, ChunkType: chunkTypeNullStr,
+					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					UpdatedAfter: ua, UpdatedBefore: ub,
+				})
+				if err != nil {
+					bm25Err = err
+					s.logger.Warn().Err(err).Msg("debug bm25 leg failed, degrading")
+					return nil
+				}
+				bm25Results = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					bm25Results = append(bm25Results, Result{
+						ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+						Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+						SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
+			}
+		} else {
+			if len(tags) > 0 {
+				rows, err := s.queries.BM25SearchWithTags(gctx, sqlc.BM25SearchWithTagsParams{
+					Query: query, WorkspaceHash: workspace, Tags: tags, ChunkType: chunkTypeNullStr,
+					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					UpdatedAfter: ua, UpdatedBefore: ub,
+				})
+				if err != nil {
+					bm25Err = err
+					s.logger.Warn().Err(err).Msg("debug bm25 leg failed, degrading")
+					return nil
+				}
+				bm25Results = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					bm25Results = append(bm25Results, Result{
+						ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+						Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+						SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
+			} else {
+				rows, err := s.queries.BM25Search(gctx, sqlc.BM25SearchParams{
+					Query: query, WorkspaceHash: workspace, ChunkType: chunkTypeNullStr,
+					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					UpdatedAfter: ua, UpdatedBefore: ub,
+				})
+				if err != nil {
+					bm25Err = err
+					s.logger.Warn().Err(err).Msg("debug bm25 leg failed, degrading")
+					return nil
+				}
+				bm25Results = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					bm25Results = append(bm25Results, Result{
+						ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+						Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+						SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
+			}
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		if s.embedder == nil {
+			return nil
+		}
+		vec, err := s.embedder.Embed(gctx, query)
+		if err != nil {
+			vectorErr = err
+			s.logger.Warn().Err(err).Msg("debug embed failed, degrading")
+			return nil
+		}
+		ca, cb, ua, ub := timeRange.ToSqlNullTimes()
+		if workspace == "all" {
+			if len(tags) > 0 {
+				rows, err := s.queries.VectorSearchAllWithTags(gctx, sqlc.VectorSearchAllWithTagsParams{
+					QueryEmbedding: pgvector_go.NewVector(vec), Tags: tags,
+					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					UpdatedAfter: ua, UpdatedBefore: ub,
+				})
+				if err != nil {
+					vectorErr = err
+					s.logger.Warn().Err(err).Msg("debug vector leg failed, degrading")
+					return nil
+				}
+				vectorResults = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					vectorResults = append(vectorResults, Result{
+						ID: r.ChunkID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+						Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+						SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
+			} else {
+				rows, err := s.queries.VectorSearchAll(gctx, sqlc.VectorSearchAllParams{
+					QueryEmbedding: pgvector_go.NewVector(vec),
+					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					UpdatedAfter: ua, UpdatedBefore: ub,
+				})
+				if err != nil {
+					vectorErr = err
+					s.logger.Warn().Err(err).Msg("debug vector leg failed, degrading")
+					return nil
+				}
+				vectorResults = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					vectorResults = append(vectorResults, Result{
+						ID: r.ChunkID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+						Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+						SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
+			}
+		} else {
+			if len(tags) > 0 {
+				rows, err := s.queries.VectorSearchWithTags(gctx, sqlc.VectorSearchWithTagsParams{
+					QueryEmbedding: pgvector_go.NewVector(vec), WorkspaceHash: workspace, Tags: tags,
+					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					UpdatedAfter: ua, UpdatedBefore: ub,
+				})
+				if err != nil {
+					vectorErr = err
+					s.logger.Warn().Err(err).Msg("debug vector leg failed, degrading")
+					return nil
+				}
+				vectorResults = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					vectorResults = append(vectorResults, Result{
+						ID: r.ChunkID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+						Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+						SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
+			} else {
+				rows, err := s.queries.VectorSearch(gctx, sqlc.VectorSearchParams{
+					QueryEmbedding: pgvector_go.NewVector(vec), WorkspaceHash: workspace,
+					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					UpdatedAfter: ua, UpdatedBefore: ub,
+				})
+				if err != nil {
+					vectorErr = err
+					s.logger.Warn().Err(err).Msg("debug vector leg failed, degrading")
+					return nil
+				}
+				vectorResults = make([]Result, 0, len(rows))
+				for _, r := range rows {
+					vectorResults = append(vectorResults, Result{
+						ID: r.ChunkID.String(), DocumentID: r.DocumentID.String(),
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+						Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+						SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					})
+				}
+			}
+		}
+		return nil
+	})
+
+	_ = g.Wait()
+
+	if bm25Err != nil && vectorErr != nil {
+		return nil, fmt.Errorf("all search legs failed: bm25: %v, vector: %v", bm25Err, vectorErr)
+	}
+
+	merged := DynamicRRFMerge(bm25Results, vectorResults, rrfK)
+	deduped := DeduplicateResults(merged)
+	codeAware := ApplyCodeAwareBoost(deduped, query, 1.2, 1.3)
+	extBoosted := ApplyExtensionBoost(codeAware, 1.1, 0.9)
+	boosted := ApplyRecencyBoost(extBoosted, recencyWeight, recencyHalfLifeDays, time.Now())
+
+	if len(boosted) > maxResults {
+		boosted = boosted[:maxResults]
+	}
+
+	return boosted, nil
+}

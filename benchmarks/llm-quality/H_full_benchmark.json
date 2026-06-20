@@ -1,0 +1,17 @@
+{
+  "feature_baseline": {
+    "avg_score": 0.934,
+    "avg_latency_ms": 121
+  },
+  "debug_baseline": {
+    "code": 0.625,
+    "session": 0.667,
+    "combined": 0.88
+  },
+  "debug_mode_n5": {
+    "code": 0.8333333333333333,
+    "session": 0.41666666666666663,
+    "combined": 0.8297619047619048,
+    "latency": 79.625
+  }
+}

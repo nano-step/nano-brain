@@ -303,6 +303,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 				"time_format":      {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
 				"fields":           {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
 				"group_by":         {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
+				"mode":             {"type": "string", "description": "Search mode: 'debugging' runs parallel code/session/config searches with source labels. Omit for standard hybrid search."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -384,7 +385,13 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 
 			fetchLimit := offset + maxResults + 1
 
-			results, err := a.searchService.HybridSearch(ctx, query, ws, fetchLimit, nil, timeRange, chunkType)
+			mode := argString(args, "mode")
+			var results []search.Result
+			if mode == search.DebugSearchMode {
+				results, err = a.searchService.DebugSearch(ctx, query, ws, fetchLimit, timeRange, chunkType)
+			} else {
+				results, err = a.searchService.HybridSearch(ctx, query, ws, fetchLimit, nil, timeRange, chunkType)
+			}
 			if err != nil {
 				return errResult(fmt.Sprintf("hybrid search failed: %v", err)), nil
 			}
@@ -487,6 +494,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				"time_format":      {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
 				"fields":           {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
 				"group_by":         {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
+				"mode":             {"type": "string", "description": "Search mode: 'debugging' runs parallel code/session/config searches with source labels. Omit for standard BM25 search."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -568,7 +576,91 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				return errResult(fmt.Sprintf("invalid cursor: %v", cursorErr)), nil
 			}
 
+			mode := argString(args, "mode")
 			fetchLimit := int32(offset + maxResults + 1)
+
+			if mode == search.DebugSearchMode {
+				debugResults, debugErr := a.searchService.DebugSearch(ctx, query, ws, int(fetchLimit), timeRange, chunkType)
+				if debugErr != nil {
+					return errResult(fmt.Sprintf("debug search failed: %v", debugErr)), nil
+				}
+
+				groupBy := argString(args, "group_by")
+				if groupBy == "" {
+					groupBy = "document"
+				}
+				if groupBy == "document" {
+					debugResults = deduplicateByDocument(debugResults)
+				}
+
+				total := len(debugResults)
+				hasMore := total > offset+maxResults
+				pageEnd := offset + maxResults
+				if pageEnd > total {
+					pageEnd = total
+				}
+				pageStart := offset
+				if pageStart > total {
+					pageStart = total
+				}
+				page := debugResults[pageStart:pageEnd]
+
+				items := make([]mcpSearchResultItem, len(page))
+				for i, r := range page {
+					var createdAt, updatedAt interface{}
+					if timeFormat == "epoch" {
+						createdAt = r.CreatedAt.Unix()
+						updatedAt = r.UpdatedAt.Unix()
+					} else {
+						createdAt = r.CreatedAt
+						updatedAt = r.UpdatedAt
+					}
+				item := mcpSearchResultItem{
+					ID: r.ID, DocumentID: r.DocumentID,
+					WorkspaceHash: "", Title: r.Title,
+					Snippet:    search.ExtractRelevantSnippet(r.Content, query, mcpSnippetLen),
+					Score:      r.Score,
+					Tags:       r.Tags,
+					Collection: r.Collection, SourcePath: r.SourcePath,
+					CreatedAt: createdAt, UpdatedAt: updatedAt,
+					HasMore:    len(r.Content) > mcpSnippetLen,
+				}
+					if includeContent {
+						item.Content = r.Content
+					}
+					items[i] = item
+				}
+
+				if fields != "" {
+					fieldSet := parseFieldSet(fields)
+					filteredItems := make([]map[string]interface{}, len(items))
+					for i, item := range items {
+						filteredItems[i] = filterFields(item, fieldSet)
+					}
+					fresp := mcpFilteredResponse{Results: filteredItems}
+					if cursorToken == "" {
+						fresp.Total = &total
+						qms := time.Since(start).Milliseconds()
+						fresp.QueryMs = &qms
+					}
+					if hasMore {
+						fresp.NextCursor = search.EncodeCursor(pageEnd, search.QueryHash(hashInput))
+					}
+					return textResult(fresp)
+				}
+
+				resp := mcpSearchResponse{Results: items}
+				if cursorToken == "" {
+					resp.Total = &total
+					qms := time.Since(start).Milliseconds()
+					resp.QueryMs = &qms
+				}
+				if hasMore {
+					resp.NextCursor = search.EncodeCursor(pageEnd, search.QueryHash(hashInput))
+				}
+				return textResult(resp)
+			}
+
 			var ca, cb, ua, ub sql.NullTime
 			if timeRange != nil {
 				ca, cb, ua, ub = timeRange.ToSqlNullTimes()
@@ -984,34 +1076,34 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				createdAt = r.CreatedAt
 				updatedAt = r.UpdatedAt
 			}
-			item := mcpSearchResultItem{
-				ID: r.ID, DocumentID: r.DocumentID,
-				WorkspaceHash: "", Title: r.Title,
-				Snippet:    search.ExtractRelevantSnippet(r.Content, query, mcpSnippetLen),
-				Score:      r.Score,
-				Tags:       r.Tags,
-				Collection: r.Collection, SourcePath: r.SourcePath,
-				CreatedAt: createdAt, UpdatedAt: updatedAt,
-				HasMore:    len(r.Content) > mcpSnippetLen,
+				item := mcpSearchResultItem{
+					ID: r.ID, DocumentID: r.DocumentID,
+					WorkspaceHash: "", Title: r.Title,
+					Snippet:    search.ExtractRelevantSnippet(r.Content, query, mcpSnippetLen),
+					Score:      r.Score,
+					Tags:       r.Tags,
+					Collection: r.Collection, SourcePath: r.SourcePath,
+					CreatedAt: createdAt, UpdatedAt: updatedAt,
+					HasMore:    len(r.Content) > mcpSnippetLen,
+				}
+				if includeContent {
+					item.Content = r.Content
+				}
+				items[i] = item
 			}
-			if includeContent {
-				item.Content = r.Content
-			}
-			items[i] = item
-		}
 
-		if fields != "" {
-			fieldSet := parseFieldSet(fields)
-			filteredItems := make([]map[string]interface{}, len(items))
-			for i, item := range items {
-				filteredItems[i] = filterFields(item, fieldSet)
-			}
-			fresp := mcpFilteredResponse{Results: filteredItems}
-			if cursorToken == "" {
-				fresp.Total = &total
-				qms := time.Since(start).Milliseconds()
-				fresp.QueryMs = &qms
-			}
+			if fields != "" {
+				fieldSet := parseFieldSet(fields)
+				filteredItems := make([]map[string]interface{}, len(items))
+				for i, item := range items {
+					filteredItems[i] = filterFields(item, fieldSet)
+				}
+				fresp := mcpFilteredResponse{Results: filteredItems}
+				if cursorToken == "" {
+					fresp.Total = &total
+					qms := time.Since(start).Milliseconds()
+					fresp.QueryMs = &qms
+				}
 				if hasMore {
 					fresp.NextCursor = search.EncodeCursor(pageEnd, search.QueryHash(hashInput))
 				}

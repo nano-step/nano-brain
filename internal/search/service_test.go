@@ -2,12 +2,17 @@ package search
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
+	"github.com/sqlc-dev/pqtype"
 )
 
 type mockQuerier struct {
@@ -224,5 +229,181 @@ func TestHybridSearch_NoTags_DispatchesToBaseQueries(t *testing.T) {
 	}
 	if q.vectorWithTagsCalled || q.vectorAllWithTagsCalled {
 		t.Error("VectorWithTags queries should not be called when tags is nil")
+	}
+}
+
+type debugMockQuerier struct {
+	bm25Results map[string][]sqlc.BM25SearchRow
+	bm25Err     error
+	vectorErr   error
+}
+
+func (m *debugMockQuerier) BM25Search(ctx context.Context, arg sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error) {
+	if rows, ok := m.bm25Results[arg.Query]; ok {
+		return rows, nil
+	}
+	if m.bm25Err != nil {
+		return nil, m.bm25Err
+	}
+	return nil, nil
+}
+
+func (m *debugMockQuerier) BM25SearchAll(ctx context.Context, arg sqlc.BM25SearchAllParams) ([]sqlc.BM25SearchAllRow, error) {
+	return nil, nil
+}
+
+func (m *debugMockQuerier) BM25SearchWithTags(ctx context.Context, arg sqlc.BM25SearchWithTagsParams) ([]sqlc.BM25SearchWithTagsRow, error) {
+	if m.bm25Err != nil {
+		return nil, m.bm25Err
+	}
+	key := arg.Query + ":" + strings.Join(arg.Tags, ",")
+	if rows, ok := m.bm25Results[key]; ok {
+		out := make([]sqlc.BM25SearchWithTagsRow, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, sqlc.BM25SearchWithTagsRow{
+				ID: r.ID, DocumentID: r.DocumentID,
+				WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+				Content: r.Content, SourcePath: r.SourcePath,
+				Collection: r.Collection, Tags: r.Tags,
+				Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			})
+		}
+		return out, nil
+	}
+	return nil, nil
+}
+
+func (m *debugMockQuerier) BM25SearchAllWithTags(ctx context.Context, arg sqlc.BM25SearchAllWithTagsParams) ([]sqlc.BM25SearchAllWithTagsRow, error) {
+	return nil, nil
+}
+
+func (m *debugMockQuerier) VectorSearch(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error) {
+	if m.vectorErr != nil {
+		return nil, m.vectorErr
+	}
+	return nil, nil
+}
+
+func (m *debugMockQuerier) VectorSearchAll(ctx context.Context, arg sqlc.VectorSearchAllParams) ([]sqlc.VectorSearchAllRow, error) {
+	return nil, nil
+}
+
+func (m *debugMockQuerier) VectorSearchWithTags(ctx context.Context, arg sqlc.VectorSearchWithTagsParams) ([]sqlc.VectorSearchWithTagsRow, error) {
+	if m.vectorErr != nil {
+		return nil, m.vectorErr
+	}
+	return nil, nil
+}
+
+func (m *debugMockQuerier) VectorSearchAllWithTags(ctx context.Context, arg sqlc.VectorSearchAllWithTagsParams) ([]sqlc.VectorSearchAllWithTagsRow, error) {
+	return nil, nil
+}
+
+func makeBM25Row(id, docID, title, content, collection string) sqlc.BM25SearchRow {
+	return sqlc.BM25SearchRow{
+		ID:         uuid.MustParse(id),
+		DocumentID: uuid.MustParse(docID),
+		Title:      title,
+		Content:    content,
+		Collection: collection,
+		Score:      0.5,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		Metadata:   pqtype.NullRawMessage{},
+	}
+}
+
+func TestDebugSearch_ReturnsResults(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+
+	codeRow := makeBM25Row("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000011", "tax.go", "calculateTax function", "code")
+	sessionRow := makeBM25Row("00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000012", "debug session", "tax was wrong due to rounding", "session-summary")
+
+	q := &debugMockQuerier{
+		bm25Results: map[string][]sqlc.BM25SearchRow{
+			"tax":                 {codeRow},
+			"tax debug session error": {sessionRow},
+		},
+	}
+	embedder := &mockEmbedder{}
+	service := NewSearchService(q, embedder, cfg, logger)
+
+	results, err := service.DebugSearch(context.Background(), "tax", "ws1", 10, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) < 2 {
+		t.Errorf("expected at least 2 results from parallel search, got %d", len(results))
+	}
+}
+
+func TestDebugSearch_PartialFailureReturnsSuccessfulResults(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+
+	codeRow := makeBM25Row("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000011", "error.go", "connection refused", "code")
+
+	q := &debugMockQuerier{
+		bm25Results: map[string][]sqlc.BM25SearchRow{
+			"connection refused": {codeRow},
+		},
+		bm25Err: fmt.Errorf("bm25 connection timeout"),
+	}
+	embedder := &mockEmbedder{}
+	service := NewSearchService(q, embedder, cfg, logger)
+
+	results, err := service.DebugSearch(context.Background(), "connection refused", "ws1", 10, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) < 1 {
+		t.Errorf("expected at least 1 result despite partial failure, got %d", len(results))
+	}
+}
+
+func TestDebugSearch_AllEmptyReturnsNil(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+
+	q := &debugMockQuerier{
+		bm25Results: map[string][]sqlc.BM25SearchRow{},
+	}
+	embedder := &mockEmbedder{}
+	service := NewSearchService(q, embedder, cfg, logger)
+
+	results, err := service.DebugSearch(context.Background(), "nonexistent", "ws1", 10, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results != nil {
+		t.Errorf("expected nil results for all-empty searches, got %v", results)
+	}
+}
+
+func TestDebugSearch_RRFMergeDeduplicates(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+
+	sameRow := makeBM25Row("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000011", "config.go", "rate limiting config", "config")
+
+	q := &debugMockQuerier{
+		bm25Results: map[string][]sqlc.BM25SearchRow{
+			"rate limiting":           {sameRow},
+			"rate limiting debug session error": {sameRow},
+		},
+	}
+	embedder := &mockEmbedder{}
+	service := NewSearchService(q, embedder, cfg, logger)
+
+	results, err := service.DebugSearch(context.Background(), "rate limiting", "ws1", 10, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatal("expected at least 1 result")
 	}
 }

@@ -1,0 +1,118 @@
+{
+  "run": "debug_mode",
+  "avg_code_score": 0.833,
+  "avg_session_score": 0.417,
+  "avg_combined_score": 0.83,
+  "avg_latency_ms": 292.0,
+  "queries": [
+    {
+      "id": "dbg1",
+      "query": "stripe payment has wrong tax",
+      "category": "payment-bug",
+      "total_results": 5,
+      "code_score": 0.667,
+      "session_score": 0.5,
+      "combined_score": 0.571,
+      "sources": {
+        "code": 4,
+        "session": 1
+      },
+      "latency_ms": 638
+    },
+    {
+      "id": "dbg2",
+      "query": "tradebot goes weird status",
+      "category": "trade-bug",
+      "total_results": 5,
+      "code_score": 1.0,
+      "session_score": 0.0,
+      "combined_score": 1.0,
+      "sources": {
+        "code": 5
+      },
+      "latency_ms": 143
+    },
+    {
+      "id": "dbg3",
+      "query": "user balance not updated after topup",
+      "category": "balance-bug",
+      "total_results": 5,
+      "code_score": 1.0,
+      "session_score": 0.0,
+      "combined_score": 1.0,
+      "sources": {
+        "code": 5
+      },
+      "latency_ms": 203
+    },
+    {
+      "id": "dbg4",
+      "query": "steam trade stuck in pending",
+      "category": "integration-bug",
+      "total_results": 5,
+      "code_score": 1.0,
+      "session_score": 0.667,
+      "combined_score": 1.0,
+      "sources": {
+        "code": 4,
+        "session": 1
+      },
+      "latency_ms": 181
+    },
+    {
+      "id": "dbg5",
+      "query": "revert trade not triggering",
+      "category": "trade-bug",
+      "total_results": 5,
+      "code_score": 1.0,
+      "session_score": 1.0,
+      "combined_score": 1.0,
+      "sources": {
+        "code": 3,
+        "session": 2
+      },
+      "latency_ms": 215
+    },
+    {
+      "id": "dbg6",
+      "query": "duplicate topup transaction",
+      "category": "concurrency-bug",
+      "total_results": 5,
+      "code_score": 0.667,
+      "session_score": 0.667,
+      "combined_score": 0.667,
+      "sources": {
+        "code": 4,
+        "session": 1
+      },
+      "latency_ms": 168
+    },
+    {
+      "id": "dbg7",
+      "query": "notification not sent after trade",
+      "category": "integration-bug",
+      "total_results": 5,
+      "code_score": 0.333,
+      "session_score": 0.5,
+      "combined_score": 0.4,
+      "sources": {
+        "code": 4,
+        "session": 1
+      },
+      "latency_ms": 290
+    },
+    {
+      "id": "dbg8",
+      "query": "search returning wrong results",
+      "category": "search-bug",
+      "total_results": 5,
+      "code_score": 1.0,
+      "session_score": 0.0,
+      "combined_score": 1.0,
+      "sources": {
+        "code": 5
+      },
+      "latency_ms": 496
+    }
+  ]
+}
