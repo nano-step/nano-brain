@@ -23,6 +23,7 @@ import (
 type ServiceQuerier interface {
 	GetUnsummarizedSymbols(ctx context.Context, arg sqlc.GetUnsummarizedSymbolsParams) ([]sqlc.GetUnsummarizedSymbolsRow, error)
 	UpsertDocument(ctx context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error)
+	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 	UpsertCodeSummarizationFailure(ctx context.Context, arg sqlc.UpsertCodeSummarizationFailureParams) error
 	BulkGetCallerContext(ctx context.Context, arg sqlc.BulkGetCallerContextParams) ([]sqlc.BulkGetCallerContextRow, error)
@@ -470,18 +471,29 @@ func (s *Service) upsertSummaryDocument(ctx context.Context, workspaceHash strin
 		return fmt.Errorf("upsert document: %w", err)
 	}
 
-	chunks, err := s.queries.ListChunksByDocumentID(ctx, sqlc.ListChunksByDocumentIDParams{
-		DocumentID:    result.ID,
-		WorkspaceHash: workspaceHash,
+	chunkID, err := s.queries.UpsertChunk(ctx, sqlc.UpsertChunkParams{
+		DocumentID:        result.ID,
+		WorkspaceHash:     workspaceHash,
+		ContentHash:       computeContentHash(summary),
+		Content:           summary,
+		ChunkIndex:        0,
+		StartLine:         sql.NullInt32{},
+		EndLine:           sql.NullInt32{},
+		Metadata:          pqtype.NullRawMessage{},
+		SymbolName:        sql.NullString{String: symbol.Name, Valid: true},
+		SymbolKind:        sql.NullString{String: symbol.Kind, Valid: true},
+		Language:          sql.NullString{},
+		LineStart:         sql.NullInt32{},
+		LineEnd:           sql.NullInt32{},
+		ChunkType:         "text",
+		EmbeddingStrategy: "default",
 	})
 	if err != nil {
-		return fmt.Errorf("list chunks: %w", err)
+		return fmt.Errorf("upsert chunk: %w", err)
 	}
 
 	if s.embedQ != nil {
-		for _, chunk := range chunks {
-			s.embedQ.Enqueue(chunk.ID)
-		}
+		s.embedQ.Enqueue(chunkID)
 	}
 
 	return nil
