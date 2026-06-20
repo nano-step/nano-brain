@@ -1,0 +1,140 @@
+{
+  "runs": [
+    {
+      "id": "q1",
+      "query": "what is topup",
+      "category": "feature-understanding",
+      "latency_ms": 94,
+      "results_count": 5,
+      "relevance_score": 1.0,
+      "snippets": [
+        "\u2026ange));\n\t\tSystem.out.println(\"current_balance: $\"+toDollar(current_balance));\n\t\tSystem.out.println(\"topup_crypto: $\"+toDollar(topup_amount_crypto[1])+\"  $\"+toDollar(topup_amount_crypto[0]));\n\t\tSyste\u2026",
+        "class TopupTransactionRepo {\n  async get(id) {\n    const result = await getConnection().execute('SELECT * FROM topup_transactions WHERE tx_id=:id', { id })\n\n    return pathOr(null, [0, 0], result)\n  \u2026",
+        "\u202600)-blackHoled-reserved;\r\n\t\tdouble result2 = bot_profit+sell_amount_crypto[0]+sell_amount_money[0]-(topup_amount_crypto[0]+topup_amount_money[0])+(depr*100)-blackHoled+balance_change;\r\n\t\tdouble bcha\u2026"
+      ]
+    },
+    {
+      "id": "q2",
+      "query": "how does trade work",
+      "category": "feature-understanding",
+      "latency_ms": 50,
+      "results_count": 5,
+      "relevance_score": 0.3333333333333333,
+      "snippets": [
+        "\u2026everses? |\n|---|---|\n| **Skinport** | B **cannot buy** \u2014 listing is hidden during A\u2192bot's 7-day Trade Protection window |\n| **DMarket** | B can buy but B's funds are locked; if Steam reverses \u2192 B ge\u2026",
+        "      title9: 'How our CSGO Trading Bots Function',\n      text9: `Our CSGO trading bots work efficiently to execute trades, ensuring a smooth and secure experience for our users.\n      By employing s\u2026",
+        "\u2026\n  landing_page: {\n    hero: {\n      trustpilot_value: '4.9 of 13,200 reviews',\n      description: 'Tradeit.gg is the highest rated CS2 (CSGO) skin trading site and the best trading bot for instant \u2026"
+      ]
+    },
+    {
+      "id": "q3",
+      "query": "what is revert trade",
+      "category": "feature-understanding",
+      "latency_ms": 34,
+      "results_count": 5,
+      "relevance_score": 0.3333333333333333,
+      "snippets": [
+        "  - Slack API\nlast_updated: 2026-03-27\nupdated_by: Claude\n---\n\n# Trade Revert Detection System\n\n## Overview\n\nThe **Trade Revert Detection System** identifies and responds to cases where users revert \u2026",
+        "ban list |\\n| `items` | old-tradeit | Item prices, metadata |\\n| `bot_balance` | old-tradeit | Bot value tracking |\\n| `configurations` | old-tradeit | Runtime config flags |\\n\\n## External Services\\\u2026",
+        "### Alert Trigger\n\nIf total missing value in 2 hours exceeds threshold:\n```sql\nSELECT SUM(price) as total\nFROM trade_revert_item_missings\nWHERE created_at > CURRENT_DATE - INTERVAL 2 HOUR\n```\n\n**Acti\u2026"
+      ]
+    },
+    {
+      "id": "q4",
+      "query": "show me the auth flow",
+      "category": "flow-understanding",
+      "latency_ms": 21,
+      "results_count": 5,
+      "relevance_score": 0.5,
+      "snippets": [
+        "---\nlast_updated: 2026-03-27\nupdated_by: agent\nflow_type: user-facing\nservices: [tradeit, tradeit-oauth2-server, tradeit-backend]\n---\n\n# OAuth2 Authorization Flow\n\n## Overview\n\nOAuth2 authorization p\u2026",
+        "The flow generates authorization codes that partners exchange for access tokens.\\n\\n## Diagrams\\n\\n### Sequence Diagram: OAuth2 Consent Flow\\n```mermaid\\nsequenceDiagram\\n  participant Partner as Par\u2026",
+        "\u2026\nComprehensive catalog of `tradeit-backend` API endpoints (base `/api/v2/`) grouped by domain \u2014 auth, trading, inventory, sell, payments, store, investment, giveaway, guess game, challenges, market \u2026"
+      ]
+    },
+    {
+      "id": "q5",
+      "query": "how does payment processing work",
+      "category": "feature-understanding",
+      "latency_ms": 12,
+      "results_count": 5,
+      "relevance_score": 0.25,
+      "snippets": [
+        "\u2026hi code v\u00e0 update status cho management. \u0110i\u1ec1u n\u00e0y gi\u00fap tr\u00e1nh rework v\u00e0 gi\u1eef alignment t\u1ed1t h\u01a1n.\n\n### 3/ Ghi ch\u00fa kh\u00e1c:\n\n- Tom c\u00f3 th\u00e1i \u0111\u1ed9 c\u1ea7u th\u1ecb t\u1ed1t \u2014 ti\u1ebfp thu feedback, kh\u00f4ng defensive. \u0110\u00e2y l\u00e0 quality\u2026",
+        "\u2026hi code v\u00e0 update status cho management. \u0110i\u1ec1u n\u00e0y gi\u00fap tr\u00e1nh rework v\u00e0 gi\u1eef alignment t\u1ed1t h\u01a1n.\n\n### 3/ Ghi ch\u00fa kh\u00e1c:\n\n- Tom c\u00f3 th\u00e1i \u0111\u1ed9 c\u1ea7u th\u1ecb t\u1ed1t \u2014 ti\u1ebfp thu feedback, kh\u00f4ng defensive. \u0110\u00e2y l\u00e0 quality\u2026",
+        "\u2026 7.2 Update any related database procedures or triggers\n- [ ] 7.3 Verify database constraints still work properly\n\n## 8. Update Payment Processing\n\n- [ ] 8.1 Update monnectPaymentService.js to remov\u2026"
+      ]
+    },
+    {
+      "id": "q6",
+      "query": "what services does the backend call",
+      "category": "architecture",
+      "latency_ms": 27,
+      "results_count": 5,
+      "relevance_score": 0.75,
+      "snippets": [
+        "\u2026 [ops-log, weekly, 2026-W16]\n---\n\nWeekly operations log for 2026-W16 (Apr 6 \u2013 Apr 12) feeding the all-hands slideshow.\n\n### 2026-04-06 \u2014 Item Details Caching on 10x Marketplace\n- **Category:** Archi\u2026",
+        "\u2026/server/controllers/cron.js:1496      \u2502\n\u2502 Action: Calls validateTradeSurge()                         \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n               \u2502\n              \u2026",
+        "\u2026backend | Calls `/api/v2/internal/validate-csgo-items`, `/api/v2/internal/checkTradeLimit` |\n| Redis (main) | Bot status, inventory cache, sessions |\n| Redis (LootBear) | External partner integratio\u2026"
+      ]
+    },
+    {
+      "id": "q7",
+      "query": "how is user balance managed",
+      "category": "feature-understanding",
+      "latency_ms": 16,
+      "results_count": 5,
+      "relevance_score": 0.5,
+      "snippets": [
+        "| `userLastSell_{steamId}` | 60s | Rate limit cooldown |\n| `reserved-assets_{appId}` | Variable | Items being processed |\n\n## Error Handling\n\n| Error | Cause | Resolution |\n|-------|-------|---------\u2026",
+        "\u2026| \\\"No available bots\\\" | All bots full | Wait for bot inventory space |\\n\\n## Performance Characteristics\\n\\n- **Trade time:** 2-10 minutes (Steam processing)\\n- **Balance credit:** 1-2 minutes aft\u2026",
+        "You saved ${{ (discountAmount / 100).toFixed(2) }}\\n    </div>\\n  </div>\\n</template>\\n\\n<script>\\nexport default {\\n  methods: {\\n    async validateAndApply() {\\n      const token = await executeRec\u2026"
+      ]
+    },
+    {
+      "id": "q8",
+      "query": "what is the tradebot",
+      "category": "architecture",
+      "latency_ms": 44,
+      "results_count": 5,
+      "relevance_score": 0.6666666666666666,
+      "snippets": [
+        "\u2026ce, bonus, tradeHash\\n  - Every validation failure has a unique stage number for debugging\\n\\n## Redis Keys (Complete)\\n| Key | Type | TTL | Owner | Purpose |\\n|---|---|---|---|---|\\n| `tradeDisable\u2026",
+        "\u2026e: internal\nservices: [tradeit-inventory-server, tradeit-inventory-parser, tradeit-service, tradeit-tradebot-server]\nchanges: DEV-4745 \u2014 added GET /sinv-merged/:gameId (ctx 2+16), vars.sinv_games st\u2026",
+        "| `containers:{botId}` | String | - | tradebot-server | Container status |\n| `invsize730:{botId}` | String | - | tradebot-server | CSGO inv size |\n| `invsize440:{botId}` | String | - | tradebot-serve\u2026"
+      ]
+    },
+    {
+      "id": "q9",
+      "query": "show me the purchase flow",
+      "category": "flow-understanding",
+      "latency_ms": 21,
+      "results_count": 5,
+      "relevance_score": 0.3333333333333333,
+      "snippets": [
+        "\u2026in `startTrade` \u2014 p2p prices excluded from total comparison; acceptable since Halo validates at purchase \u2705\n\n**Filter pattern follows existing codebase convention** (`TradeMain.vue:274`):\n```js\nconst\u2026",
+        "\u2026 at 2.58M (+137% vs baseline); 7 new error signatures including purchase-flow failures. Style: dark-mode SaaS dashboard, neon accents (red for critical, amber for warning, green for healthy), monosp\u2026",
+        "\u2026eline); WAF blocks at 2.58M (+137% vs baseline); 7 new error signatures including purchase-flow failures. Style: dark-mode SaaS dashboard, neon accents (red for critical, amber for warning, green fo\u2026"
+      ]
+    },
+    {
+      "id": "q10",
+      "query": "how does steam integration work",
+      "category": "integration",
+      "latency_ms": 1202,
+      "results_count": 5,
+      "relevance_score": 1.0,
+      "snippets": [
+        "\u2026hot, documented download procedure\n---\n\n# sih-extension\n\nLocal snapshot/extraction folder for the **Steam Inventory Helper (SIH)** Chrome extension. Not a git repo. Not a buildable project \u2014 packed \u2026",
+        "---\ntitle: tradeit-tradebot-server \u2014 Steam trade bot fleet compute layer (~400 instances)\ntype: entity\nscope: org\nconfidence: 0.95\nsources:\n  - ~/Projects/tradeit-tradebot-server/CLAUDE.md\n  - wikijs\u2026",
+        "\u2026rity: medium\n- special instructions:\n  - MUST run codebase_search first to find socket handlers and integration code.\n  - Save sample client snippets and any load-test commands in the same docs fold\u2026"
+      ]
+    }
+  ],
+  "summary": {
+    "total_queries": 10,
+    "avg_latency_ms": 152.1,
+    "avg_relevance": 0.567,
+    "total_results": 50
+  }
+}

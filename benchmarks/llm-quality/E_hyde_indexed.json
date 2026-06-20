@@ -1,0 +1,147 @@
+{
+  "run": "hyde_indexed",
+  "avg_score": 0.934,
+  "avg_latency_ms": 98.0,
+  "queries": [
+    {
+      "query": "what is topup",
+      "avg_score": 4.24,
+      "max_score": 6,
+      "num_results": 5,
+      "latency_ms": 89
+    },
+    {
+      "query": "how does trade work",
+      "avg_score": 0.328,
+      "max_score": 0.7,
+      "num_results": 5,
+      "latency_ms": 38
+    },
+    {
+      "query": "what is revert trade",
+      "avg_score": 4.064,
+      "max_score": 5.3,
+      "num_results": 5,
+      "latency_ms": 39
+    },
+    {
+      "query": "show me the auth flow",
+      "avg_score": 0.059,
+      "max_score": 0.1,
+      "num_results": 5,
+      "latency_ms": 16
+    },
+    {
+      "query": "how does payment processing work",
+      "avg_score": 0.221,
+      "max_score": 0.4,
+      "num_results": 5,
+      "latency_ms": 10
+    },
+    {
+      "query": "what services does the backend call",
+      "avg_score": 0.171,
+      "max_score": 0.4,
+      "num_results": 5,
+      "latency_ms": 20
+    },
+    {
+      "query": "how is user balance managed",
+      "avg_score": 0.36,
+      "max_score": 0.9,
+      "num_results": 5,
+      "latency_ms": 12
+    },
+    {
+      "query": "what is the tradebot",
+      "avg_score": 4.48,
+      "max_score": 5.2,
+      "num_results": 5,
+      "latency_ms": 21
+    },
+    {
+      "query": "show me the purchase flow",
+      "avg_score": 0.013,
+      "max_score": 0.0,
+      "num_results": 5,
+      "latency_ms": 942
+    },
+    {
+      "query": "how does steam integration work",
+      "avg_score": 0.015,
+      "max_score": 0.0,
+      "num_results": 5,
+      "latency_ms": 613
+    },
+    {
+      "query": "how does hybrid search work",
+      "avg_score": 0.452,
+      "max_score": 0.5,
+      "num_results": 5,
+      "latency_ms": 30
+    },
+    {
+      "query": "what is the embed queue",
+      "avg_score": 0.659,
+      "max_score": 1.2,
+      "num_results": 5,
+      "latency_ms": 21
+    },
+    {
+      "query": "how does session harvesting work",
+      "avg_score": 0.596,
+      "max_score": 0.8,
+      "num_results": 5,
+      "latency_ms": 15
+    },
+    {
+      "query": "show me the memory flow pipeline",
+      "avg_score": 0.133,
+      "max_score": 0.1,
+      "num_results": 5,
+      "latency_ms": 13
+    },
+    {
+      "query": "how does code summarization work",
+      "avg_score": 0.431,
+      "max_score": 0.5,
+      "num_results": 5,
+      "latency_ms": 10
+    },
+    {
+      "query": "what extractors are registered",
+      "avg_score": 0.239,
+      "max_score": 0.3,
+      "num_results": 5,
+      "latency_ms": 18
+    },
+    {
+      "query": "how does the watcher work",
+      "avg_score": 0.431,
+      "max_score": 0.5,
+      "num_results": 5,
+      "latency_ms": 10
+    },
+    {
+      "query": "what is the MCP server",
+      "avg_score": 0.927,
+      "max_score": 1.2,
+      "num_results": 5,
+      "latency_ms": 16
+    },
+    {
+      "query": "how does graph stitching work",
+      "avg_score": 0.413,
+      "max_score": 0.4,
+      "num_results": 5,
+      "latency_ms": 12
+    },
+    {
+      "query": "what is the RRF merge algorithm",
+      "avg_score": 0.44,
+      "max_score": 0.6,
+      "num_results": 5,
+      "latency_ms": 19
+    }
+  ]
+}

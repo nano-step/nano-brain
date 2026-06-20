@@ -1,0 +1,140 @@
+{
+  "runs": [
+    {
+      "id": "q1",
+      "query": "how does hybrid search work",
+      "category": "feature-understanding",
+      "latency_ms": 73,
+      "results_count": 5,
+      "relevance_score": 0.75,
+      "snippets": [
+        "## Search Benchmark Baseline \u2014 2026-06-07\n\n### What we did\nExtended `testdata/search_benchmarks.json` from 62 queries to 110 across 7 categories:\n- Added 15 session queries (decisions, discussions)\n-\u2026",
+        "\u2026enchmark Regression \u2014 Root Cause Analysis\n\n## Date: 2026-06-14\n\n## Problem\n\nCapability benchmark shows regression: `base=0.813 now=0.750 delta=-0.063`\n\n3 tasks failing:\n| Task | Query | Expected fil\u2026",
+        "# Executive Summary: RAG Search Quality 2026\n\n## THE RESEARCH QUESTION\n\nWhat are production-tested techniques for improving natural language search quality in RAG systems, specifically for:\n1. Query \u2026"
+      ]
+    },
+    {
+      "id": "q2",
+      "query": "what is the embed queue",
+      "category": "feature-understanding",
+      "latency_ms": 42,
+      "results_count": 5,
+      "relevance_score": 1.0,
+      "snippets": [
+        "# Session: Trace embed-queue scan triggers (@explore subagent)\n\n- Date: 2026-06-02\n- Source: opencode\n- Session ID: ses_176b06cc0ffeixFtUdiCEOaDaT\n\n\n## Goal\nInvestigate a suspected bug in the nano-br\u2026",
+        "\u2026urce: opencode\n- Session ID: ses_155766c76ffeYRfVgg8ehPDBJu\n\n\n## Goal\nPerform a comprehensive analysis of the `nano\u2011brain.log` file to locate errors, warnings, and any issues related to the embed\u2011qu\u2026",
+        "# Session: Explore embed queue code in detail (@explore subagent)\n\n- Date: 2026-06-09\n- Source: opencode\n- Session ID: ses_1557681aeffeMI5s6VpexwE07d\n\n\n## Goal\nPerform a comprehensive review of the n\u2026"
+      ]
+    },
+    {
+      "id": "q3",
+      "query": "how does session harvesting work",
+      "category": "feature-understanding",
+      "latency_ms": 29,
+      "results_count": 5,
+      "relevance_score": 0.6666666666666666,
+      "snippets": [
+        "\u2026should explain embedding queue mechanism\", \"triggered after document write\"]\n  },\n  {\n    \"query\": \"How does session harvesting work?\",\n    \"category\": \"behavioral\",\n    \"expected_keywords\": [\"harve\u2026",
+        "\u2026ts\": [\"should find the reranking package with Cohere cross-encoder adapter\"]\n  },\n  {\n    \"query\": \"how does workspace isolation work\",\n    \"category\": \"natural_language\",\n    \"expected_keywords\": [\u2026",
+        "\u2026k\",\n    \"category\": \"symbol_lookup\",\n    \"expected_keywords\": [\"LoadScores\", \"pagerank\", \"scores\", \"workspace\"],\n    \"expected_symbols\": [\"LoadScores\"],\n    \"relevance_hints\": [\"should reference pag\u2026"
+      ]
+    },
+    {
+      "id": "q4",
+      "query": "show me the memory flow pipeline",
+      "category": "flow-understanding",
+      "latency_ms": 20,
+      "results_count": 5,
+      "relevance_score": 0.5,
+      "snippets": [
+        "---\nsession_id: ses_11c24957dffexrP1RiFzTQfwaD\nsource: opencode\nmessage_count: 16\ncreated_at: 2026-06-20T07:07:48Z\ntitle: \"Find summarization and code understanding features (@explore subagent)\"\n---\n\u2026",
+        "---\nsession_id: ses_11c24d6b8ffeoUgAnLUZeqEp1l\nsource: opencode\nmessage_count: 7\ncreated_at: 2026-06-20T07:07:31Z\ntitle: \"Find current flow and search response quality (@explore subagent)\"\n---\n\n## us\u2026",
+        "4. **Remove `/ui`:** see the literal checklist in \u00a713 (it's larger than first stated \u2014 committed `dist/`, `vite.config.ts` outDir, `scripts/smoke-ui.sh`, orphaned `SecurityHeaders()`). Note: **CI has\u2026"
+      ]
+    },
+    {
+      "id": "q5",
+      "query": "how does code summarization work",
+      "category": "feature-understanding",
+      "latency_ms": 23,
+      "results_count": 5,
+      "relevance_score": 0.25,
+      "snippets": [
+        "---\nsession_id: ses_11c24957dffexrP1RiFzTQfwaD\nsource: opencode\nmessage_count: 16\ncreated_at: 2026-06-20T07:07:48Z\ntitle: \"Find summarization and code understanding features (@explore subagent)\"\n---\n\u2026",
+        "\u2026ns structured findings for each numbered point before treating the task as done.\n- For multi-area codebase scans, prefer running all targeted searches in a single batched tool call once paths are co\u2026",
+        "# Session: Investigate code summarization config issues (@explore subagent)\n\n- Date: 2026-06-08\n- Source: opencode\n- Session ID: ses_15a7aded4ffedQCrQf4Pgqo69w\n\n\n\n\n## Goal\nInvestigate why code summar\u2026"
+      ]
+    },
+    {
+      "id": "q6",
+      "query": "what extractors are registered",
+      "category": "architecture",
+      "latency_ms": 26,
+      "results_count": 5,
+      "relevance_score": 0.5,
+      "snippets": [
+        "- [ ] 2.8 Enclosing function detection: walk `function_declaration`, `arrow_function`, `method_definition` to map call-site to containing function for `SourceNode`\n- [ ] 2.9 Detect JS/TS consumer patt",
+        "\u2026e.\n    *   *Key Learnings:* Python's tree-sitter AST differs from Go/JS; specifically, method calls are handled via `call_expression` with `attribute`, and keyword arguments use `keyword_argument`.#\u2026",
+        "The system SHALL extract middleware from `app.use()` and `router.use()` call expressions as `EdgeMiddleware` edges.\n\n#### Scenario: Named middleware\n- **WHEN** a file contains `app.use(auth)`\n- **THE\u2026"
+      ]
+    },
+    {
+      "id": "q7",
+      "query": "how does the watcher work",
+      "category": "feature-understanding",
+      "latency_ms": 28,
+      "results_count": 5,
+      "relevance_score": 0.3333333333333333,
+      "snippets": [
+        "\u2026ents\n\n### Requirement: Query preprocessing translates non-English queries to English before search\n\nThe search pipeline SHALL detect non-English queries and translate them to English via an LLM call\u2026",
+        "\u2026gent)\n\n- Date: 2026-06-09\n- Source: opencode\n- Session ID: ses_152c024deffeGSqVkXFVYaFiyy\n\n\n## Goal\nThe overall objective of the session was to address a bug where the `embed_status` of a chunk was \u2026",
+        "* The proposed fix using a SQL `CASE` expression in `UpsertChunk` does not address the root cause of the issue, which is the watcher deleting and recreating chunks.\n* The watcher workflow is not full\u2026"
+      ]
+    },
+    {
+      "id": "q8",
+      "query": "what is the MCP server",
+      "category": "architecture",
+      "latency_ms": 36,
+      "results_count": 5,
+      "relevance_score": 0.6666666666666666,
+      "snippets": [
+        "\u2026h` -> `getBySourcePath` -> `QueryRowContext` (database interaction) -> ... (complex logic involving MCP server, extractor, preprocessor, and various utilities) -> `Bind`.\n    *   Key actions: Summar\u2026",
+        "# Session: Analyze Graphify MCP server (@explore subagent)\n\n- Date: 2026-06-11\n- Source: opencode\n- Session ID: ses_149f53af9ffer1Knp5udORzcNW\n\n\n## Goal\nAnalyze the **Graphify** repository to underst\u2026",
+        "\u2026ntry: `DELETE /api/v1/documents/:id`\n    *   Chain: A long sequence of function calls starting from the API endpoint, going through document deletion logic (`DeleteDocument`, `DeleteDocumentByIDAndW\u2026"
+      ]
+    },
+    {
+      "id": "q9",
+      "query": "how does graph stitching work",
+      "category": "feature-understanding",
+      "latency_ms": 15,
+      "results_count": 4,
+      "relevance_score": 0.6666666666666666,
+      "snippets": [
+        "\u2026 from \u201cpast MVP\u201d to a fully shipped, production\u2011ready state.\n\n## Decisions Made\n- **Add a worker\u2011pool (errgroup) for LLM summarization** \u2013 eliminates the 500\u202f\u00d7\u202f\u2248\u202f500\u202fms sequential bottleneck in `Mat\u2026",
+        "\u2026protocol\u2011aware parsing** \u2013 lower effort, sufficient for current needs.  \n- **Retain the `FrameworkAwareExtractor` interface and per\u2011collection framework detection** \u2013 preserves extensibility.  \n- **\u2026",
+        "\u2026d.\n\n## assistant (2026-06-17T07:56:41Z)\n\nLet me check a few more files for completeness \u2014 the graph edge types and the materializer that powers the API.\n\n## assistant (2026-06-17T07:57:01Z)\n\nNow I h\u2026"
+      ]
+    },
+    {
+      "id": "q10",
+      "query": "what is the RRF merge algorithm",
+      "category": "architecture",
+      "latency_ms": 16,
+      "results_count": 5,
+      "relevance_score": 0.5,
+      "snippets": [
+        "    \"relevance_hints\": [\"should identify sqlc.Queries as the implementation\"]\n  },\n  {\n    \"query\": \"What reads config.yml?\",\n    \"category\": \"entity_centric\",\n    \"expected_keywords\": [\"config\", \"ko\u2026",
+        "\u2026, \"index\", \"process\"],\n    \"expected_symbols\": [\"ExtractSymbols\"],\n    \"relevance_hints\": [\"should list functions that invoke ExtractSymbols\"]\n  },\n  {\n    \"query\": \"What depends on the SearchServic\u2026",
+        "\u2026ols/nano-brain/internal/server/handlers/query.go`\n\n## Problems Encountered\n* *(None reported during the planning and analysis phase)*\n\n## Key Learnings\n* **Search Flow:** The existing hybrid search \u2026"
+      ]
+    }
+  ],
+  "summary": {
+    "total_queries": 10,
+    "avg_latency_ms": 30.8,
+    "avg_relevance": 0.583,
+    "total_results": 49
+  }
+}

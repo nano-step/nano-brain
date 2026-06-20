@@ -1,0 +1,65 @@
+{
+  "workspace": "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
+  "queries": [
+    {
+      "id": "q1",
+      "query": "how does hybrid search work",
+      "category": "feature-understanding",
+      "expect": ["hybrid", "search", "bm25", "vector"]
+    },
+    {
+      "id": "q2",
+      "query": "what is the embed queue",
+      "category": "feature-understanding",
+      "expect": ["embed", "queue", "chunk"]
+    },
+    {
+      "id": "q3",
+      "query": "how does session harvesting work",
+      "category": "feature-understanding",
+      "expect": ["harvest", "session", "opencode"]
+    },
+    {
+      "id": "q4",
+      "query": "show me the memory flow pipeline",
+      "category": "flow-understanding",
+      "expect": ["flow", "graph", "edge", "node"]
+    },
+    {
+      "id": "q5",
+      "query": "how does code summarization work",
+      "category": "feature-understanding",
+      "expect": ["summarize", "code", "symbol", "llm"]
+    },
+    {
+      "id": "q6",
+      "query": "what extractors are registered",
+      "category": "architecture",
+      "expect": ["extractor", "express", "echo", "gin"]
+    },
+    {
+      "id": "q7",
+      "query": "how does the watcher work",
+      "category": "feature-understanding",
+      "expect": ["watcher", "fsnotify", "index"]
+    },
+    {
+      "id": "q8",
+      "query": "what is the MCP server",
+      "category": "architecture",
+      "expect": ["mcp", "tool", "server"]
+    },
+    {
+      "id": "q9",
+      "query": "how does graph stitching work",
+      "category": "feature-understanding",
+      "expect": ["stitch", "cross", "workspace"]
+    },
+    {
+      "id": "q10",
+      "query": "what is the RRF merge algorithm",
+      "category": "architecture",
+      "expect": ["rrf", "merge", "rank", "fusion"]
+    }
+  ]
+}

@@ -1,0 +1,307 @@
+{
+  "run": "hyde_3199",
+  "features": "hyde",
+  "avg_score": 0.921,
+  "avg_latency_ms": 28.0,
+  "queries": [
+    {
+      "query": "what is topup",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        6,
+        5.200000286102295,
+        3.6000001430511475,
+        3.200000047683716,
+        3.200000047683716
+      ],
+      "avg_score": 4.24,
+      "max_score": 6,
+      "latency_ms": 70
+    },
+    {
+      "query": "how does trade work",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        0.6530303359031677,
+        0.30000001192092896,
+        0.23333333432674408,
+        0.23333333432674408,
+        0.2210526317358017
+      ],
+      "avg_score": 0.328,
+      "max_score": 0.7,
+      "latency_ms": 26
+    },
+    {
+      "query": "what is revert trade",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        5.344876766204834,
+        4.837981700897217,
+        3.573085308074951,
+        3.427359104156494,
+        3.136159896850586
+      ],
+      "avg_score": 4.064,
+      "max_score": 5.3,
+      "latency_ms": 21
+    },
+    {
+      "query": "show me the auth flow",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        0.0816463977098465,
+        0.07782880961894989,
+        0.07517730444669724,
+        0.03076923079788685,
+        0.03076923079788685
+      ],
+      "avg_score": 0.059,
+      "max_score": 0.1,
+      "latency_ms": 14
+    },
+    {
+      "query": "how does payment processing work",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        0.41333332657814026,
+        0.41333332657814026,
+        0.11818181723356247,
+        0.08085053414106369,
+        0.08085053414106369
+      ],
+      "avg_score": 0.221,
+      "max_score": 0.4,
+      "latency_ms": 11
+    },
+    {
+      "query": "what services does the backend call",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        0.42222222685813904,
+        0.14666667580604553,
+        0.11081080883741379,
+        0.0948757752776146,
+        0.0823645368218422
+      ],
+      "avg_score": 0.171,
+      "max_score": 0.4,
+      "latency_ms": 52
+    },
+    {
+      "query": "how is user balance managed",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        0.9213675260543823,
+        0.48085901141166687,
+        0.13333334028720856,
+        0.13333334028720856,
+        0.13333334028720856
+      ],
+      "avg_score": 0.36,
+      "max_score": 0.9,
+      "latency_ms": 56
+    },
+    {
+      "query": "what is the tradebot",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        5.200000286102295,
+        5.200000286102295,
+        4.400000095367432,
+        4,
+        3.6000001430511475
+      ],
+      "avg_score": 4.48,
+      "max_score": 5.2,
+      "latency_ms": 184
+    },
+    {
+      "query": "show me the purchase flow",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        0.02131287381052971,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.004651162773370743,
+        0.004347826354205608
+      ],
+      "avg_score": 0.013,
+      "max_score": 0.0,
+      "latency_ms": 14
+    },
+    {
+      "query": "how does steam integration work",
+      "workspace": "d1915ee19311",
+      "num_results": 5,
+      "scores": [
+        0.024331796914339066,
+        0.014635658822953701,
+        0.013333333656191826,
+        0.011111111380159855,
+        0.010810811072587967
+      ],
+      "avg_score": 0.015,
+      "max_score": 0.0,
+      "latency_ms": 19
+    },
+    {
+      "query": "how does hybrid search work",
+      "workspace": "7f443561795a",
+      "num_results": 5,
+      "scores": [
+        0.5487179756164551,
+        0.4166666865348816,
+        0.4166666865348816,
+        0.4000000059604645,
+        0.004938271827995777
+      ],
+      "avg_score": 0.357,
+      "max_score": 0.5,
+      "latency_ms": 11
+    },
+    {
+      "query": "what is the embed queue",
+      "workspace": "7f443561795a",
+      "num_results": 5,
+      "scores": [
+        1.2285714149475098,
+        0.8666666746139526,
+        0.4000000059604645,
+        0.4000000059604645,
+        0.4000000059604645
+      ],
+      "avg_score": 0.659,
+      "max_score": 1.2,
+      "latency_ms": 10
+    },
+    {
+      "query": "how does session harvesting work",
+      "workspace": "7f443561795a",
+      "num_results": 5,
+      "scores": [
+        0.82833331823349,
+        0.8266666531562805,
+        0.4943847060203552,
+        0.40799999237060547,
+        0.40799999237060547
+      ],
+      "avg_score": 0.593,
+      "max_score": 0.8,
+      "latency_ms": 10
+    },
+    {
+      "query": "show me the memory flow pipeline",
+      "workspace": "7f443561795a",
+      "num_results": 5,
+      "scores": [
+        0.13333334028720856,
+        0.13333334028720856,
+        0.13333334028720856,
+        0.13333334028720856,
+        0.0024691359139978886
+      ],
+      "avg_score": 0.107,
+      "max_score": 0.1,
+      "latency_ms": 9
+    },
+    {
+      "query": "how does code summarization work",
+      "workspace": "7f443561795a",
+      "num_results": 5,
+      "scores": [
+        0.4958333373069763,
+        0.4191148579120636,
+        0.40784314274787903,
+        0.40784314274787903,
+        0.004444444552063942
+      ],
+      "avg_score": 0.347,
+      "max_score": 0.5,
+      "latency_ms": 9
+    },
+    {
+      "query": "what extractors are registered",
+      "workspace": "7f443561795a",
+      "num_results": 5,
+      "scores": [
+        0.30000001192092896,
+        0.24444444477558136,
+        0.2235294133424759,
+        0.2235294133424759,
+        0.20153845846652985
+      ],
+      "avg_score": 0.239,
+      "max_score": 0.3,
+      "latency_ms": 9
+    },
+    {
+      "query": "how does the watcher work",
+      "workspace": "7f443561795a",
+      "num_results": 5,
+      "scores": [
+        0.49666666984558105,
+        0.40799999237060547,
+        0.40799999237060547,
+        0.40360361337661743,
+        0.15833333134651184
+      ],
+      "avg_score": 0.375,
+      "max_score": 0.5,
+      "latency_ms": 9
+    },
+    {
+      "query": "what is the MCP server",
+      "workspace": "7f443561795a",
+      "num_results": 5,
+      "scores": [
+        1.2457143068313599,
+        0.9575970768928528,
+        0.9108108282089233,
+        0.8190476298332214,
+        0.699999988079071
+      ],
+      "avg_score": 0.927,
+      "max_score": 1.2,
+      "latency_ms": 12
+    },
+    {
+      "query": "how does graph stitching work",
+      "workspace": "7f443561795a",
+      "num_results": 5,
+      "scores": [
+        0.41428571939468384,
+        0.40799999237060547,
+        0.40799999237060547,
+        0.40392157435417175,
+        0.4000000059604645
+      ],
+      "avg_score": 0.407,
+      "max_score": 0.4,
+      "latency_ms": 13
+    },
+    {
+      "query": "what is the RRF merge algorithm",
+      "workspace": "7f443561795a",
+      "num_results": 4,
+      "scores": [
+        0.6000000238418579,
+        0.4000000059604645,
+        0.4000000059604645,
+        0.4000000059604645
+      ],
+      "avg_score": 0.45,
+      "max_score": 0.6,
+      "latency_ms": 9
+    }
+  ]
+}

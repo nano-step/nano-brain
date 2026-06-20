@@ -1,0 +1,65 @@
+{
+  "workspace": "d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+  "queries": [
+    {
+      "id": "q1",
+      "query": "what is topup",
+      "category": "feature-understanding",
+      "expect": ["topup", "balance", "payment"]
+    },
+    {
+      "id": "q2",
+      "query": "how does trade work",
+      "category": "feature-understanding",
+      "expect": ["trade", "purchase", "sell"]
+    },
+    {
+      "id": "q3",
+      "query": "what is revert trade",
+      "category": "feature-understanding",
+      "expect": ["revert", "rollback", "cancel"]
+    },
+    {
+      "id": "q4",
+      "query": "show me the auth flow",
+      "category": "flow-understanding",
+      "expect": ["auth", "login", "session", "token"]
+    },
+    {
+      "id": "q5",
+      "query": "how does payment processing work",
+      "category": "feature-understanding",
+      "expect": ["payment", "stripe", "paypal", "charge"]
+    },
+    {
+      "id": "q6",
+      "query": "what services does the backend call",
+      "category": "architecture",
+      "expect": ["service", "redis", "database", "api"]
+    },
+    {
+      "id": "q7",
+      "query": "how is user balance managed",
+      "category": "feature-understanding",
+      "expect": ["balance", "user", "update", "change"]
+    },
+    {
+      "id": "q8",
+      "query": "what is the tradebot",
+      "category": "architecture",
+      "expect": ["tradebot", "bot", "automation"]
+    },
+    {
+      "id": "q9",
+      "query": "show me the purchase flow",
+      "category": "flow-understanding",
+      "expect": ["purchase", "buy", "checkout"]
+    },
+    {
+      "id": "q10",
+      "query": "how does steam integration work",
+      "category": "integration",
+      "expect": ["steam", "inventory", "trade"]
+    }
+  ]
+}
