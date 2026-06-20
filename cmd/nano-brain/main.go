@@ -315,6 +315,11 @@ func startServer(configPath string) {
 	} else {
 		extractors = append(extractors, jsE)
 	}
+	if rbE, err := symbol.NewRubySymbolExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("ruby symbol extractor init failed, skipping")
+	} else {
+		extractors = append(extractors, rbE)
+	}
 	symRegistry := symbol.NewRegistry(extractors...)
 
 	var graphExtractors []graph.Extractor
@@ -399,6 +404,12 @@ func startServer(configPath string) {
 			graphExtractors = append(graphExtractors, railsGE)
 			logger.Info().Msg("execution-flow: rails route extractor enabled")
 		}
+		if rbGraphGE, err := graph.NewRubyGraphExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("ruby graph extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, rbGraphGE)
+			logger.Info().Msg("execution-flow: ruby graph extractor enabled")
+		}
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 
@@ -408,6 +419,12 @@ func startServer(configPath string) {
 		} else {
 			graphRegistry.RegisterControlFlowExtractor(jsCFG)
 			logger.Info().Msg("execution-flow: js control-flow extractor enabled")
+		}
+		if rbCFG, err := graph.NewRubyControlFlowExtractor(logger); err != nil {
+			logger.Warn().Err(err).Msg("ruby control-flow extractor init failed, skipping")
+		} else {
+			graphRegistry.RegisterControlFlowExtractor(rbCFG)
+			logger.Info().Msg("execution-flow: ruby control-flow extractor enabled")
 		}
 	}
 

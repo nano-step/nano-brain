@@ -73,7 +73,9 @@ const getFunctionFlowchartByHandler = `-- name: GetFunctionFlowchartByHandler :o
 SELECT id, workspace_hash, entry, source_file, start_line, end_line, status, cfg, created_at, updated_at
 FROM function_flowcharts
 WHERE workspace_hash = $1
-  AND (entry = $2 OR split_part(entry, '::', 2) = $2)
+  AND (entry = $2
+       OR substring(entry from '::(.*)') = $2
+       OR split_part(entry, '#', 2) = $2)
 ORDER BY start_line
 LIMIT 1
 `

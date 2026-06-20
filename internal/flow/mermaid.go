@@ -140,7 +140,11 @@ func RenderFlowchart(f Flow) string {
 	// Emit node declarations.
 	for _, n := range nodes {
 		id := sanitizeID(n.ID)
-		label := fmt.Sprintf("%s<br/>(%s)", sanitizeLabel(n.Name), string(n.Role))
+		name := n.Name
+		if idx := strings.Index(name, "#"); idx >= 0 {
+			name = name[:idx]
+		}
+		label := fmt.Sprintf("%s<br/>(%s)", sanitizeLabel(name), string(n.Role))
 		if ws, ok := crossServiceNodes[n.ID]; ok {
 			label += fmt.Sprintf("<br/>ws: %s", ws)
 		}

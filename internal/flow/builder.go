@@ -72,7 +72,7 @@ func classifyRole(name string) Role {
 	if strings.Contains(lower, "service") || strings.Contains(lower, "svc") {
 		return RoleService
 	}
-	if strings.Contains(lower, "repo") || strings.Contains(lower, "repository") || strings.Contains(lower, "store") {
+	if strings.Contains(lower, "repo") || strings.Contains(lower, "repository") || strings.Contains(lower, "store") || strings.Contains(lower, "model") {
 		return RoleRepo
 	}
 	return RoleFunc
@@ -86,6 +86,7 @@ var (
 	noiseExternalPrefixes = []string{
 		"console.", "log.", "fmt.print", "fmt.sprint", "fmt.fprint",
 		"process.stdout", "process.stderr", "system.out", "system.err",
+		"rails.logger", "logger.", "puts ", "p ", "pp ",
 	}
 	noiseExternalSuffixes = []string{".log", ".debug", ".trace", ".info", ".warn", ".warning", ".error"}
 )
@@ -183,7 +184,7 @@ func edgeConditionLabel(e graph.Edge) string {
 	if !ok {
 		return ""
 	}
-	s, ok := v.(string)
+	s, _ := v.(string)
 	return s
 }
 

@@ -21,6 +21,7 @@
 - [MCP Tools](#mcp-tools)
 - [Search Pipeline](#search-pipeline)
 - [Architecture](#architecture)
+- [Ruby / Rails Support](#ruby--rails-support)
 - [Migration from V1](#migration-from-v1)
 - [Tech Stack](#tech-stack)
 - [License](#license)
@@ -75,7 +76,7 @@ You work on 3 client projects in parallel. Each is a separate workspace. When yo
 ### Legacy codebase archaeology
 You inherit a 5-year-old codebase with minimal documentation and no original authors to ask. Index it into nano-brain. Your AI agent can now answer "what does this function do?", "why does this class exist?", and "if I change this file, what else breaks?" — navigating cross-file relationships without reading 200k lines manually.
 
-Go, TypeScript, Python, JavaScript supported today. Rust, Java, and others planned.
+Go, TypeScript, Python, JavaScript, Ruby supported today. Rust, Java, and others planned.
 
 ### Pre-commit / pre-PR impact check
 Before pushing, run `memory_impact` on your changed files to discover what else in the codebase depends on them — across files, across repos in the same workspace. Catch breaking changes before they hit CI. *(Multi-file diff-aware mode in roadmap.)*
@@ -766,6 +767,59 @@ Query --> Vector (HNSW cos) ---+
 - Constructor injection (no DI framework)
 - errgroup + context for goroutine lifecycle
 - Echo v4 middleware: workspace extraction, content-type enforcement, version header
+
+## Ruby / Rails Support
+
+nano-brain supports Ruby and Ruby on Rails code intelligence, including execution flow visualization and control-flow graph (CFG) extraction.
+
+### Supported file types
+
+- `.rb`
+
+### What's extracted
+
+- **Rails routes:** `resources`, `get`/`post`/`patch`/`put`/`delete`, `namespace`, `scope`, `mount`, `root`, `devise_for` — each generates an edge from the HTTP entry point (`METHOD /path`) to the corresponding controller action (`ControllerName#action`).
+- **Control-flow graph:** `if`/`else`, loops, `begin`/`rescue` blocks, method definitions, and same-file method calls.
+- **Flow diagrams:** Mermaid flowcharts and sequence diagrams for Rails request cycles.
+
+### Example: Flow diagram for a Rails controller action
+
+Given a `UsersController` with a `create` action that creates a user and sends a welcome email, `memory_flow` produces a flowchart:
+
+```mermaid
+flowchart LR
+  POST_/users["POST /users"]
+  POST_/users --> UsersController#create
+  UsersController#create --> User.create
+  UsersController#create --> Mailer.welcome
+```
+
+### Example: Sequence diagram for a Rails request
+
+With `format: "sequence"`, the same request produces a sequence diagram:
+
+```mermaid
+sequenceDiagram
+  participant Client
+  participant Router
+  participant UsersController
+  participant User
+  participant Mailer
+  Client->>Router: POST /users
+  Router->>UsersController: create
+  UsersController->>User: create(params)
+  User-->>UsersController: user
+  UsersController->>Mailer: welcome(user)
+  Mailer-->>UsersController: email
+  UsersController-->>Client: 201 Created
+```
+
+### Known limitations (v1)
+
+- **Same-file calls only:** Only method calls within the same file are resolved; cross-file caller/callee edges are not yet extracted.
+- **No `before_action` / `after_action`:** Callback chains are not followed or visualized.
+- **No ActiveRecord dynamic methods:** Calls like `find_by_email` or `where_active` are treated as generic method calls, not resolved to AR query targets.
+- **No metaprogramming:** Methods defined via `define_method`, `method_missing`, or `class_eval` are not captured.
 
 ## Migration from V1
 
