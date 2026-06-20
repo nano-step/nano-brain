@@ -27,7 +27,7 @@ func LoadFlowCFGs(ctx context.Context, q CFGQuerier, workspace, entry string) (F
 	handlerNames := make(map[string]string)
 	for _, e := range rawEdges {
 		if graph.EdgeKind(e.EdgeType) == graph.EdgeHTTP && e.SourceNode == entry {
-			bare := lastDottedSegment(e.TargetNode)
+			bare := resolveHandlerName(e.TargetNode)
 			handlerNames[e.TargetNode] = bare
 		}
 	}
@@ -79,6 +79,13 @@ func cfgAdj(cfg *graph.CFG) map[string][]graph.CFGEdge {
 		adj[e.From] = append(adj[e.From], e)
 	}
 	return adj
+}
+
+func resolveHandlerName(targetNode string) string {
+	if strings.Contains(targetNode, "#") {
+		return targetNode
+	}
+	return lastDottedSegment(targetNode)
 }
 
 func lastDottedSegment(s string) string {

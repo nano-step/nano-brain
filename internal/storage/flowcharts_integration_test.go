@@ -307,3 +307,141 @@ func TestGetFunctionFlowchartByHandler(t *testing.T) {
 		t.Errorf("Entry = %q, want %q", fc.Entry, "src/routes.ts::purchaseHandler")
 	}
 }
+
+func TestGetFunctionFlowchartByHandler_Ruby(t *testing.T) {
+	pool := testutil.SetupTestDB(t)
+	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
+
+	q := sqlc.New(db)
+	ctx := context.Background()
+
+	workspaceHash := uuid.New().String()[:8]
+	_, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: workspaceHash,
+		Name: "test-workspace",
+		Path: "/tmp/test",
+	})
+	if err != nil {
+		t.Fatalf("UpsertWorkspace: %v", err)
+	}
+
+	cfg := graph.CFG{
+		Entry:      "test_controller.rb::TestController#index",
+		SourceFile: "test_controller.rb",
+		StartLine:  5,
+		EndLine:    20,
+		Nodes: []graph.CFGNode{
+			{ID: "n0", Type: "start", Label: "TestController#index", Line: 5},
+			{ID: "n1", Type: "step", Label: "@items = Item.all", Line: 6},
+			{ID: "n2", Type: "terminal", Kind: "return", Label: "render json: @items", Line: 7},
+		},
+		Edges: []graph.CFGEdge{
+			{From: "n0", To: "n1", Branch: "next"},
+			{From: "n1", To: "n2", Branch: "next"},
+		},
+		Status: "complete",
+	}
+
+	cfgJSON, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	err = q.UpsertFunctionFlowchart(ctx, sqlc.UpsertFunctionFlowchartParams{
+		WorkspaceHash: workspaceHash,
+		Entry:         "test_controller.rb::TestController#index",
+		SourceFile:    "test_controller.rb",
+		StartLine:     5,
+		EndLine:       20,
+		Status:        "complete",
+		Cfg:           cfgJSON,
+	})
+	if err != nil {
+		t.Fatalf("UpsertFunctionFlowchart: %v", err)
+	}
+
+	fc, err := q.GetFunctionFlowchartByHandler(ctx, sqlc.GetFunctionFlowchartByHandlerParams{
+		WorkspaceHash: workspaceHash,
+		Entry:         "TestController#index",
+	})
+	if err != nil {
+		t.Fatalf("GetFunctionFlowchartByHandler: %v", err)
+	}
+
+	if fc.Entry != "test_controller.rb::TestController#index" {
+		t.Errorf("Entry = %q, want %q", fc.Entry, "test_controller.rb::TestController#index")
+	}
+
+	var gotCfg graph.CFG
+	if err := json.Unmarshal(fc.Cfg, &gotCfg); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if len(gotCfg.Nodes) != 3 {
+		t.Errorf("len(Nodes) = %d, want 3", len(gotCfg.Nodes))
+	}
+}
+
+func TestGetFunctionFlowchartByHandler_RubyNamespaced(t *testing.T) {
+	pool := testutil.SetupTestDB(t)
+	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
+
+	q := sqlc.New(db)
+	ctx := context.Background()
+
+	workspaceHash := uuid.New().String()[:8]
+	_, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: workspaceHash,
+		Name: "test-workspace",
+		Path: "/tmp/test",
+	})
+	if err != nil {
+		t.Fatalf("UpsertWorkspace: %v", err)
+	}
+
+	cfg := graph.CFG{
+		Entry:      "api/v1/tokens_controller.rb::Api::V1::TokensController#signup",
+		SourceFile: "api/v1/tokens_controller.rb",
+		StartLine:  10,
+		EndLine:    30,
+		Nodes: []graph.CFGNode{
+			{ID: "n0", Type: "start", Label: "Api::V1::TokensController#signup", Line: 10},
+			{ID: "n1", Type: "terminal", Kind: "return", Label: "render json: user", Line: 12},
+		},
+		Edges: []graph.CFGEdge{
+			{From: "n0", To: "n1", Branch: "next"},
+		},
+		Status: "complete",
+	}
+
+	cfgJSON, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	err = q.UpsertFunctionFlowchart(ctx, sqlc.UpsertFunctionFlowchartParams{
+		WorkspaceHash: workspaceHash,
+		Entry:         "api/v1/tokens_controller.rb::Api::V1::TokensController#signup",
+		SourceFile:    "api/v1/tokens_controller.rb",
+		StartLine:     10,
+		EndLine:       30,
+		Status:        "complete",
+		Cfg:           cfgJSON,
+	})
+	if err != nil {
+		t.Fatalf("UpsertFunctionFlowchart: %v", err)
+	}
+
+	fc, err := q.GetFunctionFlowchartByHandler(ctx, sqlc.GetFunctionFlowchartByHandlerParams{
+		WorkspaceHash: workspaceHash,
+		Entry:         "Api::V1::TokensController#signup",
+	})
+	if err != nil {
+		t.Fatalf("GetFunctionFlowchartByHandler: %v", err)
+	}
+
+	if fc.Entry != "api/v1/tokens_controller.rb::Api::V1::TokensController#signup" {
+		t.Errorf("Entry = %q, want %q", fc.Entry, "api/v1/tokens_controller.rb::Api::V1::TokensController#signup")
+	}
+}

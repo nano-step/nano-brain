@@ -184,15 +184,16 @@ func TestRegistry(t *testing.T) {
 	tsE, _ := symbol.NewTypeScriptExtractor()
 	pyE, _ := symbol.NewPythonExtractor()
 	jsE, _ := symbol.NewJavaScriptExtractor()
+	rbE, _ := symbol.NewRubySymbolExtractor()
 
-	reg := symbol.NewRegistry(goE, tsE, pyE, jsE)
+	reg := symbol.NewRegistry(goE, tsE, pyE, jsE, rbE)
 
 	if !reg.Supports(".go") { t.Error("should support .go") }
 	if !reg.Supports(".ts") { t.Error("should support .ts") }
 	if !reg.Supports(".tsx") { t.Error("should support .tsx") }
 	if !reg.Supports(".py") { t.Error("should support .py") }
 	if !reg.Supports(".js") { t.Error("should support .js") }
-	if reg.Supports(".rb") { t.Error("should not support .rb") }
+	if !reg.Supports(".rb") { t.Error("should support .rb") }
 
 	syms, err := reg.Extract("main.go", []byte("package main\nfunc main() {}"))
 	if err != nil {

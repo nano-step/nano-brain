@@ -9,31 +9,6 @@ import (
 	"github.com/nano-brain/nano-brain/internal/graph"
 )
 
-// participantAlias returns the Mermaid alias for a node.
-// Entry nodes are represented as "Client" to keep diagrams readable.
-func participantAlias(n FlowNode) string {
-	if n.Role == RoleEntry {
-		return "Client"
-	}
-	return sanitizeID(n.ID)
-}
-
-// participantLabel returns the human-readable label shown inside the participant box.
-func participantLabel(n FlowNode) string {
-	if n.Role == RoleEntry {
-		return "Client"
-	}
-	return fmt.Sprintf("%s (%s)", sanitizeLabel(n.Name), string(n.Role))
-}
-
-// msgAlias returns the participant alias used in arrow lines for a given node id.
-func msgAlias(nodeID string, nodeByID map[string]FlowNode) string {
-	if n, ok := nodeByID[nodeID]; ok {
-		return participantAlias(n)
-	}
-	return sanitizeID(nodeID)
-}
-
 // groupActors maps each node ID to a system-level actor alias.
 func groupActors(f Flow, serviceName string) map[string]string {
 	actorForNode := make(map[string]string, len(f.Nodes))
@@ -528,6 +503,15 @@ func simplifyStepLabel(label string) (string, bool) {
 			return "", false
 		}
 		return rhs, true
+	}
+	if strings.HasPrefix(label, "@") {
+		if idx := strings.Index(label, " = "); idx >= 0 {
+			rhs := strings.TrimSpace(strings.TrimPrefix(label[idx+3:], "await "))
+			if isLiteral(rhs) {
+				return "", false
+			}
+			return rhs, true
+		}
 	}
 	return label, true
 }
