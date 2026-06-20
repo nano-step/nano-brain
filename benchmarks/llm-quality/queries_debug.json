@@ -1,0 +1,69 @@
+{
+  "workspace": "d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+  "queries": [
+    {
+      "id": "dbg1",
+      "query": "stripe payment has wrong tax",
+      "category": "payment-bug",
+      "expect_code": ["tax", "stripe", "payment"],
+      "expect_sessions": ["tax", "stripe", "payment", "bug"],
+      "expect_config": ["tax_rate", "stripe"]
+    },
+    {
+      "id": "dbg2",
+      "query": "tradebot goes weird status",
+      "category": "trade-bug",
+      "expect_code": ["status", "tradebot", "trade"],
+      "expect_sessions": ["tradebot", "status", "trade"],
+      "expect_config": ["status", "trade"]
+    },
+    {
+      "id": "dbg3",
+      "query": "user balance not updated after topup",
+      "category": "balance-bug",
+      "expect_code": ["balance", "topup", "update"],
+      "expect_sessions": ["balance", "topup", "update"],
+      "expect_config": ["balance"]
+    },
+    {
+      "id": "dbg4",
+      "query": "steam trade stuck in pending",
+      "category": "integration-bug",
+      "expect_code": ["steam", "trade", "pending"],
+      "expect_sessions": ["steam", "trade", "pending"],
+      "expect_config": ["steam", "trade"]
+    },
+    {
+      "id": "dbg5",
+      "query": "revert trade not triggering",
+      "category": "trade-bug",
+      "expect_code": ["revert", "trade", "trigger"],
+      "expect_sessions": ["revert", "trade"],
+      "expect_config": ["revert", "threshold"]
+    },
+    {
+      "id": "dbg6",
+      "query": "duplicate topup transaction",
+      "category": "concurrency-bug",
+      "expect_code": ["topup", "transaction", "duplicate"],
+      "expect_sessions": ["topup", "transaction", "duplicate"],
+      "expect_config": ["idempotent", "transaction"]
+    },
+    {
+      "id": "dbg7",
+      "query": "notification not sent after trade",
+      "category": "integration-bug",
+      "expect_code": ["notification", "trade", "send"],
+      "expect_sessions": ["notification", "trade"],
+      "expect_config": ["notification", "trade"]
+    },
+    {
+      "id": "dbg8",
+      "query": "search returning wrong results",
+      "category": "search-bug",
+      "expect_code": ["search", "query", "result"],
+      "expect_sessions": ["search", "result"],
+      "expect_config": ["search", "rrf", "bm25"]
+    }
+  ]
+}
