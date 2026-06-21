@@ -2,7 +2,7 @@
   "dataset_version": "v1",
   "scale": 20,
   "workspace_hash": "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
-  "timestamp": "2026-06-21T09:57:14Z",
+  "timestamp": "2026-06-21T12:58:22Z",
   "version": "v0.3.0-dedup+ranking",
   "precision_at_5": 0,
   "recall_at_10": 0,
@@ -10,7 +10,7 @@
   "precision_at_5_paths": 0,
   "recall_at_10_paths": 0,
   "mrr_paths": 0,
-  "query_p50_ms": 7.770209,
-  "query_p95_ms": 63.582375,
+  "query_p50_ms": 7.395459,
+  "query_p95_ms": 27.654166,
   "query_count": 20
 }

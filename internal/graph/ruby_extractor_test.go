@@ -578,7 +578,7 @@ end
 	}
 }
 
-func TestRubyGraphExtractor_NoCrossFileCalls(t *testing.T) {
+func TestRubyGraphExtractor_CrossFileCalls(t *testing.T) {
 	ex := newRubyExtractor(t)
 	src := []byte(`class MyService
   def run
@@ -591,17 +591,18 @@ end
 		t.Fatal(err)
 	}
 
-	var calls []graph.Edge
+	var callees map[string]bool
 	for _, e := range edges {
 		if e.Kind == graph.EdgeCalls {
-			calls = append(calls, e)
+			if callees == nil {
+				callees = make(map[string]bool)
+			}
+			callees[e.TargetNode] = true
 		}
 	}
 
-	for _, e := range calls {
-		if e.TargetNode == "OtherService" || e.TargetNode == "process" {
-			t.Errorf("should not produce cross-file call edge: %+v", e)
-		}
+	if !callees["process"] {
+		t.Error("expected cross-file call edge to 'process'")
 	}
 }
 
