@@ -248,3 +248,35 @@ func TestBuildReconcileEdges_namespaced(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildReconcileEdges_namespaced_controllerCollision(t *testing.T) {
+	// The exact bug: TokensController model + Api::V1::TokensController controller
+	// BuildReconcileEdges should resolve to the controller file, not the model.
+	edges := []graph.Edge{
+		{SourceNode: "app/models/tokens_controller.rb", TargetNode: "app/models/tokens_controller.rb::TokensController", Kind: graph.EdgeContains},
+		{SourceNode: "app/controllers/api/v1/tokens_controller.rb", TargetNode: "app/controllers/api/v1/tokens_controller.rb::TokensController", Kind: graph.EdgeContains},
+		{SourceNode: "config/routes.rb", TargetNode: "Api::V1::TokensController#create", Kind: graph.EdgeHTTP,
+			Metadata: map[string]any{"method": "POST", "path": "/api/v1/signup"}},
+	}
+
+	resolver := newTestResolver(edges)
+	reconcileEdges := resolver.BuildReconcileEdges(edges)
+
+	if len(reconcileEdges) == 0 {
+		t.Fatal("expected at least 1 reconcile edge")
+	}
+
+	found := false
+	for _, e := range reconcileEdges {
+		if e.SourceNode == "Api::V1::TokensController#create" &&
+			e.TargetNode == "app/controllers/api/v1/tokens_controller.rb::create" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected reconcile edge to controller file, not model file")
+		for _, e := range reconcileEdges {
+			t.Logf("  %s -> %s", e.SourceNode, e.TargetNode)
+		}
+	}
+}

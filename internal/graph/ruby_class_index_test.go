@@ -144,6 +144,90 @@ func TestBuildClassIndex_skipsMethods(t *testing.T) {
 	}
 }
 
+
+func TestLookup_fullName(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "app/controllers/api/v1/users_controller.rb", TargetNode: "app/controllers/api/v1/users_controller.rb::UsersController", Kind: graph.EdgeContains},
+	}
+	idx := graph.BuildClassIndex(edges)
+
+	// Full namespace should match exactly
+	entries := idx.Lookup("Api::V1::UsersController")
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry for full name, got %d", len(entries))
+	}
+	if entries[0].FilePath != "app/controllers/api/v1/users_controller.rb" {
+		t.Errorf("expected app/controllers/api/v1/users_controller.rb, got %s", entries[0].FilePath)
+	}
+}
+
+func TestLookup_controllerPreference(t *testing.T) {
+	// The main bug: TokensController model + controller collision
+	edges := []graph.Edge{
+		{SourceNode: "app/models/tokens_controller.rb", TargetNode: "app/models/tokens_controller.rb::TokensController", Kind: graph.EdgeContains},
+		{SourceNode: "app/controllers/api/v1/tokens_controller.rb", TargetNode: "app/controllers/api/v1/tokens_controller.rb::TokensController", Kind: graph.EdgeContains},
+	}
+	idx := graph.BuildClassIndex(edges)
+
+	entries := idx.Lookup("TokensController")
+	if len(entries) < 2 {
+		t.Fatalf("expected 2 entries for ambiguous TokensController, got %d", len(entries))
+	}
+	// Controller should be first
+	if entries[0].FilePath != "app/controllers/api/v1/tokens_controller.rb" {
+		t.Errorf("expected controller first, got %s", entries[0].FilePath)
+	}
+}
+
+func TestLookup_controllerPreference_namespaced(t *testing.T) {
+	// Full namespace lookup should prefer controller even when model exists
+	edges := []graph.Edge{
+		{SourceNode: "app/models/tokens_controller.rb", TargetNode: "app/models/tokens_controller.rb::TokensController", Kind: graph.EdgeContains},
+		{SourceNode: "app/controllers/api/v1/tokens_controller.rb", TargetNode: "app/controllers/api/v1/tokens_controller.rb::TokensController", Kind: graph.EdgeContains},
+	}
+	idx := graph.BuildClassIndex(edges)
+
+	// Full namespace should resolve to the controller file directly
+	entries := idx.Lookup("Api::V1::TokensController")
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry for full namespace, got %d", len(entries))
+	}
+	if entries[0].FilePath != "app/controllers/api/v1/tokens_controller.rb" {
+		t.Errorf("expected controller file, got %s", entries[0].FilePath)
+	}
+}
+
+func TestLookup_controllerFallback(t *testing.T) {
+	// When no entries exist, railsConventionPath should use app/controllers/ for Controller classes
+	edges := []graph.Edge{
+		{SourceNode: "app/models/user.rb", TargetNode: "app/models/user.rb::User", Kind: graph.EdgeContains},
+	}
+	idx := graph.BuildClassIndex(edges)
+
+	entries := idx.Lookup("Admin::UsersController")
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 fallback entry, got %d", len(entries))
+	}
+	if entries[0].FilePath != "app/controllers/admin/users_controller.rb" {
+		t.Errorf("expected app/controllers/admin/users_controller.rb, got %s", entries[0].FilePath)
+	}
+}
+
+func TestLookup_adminNamespace(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "app/controllers/admin/users_controller.rb", TargetNode: "app/controllers/admin/users_controller.rb::UsersController", Kind: graph.EdgeContains},
+	}
+	idx := graph.BuildClassIndex(edges)
+
+	entries := idx.Lookup("Admin::UsersController")
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry for Admin::UsersController, got %d", len(entries))
+	}
+	if entries[0].FilePath != "app/controllers/admin/users_controller.rb" {
+		t.Errorf("expected app/controllers/admin/users_controller.rb, got %s", entries[0].FilePath)
+	}
+}
+
 func TestCamelToSnake(t *testing.T) {
 	tests := []struct {
 		input string

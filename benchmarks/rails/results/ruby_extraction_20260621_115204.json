@@ -1,0 +1,86 @@
+{
+  "benchmark": "ruby_extraction",
+  "workspace": "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95",
+  "server": "http://localhost:3199",
+  "endpoints_extracted": 236,
+  "expected_routes": 40,
+  "route_accuracy": 5.9,
+  "flows_resolved": 10,
+  "total_nodes": 30,
+  "total_edges": 10,
+  "avg_nodes_per_flow": 3.0,
+  "total_traversal_time_ms": 1875,
+  "avg_traversal_time_ms": 187,
+  "flow_details": [
+    {
+      "entry": "POST /api/v1/signup",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 214
+    },
+    {
+      "entry": "GET /api/v1/payments",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 141
+    },
+    {
+      "entry": "POST /api/v1/moments",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 179
+    },
+    {
+      "entry": "GET /api/v1/moments",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 249
+    },
+    {
+      "entry": "GET /story_statuses",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 227
+    },
+    {
+      "entry": "POST /story_statuses",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 304
+    },
+    {
+      "entry": "GET /users",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 139
+    },
+    {
+      "entry": "GET /",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 146
+    },
+    {
+      "entry": "GET /api/v2/stories",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 148
+    },
+    {
+      "entry": "GET /admin/users",
+      "found": "True",
+      "nodes": 3,
+      "edges": 1,
+      "time_ms": 128
+    }
+  ]
+}

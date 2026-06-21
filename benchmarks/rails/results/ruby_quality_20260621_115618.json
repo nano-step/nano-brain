@@ -1,0 +1,100 @@
+{
+  "benchmark": "ruby_quality",
+  "workspace": "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95",
+  "total_cases": 10,
+  "passed": 9,
+  "avg_nodes_per_flow": 3.0,
+  "total_nodes": 27,
+  "cases": [
+    {
+      "entry": "POST /api/v1/signup",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": true,
+      "has_cross_file_call": false,
+      "pass": true
+    },
+    {
+      "entry": "GET /api/v1/payments",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": true,
+      "has_cross_file_call": false,
+      "pass": true
+    },
+    {
+      "entry": "POST /api/v1/moments",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": true,
+      "has_cross_file_call": false,
+      "pass": true
+    },
+    {
+      "entry": "GET /api/v1/moments",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": true,
+      "has_cross_file_call": false,
+      "pass": true
+    },
+    {
+      "entry": "GET /story_statuses",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": true,
+      "has_cross_file_call": false,
+      "pass": true
+    },
+    {
+      "entry": "POST /story_statuses",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": true,
+      "has_cross_file_call": false,
+      "pass": true
+    },
+    {
+      "entry": "GET /users",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": true,
+      "has_cross_file_call": false,
+      "pass": true
+    },
+    {
+      "entry": "GET /",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": false,
+      "has_cross_file_call": false,
+      "pass": false
+    },
+    {
+      "entry": "GET /api/v2/stories",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": true,
+      "has_cross_file_call": false,
+      "pass": true
+    },
+    {
+      "entry": "GET /admin/users",
+      "found": true,
+      "node_count": 3,
+      "edge_count": 1,
+      "has_handler": true,
+      "has_cross_file_call": false,
+      "pass": true
+    }
+  ]
+}
