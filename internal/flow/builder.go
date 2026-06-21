@@ -297,6 +297,12 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 		sourceNodes := idx.bySymbol[item.bareName]
 
 		if len(sourceNodes) == 0 {
+			if exact, ok := idx.bySource[item.bareName]; ok {
+				sourceNodes = exact
+			}
+		}
+
+		if len(sourceNodes) == 0 {
 			// Already added as external leaf when first encountered; nothing to expand.
 			continue
 		}
