@@ -143,12 +143,16 @@ func (r *RubyCrossFileResolver) BuildReconcileEdges(edges []Edge) []Edge {
 		ctrlShort := parts[0]
 		action := parts[1]
 
-		ctrlName := ctrlShort
-		if idx := strings.LastIndex(ctrlShort, "::"); idx >= 0 {
-			ctrlName = ctrlShort[idx+2:]
+		// Try full namespaced name first (e.g., "Api::V1::TokensController"),
+		// then fall back to short name (e.g., "TokensController").
+		entries := r.classIndex.Lookup(ctrlShort)
+		if len(entries) == 0 {
+			ctrlName := ctrlShort
+			if idx := strings.LastIndex(ctrlShort, "::"); idx >= 0 {
+				ctrlName = ctrlShort[idx+2:]
+			}
+			entries = r.classIndex.Lookup(ctrlName)
 		}
-
-		entries := r.classIndex.Lookup(ctrlName)
 		if len(entries) == 0 {
 			continue
 		}
