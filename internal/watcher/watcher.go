@@ -985,6 +985,7 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 			count++
 			return nil
 		})
+		w.resolveRubyCrossFileCalls(ctx, col)
 	}
 	return count
 }
