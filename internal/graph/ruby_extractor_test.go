@@ -91,8 +91,8 @@ end
 		}
 	}
 
-	if len(contains) != 2 {
-		t.Fatalf("expected 2 contains edges, got %d: %v", len(contains), contains)
+	if len(contains) != 3 {
+		t.Fatalf("expected 3 contains edges (class + 2 methods), got %d: %v", len(contains), contains)
 	}
 
 	names := map[string]bool{}
@@ -104,6 +104,9 @@ end
 	}
 	if !names["test.rb::beta"] {
 		t.Error("expected contains edge for beta")
+	}
+	if !names["test.rb::MyClass"] {
+		t.Error("expected contains edge for MyClass")
 	}
 }
 
@@ -131,8 +134,8 @@ end
 		}
 	}
 
-	if len(contains) != 2 {
-		t.Fatalf("expected 2 contains edges, got %d: %v", len(contains), contains)
+	if len(contains) != 3 {
+		t.Fatalf("expected 3 contains edges (class + 2 methods), got %d: %v", len(contains), contains)
 	}
 
 	names := map[string]bool{}
@@ -144,6 +147,9 @@ end
 	}
 	if !names["test.rb::instance_method"] {
 		t.Error("expected contains edge for instance_method")
+	}
+	if !names["test.rb::MyClass"] {
+		t.Error("expected contains edge for MyClass")
 	}
 }
 
@@ -596,5 +602,78 @@ end
 		if e.TargetNode == "OtherService" || e.TargetNode == "process" {
 			t.Errorf("should not produce cross-file call edge: %+v", e)
 		}
+	}
+}
+
+func TestRubyGraphExtractor_ContainsClassModule(t *testing.T) {
+	ex := newRubyExtractor(t)
+
+	tests := []struct {
+		name     string
+		fixture  string
+		expected []string
+	}{
+		{
+			name:    "scoped class",
+			fixture: "controller.rb",
+			expected: []string{
+				"index", "create", "user_params", "UsersController",
+			},
+		},
+		{
+			name:    "simple class",
+			fixture: "user.rb",
+			expected: []string{
+				"full_name", "active?", "User",
+			},
+		},
+		{
+			name:    "class with method calls",
+			fixture: "payment_service.rb",
+			expected: []string{
+				"process", "PaymentService",
+			},
+		},
+		{
+			name:    "simple class with method",
+			fixture: "order.rb",
+			expected: []string{
+				"calculate_total", "Order",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fixturePath := filepath.Join("testdata", "ruby", "multi_file", tt.fixture)
+			content, err := os.ReadFile(fixturePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			edges, err := ex.ExtractEdges(fixturePath, content)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var contains []graph.Edge
+			for _, e := range edges {
+				if e.Kind == graph.EdgeContains {
+					contains = append(contains, e)
+				}
+			}
+
+			containsMap := map[string]bool{}
+			for _, e := range contains {
+				containsMap[e.TargetNode] = true
+			}
+
+			for _, name := range tt.expected {
+				key := fixturePath + "::" + name
+				if !containsMap[key] {
+					t.Errorf("expected contains edge for %s (key=%s)", name, key)
+				}
+			}
+		})
 	}
 }

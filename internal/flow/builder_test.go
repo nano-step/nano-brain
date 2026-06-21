@@ -319,3 +319,54 @@ func TestConditionalPropagation(t *testing.T) {
 		t.Error("CondCall edge should be conditional")
 	}
 }
+
+// TestReconcileEdgeTraversal verifies that reconcile edges are transparent
+// pass-throughs in the BFS: the builder follows them to reach downstream
+// calls but does NOT emit reconcile edges in the Mermaid output.
+func TestReconcileEdgeTraversal(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "POST /api/users", TargetNode: "HandleUsers", Kind: graph.EdgeHTTP},
+		{SourceNode: "handlers/users.go::HandleUsers", TargetNode: "svc/users.go::UserService", Kind: graph.EdgeReconcile, SourceFile: "handlers/users.go"},
+		{SourceNode: "svc/users.go::UserService", TargetNode: "Create", Kind: graph.EdgeCalls, SourceFile: "svc/users.go"},
+		{SourceNode: "svc/users.go::Create", TargetNode: "Save", Kind: graph.EdgeCalls, SourceFile: "svc/users.go"},
+	}
+
+	f := flow.BuildFlow(edges, "POST /api/users", 10, 10)
+
+	if _, ok := nodeByID(f.Nodes, "HandleUsers"); !ok {
+		t.Error("expected HandleUsers node")
+	}
+	if _, ok := nodeByID(f.Nodes, "UserService"); !ok {
+		t.Error("expected UserService node — reconcile edge should have been followed")
+	}
+	if _, ok := nodeByID(f.Nodes, "Create"); !ok {
+		t.Error("expected Create node — calls from reconcile target should be reachable")
+	}
+	if _, ok := nodeByID(f.Nodes, "Save"); !ok {
+		t.Error("expected Save node — multi-hop through reconcile should reach here")
+	}
+
+	for _, e := range f.Edges {
+		if e.Kind == "reconcile" {
+			t.Error("reconcile edges should NOT appear in flow output")
+		}
+	}
+}
+
+// TestReconcileEdgeDoesNotConsumeDepth verifies that reconcile edges do not
+// increment the depth counter, so they act as transparent rewires.
+func TestReconcileEdgeDoesNotConsumeDepth(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "POST /api/items", TargetNode: "HandleItems", Kind: graph.EdgeHTTP},
+		{SourceNode: "handlers/items.go::HandleItems", TargetNode: "svc/items.go::ItemService", Kind: graph.EdgeReconcile, SourceFile: "handlers/items.go"},
+		{SourceNode: "svc/items.go::ItemService", TargetNode: "L1", Kind: graph.EdgeCalls, SourceFile: "svc/items.go"},
+		{SourceNode: "svc/items.go::L1", TargetNode: "L2", Kind: graph.EdgeCalls, SourceFile: "svc/items.go"},
+		{SourceNode: "svc/items.go::L2", TargetNode: "L3", Kind: graph.EdgeCalls, SourceFile: "svc/items.go"},
+	}
+
+	f := flow.BuildFlow(edges, "POST /api/items", 3, 10)
+
+	if _, ok := nodeByID(f.Nodes, "L3"); !ok {
+		t.Error("L3 should be reachable — reconcile should not consume depth")
+	}
+}

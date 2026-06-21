@@ -3,6 +3,7 @@ package graph
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
@@ -11,6 +12,10 @@ import (
 const rubyGraphContainsQuery = `
 (method name: (identifier) @name) @decl
 (singleton_method name: (identifier) @name) @decl
+(class name: (constant) @name) @decl
+(class name: (scope_resolution) @name) @decl
+(module name: (constant) @name) @decl
+(module name: (scope_resolution) @name) @decl
 `
 
 const rubyGraphCallFuncQuery = `
@@ -94,7 +99,11 @@ func (e *RubyGraphExtractor) extractContains(bt *gotreesitter.BoundTree, tree *g
 		if nameNode == nil {
 			continue
 		}
-		name := bt.NodeText(nameNode)
+		fullName := extractRubyFullName(bt, nameNode)
+		name := fullName
+		if idx := strings.LastIndex(name, "::"); idx >= 0 {
+			name = name[idx+2:]
+		}
 		if seen[name] {
 			continue
 		}
@@ -109,6 +118,24 @@ func (e *RubyGraphExtractor) extractContains(bt *gotreesitter.BoundTree, tree *g
 		})
 	}
 	return edges
+}
+
+func extractRubyFullName(bt *gotreesitter.BoundTree, n *gotreesitter.Node) string {
+	if bt.NodeType(n) != "scope_resolution" {
+		return bt.NodeText(n)
+	}
+	var parts []string
+	for i := 0; i < int(n.ChildCount()); i++ {
+		child := n.Child(i)
+		if child == nil {
+			continue
+		}
+		text := bt.NodeText(child)
+		if text != "::" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "::")
 }
 
 func (e *RubyGraphExtractor) extractCalls(bt *gotreesitter.BoundTree, tree *gotreesitter.Tree, content []byte, filePath string) []Edge {
