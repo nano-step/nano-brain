@@ -3,12 +3,13 @@ package graph
 type EdgeKind string
 
 const (
-	EdgeContains   EdgeKind = "contains"
-	EdgeImports    EdgeKind = "imports"
-	EdgeCalls      EdgeKind = "calls"
+	EdgeContains    EdgeKind = "contains"
+	EdgeImports     EdgeKind = "imports"
+	EdgeCalls       EdgeKind = "calls"
 	EdgeHTTP        EdgeKind = "http"        // "<METHOD> <path>" -> handler symbol name
 	EdgeMiddleware  EdgeKind = "middleware"  // middleware symbol -> handler symbol name
 	EdgeIntegration EdgeKind = "integration" // outbound HTTP calls, queue publishes, event emissions
+	EdgeReconcile   EdgeKind = "reconcile"   // transparent pass-through for flow builder BFS
 )
 
 type Edge struct {

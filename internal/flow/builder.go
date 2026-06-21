@@ -307,7 +307,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 		fileByID := make(map[string]string)
 		fileSet := make(map[string]bool)
 		for _, e := range sourceNodes {
-			if e.Kind == graph.EdgeCalls {
+			if e.Kind == graph.EdgeCalls || e.Kind == graph.EdgeReconcile {
 				sourceNodeIDs[e.SourceNode] = true
 				fileByID[e.SourceNode] = e.SourceFile
 				fileSet[e.SourceFile] = true
@@ -317,10 +317,29 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 		// Scope reconciliation: prefer a definition in the caller's own file.
 		// If none match and the bare name resolves across too many files, it's a
 		// generic name (get/find/handle/…) — skip it to avoid graph explosion.
+		// Reconcile edges are always included (they are explicit connections).
+		reconcileIDs := make(map[string]bool)
+		for id := range sourceNodeIDs {
+			for _, e := range sourceNodes {
+				if e.SourceNode == id && e.Kind == graph.EdgeReconcile {
+					reconcileIDs[id] = true
+					break
+				}
+			}
+		}
 		if same := sameFileIDs(sourceNodeIDs, fileByID, item.parentFile); len(same) > 0 {
+			// Merge reconcile IDs that aren't in the same-file set.
+			for id := range reconcileIDs {
+				same[id] = true
+			}
 			sourceNodeIDs = same
 		} else if len(fileSet) > maxReconcileFiles {
-			continue
+			// Keep reconcile IDs even when generic-name filter triggers.
+			if len(reconcileIDs) > 0 {
+				sourceNodeIDs = reconcileIDs
+			} else {
+				continue
+			}
 		}
 
 		for sourceID := range sourceNodeIDs {
@@ -346,6 +365,15 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 						addNode(FlowNode{ID: target, Name: target, Role: RoleIntegration})
 					}
 					addEdge(FlowEdge{From: item.bareName, To: target, Kind: "integration", Line: e.Line, Conditional: edgeConditional(e), ConditionLabel: edgeConditionLabel(e)})
+					continue
+				}
+
+				if e.Kind == graph.EdgeReconcile {
+					target := symbolPart(e.TargetNode)
+					if _, exists := nodeMap[target]; !exists {
+						addNode(FlowNode{ID: target, Name: target, Role: classifyRole(target)})
+					}
+					queue = append(queue, bfsItem{bareName: target, depth: item.depth, parentFile: callerFile})
 					continue
 				}
 

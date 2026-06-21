@@ -476,6 +476,8 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		w.logger.Error().Err(err).Str("dir", col.dirPath).Msg("walk failed")
 	}
+
+	w.resolveRubyCrossFileCalls(ctx, col)
 }
 
 // ShouldSkipPath checks whether the given absolute path matches any of the
@@ -1113,6 +1115,165 @@ func (w *Watcher) chunkContent(content string, filePath string) []chunker.Chunk 
 	}
 	fixed := chunker.NewFixedChunkerWithOverlap(w.chunkOverlap)
 	return fixed.Chunk(content, filePath)
+}
+
+func (w *Watcher) resolveRubyCrossFileCalls(ctx context.Context, col watchedCollection) {
+	if w.graphRegistry == nil || w.db == nil {
+		return
+	}
+	if !hasRailsFramework(col.detectedFrameworks) {
+		return
+	}
+
+	tq := sqlc.New(w.db)
+	allEdges, err := tq.ListAllEdgesByWorkspace(ctx, col.workspaceHash)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("workspace", col.workspaceHash).Msg("ruby resolver: failed to list edges")
+		return
+	}
+	if len(allEdges) == 0 {
+		return
+	}
+
+	var containsEdges, callsEdges, httpEdges []graph.Edge
+	for _, ge := range allEdges {
+		e := sqlcGraphEdgeToGraphEdge(ge)
+		switch e.Kind {
+		case graph.EdgeContains:
+			containsEdges = append(containsEdges, e)
+		case graph.EdgeCalls:
+			callsEdges = append(callsEdges, e)
+		case graph.EdgeHTTP:
+			httpEdges = append(httpEdges, e)
+		}
+	}
+
+	if len(callsEdges) == 0 && len(httpEdges) == 0 {
+		return
+	}
+
+	classIndex := graph.BuildClassIndex(containsEdges)
+	resolver := graph.NewRubyCrossFileResolver(classIndex, w.logger)
+
+	fileContents := collectRubyContents(col.dirPath)
+
+	var resolvedEdges []graph.Edge
+	if len(callsEdges) > 0 {
+		resolvedEdges = resolver.ResolveEdges(callsEdges, fileContents)
+	} else {
+		resolvedEdges = callsEdges
+	}
+
+	reconcileEdges := resolver.BuildReconcileEdges(httpEdges)
+
+	if len(resolvedEdges) == 0 && len(reconcileEdges) == 0 {
+		return
+	}
+
+	tx, err := w.db.BeginTx(ctx, nil)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("workspace", col.workspaceHash).Msg("ruby resolver: tx begin failed")
+		return
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM graph_edges WHERE workspace_hash = $1 AND edge_type IN ('calls', 'reconcile')`,
+		col.workspaceHash); err != nil {
+		w.logger.Warn().Err(err).Str("workspace", col.workspaceHash).Msg("ruby resolver: delete old edges failed")
+		return
+	}
+
+	tqTx := sqlc.New(tx)
+	for _, e := range resolvedEdges {
+		meta, _ := buildEdgeMetadata(e)
+		if err := tqTx.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+			WorkspaceHash: col.workspaceHash,
+			SourceNode:    e.SourceNode,
+			TargetNode:    e.TargetNode,
+			EdgeType:      string(e.Kind),
+			SourceFile:    e.SourceFile,
+			Metadata:      meta,
+		}); err != nil {
+			w.logger.Warn().Err(err).Str("edge", e.SourceNode+"->"+e.TargetNode).Msg("ruby resolver: upsert resolved edge failed")
+			return
+		}
+	}
+
+	for _, e := range reconcileEdges {
+		meta, _ := buildEdgeMetadata(e)
+		if err := tqTx.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+			WorkspaceHash: col.workspaceHash,
+			SourceNode:    e.SourceNode,
+			TargetNode:    e.TargetNode,
+			EdgeType:      string(e.Kind),
+			SourceFile:    e.SourceFile,
+			Metadata:      meta,
+		}); err != nil {
+			w.logger.Warn().Err(err).Str("edge", e.SourceNode+"->"+e.TargetNode).Msg("ruby resolver: upsert reconcile edge failed")
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		w.logger.Warn().Err(err).Str("workspace", col.workspaceHash).Msg("ruby resolver: tx commit failed")
+		return
+	}
+
+	w.logger.Info().
+		Str("workspace", col.workspaceHash).
+		Int("resolved_calls", len(resolvedEdges)).
+		Int("reconcile", len(reconcileEdges)).
+		Msg("ruby cross-file resolution complete")
+}
+
+func collectRubyContents(dirPath string) map[string][]byte {
+	contents := make(map[string][]byte)
+	_ = filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".rb" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		contents[path] = data
+		return nil
+	})
+	return contents
+}
+
+func hasRailsFramework(fws []string) bool {
+	for _, fw := range fws {
+		if fw == "rails" {
+			return true
+		}
+	}
+	return false
+}
+
+func sqlcGraphEdgeToGraphEdge(ge sqlc.GraphEdge) graph.Edge {
+	e := graph.Edge{
+		SourceNode: ge.SourceNode,
+		TargetNode: ge.TargetNode,
+		Kind:       graph.EdgeKind(ge.EdgeType),
+		SourceFile: ge.SourceFile,
+	}
+	if len(ge.Metadata) > 0 {
+		var meta map[string]any
+		if err := json.Unmarshal(ge.Metadata, &meta); err == nil {
+			if l, ok := meta["line"].(float64); ok {
+				e.Line = int(l)
+			}
+			if l, ok := meta["language"].(string); ok {
+				e.Language = l
+			}
+		}
+	}
+	return e
 }
 
 func nullString(s string) sql.NullString {
