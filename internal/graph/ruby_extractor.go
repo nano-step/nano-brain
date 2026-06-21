@@ -183,10 +183,6 @@ func (e *RubyGraphExtractor) extractCalls(bt *gotreesitter.BoundTree, tree *gotr
 			}
 			callByte := calleeNode.StartByte()
 
-			if !methodNames[callee] {
-				continue
-			}
-
 			enclosing := enclosingFunc(funcs, callByte)
 			if enclosing == "" {
 				continue
