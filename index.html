@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
         :root{--bg:#09090b;--surface:#18181b;--surface-2:#27272a;--border:#3f3f46;--text:#fafafa;--text-2:#a1a1aa;--accent:#22c55e;--accent-2:#16a34a;--orange:#f97316}
         *{margin:0;padding:0;box-sizing:border-box}
@@ -136,6 +137,8 @@
         footer a{color:var(--text);text-decoration:none}
         footer a:hover{color:var(--accent)}
         @media(max-width:768px){.nav-links{display:none}.stats-bar{gap:32px}.feature-grid,.usecase-grid,.demo-grid,.ruby-grid,.benchmark-grid,.mcp-grid,.docs-grid,.steps{grid-template-columns:1fr}.contributing-content{grid-template-columns:1fr}.arch-flow{flex-direction:column}.arch-arrow{transform:rotate(90deg)}}
+        .mermaid{display:flex;justify-content:center;padding:16px;background:var(--bg);border-radius:8px}
+        .mermaid svg{max-width:100%}
     </style>
 </head>
 <body>
@@ -253,36 +256,42 @@ supported today. Rust, Java planned.</code>
         <div class="demo-grid">
             <div class="demo-card">
                 <h4>Controller Flow</h4>
-                <code>POST /users → UsersController#create
-                   ↓
-              User.create
-                   ↓
-            Mailer.welcome</code>
+                <div class="mermaid">flowchart LR
+  A["POST /users"] --> B["UsersController#create"]
+  B --> C["User.create"]
+  B --> D["Mailer.welcome"]
+  C --> E["Redis cache"]
+  D --> F["Email sent"]</div>
             </div>
             <div class="demo-card">
                 <h4>Payment Flow</h4>
-                <code>API Request → Validate Input
-                      ↓
-              Process Payment → Stripe
-                      ↓
-              Create Order → Database
-                      ↓
-              Send Confirmation → Email</code>
+                <div class="mermaid">flowchart TD
+  A["API Request"] --> B{"Validate Input"}
+  B -->|Valid| C["Process Payment"]
+  B -->|Invalid| D["Return Error"]
+  C --> E{"Success?"}
+  E -->|Yes| F["Create Order"]
+  E -->|No| G["Log Error"]
+  F --> H["Send Confirmation"]
+  G --> I["Return Failure"]</div>
             </div>
             <div class="demo-card">
                 <h4>Error Handling</h4>
-                <code>Request → Validate
-         ↓
-   {Valid} → Process → Success
-   {Invalid} → Log Error → Failure</code>
+                <div class="mermaid">flowchart LR
+  A["Request"] --> B{"Validate"}
+  B -->|Valid| C["Process"]
+  C --> D["Success"]
+  B -->|Invalid| E["Log Error"]
+  E --> F["Failure"]</div>
             </div>
             <div class="demo-card">
                 <h4>Parallel Execution</h4>
-                <code>Entry Point → Handler
-                ↓              ↓
-         Database          Cache
-                ↓              ↓
-         Response ← ← ← ← ←</code>
+                <div class="mermaid">flowchart TD
+  A["Entry Point"] --> B["Handler"]
+  B --> C["Database"]
+  B --> D["Cache"]
+  C --> E["Response"]
+  D --> E</div>
             </div>
         </div>
     </section>
@@ -294,35 +303,65 @@ supported today. Rust, Java planned.</code>
         <div class="demo-grid">
             <div class="demo-card">
                 <h4>User Registration</h4>
-                <code>Client → Router → UsersController
-         ↓
-    User.create → Mailer.welcome
-         ↓
-    Redis.cache → Response</code>
+                <div class="mermaid">sequenceDiagram
+  participant Client
+  participant Router
+  participant Controller
+  participant User
+  participant Mailer
+
+  Client->>Router: POST /users
+  Router->>Controller: create
+  Controller->>User: create(params)
+  User-->>Controller: user
+  Controller->>Mailer: welcome(user)
+  Mailer-->>Controller: email
+  Controller-->>Client: 201 Created</div>
             </div>
             <div class="demo-card">
                 <h4>Payment Processing</h4>
-                <code>Client → API → PaymentService
-         ↓
-    Stripe.charge → Database.save
-         ↓
-    Webhook → Update Status</code>
+                <div class="mermaid">sequenceDiagram
+  participant Client
+  participant API
+  participant PaymentService
+  participant Stripe
+  participant Database
+
+  Client->>API: POST /payments
+  API->>PaymentService: process(data)
+  PaymentService->>Stripe: create_charge
+  Stripe-->>PaymentService: charge_id
+  PaymentService->>Database: save(charge)
+  Database-->>PaymentService: saved
+  PaymentService-->>API: result
+  API-->>Client: 200 OK</div>
             </div>
             <div class="demo-card">
                 <h4>Session Harvest</h4>
-                <code>OpenCode DB → Harvester
-         ↓
-    LLM Summarizer → Indexer
-         ↓
-    PostgreSQL → Search</code>
+                <div class="mermaid">sequenceDiagram
+  participant OpenCode
+  participant Harvester
+  participant LLM
+  participant Indexer
+  participant PostgreSQL
+
+  OpenCode->>Harvester: sessions
+  Harvester->>LLM: summarize
+  LLM-->>Harvester: summary
+  Harvester->>Indexer: index
+  Indexer->>PostgreSQL: store</div>
             </div>
             <div class="demo-card">
                 <h4>Impact Analysis</h4>
-                <code>Change File → memory_impact
-         ↓
-    Find Callers → Find Dependencies
-         ↓
-    Return Affected Files</code>
+                <div class="mermaid">sequenceDiagram
+  participant Agent
+  participant nano-brain
+  participant PostgreSQL
+
+  Agent->>nano-brain: memory_impact(file)
+  nano-brain->>PostgreSQL: query graph
+  PostgreSQL-->>nano-brain: affected files
+  nano-brain-->>Agent: impact report</div>
             </div>
         </div>
     </section>
@@ -552,5 +591,8 @@ CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain</code>
     <footer>
         <p>Built with Go, PostgreSQL, and pgvector. MIT License. <a href="https://github.com/nano-step/nano-brain">View on GitHub →</a></p>
     </footer>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#22c55e', primaryTextColor: '#fafafa', primaryBorderColor: '#3f3f46', lineColor: '#a1a1aa', secondaryColor: '#18181b', tertiaryColor: '#27272a' } });
+    </script>
 </body>
 </html>
