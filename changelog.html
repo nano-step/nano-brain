@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nano-brain — Changelog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root{--bg:#09090b;--surface:#18181b;--border:#3f3f46;--text:#fafafa;--text-2:#a1a1aa;--accent:#22c55e;--orange:#f97316}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:120px 24px 80px}
+        .container{max-width:800px;margin:0 auto}
+        h1{font-size:40px;font-weight:700;letter-spacing:-1px;margin-bottom:8px}
+        .subtitle{color:var(--text-2);margin-bottom:48px}
+        .category{margin-bottom:48px}
+        .category h2{font-size:20px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+        .category h2 .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+        .dot-feat{background:var(--accent)}
+        .dot-fix{background:var(--orange)}
+        .dot-docs{background:#a1a1aa}
+        .dot-other{background:#71717a}
+        .commit{padding:16px 0;border-bottom:1px solid var(--border)}
+        .commit:last-child{border-bottom:none}
+        .commit-hash{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);margin-bottom:4px}
+        .commit-msg{font-size:15px;line-height:1.5}
+        .commit-date{font-size:12px;color:var(--text-2);margin-top:4px}
+        .empty{color:var(--text-2);font-style:italic}
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Changelog</h1>
+    <p class="subtitle">Auto-generated from git commits.</p>
+<div class="category">
+  <h2><span class="dot dot-feat"></span> Features</h2>
+  <div class="commit">
+    <div class="commit-hash">c287446</div>
+    <div class="commit-msg">improve search quality — dedup, code-aware ranking, flow viz, symbol re-extraction (#424)</div>
+    <div class="commit-date">2026-06-14</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">88dbd4d</div>
+    <div class="commit-msg">Rails route extractor + configurable code-summarize timeout</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">4311500</div>
+    <div class="commit-msg">execution flow visualization + search quality improvements (#423)</div>
+    <div class="commit-date">2026-06-14</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">4f5068d</div>
+    <div class="commit-msg">Rails route extractor + configurable code-summarize timeout</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">e09e93e</div>
+    <div class="commit-msg">enhanced code understanding — auto-summarization, entity linking, flow context, PageRank (#406)</div>
+    <div class="commit-date">2026-06-07</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">ebc5878</div>
+    <div class="commit-msg">Nuxt.js filesystem route extractor (#433)</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">cead794</div>
+    <div class="commit-msg">NestJS route extractor (#432)</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+</div>
+<div class="category">
+  <h2><span class="dot dot-fix"></span> Bug Fixes</h2>
+  <div class="commit">
+    <div class="commit-hash">8c8a0a3</div>
+    <div class="commit-msg">Rails extractor root/devise_for/redirect + configurable timeout</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">c596607</div>
+    <div class="commit-msg">Rails extractor root/devise_for/redirect + configurable timeout</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">19d97ff</div>
+    <div class="commit-msg">fe not work</div>
+    <div class="commit-date">2026-06-07</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">1a91ebf</div>
+    <div class="commit-msg">lint clean + add self-review evidence</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">061ab76</div>
+    <div class="commit-msg">use UpsertChunk for all chunks to preserve embed_status</div>
+    <div class="commit-date">2026-06-10</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">dcd1d1c</div>
+    <div class="commit-msg">preserve embed_status on unchanged chunk upsert (watcher update)</div>
+    <div class="commit-date">2026-06-09</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">cde4e89</div>
+    <div class="commit-msg">address Gemini review feedback for NestJS and Nuxt.js extractors</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">857337f</div>
+    <div class="commit-msg">address Gemini code review feedback</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">a276682</div>
+    <div class="commit-msg">preserve embed_status on unchanged chunk upsert</div>
+    <div class="commit-date">2026-06-09</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">562ddf3</div>
+    <div class="commit-msg">.nano-brainignore should retroactively clean up already-indexed files (#415)</div>
+    <div class="commit-date">2026-06-09</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">75a7645</div>
+    <div class="commit-msg">preserve embed_status on unchanged chunk upsert</div>
+    <div class="commit-date">2026-06-09</div>
+  </div>
+</div>
+<div class="category">
+  <h2><span class="dot dot-docs"></span> Documentation & Benchmarks</h2>
+  <div class="commit">
+    <div class="commit-hash">87386de</div>
+    <div class="commit-msg">add self-review evidence for cfg-if-continuation-paths</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">3a1d755</div>
+    <div class="commit-msg">disable Jekyll for GitHub Pages</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">85ce868</div>
+    <div class="commit-msg">add benchmark, Why Star, Ruby/Rails to GitHub Pages</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">19df2a8</div>
+    <div class="commit-msg">add recommended models section, enforce nanobrain_test for harness</div>
+    <div class="commit-date">2026-06-07</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">bac213c</div>
+    <div class="commit-msg">add flow and sequence diagram sections</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">79c54e9</div>
+    <div class="commit-msg">enhance README with demo, contributing, community</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">b6dec80</div>
+    <div class="commit-msg">remove specific project names from public docs</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">e02f6b2</div>
+    <div class="commit-msg">add deployment, auth, and RBAC to roadmap</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">3d70bb8</div>
+    <div class="commit-msg">add self-review evidence for framework-detector PR</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">5d5c45c</div>
+    <div class="commit-msg">add pre-merge override evidence for gates 3.3 and 3.4</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">84f70f3</div>
+    <div class="commit-msg">redesign landing page with modern design</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">3195710</div>
+    <div class="commit-msg">update roadmap with Ruby/Rails support and benchmarking</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">10c5d9f</div>
+    <div class="commit-msg">update benchmark numbers to use best workspace results</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">5455d07</div>
+    <div class="commit-msg">complete landing page with all sections</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">7302b37</div>
+    <div class="commit-msg">move landing page to root for GitHub Pages</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">9d247b8</div>
+    <div class="commit-msg">rewrite README, add CHANGELOG, feature showcase</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">e510488</div>
+    <div class="commit-msg">add Mermaid rendering for flow/sequence diagrams</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">2c3eaee</div>
+    <div class="commit-msg">add roadmap section to landing page</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+</div>
+<div class="category">
+  <h2><span class="dot dot-other"></span> Other</h2>
+  <div class="commit">
+    <div class="commit-hash">5fd4bf4</div>
+    <div class="commit-msg">create chunks for symbol documents to fix embedding coverage</div>
+    <div class="commit-date">2026-06-11</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">ade089e</div>
+    <div class="commit-msg">skip template strings with interpolation in route path</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">117c457</div>
+    <div class="commit-msg">Merge pull request #411 from nano-step/fix/bench-llm-query-generation</div>
+    <div class="commit-date">2026-06-09</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">4b15988</div>
+    <div class="commit-msg">execution-flow-phase2 — semantic flow visualization (#429)</div>
+    <div class="commit-date">2026-06-14</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">4cc3cd9</div>
+    <div class="commit-msg">fair comparison with same raw source files</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">a46983e</div>
+    <div class="commit-msg">rewrite sequence diagram with system-level actors and return arrows</div>
+    <div class="commit-date">2026-06-19</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">9282a23</div>
+    <div class="commit-msg">workspace-specific queries and MCP fixes</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">2380fe6</div>
+    <div class="commit-msg">remove built-in webui, add redirect to standalone dashboard</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">29467c0</div>
+    <div class="commit-msg">emit unresolved call edges for cross-file method invocations</div>
+    <div class="commit-date">2026-06-21</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">38c09f2</div>
+    <div class="commit-msg">add truncation to direct embed endpoint</div>
+    <div class="commit-date">2026-06-10</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">a01d685</div>
+    <div class="commit-msg">archive completed specs, add fix-edge-source-file-relative-paths</div>
+    <div class="commit-date">2026-06-20</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">8d89f32</div>
+    <div class="commit-msg">add LlamaIndex and Mem0 actual benchmark results</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">a631493</div>
+    <div class="commit-msg">collapse external nodes into Backend actor, add ServiceName to Flow</div>
+    <div class="commit-date">2026-06-19</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">68963f1</div>
+    <div class="commit-msg">break scan loop when all items in batch are already in-flight</div>
+    <div class="commit-date">2026-06-09</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">4b58897</div>
+    <div class="commit-msg">Phase 2 search quality — HyDE, dynamic RRF, reranking (#409)</div>
+    <div class="commit-date">2026-06-07</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">a8b2192</div>
+    <div class="commit-msg">archive framework-detector change</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">5000c3e</div>
+    <div class="commit-msg">fix goclangci-lint errcheck on test w.Write calls</div>
+    <div class="commit-date">2026-06-07</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">1ca56b3</div>
+    <div class="commit-msg">archive enhanced-code-understanding OpenSpec change [skip-release]</div>
+    <div class="commit-date">2026-06-07</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">fb69097</div>
+    <div class="commit-msg">Ruby cross-file call resolution for controller→service→model flows</div>
+    <div class="commit-date">2026-06-21</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">6f52339</div>
+    <div class="commit-msg">recreate design demos (Pentagram/Field.io/Kenya Hara) + mark Phase 2 complete</div>
+    <div class="commit-date">2026-06-16</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">253f5f0</div>
+    <div class="commit-msg">archive multi-framework-extraction OpenSpec change</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">658f17e</div>
+    <div class="commit-msg">Phase 1b — JS/TS CFG extractor, storage, API, MCP tool</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">f15b6bf</div>
+    <div class="commit-msg">Rails route extractor + configurable code-summarize timeout"</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">35fd093</div>
+    <div class="commit-msg">correct Express middleware edge direction to match builder convention</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">2ecb70c</div>
+    <div class="commit-msg">add LLM quality and debugging benchmark framework</div>
+    <div class="commit-date">2026-06-20</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">2a65711</div>
+    <div class="commit-msg">address Gemini review comments</div>
+    <div class="commit-date">2026-06-12</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">023f86f</div>
+    <div class="commit-msg">add dedup, code-aware ranking, and file-path benchmark</div>
+    <div class="commit-date">2026-06-11</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">e0abe37</div>
+    <div class="commit-msg">archive framework-detector change</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">3585ddf</div>
+    <div class="commit-msg">add generic framework detector for flow visualization</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">c71c0e6</div>
+    <div class="commit-msg">add file-extension boost to code-aware ranking</div>
+    <div class="commit-date">2026-06-14</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">0c6e9fe</div>
+    <div class="commit-msg">add wipe mode, debug logging, fix flowchart entry resolution</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">39b45d1</div>
+    <div class="commit-msg">final benchmark on host server (3100), consistent results</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">7a236fd</div>
+    <div class="commit-msg">add POST /reindex-cfg endpoint for CFG re-extraction</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">3fbe6a6</div>
+    <div class="commit-msg">cleanup temp test file, update evidence with PR #434</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">15b817d</div>
+    <div class="commit-msg">improve NL search quality — preprocessor, BM25 config, chunk overlap (#408)</div>
+    <div class="commit-date">2026-06-07</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">0dac3d9</div>
+    <div class="commit-msg">filter empty symbol_name in unsummarized query</div>
+    <div class="commit-date">2026-06-06</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">c5c8889</div>
+    <div class="commit-msg">run Ruby resolver after ReextractEdgesForWorkspace</div>
+    <div class="commit-date">2026-06-21</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">693406c</div>
+    <div class="commit-msg">Rails extractor root/devise_for/redirect + configurable timeout"</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">60efb84</div>
+    <div class="commit-msg">Merge pull request #420 from nano-step/feat/419-impact-direction-out</div>
+    <div class="commit-date">2026-06-11</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">f7055b8</div>
+    <div class="commit-msg">rewrite sequence diagram with system-level actors and return arrows</div>
+    <div class="commit-date">2026-06-19</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">b124474</div>
+    <div class="commit-msg">clean internal logic labels in sequence diagrams (#456)</div>
+    <div class="commit-date">2026-06-20</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">e6cbd41</div>
+    <div class="commit-msg">add debugging-aware search mode (mode=debugging)</div>
+    <div class="commit-date">2026-06-20</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">20872d4</div>
+    <div class="commit-msg">address review findings for Express extractor</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">c26319a</div>
+    <div class="commit-msg">also handle empty else block and empty then block in buildIf</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">178cb7a</div>
+    <div class="commit-msg">reconcile edge type migration + BFS bySource fallback</div>
+    <div class="commit-date">2026-06-21</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">6c32aea</div>
+    <div class="commit-msg">respect .nano-brainignore by reusing watcher filter</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">f8448ca</div>
+    <div class="commit-msg">address Gemini review - findAssignedName boundaries, buildTry empty blocks</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">f48a677</div>
+    <div class="commit-msg">preserve if-without-else continuation paths in CFG</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">b13d500</div>
+    <div class="commit-msg">update test for package-lock.json default exclusion</div>
+    <div class="commit-date">2026-06-16</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">f80efdc</div>
+    <div class="commit-msg">add branch-aware CFG edges for if/else, switch/case, ternary, try/catch</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">e5652c8</div>
+    <div class="commit-msg">add Express.js route extractor for flow visualization</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">b1bad6b</div>
+    <div class="commit-msg">Phase 1 backend APIs + Phase 2 scaffold</div>
+    <div class="commit-date">2026-06-16</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">ba44cef</div>
+    <div class="commit-msg">Ruby class index resolves controllers to wrong files</div>
+    <div class="commit-date">2026-06-21</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">56a4856</div>
+    <div class="commit-msg">add DeleteAllFunctionFlowcharts to mock</div>
+    <div class="commit-date">2026-06-17</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">06fa759</div>
+    <div class="commit-msg">detect Redis/cache operations in JS/TS integration extractor (#453)</div>
+    <div class="commit-date">2026-06-20</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">b1c84c3</div>
+    <div class="commit-msg">address PR #424 review comments (#425)</div>
+    <div class="commit-date">2026-06-14</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">482e0cb</div>
+    <div class="commit-msg">send oversized symbols individually instead of skipping</div>
+    <div class="commit-date">2026-06-06</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">56bc99b</div>
+    <div class="commit-msg">fix 3 benchmark weaknesses — BM25 OR fallback, incoming edges, graph extraction</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">f06c19d</div>
+    <div class="commit-msg">render internal logic in sequence diagrams via CFG (#454)</div>
+    <div class="commit-date">2026-06-20</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">0465c0a</div>
+    <div class="commit-msg">create chunk for summary documents so they're searchable</div>
+    <div class="commit-date">2026-06-20</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">45d57d5</div>
+    <div class="commit-msg">agent memory comparison — nano-brain vs Mem0, Cognee, GraphRAG, LlamaIndex, Zep</div>
+    <div class="commit-date">2026-06-22</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">82d8be8</div>
+    <div class="commit-msg">add Ruby/Rails support for flow and sequence diagrams</div>
+    <div class="commit-date">2026-06-20</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">d86228a</div>
+    <div class="commit-msg">normalize edge source_file to workspace-relative paths (#450)</div>
+    <div class="commit-date">2026-06-19</div>
+  </div>
+  <div class="commit">
+    <div class="commit-hash">7c97a48</div>
+    <div class="commit-msg">add configurable summary timeout (default 10min)</div>
+    <div class="commit-date">2026-06-15</div>
+  </div>
+</div>
+</div>
+</body>
+</html>
