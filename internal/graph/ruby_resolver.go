@@ -1,14 +1,16 @@
 package graph
 
 import (
-	"regexp"
 	"strings"
 
+	gotreesitter "github.com/odvcencio/gotreesitter"
+	"github.com/odvcencio/gotreesitter/grammars"
 	zerolog "github.com/rs/zerolog"
 )
 
 type RubyCrossFileResolver struct {
 	classIndex    *RubyClassIndex
+	lang          *gotreesitter.Language
 	logger        zerolog.Logger
 	useFallback   bool
 }
@@ -16,6 +18,7 @@ type RubyCrossFileResolver struct {
 func NewRubyCrossFileResolver(classIndex *RubyClassIndex, logger zerolog.Logger) *RubyCrossFileResolver {
 	return &RubyCrossFileResolver{
 		classIndex:  classIndex,
+		lang:        grammars.RubyLanguage(),
 		logger:      logger,
 		useFallback: true,
 	}
@@ -24,13 +27,11 @@ func NewRubyCrossFileResolver(classIndex *RubyClassIndex, logger zerolog.Logger)
 func NewRubyCrossFileResolverNoFallback(classIndex *RubyClassIndex, logger zerolog.Logger) *RubyCrossFileResolver {
 	return &RubyCrossFileResolver{
 		classIndex:  classIndex,
+		lang:        grammars.RubyLanguage(),
 		logger:      logger,
 		useFallback: false,
 	}
 }
-
-var rubyQualifiedCallRe = regexp.MustCompile(`([A-Z]\w*)\.(new)\.(\w+)`)
-var rubyClassMethodRe = regexp.MustCompile(`([A-Z]\w*)\.(\w+)`)
 
 func (r *RubyCrossFileResolver) ResolveEdges(edges []Edge, fileContents map[string][]byte) []Edge {
 	var result []Edge
@@ -41,7 +42,7 @@ func (r *RubyCrossFileResolver) ResolveEdges(edges []Edge, fileContents map[stri
 	}
 
 	for filePath, content := range fileContents {
-		newEdges := r.resolveFileCalls(filePath, content)
+		newEdges := r.resolveFileAST(filePath, content)
 		for _, e := range newEdges {
 			key := e.SourceNode + "->" + e.TargetNode
 			if seen[key] {
@@ -55,41 +56,56 @@ func (r *RubyCrossFileResolver) ResolveEdges(edges []Edge, fileContents map[stri
 	return result
 }
 
-func (r *RubyCrossFileResolver) resolveFileCalls(filePath string, content []byte) []Edge {
-	var edges []Edge
-	lines := strings.Split(string(content), "\n")
-
-	for lineNum, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-
-		if matches := rubyQualifiedCallRe.FindAllStringSubmatch(line, -1); len(matches) > 0 {
-			for _, m := range matches {
-				className := m[1]
-				methodName := m[3]
-				edges = append(edges, r.resolveCall(filePath, className, methodName, lineNum+1)...)
-			}
-			continue
-		}
-
-		if matches := rubyClassMethodRe.FindAllStringSubmatch(line, -1); len(matches) > 0 {
-			for _, m := range matches {
-				className := m[1]
-				methodName := m[2]
-				if methodName == "new" || methodName == "class" || methodName == "super" {
-					continue
-				}
-				edges = append(edges, r.resolveCall(filePath, className, methodName, lineNum+1)...)
-			}
-		}
+func (r *RubyCrossFileResolver) resolveFileAST(filePath string, content []byte) []Edge {
+	parser := gotreesitter.NewParser(r.lang)
+	tree, err := parser.Parse(content)
+	if err != nil {
+		return nil
 	}
+	bt := gotreesitter.Bind(tree)
+	defer bt.Release()
 
+	var edges []Edge
+	r.walkCallNodes(bt, tree.RootNode(), filePath, content, &edges)
 	return edges
 }
 
-func (r *RubyCrossFileResolver) resolveCall(sourceFile, className, methodName string, line int) []Edge {
+func (r *RubyCrossFileResolver) walkCallNodes(bt *gotreesitter.BoundTree, node *gotreesitter.Node, filePath string, content []byte, edges *[]Edge) {
+	if node == nil {
+		return
+	}
+	if node.Type(r.lang) == "call" {
+		r.processCallNode(bt, node, filePath, content, edges)
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		r.walkCallNodes(bt, node.Child(i), filePath, content, edges)
+	}
+}
+
+func (r *RubyCrossFileResolver) processCallNode(bt *gotreesitter.BoundTree, callNode *gotreesitter.Node, filePath string, content []byte, edges *[]Edge) {
+	methodNode := callNode.ChildByFieldName("method", r.lang)
+	if methodNode == nil {
+		return
+	}
+	methodName := bt.NodeText(methodNode)
+
+	if methodName == "new" {
+		return
+	}
+
+	receiverNode := callNode.ChildByFieldName("receiver", r.lang)
+	className := extractReceiverClassName(bt, receiverNode, r.lang)
+
+	if className == "" {
+		return
+	}
+
+	enclosingClass := extractEnclosingClass(bt, callNode, r.lang)
+	enclosingMethod := extractEnclosingMethod(bt, callNode, r.lang)
+
+	sourceNode := filePath + "::" + enclosingClass + "#" + enclosingMethod
+	line := lineForByte(content, callNode.StartByte())
+
 	var entries []classEntry
 	if r.useFallback {
 		entries = r.classIndex.Lookup(className)
@@ -98,34 +114,63 @@ func (r *RubyCrossFileResolver) resolveCall(sourceFile, className, methodName st
 	}
 
 	if len(entries) == 0 {
-		return []Edge{{
-			SourceNode: sourceFile + "::" + methodName,
+		*edges = append(*edges, Edge{
+			SourceNode: sourceNode,
 			TargetNode: methodName,
 			Kind:       EdgeCalls,
-			SourceFile: sourceFile,
+			SourceFile: filePath,
 			Line:       line,
 			Language:   "ruby",
 			Metadata:   map[string]any{"unresolved": true},
-		}}
+		})
+		return
 	}
 
-	var edges []Edge
 	ambiguous := len(entries) > 1
 	for _, entry := range entries {
 		e := Edge{
-			SourceNode: sourceFile + "::" + methodName,
+			SourceNode: sourceNode,
 			TargetNode: entry.FilePath + "::" + methodName,
 			Kind:       EdgeCalls,
-			SourceFile: sourceFile,
+			SourceFile: filePath,
 			Line:       line,
 			Language:   "ruby",
 		}
 		if ambiguous {
 			e.Metadata = map[string]any{"ambiguous": true}
 		}
-		edges = append(edges, e)
+		*edges = append(*edges, e)
 	}
-	return edges
+}
+
+func extractReceiverClassName(bt *gotreesitter.BoundTree, node *gotreesitter.Node, lang *gotreesitter.Language) string {
+	if node == nil {
+		return ""
+	}
+	switch node.Type(lang) {
+	case "constant":
+		return bt.NodeText(node)
+	case "scope_resolution":
+		return scopeResolutionText(bt, node)
+	case "call":
+		inner := node.ChildByFieldName("receiver", lang)
+		return extractReceiverClassName(bt, inner, lang)
+	default:
+		return ""
+	}
+}
+
+func extractEnclosingMethod(bt *gotreesitter.BoundTree, n *gotreesitter.Node, lang *gotreesitter.Language) string {
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		nodeType := p.Type(lang)
+		if nodeType == "method" || nodeType == "singleton_method" {
+			nameNode := p.ChildByFieldName("name", lang)
+			if nameNode != nil {
+				return bt.NodeText(nameNode)
+			}
+		}
+	}
+	return ""
 }
 
 func (r *RubyCrossFileResolver) BuildReconcileEdges(edges []Edge) []Edge {
@@ -143,14 +188,13 @@ func (r *RubyCrossFileResolver) BuildReconcileEdges(edges []Edge) []Edge {
 		ctrlShort := parts[0]
 		action := parts[1]
 
-		// Try full namespaced name first (e.g., "Api::V1::TokensController"),
-		// then fall back to short name (e.g., "TokensController").
+		ctrlName := ctrlShort
+		if idx := strings.LastIndex(ctrlShort, "::"); idx >= 0 {
+			ctrlName = ctrlShort[idx+2:]
+		}
+
 		entries := r.classIndex.Lookup(ctrlShort)
 		if len(entries) == 0 {
-			ctrlName := ctrlShort
-			if idx := strings.LastIndex(ctrlShort, "::"); idx >= 0 {
-				ctrlName = ctrlShort[idx+2:]
-			}
 			entries = r.classIndex.Lookup(ctrlName)
 		}
 		if len(entries) == 0 {
@@ -160,7 +204,7 @@ func (r *RubyCrossFileResolver) BuildReconcileEdges(edges []Edge) []Edge {
 		for _, entry := range entries {
 			result = append(result, Edge{
 				SourceNode: handler,
-				TargetNode: entry.FilePath + "::" + action,
+				TargetNode: entry.FilePath + "::" + ctrlName + "#" + action,
 				Kind:       EdgeReconcile,
 				SourceFile: e.SourceFile,
 				Line:       e.Line,

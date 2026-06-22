@@ -44,7 +44,7 @@ func (x *RubyControlFlowExtractor) ExtractCFGs(filePath string, content []byte) 
 	}
 
 	var methods []funcDef
-	walkNodes(root, x.lang, "method", func(n *gotreesitter.Node) {
+	collectMethods := func(n *gotreesitter.Node) {
 		nameNode := n.ChildByFieldName("name", x.lang)
 		bodyNode := n.ChildByFieldName("body", x.lang)
 		if nameNode == nil || bodyNode == nil {
@@ -56,7 +56,9 @@ func (x *RubyControlFlowExtractor) ExtractCFGs(filePath string, content []byte) 
 			endLine:   lineForByte(content, n.EndByte()),
 			bodyNode:  bodyNode,
 		})
-	})
+	}
+	walkNodes(root, x.lang, "method", collectMethods)
+	walkNodes(root, x.lang, "singleton_method", collectMethods)
 
 	var cfgs []CFG
 	for _, md := range methods {

@@ -179,6 +179,37 @@ func TestLookup_controllerPreference(t *testing.T) {
 	}
 }
 
+func TestLookup_conventionPaths(t *testing.T) {
+	idx := graph.BuildClassIndex(nil)
+
+	tests := []struct {
+		className string
+		wantPath  string
+	}{
+		{"PaymentService", "app/services/payment_service.rb"},
+		{"ImportJob", "app/jobs/import_job.rb"},
+		{"SyncWorker", "app/workers/sync_worker.rb"},
+		{"WelcomeMailer", "app/mailers/welcome_mailer.rb"},
+		{"UserPolicy", "app/policies/user_policy.rb"},
+		{"UserSerializer", "app/serializers/user_serializer.rb"},
+		{"Admin::PaymentService", "app/services/admin/payment_service.rb"},
+		{"Admin::ImportJob", "app/jobs/admin/import_job.rb"},
+		{"Admin::SyncWorker", "app/workers/admin/sync_worker.rb"},
+		{"Admin::WelcomeMailer", "app/mailers/admin/welcome_mailer.rb"},
+		{"Admin::UserPolicy", "app/policies/admin/user_policy.rb"},
+		{"Admin::UserSerializer", "app/serializers/admin/user_serializer.rb"},
+	}
+	for _, tt := range tests {
+		entries := idx.Lookup(tt.className)
+		if len(entries) != 1 {
+			t.Fatalf("Lookup(%q): expected 1 entry, got %d", tt.className, len(entries))
+		}
+		if entries[0].FilePath != tt.wantPath {
+			t.Errorf("Lookup(%q): got %q, want %q", tt.className, entries[0].FilePath, tt.wantPath)
+		}
+	}
+}
+
 func TestLookup_controllerPreference_namespaced(t *testing.T) {
 	// Full namespace lookup should prefer controller even when model exists
 	edges := []graph.Edge{

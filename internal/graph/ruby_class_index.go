@@ -84,6 +84,14 @@ func (idx *RubyClassIndex) LookupStrict(className string) []classEntry {
 }
 
 func containsSuffix(targetNode string) string {
+	hashIdx := strings.LastIndex(targetNode, "#")
+	if hashIdx >= 0 {
+		suffix := targetNode[hashIdx+1:]
+		if colonIdx := strings.LastIndex(targetNode[:hashIdx], "::"); colonIdx >= 0 {
+			return targetNode[colonIdx+2 : hashIdx]
+		}
+		return suffix
+	}
 	idx := strings.LastIndex(targetNode, "::")
 	if idx < 0 {
 		return ""
@@ -107,12 +115,29 @@ func railsConventionPath(className string) string {
 		namespace = className[:dotIdx]
 	}
 	snake := CamelToSnake(shortName)
-	if strings.HasSuffix(shortName, "Controller") {
-		if namespace != "" {
-			return "app/controllers/" + namespaceToPath(namespace) + "/" + snake + ".rb"
-		}
-		return "app/controllers/" + snake + ".rb"
+
+	type suffixMapping struct {
+		suffix string
+		dir    string
 	}
+	mappings := []suffixMapping{
+		{"Controller", "app/controllers/"},
+		{"Service", "app/services/"},
+		{"Job", "app/jobs/"},
+		{"Worker", "app/workers/"},
+		{"Mailer", "app/mailers/"},
+		{"Policy", "app/policies/"},
+		{"Serializer", "app/serializers/"},
+	}
+	for _, m := range mappings {
+		if strings.HasSuffix(shortName, m.suffix) {
+			if namespace != "" {
+				return m.dir + namespaceToPath(namespace) + "/" + snake + ".rb"
+			}
+			return m.dir + snake + ".rb"
+		}
+	}
+
 	if namespace != "" {
 		return "app/models/" + namespaceToPath(namespace) + "/" + snake + ".rb"
 	}

@@ -99,11 +99,11 @@ end
 	for _, e := range contains {
 		names[e.TargetNode] = true
 	}
-	if !names["test.rb::alpha"] {
-		t.Error("expected contains edge for alpha")
+	if !names["test.rb::MyClass#alpha"] {
+		t.Error("expected contains edge for MyClass#alpha")
 	}
-	if !names["test.rb::beta"] {
-		t.Error("expected contains edge for beta")
+	if !names["test.rb::MyClass#beta"] {
+		t.Error("expected contains edge for MyClass#beta")
 	}
 	if !names["test.rb::MyClass"] {
 		t.Error("expected contains edge for MyClass")
@@ -142,11 +142,11 @@ end
 	for _, e := range contains {
 		names[e.TargetNode] = true
 	}
-	if !names["test.rb::create_default"] {
-		t.Error("expected contains edge for create_default")
+	if !names["test.rb::MyClass#create_default"] {
+		t.Error("expected contains edge for MyClass#create_default")
 	}
-	if !names["test.rb::instance_method"] {
-		t.Error("expected contains edge for instance_method")
+	if !names["test.rb::MyClass#instance_method"] {
+		t.Error("expected contains edge for MyClass#instance_method")
 	}
 	if !names["test.rb::MyClass"] {
 		t.Error("expected contains edge for MyClass")
@@ -225,7 +225,7 @@ end
 
 	found := false
 	for _, e := range calls {
-		if e.SourceNode == "test.rb::index" && e.TargetNode == "data" {
+		if e.SourceNode == "test.rb::Controller#index" && e.TargetNode == "data" {
 			found = true
 		}
 	}
@@ -334,7 +334,7 @@ func TestRubyGraphExtractor_Fixture(t *testing.T) {
 		containsMap[e.TargetNode] = true
 	}
 	for _, name := range []string{"index", "create", "build_user", "user_params"} {
-		key := fixturePath + "::" + name
+		key := fixturePath + "::UsersController#" + name
 		if !containsMap[key] {
 			t.Errorf("expected contains edge for %s", name)
 		}
@@ -367,8 +367,8 @@ func TestRubyGraphExtractor_FixtureCalls(t *testing.T) {
 	}
 
 	expectedCalls := []string{
-		fixturePath + "::create->build_user",
-		fixturePath + "::build_user->user_params",
+		fixturePath + "::UsersController#create->build_user",
+		fixturePath + "::UsersController#build_user->user_params",
 	}
 	for _, key := range expectedCalls {
 		if !callMap[key] {
@@ -406,7 +406,7 @@ func TestRubyGraphExtractor_ModelFixture(t *testing.T) {
 		containsMap[e.TargetNode] = true
 	}
 	for _, name := range []string{"full_name", "find_by_email", "deactivate", "send_deactivation_email"} {
-		key := fixturePath + "::" + name
+		key := fixturePath + "::User#" + name
 		if !containsMap[key] {
 			t.Errorf("expected contains edge for %s", name)
 		}
@@ -439,10 +439,10 @@ func TestRubyGraphExtractor_ServiceFixture(t *testing.T) {
 	}
 
 	expectedCalls := []string{
-		fixturePath + "::process->validate_order",
-		fixturePath + "::process->calculate_total",
-		fixturePath + "::process->apply_discounts",
-		fixturePath + "::process->save_order",
+		fixturePath + "::OrderProcessor#process->validate_order",
+		fixturePath + "::OrderProcessor#process->calculate_total",
+		fixturePath + "::OrderProcessor#process->apply_discounts",
+		fixturePath + "::OrderProcessor#process->save_order",
 	}
 	for _, key := range expectedCalls {
 		if !callMap[key] {
@@ -570,11 +570,11 @@ end
 	for _, e := range contains {
 		names[e.TargetNode] = true
 	}
-	if !names["test.rb::public_method"] {
-		t.Error("expected contains edge for public_method")
+	if !names["test.rb::Service#public_method"] {
+		t.Error("expected contains edge for Service#public_method")
 	}
-	if !names["test.rb::private_helper"] {
-		t.Error("expected contains edge for private_helper")
+	if !names["test.rb::Service#private_helper"] {
+		t.Error("expected contains edge for Service#private_helper")
 	}
 }
 
@@ -618,28 +618,35 @@ func TestRubyGraphExtractor_ContainsClassModule(t *testing.T) {
 			name:    "scoped class",
 			fixture: "controller.rb",
 			expected: []string{
-				"index", "create", "user_params", "UsersController",
+				"Api::V1::UsersController#index",
+				"Api::V1::UsersController#create",
+				"Api::V1::UsersController#user_params",
+				"UsersController",
 			},
 		},
 		{
 			name:    "simple class",
 			fixture: "user.rb",
 			expected: []string{
-				"full_name", "active?", "User",
+				"User#full_name",
+				"User#active?",
+				"User",
 			},
 		},
 		{
 			name:    "class with method calls",
 			fixture: "payment_service.rb",
 			expected: []string{
-				"process", "PaymentService",
+				"PaymentService#process",
+				"PaymentService",
 			},
 		},
 		{
 			name:    "simple class with method",
 			fixture: "order.rb",
 			expected: []string{
-				"calculate_total", "Order",
+				"Order#calculate_total",
+				"Order",
 			},
 		},
 	}

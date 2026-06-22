@@ -479,6 +479,56 @@ end
 	}
 }
 
+func TestRubyControlFlowExtractor_SingletonMethodIfElse(t *testing.T) {
+	ex := newRubyCFGExtractor(t)
+	src := []byte(`class ImportJob
+  def self.perform(data)
+    if data.valid?
+      process(data)
+    else
+      skip(data)
+    end
+  end
+end
+`)
+	cfgs, err := ex.ExtractCFGs("app/jobs/import_job.rb", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfgs) != 1 {
+		t.Fatalf("expected 1 CFG, got %d", len(cfgs))
+	}
+	cfg := cfgs[0]
+
+	if want := "app/jobs/import_job.rb::perform"; cfg.Entry != want {
+		t.Errorf("Entry = %q, want %q", cfg.Entry, want)
+	}
+
+	for _, n := range cfg.Nodes {
+		if n.Type == "start" {
+			if n.Label != "perform" {
+				t.Errorf("start node label = %q, want %q", n.Label, "perform")
+			}
+		}
+	}
+
+	counts := countNodeTypes(cfg)
+	if counts["decision"] < 1 {
+		t.Errorf("expected at least 1 decision node, got %d", counts["decision"])
+	}
+	if counts["terminal"] < 1 {
+		t.Errorf("expected at least 1 terminal node, got %d", counts["terminal"])
+	}
+
+	branches := countEdgeBranches(cfg)
+	if branches["yes"] < 1 {
+		t.Error("expected at least 1 'yes' branch edge")
+	}
+	if branches["no"] < 1 {
+		t.Error("expected at least 1 'no' branch edge")
+	}
+}
+
 func TestRubyControlFlowExtractor_BeginRescueEnsure(t *testing.T) {
 	ex := newRubyCFGExtractor(t)
 	src := []byte(`def find_user(id)
