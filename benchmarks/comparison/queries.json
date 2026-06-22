@@ -1,0 +1,129 @@
+{
+  "workspaces": {
+    "nano-brain": "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
+    "zengamingx": "d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+    "Phil-timeshel": "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95"
+  },
+  "queries": [
+    {
+      "id": "fu1",
+      "query": "How does topup work?",
+      "category": "feature-understanding",
+      "expect": ["topup", "balance", "payment"]
+    },
+    {
+      "id": "fu2",
+      "query": "What is the payment flow?",
+      "category": "feature-understanding",
+      "expect": ["payment", "checkout", "charge"]
+    },
+    {
+      "id": "fu3",
+      "query": "How does the auth system work?",
+      "category": "feature-understanding",
+      "expect": ["auth", "login", "session", "token"]
+    },
+    {
+      "id": "fu4",
+      "query": "Explain the order lifecycle",
+      "category": "feature-understanding",
+      "expect": ["order", "status", "create", "complete"]
+    },
+    {
+      "id": "fu5",
+      "query": "What does the webhook handler do?",
+      "category": "feature-understanding",
+      "expect": ["webhook", "handler", "event", "callback"]
+    },
+    {
+      "id": "db1",
+      "query": "Why might a payment fail?",
+      "category": "debugging",
+      "expect": ["error", "fail", "timeout", "reject"]
+    },
+    {
+      "id": "db2",
+      "query": "Trace the error path in order processing",
+      "category": "debugging",
+      "expect": ["error", "exception", "retry", "catch"]
+    },
+    {
+      "id": "db3",
+      "query": "What happens when Redis is down?",
+      "category": "debugging",
+      "expect": ["redis", "cache", "fallback", "error"]
+    },
+    {
+      "id": "db4",
+      "query": "Debug the authentication flow",
+      "category": "debugging",
+      "expect": ["auth", "debug", "error", "validate"]
+    },
+    {
+      "id": "db5",
+      "query": "Why is the webhook not processing?",
+      "category": "debugging",
+      "expect": ["webhook", "queue", "retry", "fail"]
+    },
+    {
+      "id": "ar1",
+      "query": "How are services connected?",
+      "category": "architecture",
+      "expect": ["service", "connect", "api", "endpoint"]
+    },
+    {
+      "id": "ar2",
+      "query": "What calls the UserController?",
+      "category": "architecture",
+      "expect": ["controller", "route", "call", "handler"]
+    },
+    {
+      "id": "ar3",
+      "query": "How is the database structured?",
+      "category": "architecture",
+      "expect": ["database", "schema", "table", "model"]
+    },
+    {
+      "id": "ar4",
+      "query": "What is the relationship between orders and payments?",
+      "category": "architecture",
+      "expect": ["order", "payment", "relation", "foreign"]
+    },
+    {
+      "id": "ar5",
+      "query": "How does caching work?",
+      "category": "architecture",
+      "expect": ["cache", "redis", "ttl", "expire"]
+    },
+    {
+      "id": "cs1",
+      "query": "What did we decide about rate limiting?",
+      "category": "cross-session",
+      "expect": ["rate", "limit", "decision", "throttle"]
+    },
+    {
+      "id": "cs2",
+      "query": "Find past bug fixes for authentication",
+      "category": "cross-session",
+      "expect": ["fix", "bug", "auth", "patch"]
+    },
+    {
+      "id": "cs3",
+      "query": "What was the performance optimization we discussed?",
+      "category": "cross-session",
+      "expect": ["performance", "optimization", "speed", "cache"]
+    },
+    {
+      "id": "cs4",
+      "query": "Show me the database migration history",
+      "category": "cross-session",
+      "expect": ["migration", "schema", "version", "database"]
+    },
+    {
+      "id": "cs5",
+      "query": "What security concerns were raised?",
+      "category": "cross-session",
+      "expect": ["security", "vulnerability", "auth", "encrypt"]
+    }
+  ]
+}

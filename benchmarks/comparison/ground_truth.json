@@ -1,0 +1,313 @@
+{
+  "version": "1.0",
+  "description": "Ground truth annotations for nano-brain code intelligence benchmark",
+  "workspace": "nano-brain",
+  "workspace_hash": "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
+  "functions": [
+    {
+      "id": "go_http_handler_query",
+      "source_file": "internal/server/handlers/query.go",
+      "function_name": "Query",
+      "description": "Hybrid search handler - returns hybrid search results combining BM25 + vector + RRF",
+      "language": "go",
+      "expected_callers": [
+        "internal/server/routes.go::registerRoutes"
+      ],
+      "expected_callees": [
+        "search.HybridSearch",
+        "search.ParseTimeRangeFilter",
+        "handlers.LoggerFromCtx",
+        "telemetry.Recorder.Record",
+        "echo.Context.Bind",
+        "echo.Context.Get",
+        "echo.Context.JSON",
+        "echo.NewHTTPError"
+      ],
+      "expected_impact_nodes": [
+        "internal/server/handlers/query.go",
+        "internal/server/routes.go",
+        "internal/search/service.go"
+      ],
+      "expected_flow_nodes": [
+        "POST /api/v1/query",
+        "handlers.Query",
+        "search.HybridSearch",
+        "search.ParseTimeRangeFilter"
+      ]
+    },
+    {
+      "id": "go_graph_handler_query",
+      "source_file": "internal/server/handlers/graph.go",
+      "function_name": "GraphQuery",
+      "description": "Graph query handler - returns graph edges for a node",
+      "language": "go",
+      "expected_callers": [
+        "internal/server/routes.go::registerRoutes"
+      ],
+      "expected_callees": [
+        "sqlc.Queries.GetOutgoingEdges",
+        "sqlc.Queries.GetIncomingEdges",
+        "echo.Context.Bind",
+        "echo.Context.Get",
+        "echo.Context.JSON",
+        "echo.NewHTTPError"
+      ],
+      "expected_impact_nodes": [
+        "internal/server/handlers/graph.go",
+        "internal/server/routes.go",
+        "internal/storage/sqlc/querier.go"
+      ],
+      "expected_flow_nodes": [
+        "POST /api/v1/graph/query",
+        "handlers.GraphQuery",
+        "sqlc.GetOutgoingEdges",
+        "sqlc.GetIncomingEdges"
+      ]
+    },
+    {
+      "id": "go_search_hybrid",
+      "source_file": "internal/search/service.go",
+      "function_name": "HybridSearch",
+      "description": "Core hybrid search function combining BM25 + vector + RRF fusion",
+      "language": "go",
+      "expected_callers": [
+        "internal/server/handlers/query.go::Query",
+        "internal/mcp/tools.go::registerMemoryQuery"
+      ],
+      "expected_callees": [
+        "search.preprocess.Preprocessor.Process",
+        "search.hyde.Generator.Generate",
+        "sqlc.Queries.BM25Search",
+        "sqlc.Queries.VectorSearch",
+        "search.RRFMerge",
+        "search.ApplyRecencyBoost",
+        "search.PagerankBoost",
+        "search.Reranker.Rerank"
+      ],
+      "expected_impact_nodes": [
+        "internal/search/service.go",
+        "internal/server/handlers/query.go",
+        "internal/mcp/tools.go"
+      ],
+      "expected_flow_nodes": [
+        "search.HybridSearch",
+        "preprocess.Process",
+        "hyde.Generate",
+        "BM25Search",
+        "VectorSearch",
+        "RRFMerge",
+        "ApplyRecencyBoost"
+      ]
+    },
+    {
+      "id": "go_mcp_register_graph",
+      "source_file": "internal/mcp/tools.go",
+      "function_name": "registerMemoryGraph",
+      "description": "MCP tool registration for memory_graph - knowledge graph query",
+      "language": "go",
+      "expected_callers": [
+        "internal/mcp/tools.go::RegisterTools"
+      ],
+      "expected_callees": [
+        "mcpsdk.Server.AddTool",
+        "storage.ResolveWorkspaceParam",
+        "mcp.resolveNodeAgainstWorkspace",
+        "mcp.lookupWorkspaceRoot",
+        "mcp.stripWorkspacePrefix",
+        "sqlc.Queries.GetOutgoingEdges",
+        "sqlc.Queries.GetIncomingEdges"
+      ],
+      "expected_impact_nodes": [
+        "internal/mcp/tools.go",
+        "internal/mcp/adapter.go"
+      ],
+      "expected_flow_nodes": [
+        "memory_graph",
+        "resolveNodeAgainstWorkspace",
+        "GetOutgoingEdges",
+        "GetIncomingEdges"
+      ]
+    },
+    {
+      "id": "go_flow_build",
+      "source_file": "internal/flow/builder.go",
+      "function_name": "BuildFlow",
+      "description": "Flow builder - builds execution flow from graph edges starting from entry",
+      "language": "go",
+      "expected_callers": [
+        "internal/server/handlers/flow.go::GraphFlow"
+      ],
+      "expected_callees": [
+        "flow.buildIndex",
+        "flow.symbolPart",
+        "flow.classifyRole",
+        "flow.deriveServiceName",
+        "flow.isLoggingName",
+        "flow.isNoiseExternal",
+        "flow.edgeConditional",
+        "flow.edgeConditionLabel"
+      ],
+      "expected_impact_nodes": [
+        "internal/flow/builder.go",
+        "internal/server/handlers/flow.go"
+      ],
+      "expected_flow_nodes": [
+        "BuildFlow",
+        "buildIndex",
+        "classifyRole",
+        "deriveServiceName"
+      ]
+    },
+    {
+      "id": "go_graph_extract_edges",
+      "source_file": "internal/graph/go_extractor.go",
+      "function_name": "ExtractEdges",
+      "description": "Go graph extractor - extracts contains, imports, calls edges from Go source",
+      "language": "go",
+      "expected_callers": [
+        "internal/graph/registry.go::Registry.ExtractEdgesForFrameworks"
+      ],
+      "expected_callees": [
+        "GoGraphExtractor.extractContains",
+        "GoGraphExtractor.extractImports",
+        "GoGraphExtractor.extractCalls",
+        "gotreesitter.NewParser",
+        "gotreesitter.Language.Parse",
+        "gotreesitter.BoundTree.NodeText"
+      ],
+      "expected_impact_nodes": [
+        "internal/graph/go_extractor.go",
+        "internal/graph/registry.go",
+        "internal/watcher/watcher.go"
+      ],
+      "expected_flow_nodes": [
+        "ExtractEdges",
+        "extractContains",
+        "extractImports",
+        "extractCalls"
+      ]
+    },
+    {
+      "id": "go_watcher_extract_edges",
+      "source_file": "internal/watcher/watcher.go",
+      "function_name": "extractAndUpsertEdges",
+      "description": "Watcher function - extracts graph edges and upserts to database",
+      "language": "go",
+      "expected_callers": [
+        "internal/watcher/watcher.go::processFile"
+      ],
+      "expected_callees": [
+        "graph.Registry.ExtractEdgesForFrameworks",
+        "watcher.buildEdgeMetadata",
+        "sqlc.Queries.DeleteGraphEdgesByFile",
+        "sqlc.Queries.UpsertGraphEdge",
+        "database/sql.Tx.BeginTx",
+        "database/sql.Tx.Commit"
+      ],
+      "expected_impact_nodes": [
+        "internal/watcher/watcher.go",
+        "internal/graph/registry.go",
+        "internal/storage/sqlc/querier.go"
+      ],
+      "expected_flow_nodes": [
+        "extractAndUpsertEdges",
+        "ExtractEdgesForFrameworks",
+        "buildEdgeMetadata",
+        "DeleteGraphEdgesByFile",
+        "UpsertGraphEdge"
+      ]
+    },
+    {
+      "id": "go_handler_impact",
+      "source_file": "internal/server/handlers/impact.go",
+      "function_name": "GraphImpact",
+      "description": "Impact handler - returns reverse impact BFS for a node",
+      "language": "go",
+      "expected_callers": [
+        "internal/server/routes.go::registerRoutes"
+      ],
+      "expected_callees": [
+        "handlers.collectImpact",
+        "sqlc.Queries.GetImpactorsByTargets",
+        "echo.Context.Bind",
+        "echo.Context.Get",
+        "echo.Context.JSON",
+        "echo.NewHTTPError"
+      ],
+      "expected_impact_nodes": [
+        "internal/server/handlers/impact.go",
+        "internal/server/routes.go",
+        "internal/storage/sqlc/querier.go"
+      ],
+      "expected_flow_nodes": [
+        "POST /api/v1/graph/impact",
+        "handlers.GraphImpact",
+        "collectImpact",
+        "GetImpactorsByTargets"
+      ]
+    },
+    {
+      "id": "go_handler_trace",
+      "source_file": "internal/server/handlers/trace.go",
+      "function_name": "GraphTrace",
+      "description": "Trace handler - traces call chain from entry point",
+      "language": "go",
+      "expected_callers": [
+        "internal/server/routes.go::registerRoutes"
+      ],
+      "expected_callees": [
+        "handlers.traceCallChain",
+        "sqlc.Queries.GetOutgoingEdges",
+        "sqlc.Queries.GetOutgoingEdgesBySymbol",
+        "echo.Context.Bind",
+        "echo.Context.Get",
+        "echo.Context.JSON",
+        "echo.NewHTTPError"
+      ],
+      "expected_impact_nodes": [
+        "internal/server/handlers/trace.go",
+        "internal/server/routes.go",
+        "internal/storage/sqlc/querier.go"
+      ],
+      "expected_flow_nodes": [
+        "POST /api/v1/graph/trace",
+        "handlers.GraphTrace",
+        "traceCallChain",
+        "GetOutgoingEdges"
+      ]
+    },
+    {
+      "id": "go_handler_flowchart",
+      "source_file": "internal/server/handlers/flowchart.go",
+      "function_name": "GraphFlowchart",
+      "description": "Flowchart handler - returns control-flow graph for a function",
+      "language": "go",
+      "expected_callers": [
+        "internal/server/routes.go::registerRoutes"
+      ],
+      "expected_callees": [
+        "handlers.resolveFlowchartHandler",
+        "sqlc.Queries.ListAllEdgesByWorkspace",
+        "sqlc.Queries.GetFunctionFlowchartByHandler",
+        "handlers.parseRoute",
+        "handlers.lastDottedSegment",
+        "echo.Context.Bind",
+        "echo.Context.Get",
+        "echo.Context.JSON",
+        "echo.NewHTTPError"
+      ],
+      "expected_impact_nodes": [
+        "internal/server/handlers/flowchart.go",
+        "internal/server/routes.go",
+        "internal/storage/sqlc/querier.go",
+        "internal/flow/cfg_loader.go"
+      ],
+      "expected_flow_nodes": [
+        "POST /api/v1/graph/flowchart",
+        "handlers.GraphFlowchart",
+        "resolveFlowchartHandler",
+        "GetFunctionFlowchartByHandler"
+      ]
+    }
+  ]
+}
