@@ -16,7 +16,7 @@ func newTestResolver(edges []graph.Edge) *graph.RubyCrossFileResolver {
 func TestResolveEdges_simple(t *testing.T) {
 	edges := []graph.Edge{
 		{SourceNode: "app/models/user.rb", TargetNode: "app/models/user.rb::User", Kind: graph.EdgeContains},
-		{SourceNode: "app/models/user.rb", TargetNode: "app/models/user.rb::where", Kind: graph.EdgeContains},
+		{SourceNode: "app/models/user.rb", TargetNode: "app/models/user.rb::User#where", Kind: graph.EdgeContains},
 	}
 
 	resolver := newTestResolver(edges)
@@ -67,7 +67,7 @@ end`)
 func TestResolveEdges_new_method(t *testing.T) {
 	edges := []graph.Edge{
 		{SourceNode: "app/services/payment_service.rb", TargetNode: "app/services/payment_service.rb::PaymentService", Kind: graph.EdgeContains},
-		{SourceNode: "app/services/payment_service.rb", TargetNode: "app/services/payment_service.rb::process", Kind: graph.EdgeContains},
+		{SourceNode: "app/services/payment_service.rb", TargetNode: "app/services/payment_service.rb::PaymentService#process", Kind: graph.EdgeContains},
 	}
 
 	resolver := newTestResolver(edges)
@@ -211,13 +211,13 @@ func TestBuildReconcileEdges(t *testing.T) {
 	found := false
 	for _, e := range reconcileEdges {
 		if e.Kind == graph.EdgeReconcile {
-			if e.SourceNode == "UsersController#create" && e.TargetNode == "app/controllers/users_controller.rb::create" {
+			if e.SourceNode == "UsersController#create" && e.TargetNode == "app/controllers/users_controller.rb::UsersController#create" {
 				found = true
 			}
 		}
 	}
 	if !found {
-		t.Error("expected reconcile edge from UsersController#create to file::create")
+		t.Error("expected reconcile edge from UsersController#create to file::UsersController#create")
 		for _, e := range reconcileEdges {
 			t.Logf("  kind=%s %s -> %s", e.Kind, e.SourceNode, e.TargetNode)
 		}
@@ -237,7 +237,7 @@ func TestBuildReconcileEdges_namespaced(t *testing.T) {
 	found := false
 	for _, e := range reconcileEdges {
 		if e.SourceNode == "Api::V1::UsersController#index" &&
-			e.TargetNode == "app/controllers/api/v1/users_controller.rb::index" {
+			e.TargetNode == "app/controllers/api/v1/users_controller.rb::UsersController#index" {
 			found = true
 		}
 	}
@@ -250,8 +250,6 @@ func TestBuildReconcileEdges_namespaced(t *testing.T) {
 }
 
 func TestBuildReconcileEdges_namespaced_controllerCollision(t *testing.T) {
-	// The exact bug: TokensController model + Api::V1::TokensController controller
-	// BuildReconcileEdges should resolve to the controller file, not the model.
 	edges := []graph.Edge{
 		{SourceNode: "app/models/tokens_controller.rb", TargetNode: "app/models/tokens_controller.rb::TokensController", Kind: graph.EdgeContains},
 		{SourceNode: "app/controllers/api/v1/tokens_controller.rb", TargetNode: "app/controllers/api/v1/tokens_controller.rb::TokensController", Kind: graph.EdgeContains},
@@ -269,7 +267,7 @@ func TestBuildReconcileEdges_namespaced_controllerCollision(t *testing.T) {
 	found := false
 	for _, e := range reconcileEdges {
 		if e.SourceNode == "Api::V1::TokensController#create" &&
-			e.TargetNode == "app/controllers/api/v1/tokens_controller.rb::create" {
+			e.TargetNode == "app/controllers/api/v1/tokens_controller.rb::TokensController#create" {
 			found = true
 		}
 	}
@@ -278,5 +276,193 @@ func TestBuildReconcileEdges_namespaced_controllerCollision(t *testing.T) {
 		for _, e := range reconcileEdges {
 			t.Logf("  %s -> %s", e.SourceNode, e.TargetNode)
 		}
+	}
+}
+
+func TestResolveEdges_bareCall(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "app/models/user.rb", TargetNode: "app/models/user.rb::User", Kind: graph.EdgeContains},
+	}
+
+	resolver := newTestResolver(edges)
+
+	content := []byte(`class UsersController < ApplicationController
+  def show
+    @user = User.find(params[:id])
+  end
+end`)
+
+	fileContents := map[string][]byte{
+		"app/controllers/users_controller.rb": content,
+	}
+
+	resolved := resolver.ResolveEdges(edges, fileContents)
+
+	var callEdges []graph.Edge
+	for _, e := range resolved {
+		if e.Kind == graph.EdgeCalls {
+			callEdges = append(callEdges, e)
+		}
+	}
+
+	if len(callEdges) == 0 {
+		t.Fatal("expected at least 1 call edge")
+	}
+
+	found := false
+	for _, e := range callEdges {
+		if e.TargetNode == "app/models/user.rb::find" {
+			found = true
+			if e.SourceNode != "app/controllers/users_controller.rb::UsersController#show" {
+				t.Errorf("unexpected source node: %s", e.SourceNode)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected resolved call to app/models/user.rb::find")
+		for _, e := range callEdges {
+			t.Logf("  got: %s -> %s", e.SourceNode, e.TargetNode)
+		}
+	}
+}
+
+func TestResolveEdges_chainedCalls(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "app/models/user.rb", TargetNode: "app/models/user.rb::User", Kind: graph.EdgeContains},
+	}
+
+	resolver := newTestResolver(edges)
+
+	content := []byte(`class UsersController < ApplicationController
+  def index
+    users = User.where(active: true).order(:name)
+    render json: users
+  end
+end`)
+
+	fileContents := map[string][]byte{
+		"app/controllers/users_controller.rb": content,
+	}
+
+	resolved := resolver.ResolveEdges(edges, fileContents)
+
+	var callEdges []graph.Edge
+	for _, e := range resolved {
+		if e.Kind == graph.EdgeCalls {
+			callEdges = append(callEdges, e)
+		}
+	}
+
+	if len(callEdges) < 2 {
+		t.Fatalf("expected at least 2 call edges for chained calls, got %d", len(callEdges))
+	}
+
+	foundWhere := false
+	foundOrder := false
+	for _, e := range callEdges {
+		if e.TargetNode == "app/models/user.rb::where" {
+			foundWhere = true
+		}
+		if e.TargetNode == "app/models/user.rb::order" {
+			foundOrder = true
+		}
+	}
+	if !foundWhere {
+		t.Error("expected resolved call to app/models/user.rb::where")
+	}
+	if !foundOrder {
+		t.Error("expected resolved call to app/models/user.rb::order")
+	}
+}
+
+func TestResolveEdges_unresolvable(t *testing.T) {
+	edges := []graph.Edge{}
+
+	idx := graph.BuildClassIndex(edges)
+	logger := zerolog.Nop()
+	resolver := graph.NewRubyCrossFileResolverNoFallback(idx, logger)
+
+	content := []byte(`class MyService
+  def run
+    UnknownClass.do_something
+  end
+end`)
+
+	fileContents := map[string][]byte{
+		"app/services/my_service.rb": content,
+	}
+
+	resolved := resolver.ResolveEdges(edges, fileContents)
+
+	var callEdges []graph.Edge
+	for _, e := range resolved {
+		if e.Kind == graph.EdgeCalls {
+			callEdges = append(callEdges, e)
+		}
+	}
+
+	if len(callEdges) == 0 {
+		t.Fatal("expected at least 1 call edge")
+	}
+
+	found := false
+	for _, e := range callEdges {
+		if e.TargetNode == "do_something" {
+			found = true
+			if e.Metadata == nil || e.Metadata["unresolved"] != true {
+				t.Error("expected unresolved=true in metadata")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected unresolved call to do_something")
+	}
+}
+
+func TestResolveEdges_lowercaseReceiverSkipped(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "app/models/user.rb", TargetNode: "app/models/user.rb::User", Kind: graph.EdgeContains},
+	}
+
+	resolver := newTestResolver(edges)
+
+	content := []byte(`class UsersController < ApplicationController
+  def update
+    user = User.find(params[:id])
+    user.save
+    @user.stories.create(title: "new")
+  end
+end`)
+
+	fileContents := map[string][]byte{
+		"app/controllers/users_controller.rb": content,
+	}
+
+	resolved := resolver.ResolveEdges(edges, fileContents)
+
+	var callEdges []graph.Edge
+	for _, e := range resolved {
+		if e.Kind == graph.EdgeCalls {
+			callEdges = append(callEdges, e)
+		}
+	}
+
+	for _, e := range callEdges {
+		if e.TargetNode == "save" || e.TargetNode == "app/models/user.rb::save" {
+			t.Errorf("lowercase receiver 'user.save' should not produce a call edge, got: %s -> %s", e.SourceNode, e.TargetNode)
+		}
+		if e.TargetNode == "create" || e.TargetNode == "app/models/user.rb::create" {
+			t.Errorf("instance variable receiver '@user.stories.create' should not produce a call edge, got: %s -> %s", e.SourceNode, e.TargetNode)
+		}
+	}
+
+	foundFind := false
+	for _, e := range callEdges {
+		if e.TargetNode == "app/models/user.rb::find" {
+			foundFind = true
+		}
+	}
+	if !foundFind {
+		t.Error("expected resolved call to app/models/user.rb::find")
 	}
 }

@@ -410,6 +410,12 @@ func startServer(configPath string) {
 			graphExtractors = append(graphExtractors, rbGraphGE)
 			logger.Info().Msg("execution-flow: ruby graph extractor enabled")
 		}
+		if railsDSLEdge, err := graph.NewRailsDSLEdgeExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("rails dsl edge extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, railsDSLEdge)
+			logger.Info().Msg("execution-flow: rails dsl edge extractor enabled")
+		}
 	}
 	graphRegistry := graph.NewRegistry(graphExtractors...)
 

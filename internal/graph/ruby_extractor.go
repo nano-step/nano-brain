@@ -91,9 +91,13 @@ func (e *RubyGraphExtractor) extractContains(bt *gotreesitter.BoundTree, tree *g
 
 	for _, match := range matches {
 		var nameNode *gotreesitter.Node
+		var declNode *gotreesitter.Node
 		for _, cap := range match.Captures {
-			if cap.Name == "name" {
+			switch cap.Name {
+			case "name":
 				nameNode = cap.Node
+			case "decl":
+				declNode = cap.Node
 			}
 		}
 		if nameNode == nil {
@@ -104,13 +108,23 @@ func (e *RubyGraphExtractor) extractContains(bt *gotreesitter.BoundTree, tree *g
 		if idx := strings.LastIndex(name, "::"); idx >= 0 {
 			name = name[idx+2:]
 		}
-		if seen[name] {
+
+		isMethod := declNode != nil && (bt.NodeType(declNode) == "method" || bt.NodeType(declNode) == "singleton_method")
+		targetNode := filePath + "::" + name
+		if isMethod {
+			className := extractEnclosingClass(bt, declNode, e.lang)
+			if className != "" {
+				targetNode = filePath + "::" + className + "#" + name
+			}
+		}
+
+		if seen[targetNode] {
 			continue
 		}
-		seen[name] = true
+		seen[targetNode] = true
 		edges = append(edges, Edge{
 			SourceNode: filePath,
-			TargetNode: filePath + "::" + name,
+			TargetNode: targetNode,
 			Kind:       EdgeContains,
 			SourceFile: filePath,
 			Line:       lineForByte(content, nameNode.StartByte()),
@@ -138,9 +152,24 @@ func extractRubyFullName(bt *gotreesitter.BoundTree, n *gotreesitter.Node) strin
 	return strings.Join(parts, "::")
 }
 
+func extractEnclosingClass(bt *gotreesitter.BoundTree, n *gotreesitter.Node, lang *gotreesitter.Language) string {
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		nodeType := bt.NodeType(p)
+		if nodeType == "class" || nodeType == "module" {
+			nameNode := p.ChildByFieldName("name", lang)
+			if nameNode == nil {
+				continue
+			}
+			return extractRubyFullName(bt, nameNode)
+		}
+	}
+	return ""
+}
+
 func (e *RubyGraphExtractor) extractCalls(bt *gotreesitter.BoundTree, tree *gotreesitter.Tree, content []byte, filePath string) []Edge {
 	funcMatches := e.callFuncQuery.Execute(tree)
 	var funcs []funcRange
+	funcClass := map[string]string{}
 	methodNames := map[string]bool{}
 	for _, match := range funcMatches {
 		var name string
@@ -160,6 +189,9 @@ func (e *RubyGraphExtractor) extractCalls(bt *gotreesitter.BoundTree, tree *gotr
 				startByte: declNode.StartByte(),
 				endByte:   declNode.EndByte(),
 			})
+			if className := extractEnclosingClass(bt, declNode, e.lang); className != "" {
+				funcClass[name] = className
+			}
 		}
 	}
 
@@ -192,8 +224,12 @@ func (e *RubyGraphExtractor) extractCalls(bt *gotreesitter.BoundTree, tree *gotr
 				continue
 			}
 			seen[key] = true
+			sourceNode := filePath + "::" + enclosing
+			if className := funcClass[enclosing]; className != "" {
+				sourceNode = filePath + "::" + className + "#" + enclosing
+			}
 			edges = append(edges, Edge{
-				SourceNode: filePath + "::" + enclosing,
+				SourceNode: sourceNode,
 				TargetNode: callee,
 				Kind:       EdgeCalls,
 				SourceFile: filePath,
