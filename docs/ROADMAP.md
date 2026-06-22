@@ -242,7 +242,7 @@ Phase 4 — Hardening (mostly shipped)
   ├── ✅ #180 — Ollama context length overflow on large chunks (PR #208/#209)
   ├── ✅ #181 — UTF-8 null byte in harvested sessions
   ├── ⚠️ #184 — Require explicit --workspace on CLI commands (partial: only reset-embeddings)
-  ├── ❌ #158 — Incremental reindex (only changed files) — still full reindex
+  ├── ✅ #158 — Incremental reindex (only changed files) — watcher real-time cleanup shipped
   ├── ✅ #190 — cleanup-stale-raw command
   └── ✅ #191 — Summarization max_tokens default 4096 → 8000
 
