@@ -7,6 +7,9 @@ Persistent memory and code intelligence for AI coding agents. Across sessions, m
 [![Go 1.23](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-nano--step%2Fnano--brain-181717?logo=github)](https://github.com/nano-step/nano-brain)
+[![npm](https://img.shields.io/badge/npm-@nano--step%2Fnano--brain-CC3533?logo=npm)](https://www.npmjs.com/package/@nano-step/nano-brain)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/nano-step/nano-brain)
+[![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/nano-brain)
 
 ---
 
@@ -192,6 +195,56 @@ Add to your MCP client config (Claude Code, OpenCode, Cursor, etc.):
 
 ---
 
+## Demo
+
+### Query Your Codebase
+
+```bash
+# Search for authentication patterns
+curl -X POST http://localhost:3100/api/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{"workspace": "abc123", "query": "how does authentication work"}'
+```
+
+### Trace Call Chains
+
+```bash
+# Trace from entry point
+curl -X POST http://localhost:3100/api/v1/graph/trace \
+  -H "Content-Type: application/json" \
+  -d '{"workspace": "abc123", "node": "main.go::main", "max_depth": 5}'
+```
+
+### Analyze Impact
+
+```bash
+# What breaks if I change this file?
+curl -X POST http://localhost:3100/api/v1/graph/impact \
+  -H "Content-Type: application/json" \
+  -d '{"workspace": "abc123", "node": "src/auth/login.ts", "max_depth": 2}'
+```
+
+### Generate Flow Diagrams
+
+```bash
+# Get flow diagram for a controller
+curl -X POST http://localhost:3100/api/v1/graph/flow \
+  -H "Content-Type: application/json" \
+  -d '{"workspace": "abc123", "entry": "POST /users"}'
+```
+
+Returns Mermaid flowchart:
+
+```mermaid
+flowchart LR
+  POST_/users["POST /users"]
+  POST_/users --> UsersController#create
+  UsersController#create --> User.create
+  UsersController#create --> Mailer.welcome
+```
+
+---
+
 ## Use Cases
 
 ### Multi-machine developer
@@ -292,6 +345,7 @@ See [Configuration](docs/CONFIGURATION.md) for full options.
 
 ## Documentation
 
+- [Getting Started](docs/GETTING_STARTED.md) — Step-by-step setup guide
 - [Configuration](docs/CONFIGURATION.md) — All config options
 - [REST API](docs/API.md) — HTTP endpoints
 - [CLI Commands](docs/CLI.md) — Command reference
@@ -299,9 +353,76 @@ See [Configuration](docs/CONFIGURATION.md) for full options.
 - [Architecture](docs/ARCHITECTURE.md) — System design
 - [Changelog](CHANGELOG.md) — What's new
 - [Roadmap](docs/ROADMAP.md) — What's planned
+- [Feature Showcase](docs/FEATURES.md) — Visual examples
+
+---
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Development Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/nano-step/nano-brain.git
+cd nano-brain
+
+# Build
+CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain
+
+# Run tests
+go test -race -short ./...
+
+# Run integration tests (requires PostgreSQL)
+go test -race -tags=integration ./...
+```
+
+### Project Structure
+
+```
+nano-brain/
+├── cmd/nano-brain/       # CLI dispatcher + server startup
+├── internal/
+│   ├── config/           # Configuration management
+│   ├── server/           # HTTP server + handlers
+│   ├── storage/          # PostgreSQL + sqlc
+│   ├── search/           # Hybrid search pipeline
+│   ├── embed/            # Embedding queue
+│   ├── watcher/          # File system watcher
+│   ├── harvest/          # Session harvesting
+│   ├── mcp/              # MCP protocol tools
+│   ├── graph/            # Code intelligence
+│   └── ...
+├── migrations/           # Database migrations
+└── benchmarks/           # Performance benchmarks
+```
+
+---
+
+## Community
+
+- [GitHub Discussions](https://github.com/nano-step/nano-brain/discussions) — Ask questions, share ideas
+- [Discord](https://discord.gg/nano-brain) — Real-time chat
+- [Twitter](https://twitter.com/nano_brain) — Updates and announcements
 
 ---
 
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+## Acknowledgments
+
+Built with:
+- [Go](https://go.dev/) — Fast, statically typed language
+- [PostgreSQL](https://www.postgresql.org/) — The world's most advanced open source database
+- [pgvector](https://github.com/pgvector/pgvector) — Open-source vector similarity search
+- [Echo](https://echo.labstack.com/) — High performance, extensible, minimalist Go web framework
+- [sqlc](https://sqlc.dev/) — Generate type-safe code from SQL
+- [goose](https://github.com/pressly/goose) — Database migration tool
+- [zerolog](https://github.com/rs/zerolog) — Zero allocation JSON logger
+- [koanf](https://github.com/knadh/koanf) — Configuration manager
+- [fsnotify](https://github.com/fsnotify/fsnotify) — Cross-platform file system notifications
