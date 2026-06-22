@@ -4,7 +4,7 @@ All notable changes to nano-brain are documented here.
 
 ---
 
-## [Unreleased]
+## [2026.6.22] — 2026-06-22
 
 ### Added
 - **Ruby/Rails Support** (PRs #467, #469, #471, #473)
@@ -20,45 +20,33 @@ All notable changes to nano-brain are documented here.
   - Competitor comparison (LlamaIndex, Qdrant/Mem0)
   - Fair comparison with same raw source files
   - Workspace-specific queries (gaming-platform, nano-brain, rails-project)
-  - Results: nano-brain P@5=0.749, MRR=0.967
+  - Results: nano-brain P@5=80%, MRR=100%
 
 - **Search Quality Improvements**
   - BM25 OR fallback — retries with OR semantics when AND returns 0 results
   - Incoming edges symbol fallback — falls back to symbol name when target_node lookup fails
   - Debugging-aware search — parallel search mode for debugging queries
 
+- **Code symbol summarization** (`internal/codesummarize/`): LLM-generated 2-4 sentence summaries for code symbols (functions, types, structs) at index time. Batches 30 symbols per request to minimize API calls. Summaries stored as searchable documents and participate in BM25 + vector search. (#397)
+- New config section `code_summarization` with fields: `enabled`, `provider_url`, `api_key`, `model`, `batch_size`, `max_output_tokens`, `concurrency`, `max_requests_per_day`, `max_symbol_lines`, `poll_interval_seconds`, `max_summaries_per_cycle`.
+- New endpoint `POST /api/v1/code/summarize` — manual trigger for code summarization on a workspace.
+- New migration `00017_code_summarization_usage` — DB-persisted daily budget counter.
+- Stateless cursor-based pagination for all three MCP search tools. Each response includes a `next_cursor` field when more results exist; pass it back in the next call's `cursor` parameter. Cursors are opaque base64url(JSON) and bound to the query text. (#358)
+- New `include_content` boolean parameter on all three search tools (default `false`). Set to `true` to include full chunk content alongside the snippet. (#358)
+- New top-level response fields `total` (count of fused results) and `query_ms` (server-measured latency) on all three search tools. (#358)
+
 ### Changed
+- **`memory_query` / `memory_search` / `memory_vsearch`** now return a 500-char `snippet` by default and OMIT the full `content` field. Agents needing full text must either pass `include_content: true` or call `memory_get` for one full document. HTTP API (`/api/v1/search`, `/api/v1/query`, `/api/v1/vsearch`) is unchanged. (#358)
 - Updated README with visual architecture diagrams (Mermaid)
 - Updated roadmap with deployment, auth, and RBAC sections
+- Stable result-ordering tiebreaker (`id ASC`) in RRF fusion and recency boost. Equal-score results now have deterministic order across paginated calls. (#358)
 
 ### Fixed
 - Ruby class index namespace fix (controllers resolve to correct files)
 - Emit unresolved cross-file calls (controllers emit call edges)
 - Watcher runs resolver after ReextractEdgesForWorkspace
 
-
-## [Unreleased]
-
-### Added
-
-- **Code symbol summarization** (`internal/codesummarize/`): LLM-generated 2-4 sentence summaries for code symbols (functions, types, structs) at index time. Batches 30 symbols per request to minimize API calls. Summaries stored as searchable documents and participate in BM25 + vector search. (#397)
-- New config section `code_summarization` with fields: `enabled`, `provider_url`, `api_key`, `model`, `batch_size`, `max_output_tokens`, `concurrency`, `max_requests_per_day`, `max_symbol_lines`, `poll_interval_seconds`, `max_summaries_per_cycle`.
-- New endpoint `POST /api/v1/code/summarize` — manual trigger for code summarization on a workspace.
-- New migration `00017_code_summarization_usage` — DB-persisted daily budget counter.
-
-### Changed (MCP only — breaking for agents parsing `content` from search results)
-
-- **`memory_query` / `memory_search` / `memory_vsearch`** now return a 500-char `snippet` by default and OMIT the full `content` field. Agents needing full text must either pass `include_content: true` or call `memory_get` for one full document. HTTP API (`/api/v1/search`, `/api/v1/query`, `/api/v1/vsearch`) is unchanged. (#358)
-
-### Added
-
-- Stateless cursor-based pagination for all three MCP search tools. Each response includes a `next_cursor` field when more results exist; pass it back in the next call's `cursor` parameter. Cursors are opaque base64url(JSON) and bound to the query text (server returns `"cursor query mismatch"` if the query changes mid-pagination). (#358)
-- New `include_content` boolean parameter on all three search tools (default `false`). Set to `true` to include full chunk content alongside the snippet. (#358)
-- New top-level response fields `total` (count of fused results) and `query_ms` (server-measured latency) on all three search tools. (#358)
-- Stable result-ordering tiebreaker (`id ASC`) in RRF fusion and recency boost. Equal-score results now have deterministic order across paginated calls. (#358)
-
 ### Internal
-
 - Extracted `TruncateSnippet` helper from `internal/server/handlers/search.go` to `internal/search/snippet.go` so HTTP and MCP layers share the same rune-aware truncation.
 
 ## [2026.6.0] — 2026-05-30
@@ -532,42 +520,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [2026.6.0] — 2026-05-30
 
-### Fixed
-- fix(mcp): `memory_wake_up` MCP tool was returning empty `recent_memories` because the MCP handler passed `Collections: nil` to `RecentDocuments`, making the post-#338 collection filter (`collection = ANY('{}')`) always false. Now matches the HTTP `/api/v1/wake-up` behaviour. (#356)
-
-### Performance
-- Add partial index on chunks.embed_status (pending/embed_failed) for embed queue worker hot path (#322)
-- Add in-flight dedup set in embed queue to prevent re-embedding of chunks already being processed by a worker (#322)
-
-### Breaking changes (operator action required)
-
-- **fix(security): close 7 workspace-registration leak points in summary + write paths (#238).** Every write path now enforces that the target `workspace_hash` is registered in the `workspaces` table. Five layers of defense-in-depth: HTTP middleware, MCP tool handlers, harvester init, `Persister.Save`, and a new PostgreSQL FK constraint with `ON DELETE CASCADE` (migration 00011).
-
-  **Operator-facing changes:**
-
-  1. **The OpenCode harvester no longer auto-registers workspaces.** Previously, `internal/harvest/opencode_sqlite.go` called `UpsertWorkspace` for every worktree it discovered, silently extending the trust boundary. Now, sessions whose worktree is not pre-registered via `POST /api/v1/init` or `nano-brain init --root=<path>` are skipped with a WARN log. Operators relying on implicit registration must run `nano-brain init` for each worktree explicitly.
-
-  2. **HTTP write endpoints now return 400 instead of 503/200 for unregistered workspaces.** The new `workspaceRegisteredMiddleware` is applied to `POST /api/v1/{write,embed,reindex,update,summarize}`. Unregistered hash returns `HTTP 400 {"error":"workspace_not_registered"}`. The literal `"all"` is rejected on write endpoints (read endpoints unchanged — `"all"` still works for cross-workspace queries).
-
-  3. **MCP `memory_write` and `memory_update` reject unregistered workspaces.** MCP transport bypasses HTTP middleware, so the same registration check is applied inside each write tool handler.
-
-  4. **New CLI command `nano-brain cleanup-orphan-workspaces [--dry-run]`.** Removes documents and chunks whose `workspace_hash` is not in the `workspaces` table. Required before applying migration 00011 if any orphans exist; the migration will otherwise fail with PostgreSQL error 23503 (foreign-key violation).
-
-  **Operator upgrade sequence (MUST follow in order):**
-
-  ```bash
-  # 1. STOP the running server (prevents stale binary from re-creating orphans)
-  kill $(cat /path/to/nano-brain.pid)
-
-  # 2. CLEANUP (dry-run first — output is your only backup of deleted summaries)
-  nano-brain cleanup-orphan-workspaces --dry-run > orphan-backup.txt
-  cat orphan-backup.txt  # review
-  nano-brain cleanup-orphan-workspaces
-
-  # 3. MIGRATE (will fail with error 23503 if cleanup was skipped)
-  nano-brain db:migrate
+### Added
 
   # 4. START the NEW binary (do NOT start the old one — it would auto-register orphans again)
   nano-brain
