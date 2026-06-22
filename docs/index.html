@@ -268,6 +268,125 @@ curl -X POST http://localhost:3100/api/v1/query \
     </div>
   </section>
 
+  <!-- Benchmark -->
+  <section class="px-6 py-24">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="font-mono text-3xl font-bold text-center mb-4">Outperforms the competition</h2>
+      <p class="text-muted text-center mb-12">Tested on 60 domain-specific queries across 3 workspaces.</p>
+
+      <div class="terminal rounded-xl p-6 mb-10">
+        <table class="w-full">
+          <thead>
+            <tr>
+              <th class="text-left">Tool</th>
+              <th class="text-left">P@5</th>
+              <th class="text-left">MRR</th>
+              <th class="text-left">Latency</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="font-semibold">nano-brain</td>
+              <td class="text-cta font-semibold">0.749</td>
+              <td class="text-cta font-semibold">0.967</td>
+              <td class="text-cta font-semibold">42ms</td>
+            </tr>
+            <tr>
+              <td class="text-muted">LlamaIndex</td>
+              <td class="text-muted">0.55</td>
+              <td class="text-muted">—</td>
+              <td class="text-muted">—</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Qdrant/Mem0</td>
+              <td class="text-muted">0.27</td>
+              <td class="text-muted">—</td>
+              <td class="text-muted">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="terminal rounded-xl p-6 text-center">
+          <p class="font-mono text-4xl font-bold text-cta mb-2">0.749</p>
+          <p class="text-muted text-sm">P@5 Score</p>
+        </div>
+        <div class="terminal rounded-xl p-6 text-center">
+          <p class="font-mono text-4xl font-bold text-cta mb-2">0.967</p>
+          <p class="text-muted text-sm">MRR (Mean Reciprocal Rank)</p>
+        </div>
+        <div class="terminal rounded-xl p-6 text-center">
+          <p class="font-mono text-4xl font-bold text-cta mb-2">42ms</p>
+          <p class="text-muted text-sm">Average Query Latency</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why Star -->
+  <section class="px-6 py-24">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="font-mono text-3xl font-bold mb-4">Why Star This Project?</h2>
+      <p class="text-xl text-muted mb-12 max-w-2xl mx-auto">If you've ever wished your AI agent remembered what you told it yesterday.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+        <div class="terminal rounded-xl p-6">
+          <h3 class="font-mono font-semibold mb-3 text-cta">Self-hosted</h3>
+          <p class="text-muted text-sm">Your data stays on your server. No cloud dependency. No vendor lock-in.</p>
+        </div>
+        <div class="terminal rounded-xl p-6">
+          <h3 class="font-mono font-semibold mb-3 text-cta">Works everywhere</h3>
+          <p class="text-muted text-sm">OpenCode, Claude Code, Cursor, any MCP client. One server, all your agents.</p>
+        </div>
+        <div class="terminal rounded-xl p-6">
+          <h3 class="font-mono font-semibold mb-3 text-cta">Actually useful</h3>
+          <p class="text-muted text-sm">Not a toy demo. Production-ready with 14 MCP tools, hybrid search, and code intelligence.</p>
+        </div>
+        <div class="terminal rounded-xl p-6">
+          <h3 class="font-mono font-semibold mb-3 text-cta">Built for developers</h3>
+          <p class="text-muted text-sm">Go binary, PostgreSQL, zero magic. You can read the code.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ruby/Rails -->
+  <section class="px-6 py-24">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="font-mono text-3xl font-bold text-center mb-4">Ruby / Rails Support</h2>
+      <p class="text-muted text-center mb-12">Full code intelligence for Ruby on Rails applications.</p>
+
+      <div class="terminal rounded-xl p-6 mb-10">
+        <pre class="font-mono text-sm text-muted leading-loose overflow-x-auto"><span class="text-text">Flow Diagram:</span>
+
+<span class="text-cta">POST /users</span> ──&gt; <span class="text-text">UsersController#create</span>
+                      │
+                      ├──&gt; <span class="text-text">User.create</span>
+                      └──&gt; <span class="text-text">Mailer.welcome</span>
+
+<span class="text-text">Sequence Diagram:</span>
+
+<span class="text-cta">Client</span> ──&gt; <span class="text-text">Router</span> ──&gt; <span class="text-text">UsersController</span> ──&gt; <span class="text-text">User</span> ──&gt; <span class="text-text">Mailer</span></pre>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="terminal rounded-xl p-6">
+          <h3 class="font-mono font-semibold mb-3">Rails Routes</h3>
+          <p class="text-muted text-sm">Extracts resources, get/post/patch/put/delete, namespace, scope, mount.</p>
+        </div>
+        <div class="terminal rounded-xl p-6">
+          <h3 class="font-mono font-semibold mb-3">Control-Flow Graphs</h3>
+          <p class="text-muted text-sm">if/else, loops, begin/rescue, method definitions, same-file calls.</p>
+        </div>
+        <div class="terminal rounded-xl p-6">
+          <h3 class="font-mono font-semibold mb-3">Cross-File Resolution</h3>
+          <p class="text-muted text-sm">Class→file index, resolver, reconcile edges. 20-34 node flows.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- What's New -->
   <section class="px-6 py-24">
     <div class="max-w-4xl mx-auto">
