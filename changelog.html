@@ -1,550 +1,338 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>nano-brain — Changelog</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        :root{--bg:#09090b;--surface:#18181b;--border:#3f3f46;--text:#fafafa;--text-2:#a1a1aa;--accent:#22c55e;--orange:#f97316}
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:120px 24px 80px}
-        .container{max-width:800px;margin:0 auto}
-        h1{font-size:40px;font-weight:700;letter-spacing:-1px;margin-bottom:8px}
-        .subtitle{color:var(--text-2);margin-bottom:48px}
-        .category{margin-bottom:48px}
-        .category h2{font-size:20px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
-        .category h2 .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
-        .dot-feat{background:var(--accent)}
-        .dot-fix{background:var(--orange)}
-        .dot-docs{background:#a1a1aa}
-        .dot-other{background:#71717a}
-        .commit{padding:16px 0;border-bottom:1px solid var(--border)}
-        .commit:last-child{border-bottom:none}
-        .commit-hash{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);margin-bottom:4px}
-        .commit-msg{font-size:15px;line-height:1.5}
-        .commit-date{font-size:12px;color:var(--text-2);margin-top:4px}
-        .empty{color:var(--text-2);font-style:italic}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>nano-brain — Changelog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#09090b;--surface:#18181b;--surface-2:#27272a;--border:#3f3f46;--text:#fafafa;--text-2:#a1a1aa;--accent:#22c55e}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:100px 24px 80px}
+.container{max-width:800px;margin:0 auto}
+h1{font-size:40px;font-weight:700;letter-spacing:-1px;margin-bottom:8px}
+.subtitle{color:var(--text-2);margin-bottom:32px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:48px;padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.toc a{padding:6px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text-2);font-family:'JetBrains Mono',monospace;font-size:12px;transition:all .2s}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.release{margin-bottom:48px;padding:32px;background:var(--surface);border:1px solid var(--border);border-radius:16px}
+.release-header{display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.version{font-size:24px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.badge{padding:4px 12px;border-radius:100px;font-size:11px;font-weight:500}
+.badge.current{background:rgba(34,197,94,.15);color:var(--accent)}
+.badge.release{background:rgba(161,161,170,.15);color:var(--text-2)}
+.date{font-size:14px;color:var(--text-2);margin-left:auto}
+.change-section{margin-bottom:20px}
+.change-section:last-child{margin-bottom:0}
+.change-section h3{font-size:14px;font-weight:600;margin-bottom:8px}
+.change-section ul{list-style:none}
+.change-section li{padding:6px 0;font-size:14px;color:var(--text-2);line-height:1.6;border-bottom:1px solid rgba(63,63,70,.3)}
+.change-section li:last-child{border-bottom:none}
+.change-section li strong{color:var(--text);font-weight:500}
+.change-section li code{font-family:'JetBrains Mono',monospace;font-size:12px;padding:2px 6px;background:var(--bg);border-radius:4px;color:var(--accent)}
+.change-section li a{color:var(--accent);text-decoration:none}
+.change-section li a:hover{text-decoration:underline}
+</style>
 </head>
 <body>
 <div class="container">
-    <h1>Changelog</h1>
-    <p class="subtitle">Auto-generated from git commits.</p>
-<div class="category">
-  <h2><span class="dot dot-feat"></span> Features</h2>
-  <div class="commit">
-    <div class="commit-hash">c287446</div>
-    <div class="commit-msg">improve search quality — dedup, code-aware ranking, flow viz, symbol re-extraction (#424)</div>
-    <div class="commit-date">2026-06-14</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">88dbd4d</div>
-    <div class="commit-msg">Rails route extractor + configurable code-summarize timeout</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">4311500</div>
-    <div class="commit-msg">execution flow visualization + search quality improvements (#423)</div>
-    <div class="commit-date">2026-06-14</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">4f5068d</div>
-    <div class="commit-msg">Rails route extractor + configurable code-summarize timeout</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">e09e93e</div>
-    <div class="commit-msg">enhanced code understanding — auto-summarization, entity linking, flow context, PageRank (#406)</div>
-    <div class="commit-date">2026-06-07</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">ebc5878</div>
-    <div class="commit-msg">Nuxt.js filesystem route extractor (#433)</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">cead794</div>
-    <div class="commit-msg">NestJS route extractor (#432)</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-</div>
-<div class="category">
-  <h2><span class="dot dot-fix"></span> Bug Fixes</h2>
-  <div class="commit">
-    <div class="commit-hash">8c8a0a3</div>
-    <div class="commit-msg">Rails extractor root/devise_for/redirect + configurable timeout</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">c596607</div>
-    <div class="commit-msg">Rails extractor root/devise_for/redirect + configurable timeout</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">19d97ff</div>
-    <div class="commit-msg">fe not work</div>
-    <div class="commit-date">2026-06-07</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">1a91ebf</div>
-    <div class="commit-msg">lint clean + add self-review evidence</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">061ab76</div>
-    <div class="commit-msg">use UpsertChunk for all chunks to preserve embed_status</div>
-    <div class="commit-date">2026-06-10</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">dcd1d1c</div>
-    <div class="commit-msg">preserve embed_status on unchanged chunk upsert (watcher update)</div>
-    <div class="commit-date">2026-06-09</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">cde4e89</div>
-    <div class="commit-msg">address Gemini review feedback for NestJS and Nuxt.js extractors</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">857337f</div>
-    <div class="commit-msg">address Gemini code review feedback</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">a276682</div>
-    <div class="commit-msg">preserve embed_status on unchanged chunk upsert</div>
-    <div class="commit-date">2026-06-09</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">562ddf3</div>
-    <div class="commit-msg">.nano-brainignore should retroactively clean up already-indexed files (#415)</div>
-    <div class="commit-date">2026-06-09</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">75a7645</div>
-    <div class="commit-msg">preserve embed_status on unchanged chunk upsert</div>
-    <div class="commit-date">2026-06-09</div>
-  </div>
-</div>
-<div class="category">
-  <h2><span class="dot dot-docs"></span> Documentation & Benchmarks</h2>
-  <div class="commit">
-    <div class="commit-hash">87386de</div>
-    <div class="commit-msg">add self-review evidence for cfg-if-continuation-paths</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">3a1d755</div>
-    <div class="commit-msg">disable Jekyll for GitHub Pages</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">85ce868</div>
-    <div class="commit-msg">add benchmark, Why Star, Ruby/Rails to GitHub Pages</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">19df2a8</div>
-    <div class="commit-msg">add recommended models section, enforce nanobrain_test for harness</div>
-    <div class="commit-date">2026-06-07</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">bac213c</div>
-    <div class="commit-msg">add flow and sequence diagram sections</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">79c54e9</div>
-    <div class="commit-msg">enhance README with demo, contributing, community</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">b6dec80</div>
-    <div class="commit-msg">remove specific project names from public docs</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">e02f6b2</div>
-    <div class="commit-msg">add deployment, auth, and RBAC to roadmap</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">3d70bb8</div>
-    <div class="commit-msg">add self-review evidence for framework-detector PR</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">5d5c45c</div>
-    <div class="commit-msg">add pre-merge override evidence for gates 3.3 and 3.4</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">84f70f3</div>
-    <div class="commit-msg">redesign landing page with modern design</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">3195710</div>
-    <div class="commit-msg">update roadmap with Ruby/Rails support and benchmarking</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">10c5d9f</div>
-    <div class="commit-msg">update benchmark numbers to use best workspace results</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">5455d07</div>
-    <div class="commit-msg">complete landing page with all sections</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">7302b37</div>
-    <div class="commit-msg">move landing page to root for GitHub Pages</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">9d247b8</div>
-    <div class="commit-msg">rewrite README, add CHANGELOG, feature showcase</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">e510488</div>
-    <div class="commit-msg">add Mermaid rendering for flow/sequence diagrams</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">2c3eaee</div>
-    <div class="commit-msg">add roadmap section to landing page</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-</div>
-<div class="category">
-  <h2><span class="dot dot-other"></span> Other</h2>
-  <div class="commit">
-    <div class="commit-hash">5fd4bf4</div>
-    <div class="commit-msg">create chunks for symbol documents to fix embedding coverage</div>
-    <div class="commit-date">2026-06-11</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">ade089e</div>
-    <div class="commit-msg">skip template strings with interpolation in route path</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">117c457</div>
-    <div class="commit-msg">Merge pull request #411 from nano-step/fix/bench-llm-query-generation</div>
-    <div class="commit-date">2026-06-09</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">4b15988</div>
-    <div class="commit-msg">execution-flow-phase2 — semantic flow visualization (#429)</div>
-    <div class="commit-date">2026-06-14</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">4cc3cd9</div>
-    <div class="commit-msg">fair comparison with same raw source files</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">a46983e</div>
-    <div class="commit-msg">rewrite sequence diagram with system-level actors and return arrows</div>
-    <div class="commit-date">2026-06-19</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">9282a23</div>
-    <div class="commit-msg">workspace-specific queries and MCP fixes</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">2380fe6</div>
-    <div class="commit-msg">remove built-in webui, add redirect to standalone dashboard</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">29467c0</div>
-    <div class="commit-msg">emit unresolved call edges for cross-file method invocations</div>
-    <div class="commit-date">2026-06-21</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">38c09f2</div>
-    <div class="commit-msg">add truncation to direct embed endpoint</div>
-    <div class="commit-date">2026-06-10</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">a01d685</div>
-    <div class="commit-msg">archive completed specs, add fix-edge-source-file-relative-paths</div>
-    <div class="commit-date">2026-06-20</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">8d89f32</div>
-    <div class="commit-msg">add LlamaIndex and Mem0 actual benchmark results</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">a631493</div>
-    <div class="commit-msg">collapse external nodes into Backend actor, add ServiceName to Flow</div>
-    <div class="commit-date">2026-06-19</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">68963f1</div>
-    <div class="commit-msg">break scan loop when all items in batch are already in-flight</div>
-    <div class="commit-date">2026-06-09</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">4b58897</div>
-    <div class="commit-msg">Phase 2 search quality — HyDE, dynamic RRF, reranking (#409)</div>
-    <div class="commit-date">2026-06-07</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">a8b2192</div>
-    <div class="commit-msg">archive framework-detector change</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">5000c3e</div>
-    <div class="commit-msg">fix goclangci-lint errcheck on test w.Write calls</div>
-    <div class="commit-date">2026-06-07</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">1ca56b3</div>
-    <div class="commit-msg">archive enhanced-code-understanding OpenSpec change [skip-release]</div>
-    <div class="commit-date">2026-06-07</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">fb69097</div>
-    <div class="commit-msg">Ruby cross-file call resolution for controller→service→model flows</div>
-    <div class="commit-date">2026-06-21</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">6f52339</div>
-    <div class="commit-msg">recreate design demos (Pentagram/Field.io/Kenya Hara) + mark Phase 2 complete</div>
-    <div class="commit-date">2026-06-16</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">253f5f0</div>
-    <div class="commit-msg">archive multi-framework-extraction OpenSpec change</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">658f17e</div>
-    <div class="commit-msg">Phase 1b — JS/TS CFG extractor, storage, API, MCP tool</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">f15b6bf</div>
-    <div class="commit-msg">Rails route extractor + configurable code-summarize timeout"</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">35fd093</div>
-    <div class="commit-msg">correct Express middleware edge direction to match builder convention</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">2ecb70c</div>
-    <div class="commit-msg">add LLM quality and debugging benchmark framework</div>
-    <div class="commit-date">2026-06-20</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">2a65711</div>
-    <div class="commit-msg">address Gemini review comments</div>
-    <div class="commit-date">2026-06-12</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">023f86f</div>
-    <div class="commit-msg">add dedup, code-aware ranking, and file-path benchmark</div>
-    <div class="commit-date">2026-06-11</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">e0abe37</div>
-    <div class="commit-msg">archive framework-detector change</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">3585ddf</div>
-    <div class="commit-msg">add generic framework detector for flow visualization</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">c71c0e6</div>
-    <div class="commit-msg">add file-extension boost to code-aware ranking</div>
-    <div class="commit-date">2026-06-14</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">0c6e9fe</div>
-    <div class="commit-msg">add wipe mode, debug logging, fix flowchart entry resolution</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">39b45d1</div>
-    <div class="commit-msg">final benchmark on host server (3100), consistent results</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">7a236fd</div>
-    <div class="commit-msg">add POST /reindex-cfg endpoint for CFG re-extraction</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">3fbe6a6</div>
-    <div class="commit-msg">cleanup temp test file, update evidence with PR #434</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">15b817d</div>
-    <div class="commit-msg">improve NL search quality — preprocessor, BM25 config, chunk overlap (#408)</div>
-    <div class="commit-date">2026-06-07</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">0dac3d9</div>
-    <div class="commit-msg">filter empty symbol_name in unsummarized query</div>
-    <div class="commit-date">2026-06-06</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">c5c8889</div>
-    <div class="commit-msg">run Ruby resolver after ReextractEdgesForWorkspace</div>
-    <div class="commit-date">2026-06-21</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">693406c</div>
-    <div class="commit-msg">Rails extractor root/devise_for/redirect + configurable timeout"</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">60efb84</div>
-    <div class="commit-msg">Merge pull request #420 from nano-step/feat/419-impact-direction-out</div>
-    <div class="commit-date">2026-06-11</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">f7055b8</div>
-    <div class="commit-msg">rewrite sequence diagram with system-level actors and return arrows</div>
-    <div class="commit-date">2026-06-19</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">b124474</div>
-    <div class="commit-msg">clean internal logic labels in sequence diagrams (#456)</div>
-    <div class="commit-date">2026-06-20</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">e6cbd41</div>
-    <div class="commit-msg">add debugging-aware search mode (mode=debugging)</div>
-    <div class="commit-date">2026-06-20</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">20872d4</div>
-    <div class="commit-msg">address review findings for Express extractor</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">c26319a</div>
-    <div class="commit-msg">also handle empty else block and empty then block in buildIf</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">178cb7a</div>
-    <div class="commit-msg">reconcile edge type migration + BFS bySource fallback</div>
-    <div class="commit-date">2026-06-21</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">6c32aea</div>
-    <div class="commit-msg">respect .nano-brainignore by reusing watcher filter</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">f8448ca</div>
-    <div class="commit-msg">address Gemini review - findAssignedName boundaries, buildTry empty blocks</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">f48a677</div>
-    <div class="commit-msg">preserve if-without-else continuation paths in CFG</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">b13d500</div>
-    <div class="commit-msg">update test for package-lock.json default exclusion</div>
-    <div class="commit-date">2026-06-16</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">f80efdc</div>
-    <div class="commit-msg">add branch-aware CFG edges for if/else, switch/case, ternary, try/catch</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">e5652c8</div>
-    <div class="commit-msg">add Express.js route extractor for flow visualization</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">b1bad6b</div>
-    <div class="commit-msg">Phase 1 backend APIs + Phase 2 scaffold</div>
-    <div class="commit-date">2026-06-16</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">ba44cef</div>
-    <div class="commit-msg">Ruby class index resolves controllers to wrong files</div>
-    <div class="commit-date">2026-06-21</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">56a4856</div>
-    <div class="commit-msg">add DeleteAllFunctionFlowcharts to mock</div>
-    <div class="commit-date">2026-06-17</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">06fa759</div>
-    <div class="commit-msg">detect Redis/cache operations in JS/TS integration extractor (#453)</div>
-    <div class="commit-date">2026-06-20</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">b1c84c3</div>
-    <div class="commit-msg">address PR #424 review comments (#425)</div>
-    <div class="commit-date">2026-06-14</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">482e0cb</div>
-    <div class="commit-msg">send oversized symbols individually instead of skipping</div>
-    <div class="commit-date">2026-06-06</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">56bc99b</div>
-    <div class="commit-msg">fix 3 benchmark weaknesses — BM25 OR fallback, incoming edges, graph extraction</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">f06c19d</div>
-    <div class="commit-msg">render internal logic in sequence diagrams via CFG (#454)</div>
-    <div class="commit-date">2026-06-20</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">0465c0a</div>
-    <div class="commit-msg">create chunk for summary documents so they're searchable</div>
-    <div class="commit-date">2026-06-20</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">45d57d5</div>
-    <div class="commit-msg">agent memory comparison — nano-brain vs Mem0, Cognee, GraphRAG, LlamaIndex, Zep</div>
-    <div class="commit-date">2026-06-22</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">82d8be8</div>
-    <div class="commit-msg">add Ruby/Rails support for flow and sequence diagrams</div>
-    <div class="commit-date">2026-06-20</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">d86228a</div>
-    <div class="commit-msg">normalize edge source_file to workspace-relative paths (#450)</div>
-    <div class="commit-date">2026-06-19</div>
-  </div>
-  <div class="commit">
-    <div class="commit-hash">7c97a48</div>
-    <div class="commit-msg">add configurable summary timeout (default 10min)</div>
-    <div class="commit-date">2026-06-15</div>
-  </div>
-</div>
+<h1>Changelog</h1>
+<p class="subtitle">All notable changes to nano-brain.</p>
+<div class="toc"><a href="#Unreleased">Unreleased</a><a href="#Unreleased">Unreleased</a><a href="#2026.6.0">2026.6.0</a><a href="#0.0.0">0.0.0</a><a href="#Unreleased">Unreleased</a><a href="#2026.5.267">2026.5.267</a><a href="#2026.8.19">2026.8.19</a><a href="#2026.8.19">2026.8.19</a><a href="#2026.8.19">2026.8.19</a><a href="#2026.8.19">2026.8.19</a><a href="#2026.8.19">2026.8.19</a><a href="#2026.6.2">2026.6.2</a></div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">Unreleased</span>
+                <span class="badge current">Unreleased</span>
+                <span class="date"></span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#22c55e">Added</h3>
+                <ul><li><strong>Ruby/Rails Support</strong> (PRs #467, #469, #471, #473)</li><li>Ruby CFG extraction (if/else, loops, begin/rescue, method defs)</li><li>Ruby call graph extractor (class/module capture, unresolved edges)</li><li>Rails route extraction (resources, get/post/patch/put/delete, namespace)</li><li>Ruby class→file index with namespace preference</li><li>Cross-file resolver with reconcile edge builder</li><li>Flows reach 20-34 nodes (entry → handler → func → calls chain)</li><li><strong>Agent Memory Benchmarking</strong></li><li>Benchmark framework (20 queries, ground truth, 6 tool runners)</li><li>Competitor comparison (LlamaIndex, Qdrant/Mem0)</li><li>Fair comparison with same raw source files</li><li>Workspace-specific queries (gaming-platform, nano-brain, rails-project)</li><li>Results: nano-brain P@5=0.749, MRR=0.967</li><li><strong>Search Quality Improvements</strong></li><li>BM25 OR fallback — retries with OR semantics when AND returns 0 results</li><li>Incoming edges symbol fallback — falls back to symbol name when target_node lookup fails</li><li>Debugging-aware search — parallel search mode for debugging queries</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#f97316">Changed</h3>
+                <ul><li>Updated README with visual architecture diagrams (Mermaid)</li><li>Updated roadmap with deployment, auth, and RBAC sections</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#ef4444">Fixed</h3>
+                <ul><li>Ruby class index namespace fix (controllers resolve to correct files)</li><li>Emit unresolved cross-file calls (controllers emit call edges)</li><li>Watcher runs resolver after ReextractEdgesForWorkspace</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">Unreleased</span>
+                <span class="badge current">Unreleased</span>
+                <span class="date"></span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#22c55e">Added</h3>
+                <ul><li><strong>Code symbol summarization</strong> (<code>internal/codesummarize/</code>): LLM-generated 2-4 sentence summaries for code symbols (functions, types, structs) at index time. Batches 30 symbols per request to minimize API calls. Summaries stored as searchable documents and participate in BM25 + vector search. <a href="https://github.com/nano-step/nano-brain/pull/397">#397</a></li><li>New config section <code>code_summarization</code> with fields: <code>enabled</code>, <code>provider_url</code>, <code>api_key</code>, <code>model</code>, <code>batch_size</code>, <code>max_output_tokens</code>, <code>concurrency</code>, <code>max_requests_per_day</code>, <code>max_symbol_lines</code>, <code>poll_interval_seconds</code>, <code>max_summaries_per_cycle</code>.</li><li>New endpoint <code>POST /api/v1/code/summarize</code> — manual trigger for code summarization on a workspace.</li><li>New migration <code>00017_code_summarization_usage</code> — DB-persisted daily budget counter.</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Changed (MCP only — breaking for agents parsing `content` from search results)</h3>
+                <ul><li><strong><code>memory_query</code> / <code>memory_search</code> / <code>memory_vsearch</code></strong> now return a 500-char <code>snippet</code> by default and OMIT the full <code>content</code> field. Agents needing full text must either pass <code>include_content: true</code> or call <code>memory_get</code> for one full document. HTTP API (<code>/api/v1/search</code>, <code>/api/v1/query</code>, <code>/api/v1/vsearch</code>) is unchanged. <a href="https://github.com/nano-step/nano-brain/pull/358">#358</a></li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#22c55e">Added</h3>
+                <ul><li>Stateless cursor-based pagination for all three MCP search tools. Each response includes a <code>next_cursor</code> field when more results exist; pass it back in the next call&#x27;s <code>cursor</code> parameter. Cursors are opaque base64url(JSON) and bound to the query text (server returns <code>&quot;cursor query mismatch&quot;</code> if the query changes mid-pagination). <a href="https://github.com/nano-step/nano-brain/pull/358">#358</a></li><li>New <code>include_content</code> boolean parameter on all three search tools (default <code>false</code>). Set to <code>true</code> to include full chunk content alongside the snippet. <a href="https://github.com/nano-step/nano-brain/pull/358">#358</a></li><li>New top-level response fields <code>total</code> (count of fused results) and <code>query_ms</code> (server-measured latency) on all three search tools. <a href="https://github.com/nano-step/nano-brain/pull/358">#358</a></li><li>Stable result-ordering tiebreaker (<code>id ASC</code>) in RRF fusion and recency boost. Equal-score results now have deterministic order across paginated calls. <a href="https://github.com/nano-step/nano-brain/pull/358">#358</a></li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#71717a">Internal</h3>
+                <ul><li>Extracted <code>TruncateSnippet</code> helper from <code>internal/server/handlers/search.go</code> to <code>internal/search/snippet.go</code> so HTTP and MCP layers share the same rune-aware truncation.</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">2026.6.0</span>
+                <span class="badge release">2026.6.0</span>
+                <span class="date">2026-05-30</span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#22c55e">Added</h3>
+                <ul><li>feat(cli): add cleanup-stale-raw command (closes #190)</li><li>feat(config): bump summarization.max_tokens default 4096 → 8000 (closes #191)</li><li>feat(harvest): multi-DB OpenCode discovery via db_root (#199, #200)</li><li>feat(openspec): archive completed changes and lock new specs</li><li>feat(graph): add TypeScript, JavaScript, Python graph extractors and CLI commands <a href="https://github.com/nano-step/nano-brain/pull/197">#197</a></li><li>feat(harvest): filter OpenCode sessions by registered workspaces <a href="https://github.com/nano-step/nano-brain/pull/195">#195</a></li><li>feat(harvest): summary-only ingestion with unified-path fallback <a href="https://github.com/nano-step/nano-brain/pull/189">#189</a> <a href="https://github.com/nano-step/nano-brain/pull/192">#192</a></li><li>feat: real migration_version in /api/status + init --force prints harvest result</li><li>feat(init): add --force flag to reset workspace + remove CWD auto-detect</li><li>feat(summarize): add POST /api/v1/summarize endpoint</li><li>feat(init): full onboarding for all config sections</li><li>feat(summarize,init): add debug logs + summarization onboarding</li><li>feat(summarize): add token-bucket rate limiter for LLM calls</li><li>feat(summarize): session summarization pipeline v2026.5.267</li><li>feat(watcher): config-based filter - global + per-workspace exclude/extensions</li><li>feat(watcher): file filtering - gitignore, exclude patterns, allowed extensions</li><li>feat(memory): auto-extract decisions/lessons from sessions (Pillar 3)</li><li>feat(graph): call chain tracing - memory_trace tool + POST /graph/trace (Pillar 1d)</li><li>feat(graph): impact analytics - memory_impact tool + POST /graph/impact (Pillar 1c)</li><li>feat(harvester): add OpenCode SQLite harvester (Pillar 2a)</li><li>feat(graph): add knowledge graph (Pillar 1b)</li><li>feat(cli): add doctor command tests + mark tasks complete</li><li>feat: nano-brain v2 — complete greenfield rewrite (Go + PostgreSQL + pgvector)</li><li>feat(code-intel): symbol extraction with gotreesitter (Pillar 1, issue #174)</li><li>feat(ux): auto-trigger reindex + harvest after init --root</li><li>feat(cli): add reindex command — wire CLI to POST /api/v1/reindex <a href="https://github.com/nano-step/nano-brain/pull/159">#159</a></li><li>feat(cli+server): comprehensive structured logging <a href="https://github.com/nano-step/nano-brain/pull/144">#144</a> <a href="https://github.com/nano-step/nano-brain/pull/148">#148</a></li><li>feat(cli): auto-detect opencode session_dir at startup <a href="https://github.com/nano-step/nano-brain/pull/147">#147</a></li><li>feat(cli): add workspaces list command + real health workspace count <a href="https://github.com/nano-step/nano-brain/pull/146">#146</a></li><li>feat(npm): migrate to @nano-step/nano-brain + CI auto-publish <a href="https://github.com/nano-step/nano-brain/pull/139">#139</a> <a href="https://github.com/nano-step/nano-brain/pull/140">#140</a></li><li>feat(cli): add container server guard with port check and auto-config <a href="https://github.com/nano-step/nano-brain/pull/137">#137</a> <a href="https://github.com/nano-step/nano-brain/pull/138">#138</a></li><li>feat(cli): add daemon management (serve -d, stop, restart) <a href="https://github.com/nano-step/nano-brain/pull/135">#135</a> <a href="https://github.com/nano-step/nano-brain/pull/136">#136</a></li><li>feat: enhance interactive init wizard <a href="https://github.com/nano-step/nano-brain/pull/134">#134</a></li><li>feat: config show/check commands</li><li>feat: add version command</li><li>feat: interactive init wizard for first-time setup</li><li>feat: add doctor command for prerequisite checking</li><li>feat: add npx nano-brain support via npm package wrapper</li><li>feat: search telemetry with 90-day retention (Story 8.6)</li><li>feat: tags endpoint, reindex API, enhanced workspaces (Story 8.5)</li><li>feat: CLI operations commands — logs, docker, status, db:migrate goose (Story 8.4)</li><li>feat: config hot-reload endpoint POST /api/reload-config (Story 8.3)</li><li>feat: v1 SQLite to PostgreSQL migration command (Story 8.1)</li><li>feat: bench --help and JSON round-trip validation (Story 7.5) <a href="https://github.com/nano-step/nano-brain/pull/115">#115</a></li><li>feat: bench stress command for concurrent write testing (Story 7.4) <a href="https://github.com/nano-step/nano-brain/pull/113">#113</a></li><li>feat: bench compare command for regression detection (Story 7.3) <a href="https://github.com/nano-step/nano-brain/pull/111">#111</a></li><li>feat: bench run command with quality metrics and latency (Story 7.2) <a href="https://github.com/nano-step/nano-brain/pull/109">#109</a></li><li>feat: bench generate command and dataset generator (Story 7.1) <a href="https://github.com/nano-step/nano-brain/pull/107">#107</a></li><li>feat: CLI harvest command and POST /api/harvest (Story 6.5) <a href="https://github.com/nano-step/nano-brain/pull/105">#105</a></li><li>feat: add harvester config to GET /api/status (Story 6.4) <a href="https://github.com/nano-step/nano-brain/pull/103">#103</a></li><li>feat: implement Claude Code session harvester (Story 6.2) <a href="https://github.com/nano-step/nano-brain/pull/99">#99</a></li><li>feat: implement OpenCode session harvester (Story 6.1) <a href="https://github.com/nano-step/nano-brain/pull/97">#97</a></li><li>feat: implement memory_get and supersedes for memory_write (Story 5.6) <a href="https://github.com/nano-step/nano-brain/pull/95">#95</a></li><li>feat: configure 30s KeepAlive on MCP server (Story 5.5) <a href="https://github.com/nano-step/nano-brain/pull/93">#93</a></li><li>feat: enforce workspace on all MCP tools + cross-workspace &#x27;all&#x27; (Story 5.3) <a href="https://github.com/nano-step/nano-brain/pull/89">#89</a></li><li>feat: register all 9 MCP tools on both transports (Story 5.2) <a href="https://github.com/nano-step/nano-brain/pull/87">#87</a></li><li>feat: mount MCP SSE and Streamable HTTP transports (Story 5.1) <a href="https://github.com/nano-step/nano-brain/pull/85">#85</a></li><li>feat: add wake-up briefing endpoint (Story 4.6) <a href="https://github.com/nano-step/nano-brain/pull/83">#83</a></li><li>feat(search): thread-safe config updates + validation tests <a href="https://github.com/nano-step/nano-brain/pull/80">#80</a></li><li>feat(search): POST /api/query hybrid search pipeline <a href="https://github.com/nano-step/nano-brain/pull/75">#75</a></li><li>feat(search): POST /api/v1/search BM25 full-text search <a href="https://github.com/nano-step/nano-brain/pull/71">#71</a></li><li>feat(embed): POST /api/v1/embed trigger + status observability <a href="https://github.com/nano-step/nano-brain/pull/69">#69</a></li><li>feat(search): POST /api/v1/vsearch vector search endpoint <a href="https://github.com/nano-step/nano-brain/pull/67">#67</a></li><li>feat(embed): backpressure + retry/failure handling <a href="https://github.com/nano-step/nano-brain/pull/65">#65</a></li><li>feat(embed): async embedding queue with backoff + concurrency <a href="https://github.com/nano-step/nano-brain/pull/63">#63</a></li><li>feat(embed): embedding provider interface + Ollama/VoyageAI implementations <a href="https://github.com/nano-step/nano-brain/pull/61">#61</a></li><li>feat(embed): HNSW migration, embed_status column, embedding sqlc queries <a href="https://github.com/nano-step/nano-brain/pull/59">#59</a></li><li>feat(cli): init, write, query/search/vsearch commands + env/JSON flags <a href="https://github.com/nano-step/nano-brain/pull/57">#57</a></li><li>feat(collections): collection management CLI + live watcher attach <a href="https://github.com/nano-step/nano-brain/pull/55">#55</a></li><li>feat(watcher): implement file watcher with debounced reindex <a href="https://github.com/nano-step/nano-brain/pull/53">#53</a></li><li>feat(ingestion): integrate chunker into WriteDocument handler <a href="https://github.com/nano-step/nano-brain/pull/51">#51</a></li><li>feat: Story 2.3 — document write endpoint (POST /api/write)</li><li>feat: Story 2.2 — API middleware (workspace validation, content-type enforcement)</li><li>feat(harness): add b-main base branch rule + PR target check</li><li>feat: nano-brain v2 greenfield — Epic 1 foundation + Epic 2 progress</li><li>feat: interactive first-run setup wizard (closes #43)</li><li>feat(graph): auto-zoom to selected node + neighbors on focus mode</li><li>feat(graph): focus mode on node click + fix node overlap <a href="https://github.com/nano-step/nano-brain/pull/37">#37</a></li><li>feat(obsidian,db): excludeFolders, frontmatter tags, db:clean --list-only (closes #34)</li><li>feat(obsidian): Obsidian vault integration + fix entity API limit 100→2000 (closes #34)</li><li>feat(kg): scheduled entity extraction job for memory documents (closes #30)</li><li>feat(docs): extend Three.js neural graph to full-page background on all docs pages (closes #28)</li><li>feat(docs): Three.js neural graph animation in hero — nodes + edges + pulse (closes #27)</li><li>feat(docs): custom hover tooltips on MCP tools grid (closes #26)</li><li>feat(docs): CHANGELOG.md + changelog page renders it via marked.js (closes #24)</li><li>feat(docs): add setup guide page — Docker, config, Ollama, MCP connect, verify steps</li><li>feat: add GitHub Pages site — landing, features, changelog, docs (closes #23)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#ef4444">Fixed</h3>
+                <ul><li>fix(embed): scope queue scan to registered workspaces only <a href="https://github.com/nano-step/nano-brain/pull/187">#187</a> <a href="https://github.com/nano-step/nano-brain/pull/188">#188</a></li><li>fix: drop incorrect content_hash unique constraint on documents</li><li>fix: recursive watcher scan + tilde expansion for memory/sessions paths</li><li>fix: register watcher immediately on POST /api/v1/init</li><li>fix(harvest): scope OpenCodeSQLiteHarvester sessions to per-project workspace</li><li>fix(summarize): expand tilde in output_dir and fail-fast on mkdir</li><li>fix(init): default log file path in onboarding prompt</li><li>fix(status): expose actual embedding provider in active_provider field</li><li>fix(embed): reduce maxEmbedChars to 4000 for nomic-embed-text 2048-token limit</li><li>fix(embed,harvest): truncate oversized chunks + strip null bytes</li><li>fix(ci): reset package.json version to 0.0.0-dev for CI version bump</li><li>fix(harvest): enqueue chunk IDs after tx.Commit, not before</li><li>fix(harvest): align SQLite queries to actual OpenCode schema</li><li>fix(harvest): auto-detect opencode.db at ~/.local/share/opencode on macOS</li><li>fix(watcher): move processing file log after IsDir check to reduce noise</li><li>fix(embed): wire watcher+reindex to embed queue, add file-level logs</li><li>fix(mcp): populate kind/language/signature in memory_symbols tool response</li><li>fix(review): post-commit self-review fixes + harness lessons</li><li>fix(watcher): skip directories in processFile</li><li>fix(init): always use factory defaults on overwrite, drop stale config loading</li><li>fix(init): always prompt for harvester session_dir, add Claude Code detection</li><li>fix(reindex): resolve collection by path, not treat root as collection name</li><li>fix(ux): treat harvest 503 as info, not warn on init</li><li>fix(watcher): skip non-existent collection paths silently</li><li>fix(embed): recover embed_failed chunks in periodic scan</li><li>fix(cli): reindex auto-derives workspace hash from --root path</li><li>fix(server): implement POST /api/v1/reindex — replace no-op stub <a href="https://github.com/nano-step/nano-brain/pull/162">#162</a></li><li>fix(init): register default code collection at workspace root <a href="https://github.com/nano-step/nano-brain/pull/161">#161</a></li><li>fix(cli): smart recovery on &#x27;cannot connect to nano-brain server&#x27; <a href="https://github.com/nano-step/nano-brain/pull/141">#141</a> <a href="https://github.com/nano-step/nano-brain/pull/145">#145</a></li><li>fix(test): fix integration test build + harness 3.10 branch slug extraction</li><li>fix(lint): resolve all golangci-lint errcheck/unused/ineffassign issues</li><li>fix: use version --json for binary cache check in postinstall</li><li>fix: skip watcher for non-existent collection paths</li><li>fix: help command and unknown command handling</li><li>fix(ci): use nanobrain_dev DB to match default config</li><li>fix: prevent nil pointer panic in WriteDocument when embedding disabled <a href="https://github.com/nano-step/nano-brain/pull/82">#82</a></li><li>fix: address all PR #45 review findings + add self-review harness gate</li><li>fix(graph): allow dragging focused nodes — add pointerEvents:none to dimmed dots</li><li>fix(graph): hide edge labels (&#x27;call&#x27;) when edges dimmed in focus mode</li><li>fix(graph): hide edge labels when edges are dimmed in focus mode</li><li>fix(graph): Symbol Call Graph — default individual mode + fix cluster edge filter (closes #38)</li><li>fix(graph): collapse unrelated nodes to dots on focus — no label overlap</li><li>fix(watcher): address Gemini review — streaming body, yaml parser, async fs, ready event</li><li>fix(db): eliminate SQLite corruption root causes — readonly check + RESTART checkpoint</li><li>fix(db): add db:clean command and bootstrap orphan/corruption guards (closes #32, #33)</li><li>fix(kg): raise entity API limit 100→2000 so all entities appear in graph</li><li>fix(kg): start extraction cycle 30s after startup instead of 30min</li><li>fix(kg): startup reindex + fast drain for entity extraction queue</li><li>fix(ci,web): web deps install in CI + fix graph node overlap</li><li>fix(web): favicon 404, search mark rendering, missing CI web build (closes #29)</li><li>fix(docs): Three.js — use r128 UMD CDN, fix overflow, fix init timing</li><li>fix(docs): npx nano-brain mcp + add ai-sandbox-wrapper container setup section (closes #25)</li><li>fix(pages): redirect root index.html → docs/index.html</li><li>fix(docs): correct codebase facts — 30 tools, 32 CLI, 11-stage pipeline, 5 languages, accurate MCP config</li><li>fix(ci): skip GitHub release creation if tag already exists (closes #22)</li><li>fix(ci): skip npm publish if version already exists on registry</li><li>fix(ci): use --legacy-peer-deps for npm ci (tree-sitter peer conflict)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#f97316">Changed</h3>
+                <ul><li>refactor(search): normalize SearchResult schema across all endpoints <a href="https://github.com/nano-step/nano-brain/pull/73">#73</a></li><li>refactor(graph): consolidate 3 useEffects into 1 — address Gemini review</li><li>refactor(graph): shared GraphShell + node cap + truncation banner on all graphs (closes #41)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Documentation</h3>
+                <ul><li>docs(harness): add 3 anti-footgun rules to prevent recent merge mistakes <a href="https://github.com/nano-step/nano-brain/pull/202">#202</a></li><li>docs(agents): origin now HTTPS, simplify git push workflow</li><li>docs(evidence): cleanup-stale-raw end-to-end test <a href="https://github.com/nano-step/nano-brain/pull/190">#190</a></li><li>docs: clarify summarization no longer writes .md to disk (closes #198)</li><li>docs(agents): refine AGENTS.md/CLAUDE.md/ROADMAP and ignore .sisyphus runtime</li><li>docs(agents): add per-package AGENTS.md files for AI context</li><li>docs: fix container API URL in AGENTS.md — use host.docker.internal:3100</li><li>docs(agents): add git push workflow for container environment (SSH blocked, use HTTPS kokorolx token)</li><li>docs(agents): update harness block with full validation ladder and rules</li><li>docs(roadmap): update status - Pillar 1 complete, Pillar 2a/2b done</li><li>docs(harness): add response-shape + staged-files gates, forbidden practice #14</li><li>docs: add ROADMAP.md with Pillar 1-4 vision</li><li>docs: add per-branch self-review stubs for harness 3.10 gate (#146 #147 #148)</li><li>docs: add self-review evidence for PRs #146 #147 #148</li><li>docs: add npx quick start, doctor command, and npx caveats</li><li>docs: add README.md and landing page for v2</li><li>docs: add npm, CI, license badges to README (closes #21)</li><li>docs(claude): add rule to create GitHub issue before starting any task</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Other</h3>
+                <ul><li>chore(npm): manual publish 2026.5.2903 <a href="https://github.com/nano-step/nano-brain/pull/206">#206</a></li><li>chore(npm): commit package-lock.json for shared-workflows compat <a href="https://github.com/nano-step/nano-brain/pull/204">#204</a></li><li>chore(gitignore): exclude .sisyphus/ orchestrator state</li><li>chore(openspec): archive opencode-multi-db-discovery <a href="https://github.com/nano-step/nano-brain/pull/199">#199</a></li><li>chore(openspec): mark extend-code-intelligence tasks as complete</li><li>chore(config): add project opencode.json to disable unused MCPs</li><li>chore(skills): remove unused BMad skill bundles</li><li>chore(openspec): archive harvest-summary-only</li><li>chore(openspec): archive 7 completed changes</li><li>chore(openspec): archive embed-queue-workspace-isolation</li><li>chore(openspec): archive fix-harvester-per-project-workspace change</li><li>chore(openspec): archive opencode-sqlite-harvester</li><li>chore(openspec): archive knowledge-graph (implemented + tested)</li><li>chore(openspec): archive reindex-real-impl (already implemented + tested)</li><li>chore(openspec): archive init-default-collections (already implemented + tested)</li><li>chore(openspec): archive doctor-command (complete)</li><li>chore(openspec): archive 4 completed changes (logging, connect-error-ux, harvester-autodetect, workspaces-list-cli)</li><li>chore(ci): upgrade Node.js 20 → 24 in release workflow</li><li>chore: archive npm-scoped-publish OpenSpec</li><li>chore: archive container-server-guard OpenSpec</li><li>chore: archive daemon-management OpenSpec</li><li>chore: bump npm version to 2.0.0-beta.5</li><li>chore: archive OpenSpec enhanced-init</li><li>chore: archive OpenSpec config-commands</li><li>chore: bump npm version to 2.0.0-beta.4</li><li>chore: archive OpenSpec interactive-init</li><li>chore: bump npm version to 2.0.0-beta.3</li><li>chore: bump npm version to 2.0.0-beta.2</li><li>chore: update harness state — ALL 8 EPICS COMPLETE</li><li>chore: update harness state — Epic 7 complete, position 8.1</li><li>chore: update harness state — Story 7.4 done, position 7.5</li><li>chore: update harness state — Story 7.3 done, position 7.4</li><li>chore: update harness state — Story 7.2 done, position 7.3</li><li>chore: update harness state — Story 7.1 done, position 7.2</li><li>chore: update harness state - Epic 6 complete, position Epic 7</li><li>chore: update harness state — Epic 5 complete, advance to Epic 6</li><li>chore: update harness state — Story 5.5 done, advance to 5.6</li><li>chore: update harness state — Story 5.4 done, position 5.5</li><li>chore: update harness state — Story 5.3 done, position 5.4</li><li>chore: update harness state — Story 5.2 done, position 5.3</li><li>chore: update harness state — Story 5.1 done, position 5.2</li><li>chore: Epic 4 complete; advance to Epic 5, Story 5.1</li><li>chore: add smoke:e2e to harness rules and harness-check skill</li><li>chore: update harness state - Story 4.3 done, position 4.4</li><li>chore: update harness-state for Story 4.2 completion</li><li>chore: update harness-state for Story 4.1 completion</li><li>chore: update harness-state for Epic 3 completion</li><li>chore: update harness state — Epic 2 complete, position → 3.1</li><li>chore(bmad): install BMad Builder module</li><li>chore(b-main): greenfield baseline</li><li>chore: migrate workflows to kokorolx/shared-workflows@v1</li><li>chore: fix homepage URL to GitHub Pages docs site</li><li>chore: add repository, homepage, and bugs URLs to package.json</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">0.0.0</span>
+                <span class="badge release">0.0.0</span>
+                <span class="date">2026-05-30</span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#22c55e">Added</h3>
+                <ul><li>feat(cli): add cleanup-stale-raw command (closes #190)</li><li>feat(config): bump summarization.max_tokens default 4096 → 8000 (closes #191)</li><li>feat(harvest): multi-DB OpenCode discovery via db_root (#199, #200)</li><li>feat(openspec): archive completed changes and lock new specs</li><li>feat(graph): add TypeScript, JavaScript, Python graph extractors and CLI commands <a href="https://github.com/nano-step/nano-brain/pull/197">#197</a></li><li>feat(harvest): filter OpenCode sessions by registered workspaces <a href="https://github.com/nano-step/nano-brain/pull/195">#195</a></li><li>feat(harvest): summary-only ingestion with unified-path fallback <a href="https://github.com/nano-step/nano-brain/pull/189">#189</a> <a href="https://github.com/nano-step/nano-brain/pull/192">#192</a></li><li>feat: real migration_version in /api/status + init --force prints harvest result</li><li>feat(init): add --force flag to reset workspace + remove CWD auto-detect</li><li>feat(summarize): add POST /api/v1/summarize endpoint</li><li>feat(init): full onboarding for all config sections</li><li>feat(summarize,init): add debug logs + summarization onboarding</li><li>feat(summarize): add token-bucket rate limiter for LLM calls</li><li>feat(summarize): session summarization pipeline v2026.5.267</li><li>feat(watcher): config-based filter - global + per-workspace exclude/extensions</li><li>feat(watcher): file filtering - gitignore, exclude patterns, allowed extensions</li><li>feat(memory): auto-extract decisions/lessons from sessions (Pillar 3)</li><li>feat(graph): call chain tracing - memory_trace tool + POST /graph/trace (Pillar 1d)</li><li>feat(graph): impact analytics - memory_impact tool + POST /graph/impact (Pillar 1c)</li><li>feat(harvester): add OpenCode SQLite harvester (Pillar 2a)</li><li>feat(graph): add knowledge graph (Pillar 1b)</li><li>feat(cli): add doctor command tests + mark tasks complete</li><li>feat: nano-brain v2 — complete greenfield rewrite (Go + PostgreSQL + pgvector)</li><li>feat(code-intel): symbol extraction with gotreesitter (Pillar 1, issue #174)</li><li>feat(ux): auto-trigger reindex + harvest after init --root</li><li>feat(cli): add reindex command — wire CLI to POST /api/v1/reindex <a href="https://github.com/nano-step/nano-brain/pull/159">#159</a></li><li>feat(cli+server): comprehensive structured logging <a href="https://github.com/nano-step/nano-brain/pull/144">#144</a> <a href="https://github.com/nano-step/nano-brain/pull/148">#148</a></li><li>feat(cli): auto-detect opencode session_dir at startup <a href="https://github.com/nano-step/nano-brain/pull/147">#147</a></li><li>feat(cli): add workspaces list command + real health workspace count <a href="https://github.com/nano-step/nano-brain/pull/146">#146</a></li><li>feat(npm): migrate to @nano-step/nano-brain + CI auto-publish <a href="https://github.com/nano-step/nano-brain/pull/139">#139</a> <a href="https://github.com/nano-step/nano-brain/pull/140">#140</a></li><li>feat(cli): add container server guard with port check and auto-config <a href="https://github.com/nano-step/nano-brain/pull/137">#137</a> <a href="https://github.com/nano-step/nano-brain/pull/138">#138</a></li><li>feat(cli): add daemon management (serve -d, stop, restart) <a href="https://github.com/nano-step/nano-brain/pull/135">#135</a> <a href="https://github.com/nano-step/nano-brain/pull/136">#136</a></li><li>feat: enhance interactive init wizard <a href="https://github.com/nano-step/nano-brain/pull/134">#134</a></li><li>feat: config show/check commands</li><li>feat: add version command</li><li>feat: interactive init wizard for first-time setup</li><li>feat: add doctor command for prerequisite checking</li><li>feat: add npx nano-brain support via npm package wrapper</li><li>feat: search telemetry with 90-day retention (Story 8.6)</li><li>feat: tags endpoint, reindex API, enhanced workspaces (Story 8.5)</li><li>feat: CLI operations commands — logs, docker, status, db:migrate goose (Story 8.4)</li><li>feat: config hot-reload endpoint POST /api/reload-config (Story 8.3)</li><li>feat: v1 SQLite to PostgreSQL migration command (Story 8.1)</li><li>feat: bench --help and JSON round-trip validation (Story 7.5) <a href="https://github.com/nano-step/nano-brain/pull/115">#115</a></li><li>feat: bench stress command for concurrent write testing (Story 7.4) <a href="https://github.com/nano-step/nano-brain/pull/113">#113</a></li><li>feat: bench compare command for regression detection (Story 7.3) <a href="https://github.com/nano-step/nano-brain/pull/111">#111</a></li><li>feat: bench run command with quality metrics and latency (Story 7.2) <a href="https://github.com/nano-step/nano-brain/pull/109">#109</a></li><li>feat: bench generate command and dataset generator (Story 7.1) <a href="https://github.com/nano-step/nano-brain/pull/107">#107</a></li><li>feat: CLI harvest command and POST /api/harvest (Story 6.5) <a href="https://github.com/nano-step/nano-brain/pull/105">#105</a></li><li>feat: add harvester config to GET /api/status (Story 6.4) <a href="https://github.com/nano-step/nano-brain/pull/103">#103</a></li><li>feat: implement Claude Code session harvester (Story 6.2) <a href="https://github.com/nano-step/nano-brain/pull/99">#99</a></li><li>feat: implement OpenCode session harvester (Story 6.1) <a href="https://github.com/nano-step/nano-brain/pull/97">#97</a></li><li>feat: implement memory_get and supersedes for memory_write (Story 5.6) <a href="https://github.com/nano-step/nano-brain/pull/95">#95</a></li><li>feat: configure 30s KeepAlive on MCP server (Story 5.5) <a href="https://github.com/nano-step/nano-brain/pull/93">#93</a></li><li>feat: enforce workspace on all MCP tools + cross-workspace &#x27;all&#x27; (Story 5.3) <a href="https://github.com/nano-step/nano-brain/pull/89">#89</a></li><li>feat: register all 9 MCP tools on both transports (Story 5.2) <a href="https://github.com/nano-step/nano-brain/pull/87">#87</a></li><li>feat: mount MCP SSE and Streamable HTTP transports (Story 5.1) <a href="https://github.com/nano-step/nano-brain/pull/85">#85</a></li><li>feat: add wake-up briefing endpoint (Story 4.6) <a href="https://github.com/nano-step/nano-brain/pull/83">#83</a></li><li>feat(search): thread-safe config updates + validation tests <a href="https://github.com/nano-step/nano-brain/pull/80">#80</a></li><li>feat(search): POST /api/query hybrid search pipeline <a href="https://github.com/nano-step/nano-brain/pull/75">#75</a></li><li>feat(search): POST /api/v1/search BM25 full-text search <a href="https://github.com/nano-step/nano-brain/pull/71">#71</a></li><li>feat(embed): POST /api/v1/embed trigger + status observability <a href="https://github.com/nano-step/nano-brain/pull/69">#69</a></li><li>feat(search): POST /api/v1/vsearch vector search endpoint <a href="https://github.com/nano-step/nano-brain/pull/67">#67</a></li><li>feat(embed): backpressure + retry/failure handling <a href="https://github.com/nano-step/nano-brain/pull/65">#65</a></li><li>feat(embed): async embedding queue with backoff + concurrency <a href="https://github.com/nano-step/nano-brain/pull/63">#63</a></li><li>feat(embed): embedding provider interface + Ollama/VoyageAI implementations <a href="https://github.com/nano-step/nano-brain/pull/61">#61</a></li><li>feat(embed): HNSW migration, embed_status column, embedding sqlc queries <a href="https://github.com/nano-step/nano-brain/pull/59">#59</a></li><li>feat(cli): init, write, query/search/vsearch commands + env/JSON flags <a href="https://github.com/nano-step/nano-brain/pull/57">#57</a></li><li>feat(collections): collection management CLI + live watcher attach <a href="https://github.com/nano-step/nano-brain/pull/55">#55</a></li><li>feat(watcher): implement file watcher with debounced reindex <a href="https://github.com/nano-step/nano-brain/pull/53">#53</a></li><li>feat(ingestion): integrate chunker into WriteDocument handler <a href="https://github.com/nano-step/nano-brain/pull/51">#51</a></li><li>feat: Story 2.3 — document write endpoint (POST /api/write)</li><li>feat: Story 2.2 — API middleware (workspace validation, content-type enforcement)</li><li>feat(harness): add b-main base branch rule + PR target check</li><li>feat: nano-brain v2 greenfield — Epic 1 foundation + Epic 2 progress</li><li>feat: interactive first-run setup wizard (closes #43)</li><li>feat(graph): auto-zoom to selected node + neighbors on focus mode</li><li>feat(graph): focus mode on node click + fix node overlap <a href="https://github.com/nano-step/nano-brain/pull/37">#37</a></li><li>feat(obsidian,db): excludeFolders, frontmatter tags, db:clean --list-only (closes #34)</li><li>feat(obsidian): Obsidian vault integration + fix entity API limit 100→2000 (closes #34)</li><li>feat(kg): scheduled entity extraction job for memory documents (closes #30)</li><li>feat(docs): extend Three.js neural graph to full-page background on all docs pages (closes #28)</li><li>feat(docs): Three.js neural graph animation in hero — nodes + edges + pulse (closes #27)</li><li>feat(docs): custom hover tooltips on MCP tools grid (closes #26)</li><li>feat(docs): CHANGELOG.md + changelog page renders it via marked.js (closes #24)</li><li>feat(docs): add setup guide page — Docker, config, Ollama, MCP connect, verify steps</li><li>feat: add GitHub Pages site — landing, features, changelog, docs (closes #23)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#ef4444">Fixed</h3>
+                <ul><li>fix(embed): scope queue scan to registered workspaces only <a href="https://github.com/nano-step/nano-brain/pull/187">#187</a> <a href="https://github.com/nano-step/nano-brain/pull/188">#188</a></li><li>fix: drop incorrect content_hash unique constraint on documents</li><li>fix: recursive watcher scan + tilde expansion for memory/sessions paths</li><li>fix: register watcher immediately on POST /api/v1/init</li><li>fix(harvest): scope OpenCodeSQLiteHarvester sessions to per-project workspace</li><li>fix(summarize): expand tilde in output_dir and fail-fast on mkdir</li><li>fix(init): default log file path in onboarding prompt</li><li>fix(status): expose actual embedding provider in active_provider field</li><li>fix(embed): reduce maxEmbedChars to 4000 for nomic-embed-text 2048-token limit</li><li>fix(embed,harvest): truncate oversized chunks + strip null bytes</li><li>fix(ci): reset package.json version to 0.0.0-dev for CI version bump</li><li>fix(harvest): enqueue chunk IDs after tx.Commit, not before</li><li>fix(harvest): align SQLite queries to actual OpenCode schema</li><li>fix(harvest): auto-detect opencode.db at ~/.local/share/opencode on macOS</li><li>fix(watcher): move processing file log after IsDir check to reduce noise</li><li>fix(embed): wire watcher+reindex to embed queue, add file-level logs</li><li>fix(mcp): populate kind/language/signature in memory_symbols tool response</li><li>fix(review): post-commit self-review fixes + harness lessons</li><li>fix(watcher): skip directories in processFile</li><li>fix(init): always use factory defaults on overwrite, drop stale config loading</li><li>fix(init): always prompt for harvester session_dir, add Claude Code detection</li><li>fix(reindex): resolve collection by path, not treat root as collection name</li><li>fix(ux): treat harvest 503 as info, not warn on init</li><li>fix(watcher): skip non-existent collection paths silently</li><li>fix(embed): recover embed_failed chunks in periodic scan</li><li>fix(cli): reindex auto-derives workspace hash from --root path</li><li>fix(server): implement POST /api/v1/reindex — replace no-op stub <a href="https://github.com/nano-step/nano-brain/pull/162">#162</a></li><li>fix(init): register default code collection at workspace root <a href="https://github.com/nano-step/nano-brain/pull/161">#161</a></li><li>fix(cli): smart recovery on &#x27;cannot connect to nano-brain server&#x27; <a href="https://github.com/nano-step/nano-brain/pull/141">#141</a> <a href="https://github.com/nano-step/nano-brain/pull/145">#145</a></li><li>fix(test): fix integration test build + harness 3.10 branch slug extraction</li><li>fix(lint): resolve all golangci-lint errcheck/unused/ineffassign issues</li><li>fix: use version --json for binary cache check in postinstall</li><li>fix: skip watcher for non-existent collection paths</li><li>fix: help command and unknown command handling</li><li>fix(ci): use nanobrain_dev DB to match default config</li><li>fix: prevent nil pointer panic in WriteDocument when embedding disabled <a href="https://github.com/nano-step/nano-brain/pull/82">#82</a></li><li>fix: address all PR #45 review findings + add self-review harness gate</li><li>fix(graph): allow dragging focused nodes — add pointerEvents:none to dimmed dots</li><li>fix(graph): hide edge labels (&#x27;call&#x27;) when edges dimmed in focus mode</li><li>fix(graph): hide edge labels when edges are dimmed in focus mode</li><li>fix(graph): Symbol Call Graph — default individual mode + fix cluster edge filter (closes #38)</li><li>fix(graph): collapse unrelated nodes to dots on focus — no label overlap</li><li>fix(watcher): address Gemini review — streaming body, yaml parser, async fs, ready event</li><li>fix(db): eliminate SQLite corruption root causes — readonly check + RESTART checkpoint</li><li>fix(db): add db:clean command and bootstrap orphan/corruption guards (closes #32, #33)</li><li>fix(kg): raise entity API limit 100→2000 so all entities appear in graph</li><li>fix(kg): start extraction cycle 30s after startup instead of 30min</li><li>fix(kg): startup reindex + fast drain for entity extraction queue</li><li>fix(ci,web): web deps install in CI + fix graph node overlap</li><li>fix(web): favicon 404, search mark rendering, missing CI web build (closes #29)</li><li>fix(docs): Three.js — use r128 UMD CDN, fix overflow, fix init timing</li><li>fix(docs): npx nano-brain mcp + add ai-sandbox-wrapper container setup section (closes #25)</li><li>fix(pages): redirect root index.html → docs/index.html</li><li>fix(docs): correct codebase facts — 30 tools, 32 CLI, 11-stage pipeline, 5 languages, accurate MCP config</li><li>fix(ci): skip GitHub release creation if tag already exists (closes #22)</li><li>fix(ci): skip npm publish if version already exists on registry</li><li>fix(ci): use --legacy-peer-deps for npm ci (tree-sitter peer conflict)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#f97316">Changed</h3>
+                <ul><li>refactor(search): normalize SearchResult schema across all endpoints <a href="https://github.com/nano-step/nano-brain/pull/73">#73</a></li><li>refactor(graph): consolidate 3 useEffects into 1 — address Gemini review</li><li>refactor(graph): shared GraphShell + node cap + truncation banner on all graphs (closes #41)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Documentation</h3>
+                <ul><li>docs(harness): add 3 anti-footgun rules to prevent recent merge mistakes <a href="https://github.com/nano-step/nano-brain/pull/202">#202</a></li><li>docs(agents): origin now HTTPS, simplify git push workflow</li><li>docs(evidence): cleanup-stale-raw end-to-end test <a href="https://github.com/nano-step/nano-brain/pull/190">#190</a></li><li>docs: clarify summarization no longer writes .md to disk (closes #198)</li><li>docs(agents): refine AGENTS.md/CLAUDE.md/ROADMAP and ignore .sisyphus runtime</li><li>docs(agents): add per-package AGENTS.md files for AI context</li><li>docs: fix container API URL in AGENTS.md — use host.docker.internal:3100</li><li>docs(agents): add git push workflow for container environment (SSH blocked, use HTTPS kokorolx token)</li><li>docs(agents): update harness block with full validation ladder and rules</li><li>docs(roadmap): update status - Pillar 1 complete, Pillar 2a/2b done</li><li>docs(harness): add response-shape + staged-files gates, forbidden practice #14</li><li>docs: add ROADMAP.md with Pillar 1-4 vision</li><li>docs: add per-branch self-review stubs for harness 3.10 gate (#146 #147 #148)</li><li>docs: add self-review evidence for PRs #146 #147 #148</li><li>docs: add npx quick start, doctor command, and npx caveats</li><li>docs: add README.md and landing page for v2</li><li>docs: add npm, CI, license badges to README (closes #21)</li><li>docs(claude): add rule to create GitHub issue before starting any task</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Other</h3>
+                <ul><li>chore(npm): commit package-lock.json for shared-workflows compat <a href="https://github.com/nano-step/nano-brain/pull/204">#204</a></li><li>chore(gitignore): exclude .sisyphus/ orchestrator state</li><li>chore(openspec): archive opencode-multi-db-discovery <a href="https://github.com/nano-step/nano-brain/pull/199">#199</a></li><li>chore(openspec): mark extend-code-intelligence tasks as complete</li><li>chore(config): add project opencode.json to disable unused MCPs</li><li>chore(skills): remove unused BMad skill bundles</li><li>chore(openspec): archive harvest-summary-only</li><li>chore(openspec): archive 7 completed changes</li><li>chore(openspec): archive embed-queue-workspace-isolation</li><li>chore(openspec): archive fix-harvester-per-project-workspace change</li><li>chore(openspec): archive opencode-sqlite-harvester</li><li>chore(openspec): archive knowledge-graph (implemented + tested)</li><li>chore(openspec): archive reindex-real-impl (already implemented + tested)</li><li>chore(openspec): archive init-default-collections (already implemented + tested)</li><li>chore(openspec): archive doctor-command (complete)</li><li>chore(openspec): archive 4 completed changes (logging, connect-error-ux, harvester-autodetect, workspaces-list-cli)</li><li>chore(ci): upgrade Node.js 20 → 24 in release workflow</li><li>chore: archive npm-scoped-publish OpenSpec</li><li>chore: archive container-server-guard OpenSpec</li><li>chore: archive daemon-management OpenSpec</li><li>chore: bump npm version to 2.0.0-beta.5</li><li>chore: archive OpenSpec enhanced-init</li><li>chore: archive OpenSpec config-commands</li><li>chore: bump npm version to 2.0.0-beta.4</li><li>chore: archive OpenSpec interactive-init</li><li>chore: bump npm version to 2.0.0-beta.3</li><li>chore: bump npm version to 2.0.0-beta.2</li><li>chore: update harness state — ALL 8 EPICS COMPLETE</li><li>chore: update harness state — Epic 7 complete, position 8.1</li><li>chore: update harness state — Story 7.4 done, position 7.5</li><li>chore: update harness state — Story 7.3 done, position 7.4</li><li>chore: update harness state — Story 7.2 done, position 7.3</li><li>chore: update harness state — Story 7.1 done, position 7.2</li><li>chore: update harness state - Epic 6 complete, position Epic 7</li><li>chore: update harness state — Epic 5 complete, advance to Epic 6</li><li>chore: update harness state — Story 5.5 done, advance to 5.6</li><li>chore: update harness state — Story 5.4 done, position 5.5</li><li>chore: update harness state — Story 5.3 done, position 5.4</li><li>chore: update harness state — Story 5.2 done, position 5.3</li><li>chore: update harness state — Story 5.1 done, position 5.2</li><li>chore: Epic 4 complete; advance to Epic 5, Story 5.1</li><li>chore: add smoke:e2e to harness rules and harness-check skill</li><li>chore: update harness state - Story 4.3 done, position 4.4</li><li>chore: update harness-state for Story 4.2 completion</li><li>chore: update harness-state for Story 4.1 completion</li><li>chore: update harness-state for Epic 3 completion</li><li>chore: update harness state — Epic 2 complete, position → 3.1</li><li>chore(bmad): install BMad Builder module</li><li>chore(b-main): greenfield baseline</li><li>chore: migrate workflows to kokorolx/shared-workflows@v1</li><li>chore: fix homepage URL to GitHub Pages docs site</li><li>chore: add repository, homepage, and bugs URLs to package.json</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">Unreleased</span>
+                <span class="badge current">Unreleased</span>
+                <span class="date"></span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#ef4444">Fixed</h3>
+                <ul><li>fix(mcp): <code>memory_wake_up</code> MCP tool was returning empty <code>recent_memories</code> because the MCP handler passed <code>Collections: nil</code> to <code>RecentDocuments</code>, making the post-#338 collection filter (<code>collection = ANY(&#x27;{}&#x27;)</code>) always false. Now matches the HTTP <code>/api/v1/wake-up</code> behaviour. <a href="https://github.com/nano-step/nano-brain/pull/356">#356</a></li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Performance</h3>
+                <ul><li>Add partial index on chunks.embed_status (pending/embed_failed) for embed queue worker hot path <a href="https://github.com/nano-step/nano-brain/pull/322">#322</a></li><li>Add in-flight dedup set in embed queue to prevent re-embedding of chunks already being processed by a worker <a href="https://github.com/nano-step/nano-brain/pull/322">#322</a></li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Breaking changes (operator action required)</h3>
+                <ul><li><strong>fix(security): close 7 workspace-registration leak points in summary + write paths <a href="https://github.com/nano-step/nano-brain/pull/238">#238</a>.</strong> Every write path now enforces that the target <code>workspace_hash</code> is registered in the <code>workspaces</code> table. Five layers of defense-in-depth: HTTP middleware, MCP tool handlers, harvester init, <code>Persister.Save</code>, and a new PostgreSQL FK constraint with <code>ON DELETE CASCADE</code> (migration 00011).</li><li>Orphan summary documents are LLM-generated and cannot be regenerated by the new code (the underlying sessions are now skipped). Save the <code>--dry-run</code> output as your record.</li><li><strong>V1 migration users:</strong> if you previously imported data with <code>nano-brain db:migrate --from-v1</code> using the default <code>workspace_hash = &quot;default&quot;</code> (the implicit workspace when <code>--workspace</code> is not supplied), those documents are orphans and will block migration 00011 with error 23503. They will appear in <code>cleanup-orphan-workspaces --dry-run</code> output. Register the target workspace with <code>nano-brain init --root=&lt;path&gt;</code> before running cleanup, or let cleanup delete them and re-import post-migration with the new binary.</li><li>On large tables (&gt;1M documents), migration 00011 validates every row and acquires a <code>ShareRowExclusiveLock</code>. Expect 30-60s of blocked writes. For very large deployments, consider applying <code>ADD CONSTRAINT ... NOT VALID</code> + <code>VALIDATE CONSTRAINT</code> manually.</li><li>Full test cycle artifacts at <code>ai/test-case/rri-t/summary/</code> (RRI-T), <code>openspec/changes/fix-summary-workspace-registration-leaks/</code> (proposal + spec deltas), and <code>docs/evidence/fix-summary-workspace-registration-leaks/</code> (Phase G user-flow evidence).</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Fixes</h3>
+                <ul><li>fix(config): <code>NANO_BRAIN_CONFIG</code> (and <code>--config</code>) now strip leading/trailing whitespace, and a <code>WARNING:</code> is printed to stderr when the explicitly-set path does not exist (previously silently fell back to defaults — a production footgun for typos in container env values) <a href="https://github.com/nano-step/nano-brain/pull/224">#224</a></li><li>fix(handler): wrap <code>ResetWorkspace</code> document+workspace deletion in a single transaction with rollback — matches the pattern already shipped in <code>RemoveWorkspace</code> <a href="https://github.com/nano-step/nano-brain/pull/155">#155</a>. Prevents orphaned documents if the workspace delete fails after docs are already removed <a href="https://github.com/nano-step/nano-brain/pull/225">#225</a></li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Features</h3>
+                <ul><li><strong>feat(summary): restore disk persistence for summaries <a href="https://github.com/nano-step/nano-brain/pull/258">#258</a>.</strong> Session summaries are now written to disk as <code>.md</code> files in addition to PostgreSQL, enabling integration with Obsidian and other filesystem-based markdown tools. Disk writes are <strong>enabled by default</strong>.</li><li>Disk write is atomic (<code>.tmp</code> + <code>os.Rename</code> on POSIX) — no partial files on crash</li><li>Disk failure (permissions, disk full) logs a WARN but does NOT roll back the DB transaction (DB is source of truth)</li><li>Idempotent: re-persisting the same session overwrites the same file</li><li>Collision-safe: if two sessions produce the same path with different content, the second gets a <code>_&lt;sha8-of-session-id&gt;</code> suffix</li><li>feat(cli): <code>get</code>, <code>tags</code>, <code>multi-get</code> commands — fetch a single document by source_path or UUID, list all tags with counts, and batch-fetch multiple documents in one round-trip; backed by <code>POST /api/v1/get</code>, <code>GET /api/v1/tags</code> (existing), and <code>POST /api/v1/multi-get</code> REST endpoints <a href="https://github.com/nano-step/nano-brain/pull/152">#152</a></li><li>feat(cli): <code>--tags=t1,t2,t3</code> filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL <code>&amp;&amp;</code> array op) with the given set; works in --workspace= or --scope=all mode <a href="https://github.com/nano-step/nano-brain/pull/160">#160</a></li><li>feat(cli): <code>workspaces remove --workspace=&lt;hash&gt;</code> — destructive workspace deletion with <code>--dry-run</code> preview and <code>--force</code> safety gate; backed by <code>DELETE /api/v1/workspaces/:hash</code> REST endpoint wrapped in a single transaction <a href="https://github.com/nano-step/nano-brain/pull/155">#155</a></li><li>feat(cli): wake-up command — pretty/JSON workspace briefing at session start (#151, PR #216)</li><li>feat(cli): <code>--scope=all</code> flag on query/search/vsearch for cross-workspace search (#156, PR #217)</li><li>feat(config): <code>NANO_BRAIN_CONFIG</code> env var support — precedence <code>--config</code> flag &gt; env var &gt; <code>~/.nano-brain/config.yml</code>. Enables Docker/k8s deployments to point at a container-specific config without mounting over the host&#x27;s default.</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Documentation</h3>
+                <ul><li>docs(roadmap): reconcile ROADMAP.md status with actually shipped features (#214, PR #215)</li><li>docs(readme): document <code>NANO_BRAIN_CONFIG</code> env var + Docker example</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">2026.5.267</span>
+                <span class="badge release">2026.5.267</span>
+                <span class="date">2026-05-26</span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Features</h3>
+                <ul><li>feat(cli): <code>--tags=t1,t2,t3</code> filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL <code>&amp;&amp;</code> array op) with the given set; works in --workspace= or --scope=all mode <a href="https://github.com/nano-step/nano-brain/pull/160">#160</a></li><li>feat(summarize): session summarization pipeline — LLM-powered structured summaries for harvested sessions</li><li>feat(summarize): map-reduce pipeline with strip, parallel map, hierarchical reduce for sessions up to 1M tokens</li><li>feat(summarize): OpenAI-compatible LLM client with SSE streaming, retry (3x backoff for 429/5xx)</li><li>feat(summarize): persist summaries as <code>.md</code> files + embed in vector DB under <code>session-summary</code> collection</li><li>feat(summarize): idempotent upsert via <code>summary://opencode/{id}</code> source path — unchanged sessions skipped</li><li>feat(summarize): cross-session relationship links (parent/child/sibling) in summary header</li><li>feat(harvest): wire summarizer into OpenCode SQLite + Claude Code harvesters — runs after successful harvest</li><li>feat(config): <code>summarization</code> config block — provider_url, api_key, model, max_tokens, concurrency</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Documentation</h3>
+                <ul><li>docs: add <code>summarization</code> config section to README with ai-proxy setup example</li><li>docs: document <code>NANO_BRAIN_SUMMARIZE_API_KEY</code> env var</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">2026.8.19</span>
+                <span class="badge release">2026.8.19</span>
+                <span class="date">2026-05-25</span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Features</h3>
+                <ul><li>feat(cli): <code>--tags=t1,t2,t3</code> filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL <code>&amp;&amp;</code> array op) with the given set; works in --workspace= or --scope=all mode <a href="https://github.com/nano-step/nano-brain/pull/160">#160</a></li><li>feat: nano-brain v2 — complete greenfield rewrite (Go + PostgreSQL + pgvector)</li><li>feat: interactive first-run setup wizard (closes #43)</li><li>feat(graph): auto-zoom to selected node + neighbors on focus mode</li><li>feat(graph): focus mode on node click + fix node overlap <a href="https://github.com/nano-step/nano-brain/pull/37">#37</a></li><li>feat(obsidian,db): excludeFolders, frontmatter tags, db:clean --list-only (closes #34)</li><li>feat(obsidian): Obsidian vault integration + fix entity API limit 100→2000 (closes #34)</li><li>feat(kg): scheduled entity extraction job for memory documents (closes #30)</li><li>feat(docs): extend Three.js neural graph to full-page background on all docs pages (closes #28)</li><li>feat(docs): Three.js neural graph animation in hero — nodes + edges + pulse (closes #27)</li><li>feat(docs): custom hover tooltips on MCP tools grid (closes #26)</li><li>feat(docs): CHANGELOG.md + changelog page renders it via marked.js (closes #24)</li><li>feat(docs): add setup guide page — Docker, config, Ollama, MCP connect, verify steps</li><li>feat: add GitHub Pages site — landing, features, changelog, docs (closes #23)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Bug Fixes</h3>
+                <ul><li>fix(graph): allow dragging focused nodes — add pointerEvents:none to dimmed dots</li><li>fix(graph): hide edge labels (&#x27;call&#x27;) when edges dimmed in focus mode</li><li>fix(graph): hide edge labels when edges are dimmed in focus mode</li><li>fix(graph): Symbol Call Graph — default individual mode + fix cluster edge filter (closes #38)</li><li>fix(graph): collapse unrelated nodes to dots on focus — no label overlap</li><li>fix(watcher): address Gemini review — streaming body, yaml parser, async fs, ready event</li><li>fix(db): eliminate SQLite corruption root causes — readonly check + RESTART checkpoint</li><li>fix(db): add db:clean command and bootstrap orphan/corruption guards (closes #32, #33)</li><li>fix(kg): raise entity API limit 100→2000 so all entities appear in graph</li><li>fix(kg): start extraction cycle 30s after startup instead of 30min</li><li>fix(kg): startup reindex + fast drain for entity extraction queue</li><li>fix(ci,web): web deps install in CI + fix graph node overlap</li><li>fix(web): favicon 404, search mark rendering, missing CI web build (closes #29)</li><li>fix(docs): Three.js — use r128 UMD CDN, fix overflow, fix init timing</li><li>fix(docs): npx nano-brain mcp + add ai-sandbox-wrapper container setup section (closes #25)</li><li>fix(pages): redirect root index.html → docs/index.html</li><li>fix(docs): correct codebase facts — 30 tools, 32 CLI, 11-stage pipeline, 5 languages, accurate MCP config</li><li>fix(ci): skip GitHub release creation if tag already exists (closes #22)</li><li>fix(ci): skip npm publish if version already exists on registry</li><li>fix(ci): use --legacy-peer-deps for npm ci (tree-sitter peer conflict)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Documentation</h3>
+                <ul><li>docs: add npm, CI, license badges to README (closes #21)</li><li>docs(claude): add rule to create GitHub issue before starting any task</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Other</h3>
+                <ul><li>chore: update CHANGELOG.md for v2026.8.19 [skip ci]</li><li>chore: update CHANGELOG.md for v2026.8.19 [skip ci]</li><li>chore: fix homepage URL to GitHub Pages docs site</li><li>chore: add repository, homepage, and bugs URLs to package.json</li><li>chore: update CHANGELOG.md for v2026.8.19 [skip ci]</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">2026.8.19</span>
+                <span class="badge release">2026.8.19</span>
+                <span class="date">2026-05-16</span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Features</h3>
+                <ul><li>feat(cli): <code>--tags=t1,t2,t3</code> filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL <code>&amp;&amp;</code> array op) with the given set; works in --workspace= or --scope=all mode <a href="https://github.com/nano-step/nano-brain/pull/160">#160</a></li><li>feat: interactive first-run setup wizard (closes #43)</li><li>feat(graph): auto-zoom to selected node + neighbors on focus mode</li><li>feat(graph): focus mode on node click + fix node overlap <a href="https://github.com/nano-step/nano-brain/pull/37">#37</a></li><li>feat(obsidian,db): excludeFolders, frontmatter tags, db:clean --list-only (closes #34)</li><li>feat(obsidian): Obsidian vault integration + fix entity API limit 100→2000 (closes #34)</li><li>feat(kg): scheduled entity extraction job for memory documents (closes #30)</li><li>feat(docs): extend Three.js neural graph to full-page background on all docs pages (closes #28)</li><li>feat(docs): Three.js neural graph animation in hero — nodes + edges + pulse (closes #27)</li><li>feat(docs): custom hover tooltips on MCP tools grid (closes #26)</li><li>feat(docs): CHANGELOG.md + changelog page renders it via marked.js (closes #24)</li><li>feat(docs): add setup guide page — Docker, config, Ollama, MCP connect, verify steps</li><li>feat: add GitHub Pages site — landing, features, changelog, docs (closes #23)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Bug Fixes</h3>
+                <ul><li>fix(graph): allow dragging focused nodes — add pointerEvents:none to dimmed dots</li><li>fix(graph): hide edge labels (&#x27;call&#x27;) when edges dimmed in focus mode</li><li>fix(graph): hide edge labels when edges are dimmed in focus mode</li><li>fix(graph): Symbol Call Graph — default individual mode + fix cluster edge filter (closes #38)</li><li>fix(graph): collapse unrelated nodes to dots on focus — no label overlap</li><li>fix(watcher): address Gemini review — streaming body, yaml parser, async fs, ready event</li><li>fix(db): eliminate SQLite corruption root causes — readonly check + RESTART checkpoint</li><li>fix(db): add db:clean command and bootstrap orphan/corruption guards (closes #32, #33)</li><li>fix(kg): raise entity API limit 100→2000 so all entities appear in graph</li><li>fix(kg): start extraction cycle 30s after startup instead of 30min</li><li>fix(kg): startup reindex + fast drain for entity extraction queue</li><li>fix(ci,web): web deps install in CI + fix graph node overlap</li><li>fix(web): favicon 404, search mark rendering, missing CI web build (closes #29)</li><li>fix(docs): Three.js — use r128 UMD CDN, fix overflow, fix init timing</li><li>fix(docs): npx nano-brain mcp + add ai-sandbox-wrapper container setup section (closes #25)</li><li>fix(pages): redirect root index.html → docs/index.html</li><li>fix(docs): correct codebase facts — 30 tools, 32 CLI, 11-stage pipeline, 5 languages, accurate MCP config</li><li>fix(ci): skip GitHub release creation if tag already exists (closes #22)</li><li>fix(ci): skip npm publish if version already exists on registry</li><li>fix(ci): use --legacy-peer-deps for npm ci (tree-sitter peer conflict)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Documentation</h3>
+                <ul><li>docs: add npm, CI, license badges to README (closes #21)</li><li>docs(claude): add rule to create GitHub issue before starting any task</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Other</h3>
+                <ul><li>chore: update CHANGELOG.md for v2026.8.19 [skip ci]</li><li>chore: fix homepage URL to GitHub Pages docs site</li><li>chore: add repository, homepage, and bugs URLs to package.json</li><li>chore: update CHANGELOG.md for v2026.8.19 [skip ci]</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">2026.8.19</span>
+                <span class="badge release">2026.8.19</span>
+                <span class="date">2026-05-16</span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Features</h3>
+                <ul><li>feat(cli): <code>--tags=t1,t2,t3</code> filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL <code>&amp;&amp;</code> array op) with the given set; works in --workspace= or --scope=all mode <a href="https://github.com/nano-step/nano-brain/pull/160">#160</a></li><li>feat(graph): auto-zoom to selected node + neighbors on focus mode</li><li>feat(graph): focus mode on node click + fix node overlap <a href="https://github.com/nano-step/nano-brain/pull/37">#37</a></li><li>feat(obsidian,db): excludeFolders, frontmatter tags, db:clean --list-only (closes #34)</li><li>feat(obsidian): Obsidian vault integration + fix entity API limit 100→2000 (closes #34)</li><li>feat(kg): scheduled entity extraction job for memory documents (closes #30)</li><li>feat(docs): extend Three.js neural graph to full-page background on all docs pages (closes #28)</li><li>feat(docs): Three.js neural graph animation in hero — nodes + edges + pulse (closes #27)</li><li>feat(docs): custom hover tooltips on MCP tools grid (closes #26)</li><li>feat(docs): CHANGELOG.md + changelog page renders it via marked.js (closes #24)</li><li>feat(docs): add setup guide page — Docker, config, Ollama, MCP connect, verify steps</li><li>feat: add GitHub Pages site — landing, features, changelog, docs (closes #23)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Bug Fixes</h3>
+                <ul><li>fix(graph): allow dragging focused nodes — add pointerEvents:none to dimmed dots</li><li>fix(graph): hide edge labels (&#x27;call&#x27;) when edges dimmed in focus mode</li><li>fix(graph): hide edge labels when edges are dimmed in focus mode</li><li>fix(graph): Symbol Call Graph — default individual mode + fix cluster edge filter (closes #38)</li><li>fix(graph): collapse unrelated nodes to dots on focus — no label overlap</li><li>fix(watcher): address Gemini review — streaming body, yaml parser, async fs, ready event</li><li>fix(db): eliminate SQLite corruption root causes — readonly check + RESTART checkpoint</li><li>fix(db): add db:clean command and bootstrap orphan/corruption guards (closes #32, #33)</li><li>fix(kg): raise entity API limit 100→2000 so all entities appear in graph</li><li>fix(kg): start extraction cycle 30s after startup instead of 30min</li><li>fix(kg): startup reindex + fast drain for entity extraction queue</li><li>fix(ci,web): web deps install in CI + fix graph node overlap</li><li>fix(web): favicon 404, search mark rendering, missing CI web build (closes #29)</li><li>fix(docs): Three.js — use r128 UMD CDN, fix overflow, fix init timing</li><li>fix(docs): npx nano-brain mcp + add ai-sandbox-wrapper container setup section (closes #25)</li><li>fix(pages): redirect root index.html → docs/index.html</li><li>fix(docs): correct codebase facts — 30 tools, 32 CLI, 11-stage pipeline, 5 languages, accurate MCP config</li><li>fix(ci): skip GitHub release creation if tag already exists (closes #22)</li><li>fix(ci): skip npm publish if version already exists on registry</li><li>fix(ci): use --legacy-peer-deps for npm ci (tree-sitter peer conflict)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Documentation</h3>
+                <ul><li>docs: add npm, CI, license badges to README (closes #21)</li><li>docs(claude): add rule to create GitHub issue before starting any task</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Other</h3>
+                <ul><li>chore: fix homepage URL to GitHub Pages docs site</li><li>chore: add repository, homepage, and bugs URLs to package.json</li><li>chore: update CHANGELOG.md for v2026.8.19 [skip ci]</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">2026.8.19</span>
+                <span class="badge release">2026.8.19</span>
+                <span class="date">2026-05-16</span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Features</h3>
+                <ul><li>feat(cli): <code>--tags=t1,t2,t3</code> filter on query/search/vsearch — filters results to docs whose tags overlap (PostgreSQL <code>&amp;&amp;</code> array op) with the given set; works in --workspace= or --scope=all mode <a href="https://github.com/nano-step/nano-brain/pull/160">#160</a></li><li>feat(graph): auto-zoom to selected node + neighbors on focus mode</li><li>feat(graph): focus mode on node click + fix node overlap <a href="https://github.com/nano-step/nano-brain/pull/37">#37</a></li><li>feat(obsidian,db): excludeFolders, frontmatter tags, db:clean --list-only (closes #34)</li><li>feat(obsidian): Obsidian vault integration + fix entity API limit 100→2000 (closes #34)</li><li>feat(kg): scheduled entity extraction job for memory documents (closes #30)</li><li>feat(docs): extend Three.js neural graph to full-page background on all docs pages (closes #28)</li><li>feat(docs): Three.js neural graph animation in hero — nodes + edges + pulse (closes #27)</li><li>feat(docs): custom hover tooltips on MCP tools grid (closes #26)</li><li>feat(docs): CHANGELOG.md + changelog page renders it via marked.js (closes #24)</li><li>feat(docs): add setup guide page — Docker, config, Ollama, MCP connect, verify steps</li><li>feat: add GitHub Pages site — landing, features, changelog, docs (closes #23)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Bug Fixes</h3>
+                <ul><li>fix(graph): allow dragging focused nodes — add pointerEvents:none to dimmed dots</li><li>fix(graph): hide edge labels (&#x27;call&#x27;) when edges dimmed in focus mode</li><li>fix(graph): hide edge labels when edges are dimmed in focus mode</li><li>fix(graph): Symbol Call Graph — default individual mode + fix cluster edge filter (closes #38)</li><li>fix(graph): collapse unrelated nodes to dots on focus — no label overlap</li><li>fix(watcher): address Gemini review — streaming body, yaml parser, async fs, ready event</li><li>fix(db): eliminate SQLite corruption root causes — readonly check + RESTART checkpoint</li><li>fix(db): add db:clean command and bootstrap orphan/corruption guards (closes #32, #33)</li><li>fix(kg): raise entity API limit 100→2000 so all entities appear in graph</li><li>fix(kg): start extraction cycle 30s after startup instead of 30min</li><li>fix(kg): startup reindex + fast drain for entity extraction queue</li><li>fix(ci,web): web deps install in CI + fix graph node overlap</li><li>fix(web): favicon 404, search mark rendering, missing CI web build (closes #29)</li><li>fix(docs): Three.js — use r128 UMD CDN, fix overflow, fix init timing</li><li>fix(docs): npx nano-brain mcp + add ai-sandbox-wrapper container setup section (closes #25)</li><li>fix(pages): redirect root index.html → docs/index.html</li><li>fix(docs): correct codebase facts — 30 tools, 32 CLI, 11-stage pipeline, 5 languages, accurate MCP config</li><li>fix(ci): skip GitHub release creation if tag already exists (closes #22)</li><li>fix(ci): skip npm publish if version already exists on registry</li><li>fix(ci): use --legacy-peer-deps for npm ci (tree-sitter peer conflict)</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Documentation</h3>
+                <ul><li>docs: add npm, CI, license badges to README (closes #21)</li><li>docs(claude): add rule to create GitHub issue before starting any task</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">2026.8.19</span>
+                <span class="badge release">2026.8.19</span>
+                <span class="date">2026-05-15</span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Bug Fixes</h3>
+                <ul><li><strong>Workspace guard</strong> — server no longer creates a database for <code>--root</code> paths not declared in <code>config.workspaces</code>. Falls back to closest configured workspace via longest-prefix match, then first workspace. Prevents orphaned DB accumulation. Closes [#19](https://github.com/nano-step/nano-brain/issues/19).</li><li><strong>CLI pre-resolution</strong> — <code>cli/index.ts</code> no longer pre-resolves the DB path from <code>process.cwd()</code> for the <code>mcp</code> command, which was bypassing the workspace guard entirely.</li><li><strong>CI: skip existing release</strong> — <code>Publish Stable</code> workflow no longer fails when the GitHub release tag already exists. Closes [#22](https://github.com/nano-step/nano-brain/issues/22).</li><li><strong>CI: peer deps</strong> — use <code>--legacy-peer-deps</code> in GitHub Actions to resolve <code>tree-sitter</code> peer conflict.</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Infrastructure</h3>
+                <ul><li>Added <code>develop</code> branch → <code>npm publish --tag beta</code> + GitHub pre-release on every push.</li><li>Added <code>master</code> branch → <code>npm publish --tag latest</code> + GitHub release with auto-generated changelog.</li><li>Added npm, CI, and license badges to README.</li><li>CLAUDE.md: every npm publish must have a changelog; create GitHub issue before starting any task.</li></ul>
+            </div>
+        </div>
+
+        <div class="release">
+            <div class="release-header">
+                <span class="version">2026.6.2</span>
+                <span class="badge release">2026.6.2</span>
+                <span class="date">2026-03-17</span>
+            </div>
+            
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Features — Memory Intelligence v2</h3>
+                <ul><li><strong>Entity Pruning</strong> — background job (6h interval) soft-deletes contradicted entities after 30 days and orphan entities after 90 days; hard-deletes after 30-day retention.</li><li><strong>LLM Categorization</strong> — async fire-and-forget assigns <code>llm:</code> category tags after every <code>memory_write</code>.</li><li><strong>Preference Learning</strong> — Thompson Sampling bandits track which content types the agent retrieves most; RRF blend weights adapt over time.</li><li><strong>Schema v7</strong> — <code>pruned_at</code> column on <code>memory_entities</code>.</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Features — Search Quality</h3>
+                <ul><li><strong>Query Expansion</strong> — LLM generates 2–3 query variants before search for better recall.</li><li><strong>Tag Display</strong> — <code>auto:</code> and <code>llm:</code> tags now visible in search results (verbose + compact modes).</li><li><strong>Backfill CLI</strong> — <code>nano-brain categorize-backfill</code> to LLM-categorize existing documents.</li><li>Wave 7: recency boost for sessions/memory collections.</li><li>Wave 6: length normalization penalty using <code>charLength</code>.</li><li>Wave 5: temporal metadata (<code>createdAt</code>) in <code>SearchResult</code>.</li><li>Wave 4: Qdrant <code>project_hash</code> payload filter and backfill.</li><li>Wave 3: FTS workspace isolation (strict filter).</li><li>Wave 2: fix <code>supersedeDocument</code> bug.</li><li>Wave 1: <code>domain_type</code> and <code>last_reinforced_at</code> schema columns.</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Features — Token Reduction</h3>
+                <ul><li><strong>MCP Response Caps</strong> — hard limits on all unbounded tools: <code>memory_get</code> (200 lines), <code>code_impact</code> (depth 3, 50 entries), <code>code_context</code> (20 callers/callees).</li><li><strong>Compact mode default</strong> — search tools return compact format (~60% fewer tokens).</li><li>Heading-aware chunking (900 tokens, 15% overlap).</li></ul>
+            </div>
+            <div class="change-section">
+                <h3 style="color:#a1a1aa">Infrastructure</h3>
+                <ul><li>Replaced sqlite-vec with Qdrant as sole vector store.</li><li>Added benchmark suite — data generator, runner, compare CLI.</li><li>Consolidation decisions now reconciled automatically in the background.</li></ul>
+            </div>
+        </div>
 </div>
 </body>
 </html>
