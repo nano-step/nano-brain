@@ -37,7 +37,7 @@ nano-brain is the missing memory layer for AI coding agents. It's:
 - **Works everywhere** — OpenCode, Claude Code, Cursor, any MCP client.
 - **Actually useful** — Not a toy demo. Production-ready with 14 MCP tools, hybrid search, and code intelligence.
 - **Built for developers** — Go binary, PostgreSQL, zero magic. You can read the code.
-- **Beating competitors** — P@5 of 0.749 vs LlamaIndex's 0.55 and Qdrant's 0.27 on real-world queries.
+- **Beating competitors** — P@5 of 80% vs LlamaIndex's 55% and Qdrant's 27% on real-world queries.
 
 Star it if you want AI agents that actually learn from context.
 
@@ -267,8 +267,8 @@ Before pushing, run `memory_impact` on changed files. Discover what else depends
 
 | Metric | nano-brain | LlamaIndex | Qdrant/Mem0 |
 |--------|------------|------------|-------------|
-| P@5 | **0.749** | 0.55 | 0.27 |
-| MRR | **0.967** | — | — |
+| P@5 | **80%** | 55% | 27% |
+| MRR | **100%** | — | — |
 | Latency | 42ms | — | — |
 
 Tested on 60 domain-specific queries across 3 workspaces (gaming, Go codebase, Rails app).
