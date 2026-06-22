@@ -487,7 +487,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 			s.logger.Debug().Str("original", query).Str("or_query", orQuery).Msg("bm25 returned 0 results, retrying with OR")
 			orFallback = true
 			if workspace == "all" {
-				orRows, err := s.queries.BM25SearchAllOR(gctx, sqlc.BM25SearchAllORParams{
+				orRows, err := s.queries.BM25SearchAllOR(ctx, sqlc.BM25SearchAllORParams{
 					Query:      orQuery,
 					ChunkType:  chunkTypeNullStr,
 					MaxResults: fetchLimit,
@@ -506,7 +506,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					s.logger.Warn().Err(err).Msg("bm25 OR fallback failed")
 				}
 			} else {
-				orRows, err := s.queries.BM25SearchOR(gctx, sqlc.BM25SearchORParams{
+				orRows, err := s.queries.BM25SearchOR(ctx, sqlc.BM25SearchORParams{
 					Query:         orQuery,
 					WorkspaceHash: workspace,
 					ChunkType:     chunkTypeNullStr,
@@ -934,7 +934,7 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 			s.logger.Debug().Str("original", query).Str("or_query", orQuery).Msg("bm25 returned 0 results, retrying with OR")
 			orFallback = true
 			if workspace == "all" {
-				orRows, err := s.queries.BM25SearchAllOR(gctx, sqlc.BM25SearchAllORParams{
+				orRows, err := s.queries.BM25SearchAllOR(ctx, sqlc.BM25SearchAllORParams{
 					Query:      orQuery,
 					ChunkType:  chunkTypeNullStr,
 					MaxResults: fetchLimit,
@@ -953,7 +953,7 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 					s.logger.Warn().Err(err).Msg("bm25 OR fallback failed")
 				}
 			} else {
-				orRows, err := s.queries.BM25SearchOR(gctx, sqlc.BM25SearchORParams{
+				orRows, err := s.queries.BM25SearchOR(ctx, sqlc.BM25SearchORParams{
 					Query:         orQuery,
 					WorkspaceHash: workspace,
 					ChunkType:     chunkTypeNullStr,
