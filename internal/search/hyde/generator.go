@@ -19,11 +19,16 @@ import (
 // It takes a search query, asks an LLM to "write a passage that would be the ideal answer to this query",
 // and returns that hypothetical document text for embedding.
 type Generator struct {
-	httpClient  *http.Client
-	providerURL string
-	apiKey      string
-	model       string
-	logger      zerolog.Logger
+	httpClient     *http.Client
+	providerURL    string
+	apiKey         string
+	model          string
+	logger         zerolog.Logger
+	contextHints   map[string]string
+}
+
+func (g *Generator) SetContextHints(hints map[string]string) {
+	g.contextHints = hints
 }
 
 // NewGenerator creates a new HyDE generator from configuration.
@@ -43,18 +48,31 @@ func NewGenerator(cfg config.HyDEConfig, logger zerolog.Logger) *Generator {
 
 // Generate takes a search query and returns a hypothetical document text that would
 // be the ideal answer to the query. On any error or timeout, returns an empty string.
-func (g *Generator) Generate(ctx context.Context, query string) (string, error) {
+func (g *Generator) Generate(ctx context.Context, query string, workspace string) (string, error) {
 	if g.providerURL == "" || g.model == "" {
 		return "", nil
 	}
 
-	result, err := g.callLLM(ctx, query)
+	result, err := g.callLLM(ctx, query, workspace)
 	if err != nil {
 		g.logger.Warn().Err(err).Msg("hyde: LLM call failed, returning empty")
 		return "", nil
 	}
 
 	return result, nil
+}
+
+func (g *Generator) buildSystemPrompt(workspace string) string {
+	if hint, ok := g.contextHints[workspace]; ok && hint != "" {
+		return fmt.Sprintf(`You are a technical documentation writer for a software project. Given a search query, write a concise paragraph (80-120 words) that would be the ideal answer to the query. Write in a factual, technical documentation style. Focus on explaining concepts clearly. Respond with ONLY the paragraph text, no JSON, no markdown.
+
+Project context: %s
+
+Use this project context to write a passage that matches the domain and terminology of this codebase. If the query relates to a specific service, component, or domain concept, reference it accurately.
+
+Now, respond with only the paragraph for the given query.`, hint)
+	}
+	return systemPrompt
 }
 
 const systemPrompt = `You are a technical documentation writer. Given a search query, write a concise paragraph (80-120 words) that would be the ideal answer to the query. Write in a factual, technical documentation style. Focus on explaining concepts clearly. Respond with ONLY the paragraph text, no JSON, no markdown.
@@ -84,11 +102,11 @@ type chatResponse struct {
 	} `json:"choices"`
 }
 
-func (g *Generator) callLLM(ctx context.Context, query string) (string, error) {
+func (g *Generator) callLLM(ctx context.Context, query string, workspace string) (string, error) {
 	reqBody := chatRequest{
 		Model: g.model,
 		Messages: []chatMessage{
-			{Role: "system", Content: systemPrompt},
+			{Role: "system", Content: g.buildSystemPrompt(workspace)},
 			{Role: "user", Content: query},
 		},
 		Stream: false,

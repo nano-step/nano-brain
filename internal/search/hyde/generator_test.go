@@ -39,7 +39,7 @@ func TestGenerate_EmptyProviderURL(t *testing.T) {
 
 	generator := NewGenerator(cfg, logger)
 
-	text, err := generator.Generate(context.Background(), "test query")
+	text, err := generator.Generate(context.Background(), "test query", "test-ws")
 	assert.NoError(t, err)
 	assert.Equal(t, "", text)
 }
@@ -53,7 +53,7 @@ func TestGenerate_EmptyModel(t *testing.T) {
 
 	generator := NewGenerator(cfg, logger)
 
-	text, err := generator.Generate(context.Background(), "test query")
+	text, err := generator.Generate(context.Background(), "test query", "test-ws")
 	assert.NoError(t, err)
 	assert.Equal(t, "", text)
 }
@@ -88,7 +88,7 @@ func TestGenerate_Success(t *testing.T) {
 
 	generator := NewGenerator(cfg, logger)
 
-	text, err := generator.Generate(context.Background(), "How to handle rate limiting in Go")
+	text, err := generator.Generate(context.Background(), "How to handle rate limiting in Go", "test-ws")
 	assert.NoError(t, err)
 	assert.Contains(t, text, "hypothetical document")
 	assert.Contains(t, text, "rate limiting")
@@ -113,7 +113,7 @@ func TestGenerate_HTTPError(t *testing.T) {
 
 	generator := NewGenerator(cfg, logger)
 
-	text, err := generator.Generate(context.Background(), "test query")
+	text, err := generator.Generate(context.Background(), "test query", "test-ws")
 	assert.NoError(t, err)
 	assert.Equal(t, "", text)
 }
@@ -139,7 +139,7 @@ func TestGenerate_Timeout(t *testing.T) {
 
 	generator := NewGenerator(cfg, logger)
 
-	text, err := generator.Generate(context.Background(), "test query")
+	text, err := generator.Generate(context.Background(), "test query", "test-ws")
 	assert.NoError(t, err)
 	assert.Equal(t, "", text)
 }
@@ -164,7 +164,7 @@ func TestGenerate_EmptyChoices(t *testing.T) {
 
 	generator := NewGenerator(cfg, logger)
 
-	text, err := generator.Generate(context.Background(), "test query")
+	text, err := generator.Generate(context.Background(), "test query", "test-ws")
 	assert.NoError(t, err)
 	assert.Equal(t, "", text)
 }
@@ -188,7 +188,7 @@ func TestGenerate_JSONParseError(t *testing.T) {
 
 	generator := NewGenerator(cfg, logger)
 
-	text, err := generator.Generate(context.Background(), "test query")
+	text, err := generator.Generate(context.Background(), "test query", "test-ws")
 	assert.NoError(t, err)
 	assert.Equal(t, "", text)
 }

@@ -49,7 +49,7 @@ for ws_name in $(list_workspaces); do
     echo -n "    [$((i+1))/$TOTAL_QUERIES] $QUERY ... "
 
     START_MS=$(now_ms)
-    RAW_RESULT=$(query_nano_brain "$ws_hash" "$QUERY" 5)
+    RAW_RESULT=$(query_nano_brain_hybrid "$ws_hash" "$QUERY" 5)
     END_MS=$(now_ms)
     LATENCY_MS=$((END_MS - START_MS))
 

@@ -1,5 +1,5 @@
 // Package reranking provides cross-encoder reranking for search results.
-// It can reorder candidate documents using API-based reranking models.
+// Supports Cohere and Jina providers via their REST APIs.
 package reranking
 
 import (
@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -17,48 +18,54 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// Config holds reranker configuration.
-type Config struct {
-	Enabled  bool   `koanf:"enabled" json:"enabled"`
-	Provider string `koanf:"provider" json:"provider"`
-	APIKey   string `koanf:"api_key" json:"api_key"`
-	TopK     int    `koanf:"top_k" json:"top_k"`
-}
+const (
+	defaultTopK         = 20
+	defaultTimeout      = 2 * time.Second
+	defaultMaxRetries   = 3
+	defaultMinScore     = 0.0
+	cohereDefaultModel  = "rerank-v4.0-pro"
+	jinaDefaultModel    = "jina-reranker-v2-base-multilingual"
+	jinaDefaultEndpoint = "https://api.jina.ai/v1/rerank"
+)
 
-// CohereReranker implements the search.Reranker interface using Cohere's rerank API.
-type CohereReranker struct {
+// apiReranker is a shared implementation for Cohere-compatible rerank APIs.
+type apiReranker struct {
+	provider   string
 	apiKey     string
+	endpoint   string
 	model      string
 	topK       int
+	minScore   float64
+	maxRetries int
 	logger     zerolog.Logger
 	httpClient *http.Client
 }
 
-// NewCohereReranker creates a new CohereReranker with the given configuration.
-func NewCohereReranker(cfg Config, logger zerolog.Logger) *CohereReranker {
-	if cfg.TopK <= 0 {
-		cfg.TopK = 20
+func newAPIReranker(provider, apiKey, endpoint, model string, topK int, minScore float64, timeout time.Duration, logger zerolog.Logger) *apiReranker {
+	if topK <= 0 {
+		topK = defaultTopK
 	}
-
-	return &CohereReranker{
-		apiKey: cfg.APIKey,
-		model:  "rerank-v4.0-pro",
-		topK:   cfg.TopK,
-		logger: logger,
-		httpClient: &http.Client{
-			Timeout: 2 * time.Second,
-		},
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+	return &apiReranker{
+		provider:   provider,
+		apiKey:     apiKey,
+		endpoint:   endpoint,
+		model:      model,
+		topK:       topK,
+		minScore:   minScore,
+		maxRetries: defaultMaxRetries,
+		logger:     logger,
+		httpClient: &http.Client{Timeout: timeout},
 	}
 }
 
-// Rerank implements the Reranker interface for Cohere.
-func (r *CohereReranker) Rerank(ctx context.Context, query string, docs []search.Result, topK int) ([]search.Result, error) {
-	// If disabled or no documents, return original
+func (r *apiReranker) Rerank(ctx context.Context, query string, docs []search.Result, topK int) ([]search.Result, error) {
 	if r.apiKey == "" || len(docs) == 0 {
 		return docs, nil
 	}
 
-	// Use parameter topK if provided, otherwise use configured topK
 	if topK <= 0 {
 		topK = r.topK
 	}
@@ -66,55 +73,79 @@ func (r *CohereReranker) Rerank(ctx context.Context, query string, docs []search
 		topK = len(docs)
 	}
 
-	// Prepare documents for API call
 	docTexts := make([]string, len(docs))
 	for i, doc := range docs {
-		// Prefer snippet if available, otherwise content
-		if doc.Snippet != "" {
-			docTexts[i] = doc.Snippet
-		} else {
-			docTexts[i] = doc.Content
+		text := doc.Snippet
+		if text == "" {
+			text = doc.Content
 		}
-	}
-
-	// Call Cohere API
-	rerankedDocs, err := r.callAPI(ctx, query, docTexts, topK)
-	if err != nil {
-		r.logger.Warn().Err(err).Str("query", query).Msg("reranking failed, returning original results")
-		return docs, nil // Graceful degradation: return original docs
-	}
-
-	// Map reranked indices back to original documents
-	result := make([]search.Result, len(rerankedDocs))
-	for i, idx := range rerankedDocs {
-		if idx < 0 || idx >= len(docs) {
-			// This shouldn't happen, but be safe
-			r.logger.Warn().Int("index", idx).Int("max", len(docs)-1).Msg("invalid reranked index")
-			return docs, nil
+		if doc.Title != "" {
+			text = doc.Title + "\n" + text
 		}
-		result[i] = docs[idx]
+		docTexts[i] = text
 	}
 
-	return result, nil
+	type rerankResult struct {
+		indices []int
+		scores  []float64
+		err     error
+	}
+
+	var lastErr error
+	for attempt := 0; attempt <= r.maxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(math.Pow(2, float64(attempt-1))) * 500 * time.Millisecond
+			select {
+			case <-ctx.Done():
+				return docs, ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+
+		indices, scores, err := r.callAPI(ctx, query, docTexts, topK)
+		if err == nil {
+			result := make([]search.Result, 0, len(indices))
+			for i, idx := range indices {
+				if idx < 0 || idx >= len(docs) {
+					r.logger.Warn().Int("index", idx).Int("max", len(docs)-1).Msg("invalid reranked index")
+					return docs, nil
+				}
+				if r.minScore > 0 && i < len(scores) && scores[i] < r.minScore {
+					continue
+				}
+				result = append(result, docs[idx])
+			}
+			return result, nil
+		}
+
+		lastErr = err
+		if !isRetryable(err) {
+			break
+		}
+		r.logger.Warn().Err(err).Int("attempt", attempt+1).Msg("reranking failed, retrying")
+	}
+
+	r.logger.Warn().Err(lastErr).Str("provider", r.provider).Msg("reranking failed after retries, returning original results")
+	return docs, nil
 }
 
-func (r *CohereReranker) callAPI(ctx context.Context, query string, documents []string, topN int) ([]int, error) {
+func (r *apiReranker) callAPI(ctx context.Context, query string, documents []string, topN int) ([]int, []float64, error) {
 	reqBody := map[string]interface{}{
-		"model":             r.model,
-		"query":             query,
-		"documents":         documents,
-		"top_n":             topN,
-		"return_documents":  false,
+		"model":            r.model,
+		"query":            query,
+		"documents":        documents,
+		"top_n":            topN,
+		"return_documents": false,
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.cohere.com/v2/rerank", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", r.endpoint, bytes.NewReader(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, nil, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -122,49 +153,79 @@ func (r *CohereReranker) callAPI(ctx context.Context, query string, documents []
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http request: %w", err)
+		return nil, nil, fmt.Errorf("http request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return nil, fmt.Errorf("cohere API HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, nil, fmt.Errorf("%s API HTTP %d: %s", r.provider, resp.StatusCode, string(body))
 	}
 
 	var apiResp struct {
 		Results []struct {
-			Index           int     `json:"index"`
-			RelevanceScore  float64 `json:"relevance_score"`
+			Index          int     `json:"index"`
+			RelevanceScore float64 `json:"relevance_score"`
 		} `json:"results"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, nil, fmt.Errorf("decode response: %w", err)
 	}
 
 	indices := make([]int, len(apiResp.Results))
+	scores := make([]float64, len(apiResp.Results))
 	for i, result := range apiResp.Results {
 		if result.Index < 0 || result.Index >= len(documents) {
-			return nil, fmt.Errorf("invalid index %d for document count %d", result.Index, len(documents))
+			return nil, nil, fmt.Errorf("invalid index %d for document count %d", result.Index, len(documents))
 		}
 		indices[i] = result.Index
+		scores[i] = result.RelevanceScore
 	}
 
-	return indices, nil
+	return indices, scores, nil
 }
 
+func isRetryable(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "429") || strings.Contains(msg, "500") ||
+		strings.Contains(msg, "502") || strings.Contains(msg, "503") ||
+		strings.Contains(msg, "timeout") || strings.Contains(msg, "connection refused")
+}
+
+// NewReranker creates a Reranker from config.
 func NewReranker(cfg config.RerankingConfig, logger zerolog.Logger) search.Reranker {
 	if !cfg.Enabled {
 		return &noopReranker{}
 	}
 
+	timeout := time.Duration(cfg.MaxLatencyMs) * time.Millisecond
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+
 	switch strings.ToLower(cfg.Provider) {
 	case "cohere":
-		return NewCohereReranker(Config{
-			Enabled:  cfg.Enabled,
-			Provider: cfg.Provider,
-			APIKey:   cfg.APIKey,
-			TopK:     cfg.TopK,
-		}, logger)
+		endpoint := cfg.ProviderURL
+		if endpoint == "" {
+			endpoint = "https://api.cohere.com/v2/rerank"
+		}
+		model := cfg.Model
+		if model == "" {
+			model = cohereDefaultModel
+		}
+		return newAPIReranker("cohere", cfg.APIKey, endpoint, model, cfg.TopK, cfg.MinScore, timeout, logger)
+
+	case "jina":
+		endpoint := cfg.ProviderURL
+		if endpoint == "" {
+			endpoint = jinaDefaultEndpoint
+		}
+		model := cfg.Model
+		if model == "" {
+			model = jinaDefaultModel
+		}
+		return newAPIReranker("jina", cfg.APIKey, endpoint, model, cfg.TopK, cfg.MinScore, timeout, logger)
+
 	default:
 		logger.Warn().Str("provider", cfg.Provider).Msg("unknown reranker provider, using noop")
 		return &noopReranker{}

@@ -168,19 +168,24 @@ type SearchConfig struct {
 
 // HyDEConfig holds HyDE (Hypothetical Document Embedding) configuration.
 type HyDEConfig struct {
-	Enabled      bool   `koanf:"enabled" json:"enabled"`
-	ProviderURL  string `koanf:"provider_url" json:"provider_url"`
-	APIKey       string `koanf:"api_key" json:"api_key"`
-	Model        string `koanf:"model" json:"model"`
-	MaxLatencyMs int    `koanf:"max_latency_ms" json:"max_latency_ms"`
+	Enabled      bool              `koanf:"enabled" json:"enabled"`
+	ProviderURL  string            `koanf:"provider_url" json:"provider_url"`
+	APIKey       string            `koanf:"api_key" json:"api_key"`
+	Model        string            `koanf:"model" json:"model"`
+	MaxLatencyMs int               `koanf:"max_latency_ms" json:"max_latency_ms"`
+	ContextHints map[string]string `koanf:"context_hints" json:"context_hints"`
 }
 
 // RerankingConfig holds cross-encoder reranking configuration.
 type RerankingConfig struct {
-	Enabled  bool   `koanf:"enabled" json:"enabled"`
-	Provider string `koanf:"provider" json:"provider"`
-	APIKey   string `koanf:"api_key" json:"api_key"`
-	TopK     int    `koanf:"top_k" json:"top_k"`
+	Enabled      bool    `koanf:"enabled" json:"enabled"`
+	Provider     string  `koanf:"provider" json:"provider"`
+	ProviderURL  string  `koanf:"provider_url" json:"provider_url"`
+	APIKey       string  `koanf:"api_key" json:"api_key"`
+	Model        string  `koanf:"model" json:"model"`
+	TopK         int     `koanf:"top_k" json:"top_k"`
+	MaxLatencyMs int     `koanf:"max_latency_ms" json:"max_latency_ms"`
+	MinScore     float64 `koanf:"min_score" json:"min_score"`
 }
 
 // QueryPreprocessingConfig holds LLM-based query preprocessing configuration.

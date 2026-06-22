@@ -37,6 +37,36 @@
         "expect": ["limitation", "user", "limit", "restriction"]
       },
       {
+        "id": "zg-fu6",
+        "query": "how does the thundering herd problem affect Strapi at 07:04 UTC daily",
+        "category": "debugging",
+        "expect": ["strapi", "thundering", "herd", "tradebot", "connection", "pool"]
+      },
+      {
+        "id": "zg-fu7",
+        "query": "what causes the DB connection ceiling on pricing-test-instance-1",
+        "category": "debugging",
+        "expect": ["pricing", "connection", "ceiling", "idle", "pool", "max_connections"]
+      },
+      {
+        "id": "zg-fu8",
+        "query": "how does the SIH defense anti-injection work in the Nuxt SSR plugin",
+        "category": "feature-understanding",
+        "expect": ["sih", "antiSihInject", "MutationObserver", "prototype", "freeze", "isolated", "world"]
+      },
+      {
+        "id": "zg-fu9",
+        "query": "what is the Steam trade protection reversion flow and how does escrow handle it",
+        "category": "feature-understanding",
+        "expect": ["reversion", "escrow", "steam", "trade", "protection", "locked"]
+      },
+      {
+        "id": "zg-fu10",
+        "query": "how do deposit and withdrawal items move between user Steam inventory and bot",
+        "category": "feature-understanding",
+        "expect": ["deposit", "withdraw", "inventory", "bot", "steam", "trade"]
+      },
+      {
         "id": "zg-db1",
         "query": "payment error fail",
         "category": "debugging",
@@ -56,75 +86,105 @@
       },
       {
         "id": "zg-db4",
-        "query": "order error debug",
+        "query": "why does Strapi return HTTP 500 on gifts and seo-page-contents endpoints",
         "category": "debugging",
-        "expect": ["order", "error", "debug", "trace"]
+        "expect": ["strapi", "500", "gifts", "seo", "connection", "too many"]
       },
       {
         "id": "zg-db5",
-        "query": "payment fail timeout",
-        "category": "debugging",
-        "expect": ["payment", "error", "fail", "timeout"]
+        "query": "what is the real-time socket event flow from Redis pubsub to frontend",
+        "category": "feature-understanding",
+        "expect": ["socket", "redis", "pubsub", "tradeit-socket-server", "Socket.IO"]
       },
       {
-        "id": "zg-ar1",
+        "id": "zg-db6",
+        "query": "how does Monnect payment authorization work with signature creation",
+        "category": "feature-understanding",
+        "expect": ["monnect", "signature", "authorize", "payment", "transaction"]
+      },
+      {
+        "id": "zg-db7",
+        "query": "what defense layers exist against SIH browser extension and which are effective",
+        "category": "debugging",
+        "expect": ["sih", "defense", "layer", "MutationObserver", "CustomEvent", "chrome.runtime"]
+      },
+      {
+        "id": "zg-db8",
+        "query": "how does the tradebot server check revert trade cron cause DB connection exhaustion",
+        "category": "debugging",
+        "expect": ["tradebot", "revert", "cron", "connection", "exhaustion", "pool"]
+      },
+      {
+        "id": "zg-db9",
+        "query": "what happens when Redis pubsub fails in the real-time socket event pipeline",
+        "category": "debugging",
+        "expect": ["redis", "pubsub", "fail", "socket", "fallback", "reconnect"]
+      },
+      {
+        "id": "zg-db10",
+        "query": "how does the inventory indexing pipeline handle Steam API rate limits",
+        "category": "debugging",
+        "expect": ["inventory", "indexing", "steam", "rate", "limit", "throttle"]
+      },
+      {
+        "id": "zg-fn1",
         "query": "services connected api",
         "category": "architecture",
-        "expect": ["service", "connect", "api", "endpoint"]
+        "expect": ["api", "service", "backend", "connection"]
       },
       {
-        "id": "zg-ar2",
+        "id": "zg-fn2",
         "query": "database schema table",
         "category": "architecture",
-        "expect": ["database", "schema", "table", "model"]
+        "expect": ["database", "schema", "table", "mysql"]
       },
       {
-        "id": "zg-ar3",
+        "id": "zg-fn3",
         "query": "dota schema item",
         "category": "architecture",
-        "expect": ["dota", "schema", "item", "price"]
+        "expect": ["dota", "item", "schema", "pricing"]
       },
       {
-        "id": "zg-ar4",
+        "id": "zg-fn4",
         "query": "api endpoint route",
         "category": "architecture",
-        "expect": ["api", "endpoint", "route", "request"]
+        "expect": ["api", "endpoint", "route", "handler"]
       },
       {
-        "id": "zg-ar5",
+        "id": "zg-fn5",
         "query": "Redis cache ttl",
         "category": "architecture",
         "expect": ["redis", "cache", "ttl", "expire"]
       },
       {
-        "id": "zg-cs1",
-        "query": "tradebot price update",
-        "category": "cross-session",
-        "expect": ["tradebot", "price", "update", "bot"]
+        "id": "zg-fn6",
+        "query": "what are all the microservices in the tradeit ecosystem and their responsibilities",
+        "category": "architecture",
+        "expect": ["tradeit-backend", "tradeit-service", "tradeit-socket-server", "pricing-manager", "inventory"]
       },
       {
-        "id": "zg-cs2",
-        "query": "skin trading dota",
-        "category": "cross-session",
-        "expect": ["skin", "trade", "exchange", "dota"]
+        "id": "zg-fn7",
+        "query": "how does the analytics MCP layer connect to Claude via Cloudflare Worker",
+        "category": "architecture",
+        "expect": ["analytics", "mcp", "cloudflare", "claude", "oauth", "fargate"]
       },
       {
-        "id": "zg-cs3",
-        "query": "payment method monnect",
-        "category": "cross-session",
-        "expect": ["payment", "method", "monnect", "card"]
+        "id": "zg-fn8",
+        "query": "what is the data flow from Steam Market price scraping to OpenSearch indexing",
+        "category": "architecture",
+        "expect": ["steam", "price", "scraping", "opensearch", "indexing", "pipeline"]
       },
       {
-        "id": "zg-cs4",
-        "query": "haloskin delivery order",
-        "category": "cross-session",
-        "expect": ["haloskin", "delivery", "skin", "order"]
+        "id": "zg-fn9",
+        "query": "how do the browser extensions communicate with the tradeit backend",
+        "category": "architecture",
+        "expect": ["extension", "chrome", "tradeit", "backend", "api", "websocket"]
       },
       {
-        "id": "zg-cs5",
-        "query": "payment limitation restriction",
-        "category": "cross-session",
-        "expect": ["payment", "limitation", "limit", "restriction"]
+        "id": "zg-fn10",
+        "query": "what is the complete payment lifecycle from user topup to Stripe settlement",
+        "category": "architecture",
+        "expect": ["payment", "topup", "stripe", "settlement", "webhook", "session"]
       }
     ],
     "nano-brain": [

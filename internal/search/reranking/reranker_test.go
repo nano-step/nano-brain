@@ -81,3 +81,45 @@ func TestEmptyDocs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, result)
 }
+
+func TestJinaNoAPIKey(t *testing.T) {
+	cfg := config.RerankingConfig{
+		Enabled:  true,
+		Provider: "jina",
+		APIKey:   "",
+		TopK:     20,
+	}
+	logger := zerolog.Nop()
+	reranker := reranking.NewReranker(cfg, logger)
+
+	docs := []search.Result{
+		{ID: "1", Snippet: "doc1", Score: 0.5},
+	}
+
+	result, err := reranker.Rerank(context.Background(), "test query", docs, 10)
+	require.NoError(t, err)
+	assert.Equal(t, docs, result)
+}
+
+func TestJinaCustomEndpoint(t *testing.T) {
+	cfg := config.RerankingConfig{
+		Enabled:    true,
+		Provider:   "jina",
+		ProviderURL: "https://custom.example.com/rerank",
+		APIKey:      "test-key",
+		Model:       "jina-reranker-v1-turbo",
+		TopK:        10,
+		MinScore:    0.5,
+		MaxLatencyMs: 3000,
+	}
+	logger := zerolog.Nop()
+	reranker := reranking.NewReranker(cfg, logger)
+
+	docs := []search.Result{
+		{ID: "1", Snippet: "doc1", Score: 0.5},
+	}
+
+	result, err := reranker.Rerank(context.Background(), "test query", docs, 10)
+	require.NoError(t, err)
+	assert.Equal(t, docs, result)
+}

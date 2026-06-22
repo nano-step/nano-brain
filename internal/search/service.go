@@ -160,21 +160,6 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 		}
 	}
 
-	// HyDE: generate a hypothetical document for embedding if enabled
-	embedQuery := query
-	if s.hydeGenerator != nil {
-		s.configMutex.RLock()
-		hydeEnabled := s.config.HyDE.Enabled
-		s.configMutex.RUnlock()
-		if hydeEnabled {
-			hypothetical, err := s.hydeGenerator.Generate(ctx, query)
-			if err == nil && hypothetical != "" {
-				s.logger.Debug().Str("original", query).Str("hyde", hypothetical).Msg("hyde: generated hypothetical document")
-				embedQuery = hypothetical
-			}
-		}
-	}
-
 	fetchLimit := int32(maxResults * 3)
 	if fetchLimit < 30 {
 		fetchLimit = 30
@@ -333,6 +318,19 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 	g.Go(func() error {
 		if s.embedder == nil {
 			return nil
+		}
+		embedQuery := query
+		if s.hydeGenerator != nil {
+			s.configMutex.RLock()
+			hydeEnabled := s.config.HyDE.Enabled
+			s.configMutex.RUnlock()
+			if hydeEnabled {
+				hypothetical, err := s.hydeGenerator.Generate(gctx, query, workspace)
+				if err == nil && hypothetical != "" {
+					s.logger.Debug().Str("original", query).Str("hyde", hypothetical).Msg("hyde: generated hypothetical document")
+					embedQuery = hypothetical
+				}
+			}
 		}
 		vec, err := s.embedder.Embed(gctx, embedQuery)
 		if err != nil {

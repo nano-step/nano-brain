@@ -95,6 +95,7 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 		// Create and inject HyDE generator if enabled
 		if fullCfg.Search.HyDE.Enabled {
 			hg := hyde.NewGenerator(fullCfg.Search.HyDE, logger)
+			hg.SetContextHints(fullCfg.Search.HyDE.ContextHints)
 			ss.SetHydeGenerator(hg)
 		}
 		// Create and inject reranker if enabled
@@ -320,6 +321,13 @@ func (s *Server) applyReloadedConfig(newCfg *config.Config, _ *config.ReloadResu
 
 	if s.searchService != nil {
 		s.searchService.UpdateConfig(newCfg.Search)
+		rr := reranking.NewReranker(newCfg.Search.Reranking, s.logger)
+		s.searchService.SetReranker(rr)
+		if newCfg.Search.HyDE.Enabled {
+			hg := hyde.NewGenerator(newCfg.Search.HyDE, s.logger)
+			hg.SetContextHints(newCfg.Search.HyDE.ContextHints)
+			s.searchService.SetHydeGenerator(hg)
+		}
 	}
 
 	level, err := zerolog.ParseLevel(newCfg.Logging.Level)
