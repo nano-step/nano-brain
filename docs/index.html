@@ -1,442 +1,782 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>nano-brain — Persistent memory for AI coding agents</title>
-  <meta name="description" content="Hybrid search, MCP tools, session harvesting — all in a single Go binary. Your AI never forgets again.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            primary: '#1E293B',
-            secondary: '#334155',
-            cta: '#22C55E',
-            surface: '#0F172A',
-            text: '#F8FAFC',
-            muted: '#94A3B8',
-            border: '#1E293B',
-          },
-          fontFamily: {
-            mono: ['"JetBrains Mono"', 'monospace'],
-            sans: ['"IBM Plex Sans"', 'sans-serif'],
-          },
-        },
-      },
-    }
-  </script>
-  <style>
-    body { background: #0F172A; color: #F8FAFC; }
-    ::selection { background: #22C55E; color: #0F172A; }
-    .terminal { background: #0c0f17; border: 1px solid #1E293B; }
-    .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
-    .pill { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; border: 1px solid #334155; color: #94A3B8; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #1E293B; font-size: 0.875rem; }
-    th { color: #94A3B8; font-weight: 500; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nano-brain — Your AI agent remembers everything</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #09090b;
+            --surface: #18181b;
+            --surface-2: #27272a;
+            --border: #3f3f46;
+            --text: #fafafa;
+            --text-2: #a1a1aa;
+            --accent: #22c55e;
+            --accent-2: #16a34a;
+            --orange: #f97316;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+        }
+
+        /* Hero */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at center, rgba(34, 197, 94, 0.03) 0%, transparent 50%);
+            animation: pulse 8s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+
+        .hero-content {
+            text-align: center;
+            z-index: 1;
+            padding: 0 24px;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            font-size: 13px;
+            color: var(--text-2);
+            margin-bottom: 32px;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .hero-badge .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .hero h1 {
+            font-size: clamp(48px, 8vw, 80px);
+            font-weight: 700;
+            letter-spacing: -3px;
+            line-height: 1.1;
+            margin-bottom: 24px;
+            animation: fadeInUp 0.6s ease-out 0.1s both;
+        }
+
+        .hero h1 .highlight {
+            background: linear-gradient(135deg, var(--accent) 0%, #86efac 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p {
+            font-size: 18px;
+            color: var(--text-2);
+            max-width: 500px;
+            margin: 0 auto 40px;
+            line-height: 1.6;
+            animation: fadeInUp 0.6s ease-out 0.2s both;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            animation: fadeInUp 0.6s ease-out 0.3s both;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-2);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface-2);
+            border-color: var(--text-2);
+        }
+
+        .install-box {
+            margin-top: 48px;
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            animation: fadeInUp 0.6s ease-out 0.4s both;
+        }
+
+        .install-box code {
+            color: var(--accent);
+        }
+
+        .install-box .copy {
+            color: var(--text-2);
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .install-box .copy:hover {
+            color: var(--text);
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 64px;
+            padding: 48px 24px;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-2);
+            margin-top: 4px;
+        }
+
+        /* Features */
+        .features {
+            padding: 120px 24px;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 64px;
+        }
+
+        .section-header h2 {
+            font-size: 40px;
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 16px;
+        }
+
+        .section-header p {
+            font-size: 16px;
+            color: var(--text-2);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            padding: 32px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(34, 197, 94, 0.1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .feature-icon svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--accent);
+        }
+
+        .feature-card h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .feature-card p {
+            font-size: 14px;
+            color: var(--text-2);
+            line-height: 1.7;
+        }
+
+        /* Architecture */
+        .architecture {
+            padding: 120px 24px;
+            background: var(--surface);
+        }
+
+        .arch-visual {
+            max-width: 900px;
+            margin: 48px auto 0;
+            padding: 48px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            position: relative;
+        }
+
+        .arch-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .arch-node {
+            padding: 16px 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .arch-node:hover {
+            border-color: var(--accent);
+            transform: scale(1.05);
+        }
+
+        .arch-node.agent {
+            border-color: var(--accent);
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        .arch-node.brain {
+            border-color: var(--orange);
+            background: rgba(249, 115, 22, 0.1);
+            font-weight: 600;
+        }
+
+        .arch-arrow {
+            color: var(--text-2);
+            font-size: 20px;
+        }
+
+        .arch-label {
+            font-size: 12px;
+            color: var(--text-2);
+            margin-top: 8px;
+        }
+
+        /* Benchmark */
+        .benchmark {
+            padding: 120px 24px;
+        }
+
+        .benchmark-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 1000px;
+            margin: 48px auto 0;
+        }
+
+        .benchmark-card {
+            padding: 32px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .benchmark-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+        }
+
+        .benchmark-value {
+            font-size: 48px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .benchmark-label {
+            font-size: 14px;
+            color: var(--text-2);
+        }
+
+        .benchmark-comparison {
+            max-width: 800px;
+            margin: 48px auto 0;
+            padding: 32px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+
+        .comparison-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-row:last-child {
+            border-bottom: none;
+        }
+
+        .comparison-tool {
+            font-weight: 500;
+        }
+
+        .comparison-tool.winner {
+            color: var(--accent);
+        }
+
+        .comparison-bar {
+            flex: 1;
+            max-width: 300px;
+            height: 8px;
+            background: var(--bg);
+            border-radius: 4px;
+            margin: 0 24px;
+            overflow: hidden;
+        }
+
+        .comparison-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 4px;
+            transition: width 1s ease-out;
+        }
+
+        .comparison-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        /* Quick Start */
+        .quickstart {
+            padding: 120px 24px;
+            background: var(--surface);
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
+            max-width: 1000px;
+            margin: 48px auto 0;
+        }
+
+        .step {
+            position: relative;
+        }
+
+        .step-number {
+            width: 32px;
+            height: 32px;
+            background: var(--accent);
+            color: #000;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .step h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .step code {
+            display: block;
+            padding: 16px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--accent);
+            overflow-x: auto;
+        }
+
+        /* Footer */
+        footer {
+            padding: 64px 24px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+        }
+
+        footer p {
+            color: var(--text-2);
+            font-size: 14px;
+        }
+
+        footer a {
+            color: var(--text);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            color: var(--accent);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .stats-bar {
+                flex-wrap: wrap;
+                gap: 32px;
+            }
+
+            .feature-grid,
+            .benchmark-grid,
+            .steps {
+                grid-template-columns: 1fr;
+            }
+
+            .arch-flow {
+                flex-direction: column;
+            }
+
+            .arch-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
 </head>
-<body class="font-sans antialiased">
+<body>
 
-  <!-- Hero -->
-  <section class="min-h-screen flex items-center justify-center px-6 py-24">
-    <div class="max-w-5xl mx-auto text-center">
-      <p class="font-mono text-cta text-sm tracking-widest uppercase mb-4">v2.0</p>
-      <h1 class="font-mono text-5xl md:text-7xl font-bold tracking-tight mb-4">nano-brain</h1>
-      <p class="text-xl md:text-2xl text-muted font-light mb-6">Persistent memory for AI coding agents</p>
-      <p class="text-muted max-w-2xl mx-auto mb-10 leading-relaxed">Your AI forgets everything between sessions. nano-brain fixes that. Hybrid search, MCP tools, session harvesting — all in a single Go binary.</p>
-      <div class="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-        <a href="#quickstart" class="inline-flex items-center justify-center px-6 py-3 bg-cta text-surface font-semibold rounded-lg hover:bg-green-400 transition-colors duration-200 cursor-pointer">Get Started</a>
-        <a href="https://github.com/nano-step/nano-brain" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 px-6 py-3 border border-secondary text-text rounded-lg hover:border-muted transition-colors duration-200 cursor-pointer">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-          View on GitHub
-        </a>
-      </div>
-      <div class="terminal rounded-xl p-1 max-w-lg mx-auto text-left">
-        <div class="flex gap-1.5 px-4 pt-3 pb-2">
-          <span class="terminal-dot bg-red-500/70"></span>
-          <span class="terminal-dot bg-yellow-500/70"></span>
-          <span class="terminal-dot bg-green-500/70"></span>
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-badge">
+                <span class="dot"></span>
+                <span>v2.0 — Now with Ruby/Rails support</span>
+            </div>
+            <h1>Your AI agent<br><span class="highlight">remembers everything.</span></h1>
+            <p>Persistent memory and code intelligence for AI coding agents. Across sessions, machines, and team members.</p>
+            <div class="hero-buttons">
+                <a href="https://github.com/nano-step/nano-brain" class="btn btn-primary">Star on GitHub</a>
+                <a href="#quickstart" class="btn btn-secondary">Get Started →</a>
+            </div>
+            <div class="install-box">
+                <span style="color: var(--text-2)">$</span>
+                <code>npm install -g @nano-step/nano-brain</code>
+                <span class="copy" onclick="navigator.clipboard.writeText('npm install -g @nano-step/nano-brain')">📋</span>
+            </div>
         </div>
-        <pre class="font-mono text-sm px-4 pb-4 text-muted leading-relaxed"><span class="text-cta">$</span> nano-brain serve
-<span class="text-text">nano-brain starting (v2.0.0, port 3100)</span>
-<span class="text-muted">database pool connected</span>
-<span class="text-muted">HTTP server listening on localhost:3100</span></pre>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Features -->
-  <section class="px-6 py-24">
-    <div class="max-w-6xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">Features</h2>
-      <p class="text-muted text-center mb-16 max-w-xl mx-auto">Everything an AI agent needs to remember across sessions.</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Hybrid Search</h3>
-          <p class="text-muted text-sm leading-relaxed">BM25 + pgvector + RRF fusion + recency decay. Find anything by keyword or meaning.</p>
+    <!-- Stats -->
+    <section class="stats-bar">
+        <div class="stat">
+            <div class="stat-value">14</div>
+            <div class="stat-label">MCP Tools</div>
         </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-          <h3 class="font-mono font-semibold mb-2">9 MCP Tools</h3>
-          <p class="text-muted text-sm leading-relaxed">query, search, vsearch, get, write, tags, status, update, wake_up. Works with any MCP client.</p>
+        <div class="stat">
+            <div class="stat-value">0.749</div>
+            <div class="stat-label">P@5 Score</div>
         </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Session Harvesting</h3>
-          <p class="text-muted text-sm leading-relaxed">Auto-ingest OpenCode and Claude Code sessions. Never lose context.</p>
+        <div class="stat">
+            <div class="stat-value">42ms</div>
+            <div class="stat-label">Avg Latency</div>
         </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">File Watcher</h3>
-          <p class="text-muted text-sm leading-relaxed">fsnotify directory monitoring with debounce. Documents stay in sync.</p>
+        <div class="stat">
+            <div class="stat-value">6</div>
+            <div class="stat-label">Languages</div>
         </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Content Addressing</h3>
-          <p class="text-muted text-sm leading-relaxed">SHA-256 deduplication. Write the same thing twice, stored once.</p>
+        <div class="stat">
+            <div class="stat-value">96.7%</div>
+            <div class="stat-label">MRR</div>
         </div>
+    </section>
 
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Config Hot-Reload</h3>
-          <p class="text-muted text-sm leading-relaxed">POST /api/reload-config. Change search params without restart.</p>
+    <!-- Features -->
+    <section class="features">
+        <div class="section-header">
+            <h2>Everything your AI needs</h2>
+            <p>Memory, code intelligence, and search — all in one binary.</p>
         </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Single Binary</h3>
-          <p class="text-muted text-sm leading-relaxed">CGO_ENABLED=0 Go binary. No runtime dependencies.</p>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="m21 21-4.3-4.3"/>
+                    </svg>
+                </div>
+                <h3>Hybrid Search</h3>
+                <p>BM25 full-text + pgvector HNSW cosine similarity + Reciprocal Rank Fusion. Find anything by keyword or meaning.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2a10 10 0 1 0 10 10H12V2z"/>
+                        <path d="M21.2 8a10 10 0 0 0-9.2-6v8h9.2z"/>
+                    </svg>
+                </div>
+                <h3>Session Memory</h3>
+                <p>Auto-ingest from OpenCode and Claude Code sessions. Your agent remembers decisions, patterns, and code.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    </svg>
+                </div>
+                <h3>Code Intelligence</h3>
+                <p>Symbol graphs, call chains, impact analysis. Ask "what breaks if I change this?" and get answers.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                    </svg>
+                </div>
+                <h3>14 MCP Tools</h3>
+                <p>Query, search, trace, analyze — all accessible via the Model Context Protocol.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                </div>
+                <h3>Team Sharing</h3>
+                <p>One server, whole team. New hires get full context from day one. Role-based access control.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </div>
+                <h3>Single Binary</h3>
+                <p>Go static binary with zero CGO dependencies. PostgreSQL + pgvector. Deploy anywhere.</p>
+            </div>
         </div>
+    </section>
 
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-          <h3 class="font-mono font-semibold mb-2">V1 Migration</h3>
-          <p class="text-muted text-sm leading-relaxed">Import from SQLite with pure Go reader. Idempotent, safe to re-run.</p>
+    <!-- Architecture -->
+    <section class="architecture">
+        <div class="section-header">
+            <h2>How it works</h2>
+            <p>Your AI agent talks to nano-brain via MCP. nano-brain handles everything else.</p>
         </div>
-
-        <div class="p-6 rounded-xl border border-border hover:border-secondary transition-colors duration-200">
-          <svg class="w-8 h-8 text-cta mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-          <h3 class="font-mono font-semibold mb-2">Benchmarking</h3>
-          <p class="text-muted text-sm leading-relaxed">Generate, run, compare, stress. Measure search quality and latency.</p>
+        <div class="arch-visual">
+            <div class="arch-flow">
+                <div class="arch-node agent">
+                    <div>Your AI Agent</div>
+                    <div class="arch-label">Claude Code / OpenCode</div>
+                </div>
+                <div class="arch-arrow">→</div>
+                <div class="arch-node brain">
+                    <div>nano-brain</div>
+                    <div class="arch-label">MCP Protocol</div>
+                </div>
+                <div class="arch-arrow">→</div>
+                <div class="arch-node">
+                    <div>PostgreSQL</div>
+                    <div class="arch-label">+ pgvector</div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 32px; color: var(--text-2); font-size: 14px;">
+                Hybrid Search (BM25 + Vector + RRF) • Session Harvesting • Code Intelligence
+            </div>
         </div>
+    </section>
 
-      </div>
-    </div>
-  </section>
-
-  <!-- Architecture -->
-  <section class="px-6 py-24">
-    <div class="max-w-4xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">How It Works</h2>
-      <p class="text-muted text-center mb-12 max-w-xl mx-auto">Two search paths, fused into one ranked result set.</p>
-      <div class="terminal rounded-xl p-6 md:p-8 mb-10">
-        <pre class="font-mono text-sm md:text-base text-muted leading-loose overflow-x-auto"><span class="text-text">Query</span> ──&gt; <span class="text-cta">BM25</span> (PostgreSQL tsquery) ───┐
-                                        ├──&gt; <span class="text-text">RRF Fusion</span> (k=60) ──&gt; <span class="text-text">Recency Decay</span> ──&gt; <span class="text-cta">Results</span>
-<span class="text-text">Query</span> ──&gt; <span class="text-cta">Vector</span> (pgvector HNSW)  ────┘</pre>
-      </div>
-      <div class="flex flex-wrap gap-2 justify-center">
-        <span class="pill">Go 1.23</span>
-        <span class="pill">PostgreSQL 17</span>
-        <span class="pill">pgvector</span>
-        <span class="pill">Echo v4</span>
-        <span class="pill">sqlc</span>
-        <span class="pill">goose</span>
-        <span class="pill">zerolog</span>
-        <span class="pill">koanf</span>
-        <span class="pill">fsnotify</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- Quick Start -->
-  <section id="quickstart" class="px-6 py-24">
-    <div class="max-w-4xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">Quick Start</h2>
-      <p class="text-muted text-center mb-12">Three steps to persistent AI memory.</p>
-
-      <div class="space-y-8">
-        <div>
-          <p class="font-mono text-cta text-sm mb-2">1. Build</p>
-          <div class="terminal rounded-lg p-4"><pre class="font-mono text-sm text-muted">CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain</pre></div>
+    <!-- Benchmark -->
+    <section class="benchmark">
+        <div class="section-header">
+            <h2>Outperforms the competition</h2>
+            <p>Tested on 60 domain-specific queries across 3 workspaces.</p>
         </div>
-        <div>
-          <p class="font-mono text-cta text-sm mb-2">2. Start PostgreSQL</p>
-          <div class="terminal rounded-lg p-4"><pre class="font-mono text-sm text-muted">docker run -d --name nanobrain-pg -p 5432:5432 \
-  -e POSTGRES_USER=nanobrain \
-  -e POSTGRES_PASSWORD=nanobrain \
-  -e POSTGRES_DB=nanobrain_dev \
-  pgvector/pgvector:pg17</pre></div>
+        <div class="benchmark-grid">
+            <div class="benchmark-card">
+                <div class="benchmark-value">0.749</div>
+                <div class="benchmark-label">P@5 Score</div>
+            </div>
+            <div class="benchmark-card">
+                <div class="benchmark-value">0.967</div>
+                <div class="benchmark-label">MRR</div>
+            </div>
+            <div class="benchmark-card">
+                <div class="benchmark-value">42ms</div>
+                <div class="benchmark-label">Avg Latency</div>
+            </div>
         </div>
-        <div>
-          <p class="font-mono text-cta text-sm mb-2">3. Run</p>
-          <div class="terminal rounded-lg p-4"><pre class="font-mono text-sm text-muted">DATABASE_URL="postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev" \
-  ./nano-brain</pre></div>
+        <div class="benchmark-comparison">
+            <div class="comparison-row">
+                <span class="comparison-tool winner">nano-brain</span>
+                <div class="comparison-bar">
+                    <div class="comparison-fill" style="width: 75%"></div>
+                </div>
+                <span class="comparison-score" style="color: var(--accent)">0.749</span>
+            </div>
+            <div class="comparison-row">
+                <span class="comparison-tool">LlamaIndex</span>
+                <div class="comparison-bar">
+                    <div class="comparison-fill" style="width: 55%"></div>
+                </div>
+                <span class="comparison-score">0.550</span>
+            </div>
+            <div class="comparison-row">
+                <span class="comparison-tool">Qdrant/Mem0</span>
+                <div class="comparison-bar">
+                    <div class="comparison-fill" style="width: 27%"></div>
+                </div>
+                <span class="comparison-score">0.270</span>
+            </div>
         </div>
-      </div>
+    </section>
 
-      <div class="mt-12">
-        <p class="font-mono text-sm text-muted mb-4">Then register a workspace, write, and search:</p>
-        <div class="terminal rounded-lg p-4"><pre class="font-mono text-sm text-muted"><span class="text-cta">#</span> Register workspace
-curl -X POST http://localhost:3100/api/v1/init \
-  -H "Content-Type: application/json" \
-  -d '{"root_path":"/path/to/project","name":"my-project"}'
-
-<span class="text-cta">#</span> Write a document
-curl -X POST http://localhost:3100/api/v1/write \
-  -H "Content-Type: application/json" \
-  -d '{"workspace":"&lt;hash&gt;","source_path":"notes/decision.md",
-       "content":"# Decision\nUse PostgreSQL.","tags":["decision"]}'
-
-<span class="text-cta">#</span> Hybrid search
-curl -X POST http://localhost:3100/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{"workspace":"&lt;hash&gt;","query":"database decision"}'</pre></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- API Reference -->
-  <section class="px-6 py-24">
-    <div class="max-w-5xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-12">API Reference</h2>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <div>
-          <h3 class="font-mono text-lg font-semibold mb-4">REST Endpoints</h3>
-          <div class="overflow-x-auto">
-            <table>
-              <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
-              <tbody class="text-muted">
-                <tr><td class="font-mono text-cta text-xs">GET</td><td class="font-mono text-xs">/health</td><td>Health check</td></tr>
-                <tr><td class="font-mono text-cta text-xs">GET</td><td class="font-mono text-xs">/api/status</td><td>Server status</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/init</td><td>Register workspace</td></tr>
-                <tr><td class="font-mono text-cta text-xs">GET</td><td class="font-mono text-xs">/api/v1/workspaces</td><td>List workspaces</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/write</td><td>Write document</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/search</td><td>BM25 search</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/vsearch</td><td>Vector search</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/v1/query</td><td>Hybrid search</td></tr>
-                <tr><td class="font-mono text-cta text-xs">GET</td><td class="font-mono text-xs">/api/v1/tags</td><td>List tags</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/harvest</td><td>Harvest sessions</td></tr>
-                <tr><td class="font-mono text-cta text-xs">POST</td><td class="font-mono text-xs">/api/reload-config</td><td>Hot-reload config</td></tr>
-              </tbody>
-            </table>
-          </div>
+    <!-- Quick Start -->
+    <section class="quickstart" id="quickstart">
+        <div class="section-header">
+            <h2>Get started in 3 steps</h2>
+            <p>From install to your first query in under 5 minutes.</p>
         </div>
-
-        <div>
-          <h3 class="font-mono text-lg font-semibold mb-4">MCP Tools</h3>
-          <div class="overflow-x-auto">
-            <table>
-              <thead><tr><th>Tool</th><th>Description</th></tr></thead>
-              <tbody class="text-muted">
-                <tr><td class="font-mono text-xs">memory_query</td><td>Hybrid search</td></tr>
-                <tr><td class="font-mono text-xs">memory_search</td><td>BM25 keyword search</td></tr>
-                <tr><td class="font-mono text-xs">memory_vsearch</td><td>Vector similarity search</td></tr>
-                <tr><td class="font-mono text-xs">memory_get</td><td>Get document by path</td></tr>
-                <tr><td class="font-mono text-xs">memory_write</td><td>Write/update document</td></tr>
-                <tr><td class="font-mono text-xs">memory_tags</td><td>List tags with counts</td></tr>
-                <tr><td class="font-mono text-xs">memory_status</td><td>Server + embedding status</td></tr>
-                <tr><td class="font-mono text-xs">memory_update</td><td>Trigger re-embedding</td></tr>
-                <tr><td class="font-mono text-xs">memory_wake_up</td><td>Workspace briefing</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <h3 class="font-mono text-lg font-semibold mt-8 mb-4">MCP Config</h3>
-          <div class="terminal rounded-lg p-4"><pre class="font-mono text-xs text-muted">{
-  "mcp": {
-    "nano-brain": {
-      "type": "remote",
-      "url": "http://localhost:3100/mcp"
-    }
-  }
-}</pre></div>
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3>Install</h3>
+                <code>npm install -g @nano-step/nano-brain</code>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3>Start</h3>
+                <code>nano-brain serve -d</code>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3>Query</h3>
+                <code>curl -X POST http://localhost:3100/api/v1/query \
+  -d '{"workspace":"abc","query":"auth flow"}'</code>
+            </div>
         </div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Benchmark -->
-  <section class="px-6 py-24">
-    <div class="max-w-5xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">Outperforms the competition</h2>
-      <p class="text-muted text-center mb-12">Tested on 60 domain-specific queries across 3 workspaces.</p>
-
-      <div class="terminal rounded-xl p-6 mb-10">
-        <table class="w-full">
-          <thead>
-            <tr>
-              <th class="text-left">Tool</th>
-              <th class="text-left">P@5</th>
-              <th class="text-left">MRR</th>
-              <th class="text-left">Latency</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="font-semibold">nano-brain</td>
-              <td class="text-cta font-semibold">0.749</td>
-              <td class="text-cta font-semibold">0.967</td>
-              <td class="text-cta font-semibold">42ms</td>
-            </tr>
-            <tr>
-              <td class="text-muted">LlamaIndex</td>
-              <td class="text-muted">0.55</td>
-              <td class="text-muted">—</td>
-              <td class="text-muted">—</td>
-            </tr>
-            <tr>
-              <td class="text-muted">Qdrant/Mem0</td>
-              <td class="text-muted">0.27</td>
-              <td class="text-muted">—</td>
-              <td class="text-muted">—</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="terminal rounded-xl p-6 text-center">
-          <p class="font-mono text-4xl font-bold text-cta mb-2">0.749</p>
-          <p class="text-muted text-sm">P@5 Score</p>
-        </div>
-        <div class="terminal rounded-xl p-6 text-center">
-          <p class="font-mono text-4xl font-bold text-cta mb-2">0.967</p>
-          <p class="text-muted text-sm">MRR (Mean Reciprocal Rank)</p>
-        </div>
-        <div class="terminal rounded-xl p-6 text-center">
-          <p class="font-mono text-4xl font-bold text-cta mb-2">42ms</p>
-          <p class="text-muted text-sm">Average Query Latency</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Why Star -->
-  <section class="px-6 py-24">
-    <div class="max-w-4xl mx-auto text-center">
-      <h2 class="font-mono text-3xl font-bold mb-4">Why Star This Project?</h2>
-      <p class="text-xl text-muted mb-12 max-w-2xl mx-auto">If you've ever wished your AI agent remembered what you told it yesterday.</p>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-        <div class="terminal rounded-xl p-6">
-          <h3 class="font-mono font-semibold mb-3 text-cta">Self-hosted</h3>
-          <p class="text-muted text-sm">Your data stays on your server. No cloud dependency. No vendor lock-in.</p>
-        </div>
-        <div class="terminal rounded-xl p-6">
-          <h3 class="font-mono font-semibold mb-3 text-cta">Works everywhere</h3>
-          <p class="text-muted text-sm">OpenCode, Claude Code, Cursor, any MCP client. One server, all your agents.</p>
-        </div>
-        <div class="terminal rounded-xl p-6">
-          <h3 class="font-mono font-semibold mb-3 text-cta">Actually useful</h3>
-          <p class="text-muted text-sm">Not a toy demo. Production-ready with 14 MCP tools, hybrid search, and code intelligence.</p>
-        </div>
-        <div class="terminal rounded-xl p-6">
-          <h3 class="font-mono font-semibold mb-3 text-cta">Built for developers</h3>
-          <p class="text-muted text-sm">Go binary, PostgreSQL, zero magic. You can read the code.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Ruby/Rails -->
-  <section class="px-6 py-24">
-    <div class="max-w-5xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">Ruby / Rails Support</h2>
-      <p class="text-muted text-center mb-12">Full code intelligence for Ruby on Rails applications.</p>
-
-      <div class="terminal rounded-xl p-6 mb-10">
-        <pre class="font-mono text-sm text-muted leading-loose overflow-x-auto"><span class="text-text">Flow Diagram:</span>
-
-<span class="text-cta">POST /users</span> ──&gt; <span class="text-text">UsersController#create</span>
-                      │
-                      ├──&gt; <span class="text-text">User.create</span>
-                      └──&gt; <span class="text-text">Mailer.welcome</span>
-
-<span class="text-text">Sequence Diagram:</span>
-
-<span class="text-cta">Client</span> ──&gt; <span class="text-text">Router</span> ──&gt; <span class="text-text">UsersController</span> ──&gt; <span class="text-text">User</span> ──&gt; <span class="text-text">Mailer</span></pre>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="terminal rounded-xl p-6">
-          <h3 class="font-mono font-semibold mb-3">Rails Routes</h3>
-          <p class="text-muted text-sm">Extracts resources, get/post/patch/put/delete, namespace, scope, mount.</p>
-        </div>
-        <div class="terminal rounded-xl p-6">
-          <h3 class="font-mono font-semibold mb-3">Control-Flow Graphs</h3>
-          <p class="text-muted text-sm">if/else, loops, begin/rescue, method definitions, same-file calls.</p>
-        </div>
-        <div class="terminal rounded-xl p-6">
-          <h3 class="font-mono font-semibold mb-3">Cross-File Resolution</h3>
-          <p class="text-muted text-sm">Class→file index, resolver, reconcile edges. 20-34 node flows.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- What's New -->
-  <section class="px-6 py-24">
-    <div class="max-w-4xl mx-auto">
-      <h2 class="font-mono text-3xl font-bold text-center mb-4">What's New in V2</h2>
-      <p class="text-muted text-center mb-12">Complete rewrite: TypeScript/SQLite to Go/PostgreSQL.</p>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-        <div class="terminal rounded-xl p-6">
-          <p class="font-mono text-sm text-cta mb-3">V2 (current)</p>
-          <ul class="text-sm text-muted space-y-2">
-            <li>Single static Go binary (CGO_ENABLED=0)</li>
-            <li>PostgreSQL 17 + pgvector 0.8.2</li>
-            <li>9 focused MCP tools</li>
-            <li>Session harvesting (OpenCode + Claude Code)</li>
-            <li>Config hot-reload</li>
-            <li>Search telemetry (local-only, 90-day retention)</li>
-            <li>V1 migration (pure Go SQLite reader)</li>
-            <li>Benchmarking suite</li>
-          </ul>
-        </div>
-        <div class="terminal rounded-xl p-6 opacity-60">
-          <p class="font-mono text-sm text-muted mb-3">V1 (legacy)</p>
-          <ul class="text-sm text-muted space-y-2">
-            <li>TypeScript + SQLite + Qdrant</li>
-            <li>22+ MCP tools</li>
-            <li>Tree-sitter code intelligence</li>
-            <li>Knowledge graph with PageRank</li>
-            <li>Neural reranking</li>
-            <li>Query expansion</li>
-            <li>Community detection (Louvain)</li>
-            <li>Self-learning query engine</li>
-          </ul>
-        </div>
-      </div>
-
-      <p class="text-center text-muted text-sm">8 epics, 49 stories, 50+ PRs. V2 is focused and lean — PostgreSQL-only, 9 tools, no code intelligence (yet).</p>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="border-t border-border px-6 py-12">
-    <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-      <p class="font-mono text-sm text-muted">Built with Go + PostgreSQL + pgvector</p>
-      <div class="flex gap-6">
-        <a href="https://github.com/nano-step/nano-brain" target="_blank" rel="noopener" class="text-muted hover:text-text transition-colors duration-200 text-sm cursor-pointer">GitHub</a>
-        <a href="https://github.com/nano-step/nano-brain/blob/main/LICENSE" target="_blank" rel="noopener" class="text-muted hover:text-text transition-colors duration-200 text-sm cursor-pointer">MIT License</a>
-        <a href="https://github.com/nano-step/nano-brain#readme" target="_blank" rel="noopener" class="text-muted hover:text-text transition-colors duration-200 text-sm cursor-pointer">Documentation</a>
-      </div>
-    </div>
-  </footer>
+    <!-- Footer -->
+    <footer>
+        <p>Built with Go, PostgreSQL, and pgvector. MIT License. <a href="https://github.com/nano-step/nano-brain">View on GitHub →</a></p>
+    </footer>
 
 </body>
 </html>
