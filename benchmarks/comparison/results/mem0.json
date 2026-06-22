@@ -1,0 +1,548 @@
+{
+  "tool": "mem0-vector-only",
+  "config": "Qdrant in-memory, all-MiniLM-L6-v2, no LLM extraction (Mem0 requires LLM for full functionality)",
+  "workspaces": {
+    "zengamingx": {
+      "workspace": "zengamingx",
+      "queries_run": 20,
+      "avg_p_at_5": 0.83,
+      "avg_mrr": 0.963,
+      "avg_latency_ms": 7,
+      "index_time_s": 3.3,
+      "doc_count": 157,
+      "results": [
+        {
+          "query": "How does topup work?",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 13,
+          "p_at_5": 0.6,
+          "mrr": 1.0,
+          "top_titles": [
+            "topupTransactionRepo.js",
+            "Analyse.java",
+            "Analyse.java"
+          ]
+        },
+        {
+          "query": "What is the payment flow?",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 14,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "store-checkout.md",
+            "payment-limitations.md",
+            "store-checkout.md"
+          ]
+        },
+        {
+          "query": "How does the auth system work?",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 7,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "POST /auth/steam flow",
+            "GET /auth/steam/return flow",
+            "source-wikijs-auth-flow.md"
+          ]
+        },
+        {
+          "query": "Explain the order lifecycle",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.2,
+          "mrr": 0.25,
+          "top_titles": [
+            "systemPatterns.md",
+            "container-system.md",
+            "index.md"
+          ]
+        },
+        {
+          "query": "What does the webhook handler do?",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 7,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "systemPatterns.md",
+            "design.md",
+            "index.html"
+          ]
+        },
+        {
+          "query": "Why might a payment fail?",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "DEV-4122.md",
+            "02-discover.md",
+            "DEV-4122.md"
+          ]
+        },
+        {
+          "query": "Trace the error path in order processing",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.4,
+          "mrr": 1.0,
+          "top_titles": [
+            "spec.md",
+            "index.html",
+            "index.html"
+          ]
+        },
+        {
+          "query": "What happens when Redis is down?",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "tool-redis.md",
+            "auth-flow.md",
+            "CLAUDE.md"
+          ]
+        },
+        {
+          "query": "Debug the authentication flow",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "source-wikijs-auth-flow.md",
+            "POST /auth/steam flow",
+            "GET /auth/steam/return flow"
+          ]
+        },
+        {
+          "query": "Why is the webhook not processing?",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 7,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "user-store-purchase.md",
+            "design.md",
+            "index.html"
+          ]
+        },
+        {
+          "query": "How are services connected?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "systemPatterns.md",
+            "POST /auth/steam flow",
+            "subtasks-definition.md"
+          ]
+        },
+        {
+          "query": "What calls the UserController?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.8,
+          "mrr": 1.0,
+          "top_titles": [
+            "POST /auth/steam flow",
+            "GET /auth/steam/return flow",
+            "technical-design-rule.mdc"
+          ]
+        },
+        {
+          "query": "How is the database structured?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.6,
+          "mrr": 1.0,
+          "top_titles": [
+            "summary.md",
+            "systemPatterns.md",
+            "index.html"
+          ]
+        },
+        {
+          "query": "What is the relationship between orders and payments?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "store-checkout.md",
+            "store-checkout.md",
+            "api-endpoints-payments.md"
+          ]
+        },
+        {
+          "query": "How does caching work?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "cms-content-management.md",
+            "seo-content.md",
+            "repos-and-architecture.md"
+          ]
+        },
+        {
+          "query": "What did we decide about rate limiting?",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "payment-limitations.md",
+            "tradeit-backend-security-audit-jun2026.md",
+            "index.html"
+          ]
+        },
+        {
+          "query": "Find past bug fixes for authentication",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.8,
+          "mrr": 1.0,
+          "top_titles": [
+            "source-wikijs-auth-flow.md",
+            "subtasks-definition.md",
+            "passport-steam.md"
+          ]
+        },
+        {
+          "query": "What was the performance optimization we discussed?",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.8,
+          "mrr": 1.0,
+          "top_titles": [
+            "ops-log-week-2026-W14.md",
+            "index.html",
+            "SEO_TESTING_PLAN.md"
+          ]
+        },
+        {
+          "query": "Show me the database migration history",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "instruction-bymykel-migration.md",
+            "instruction-bymykel-migration.md",
+            "summary.md"
+          ]
+        },
+        {
+          "query": "What security concerns were raised?",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.4,
+          "mrr": 1.0,
+          "top_titles": [
+            "02-discover.md",
+            "tradeit-backend-security-audit-jun2026.md",
+            "ops-log-week-2026-W14.md"
+          ]
+        }
+      ]
+    },
+    "nanobrain": {
+      "workspace": "nanobrain",
+      "queries_run": 20,
+      "avg_p_at_5": 0.56,
+      "avg_mrr": 0.802,
+      "avg_latency_ms": 7,
+      "index_time_s": 1.2,
+      "doc_count": 55,
+      "results": [
+        {
+          "query": "How does topup work?",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 7,
+          "p_at_5": 0.8,
+          "mrr": 1.0,
+          "top_titles": [
+            "Research: Execution Flow Visualization Impact Analysis",
+            "Summary: Phase 4: PageRank importance computation + boost (@Sisyphus-Junior subagent)",
+            "Roadmap: Execution Flow Visualization"
+          ]
+        },
+        {
+          "query": "What is the payment flow?",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.8,
+          "mrr": 1.0,
+          "top_titles": [
+            "Roadmap: Execution Flow Visualization",
+            "payment_processor.rb",
+            "payments_controller.rb"
+          ]
+        },
+        {
+          "query": "How does the auth system work?",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.4,
+          "mrr": 0.3333333333333333,
+          "top_titles": [
+            "Phase 1.5: Oracle cross-critique of Metis (@oracle subagent)",
+            "Summary: TestPythonExtractor (function)",
+            "TG1+TG2: Benchmark setup + tool integration scripts (@Sisyphus-Junior subagent)"
+          ]
+        },
+        {
+          "query": "Explain the order lifecycle",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.4,
+          "mrr": 1.0,
+          "top_titles": [
+            "Production AI Code Memory Systems: Execution Flow Indexing Research",
+            "Summary: Deep design: Oracle architecture for enhanced code understanding (@oracle subagent)",
+            "POST /api/v1/summarize flow"
+          ]
+        },
+        {
+          "query": "What does the webhook handler do?",
+          "category": "feature-understanding",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "TG1+TG2: Benchmark setup + tool integration scripts (@Sisyphus-Junior subagent)",
+            "POST /api/v1/summarize flow",
+            "Roadmap: Execution Flow Visualization"
+          ]
+        },
+        {
+          "query": "Why might a payment fail?",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 7,
+          "p_at_5": 0.2,
+          "mrr": 0.2,
+          "top_titles": [
+            "payment_processor.rb",
+            "payments_controller.rb",
+            "queries_debug.json"
+          ]
+        },
+        {
+          "query": "Trace the error path in order processing",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 13,
+          "p_at_5": 0.4,
+          "mrr": 1.0,
+          "top_titles": [
+            "Research: Execution Flow Visualization Impact Analysis",
+            "Task Group 5: Flow Builder Fixes (@Sisyphus-Junior subagent)",
+            "spec.md"
+          ]
+        },
+        {
+          "query": "What happens when Redis is down?",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 8,
+          "p_at_5": 0.4,
+          "mrr": 0.5,
+          "top_titles": [
+            "Summary: QA hands-on execution PR #323 (@Sisyphus-Junior subagent)",
+            "Summary: Metis cross-critique retry (focused, no verification) (@Metis - Plan Consultant subagent)",
+            "proposal.md"
+          ]
+        },
+        {
+          "query": "Debug the authentication flow",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 7,
+          "p_at_5": 0.4,
+          "mrr": 1.0,
+          "top_titles": [
+            "TG1+TG2: Benchmark setup + tool integration scripts (@Sisyphus-Junior subagent)",
+            "Roadmap: Execution Flow Visualization",
+            "proposal.md"
+          ]
+        },
+        {
+          "query": "Why is the webhook not processing?",
+          "category": "debugging",
+          "total": 10,
+          "latency_ms": 7,
+          "p_at_5": 0.4,
+          "mrr": 1.0,
+          "top_titles": [
+            "TG1+TG2: Benchmark setup + tool integration scripts (@Sisyphus-Junior subagent)",
+            "nano-brain Search Pipeline: Phase 1 Implementation Guide",
+            "results_debug_20260620_121529.json"
+          ]
+        },
+        {
+          "query": "How are services connected?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "Roadmap: Execution Flow Visualization",
+            "POST /api/v1/summarize flow",
+            "TG1+TG2: Benchmark setup + tool integration scripts (@Sisyphus-Junior subagent)"
+          ]
+        },
+        {
+          "query": "What calls the UserController?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "Phase 1.5: Oracle cross-critique of Metis (@oracle subagent)",
+            "Phase 1.5: Oracle cross-critique of Metis (@oracle subagent)",
+            "routes.rb"
+          ]
+        },
+        {
+          "query": "How is the database structured?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.6,
+          "mrr": 1.0,
+          "top_titles": [
+            "Summary: Deep design: Oracle architecture for enhanced code understanding (@oracle subagent)",
+            "POST /api/v1/summarize flow",
+            "Summary: Deep design: Oracle architecture for enhanced code understanding (@oracle subagent)"
+          ]
+        },
+        {
+          "query": "What is the relationship between orders and payments?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 1.0,
+          "mrr": 1.0,
+          "top_titles": [
+            "payment_processor.rb",
+            "payments_controller.rb",
+            "Roadmap: Execution Flow Visualization"
+          ]
+        },
+        {
+          "query": "How does caching work?",
+          "category": "architecture",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.2,
+          "mrr": 1.0,
+          "top_titles": [
+            "Summary: Explore DB schema and queries (@explore subagent)",
+            "Summary: Industry patterns: incremental indexing for RAG (@librarian subagent)",
+            "Summary: Phase 4: PageRank importance computation + boost (@Sisyphus-Junior subagent)"
+          ]
+        },
+        {
+          "query": "What did we decide about rate limiting?",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.4,
+          "mrr": 1.0,
+          "top_titles": [
+            "generator.go",
+            "Summary: Industry patterns: incremental indexing for RAG (@librarian subagent)",
+            "nano-brain Search Quality: Week-by-Week Checklist & Tasks"
+          ]
+        },
+        {
+          "query": "Find past bug fixes for authentication",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.4,
+          "mrr": 0.5,
+          "top_titles": [
+            "Summary: Explore DB schema and queries (@explore subagent)",
+            "Summary: Metis cross-critique retry (focused, no verification) (@Metis - Plan Consultant subagent)",
+            "proposal.md"
+          ]
+        },
+        {
+          "query": "What was the performance optimization we discussed?",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.4,
+          "mrr": 0.25,
+          "top_titles": [
+            "nano-brain Search Quality: Week-by-Week Checklist & Tasks",
+            "Summary: Explore zengamingx workspace (@explore subagent)",
+            "Summary: Phase 4: PageRank importance computation + boost (@Sisyphus-Junior subagent)"
+          ]
+        },
+        {
+          "query": "Show me the database migration history",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.6,
+          "mrr": 1.0,
+          "top_titles": [
+            "Summary: Explore DB schema and queries (@explore subagent)",
+            "Summary: QA hands-on execution PR #323 (@Sisyphus-Junior subagent)",
+            "Summary: Deep design: Oracle architecture for enhanced code understanding (@oracle subagent)"
+          ]
+        },
+        {
+          "query": "What security concerns were raised?",
+          "category": "cross-session",
+          "total": 10,
+          "latency_ms": 6,
+          "p_at_5": 0.4,
+          "mrr": 0.25,
+          "top_titles": [
+            "Summary: QA hands-on execution PR #323 (@Sisyphus-Junior subagent)",
+            "Summary: Industry patterns: incremental indexing for RAG (@librarian subagent)",
+            "Summary: Metis cross-critique retry (focused, no verification) (@Metis - Plan Consultant subagent)"
+          ]
+        }
+      ]
+    }
+  }
+}
