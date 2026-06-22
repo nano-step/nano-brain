@@ -1,0 +1,348 @@
+{
+  "tool": "nanobrain",
+  "workspace": "nano-brain",
+  "functions_tested": 10,
+  "graph_accuracy": {
+    "precision": 0.129,
+    "recall": 0.252,
+    "f1": 0.171
+  },
+  "avg_latency_ms": 29,
+  "per_function": [
+    {
+      "function": "Query",
+      "source_file": "internal/server/handlers/query.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 26,
+        "expected": 8,
+        "matched": 8,
+        "precision": 0.308,
+        "recall": 1.0,
+        "matched_symbols": [
+          "Bind",
+          "Get",
+          "HybridSearch",
+          "JSON",
+          "LoggerFromCtx",
+          "NewHTTPError",
+          "ParseTimeRangeFilter",
+          "Record"
+        ],
+        "missed_symbols": []
+      },
+      "graph_in": {
+        "edges": 1,
+        "expected": 1,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 26,
+        "latency_ms": 36
+      }
+    },
+    {
+      "function": "GraphQuery",
+      "source_file": "internal/server/handlers/graph.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 15,
+        "expected": 6,
+        "matched": 6,
+        "precision": 0.4,
+        "recall": 1.0,
+        "matched_symbols": [
+          "Bind",
+          "Get",
+          "GetIncomingEdges",
+          "GetOutgoingEdges",
+          "JSON",
+          "NewHTTPError"
+        ],
+        "missed_symbols": []
+      },
+      "graph_in": {
+        "edges": 1,
+        "expected": 1,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 15,
+        "latency_ms": 33
+      }
+    },
+    {
+      "function": "HybridSearch",
+      "source_file": "internal/search/service.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 0,
+        "expected": 8,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "matched_symbols": [],
+        "missed_symbols": [
+          "ApplyRecencyBoost",
+          "BM25Search",
+          "Generate",
+          "PagerankBoost",
+          "Process",
+          "RRFMerge",
+          "Rerank",
+          "VectorSearch"
+        ]
+      },
+      "graph_in": {
+        "edges": 0,
+        "expected": 2,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 0,
+        "latency_ms": 28
+      }
+    },
+    {
+      "function": "registerMemoryGraph",
+      "source_file": "internal/mcp/tools.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 0,
+        "expected": 7,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "matched_symbols": [],
+        "missed_symbols": [
+          "AddTool",
+          "GetIncomingEdges",
+          "GetOutgoingEdges",
+          "ResolveWorkspaceParam",
+          "lookupWorkspaceRoot",
+          "resolveNodeAgainstWorkspace",
+          "stripWorkspacePrefix"
+        ]
+      },
+      "graph_in": {
+        "edges": 0,
+        "expected": 1,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 0,
+        "latency_ms": 25
+      }
+    },
+    {
+      "function": "BuildFlow",
+      "source_file": "internal/flow/builder.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 0,
+        "expected": 8,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "matched_symbols": [],
+        "missed_symbols": [
+          "buildIndex",
+          "classifyRole",
+          "deriveServiceName",
+          "edgeConditionLabel",
+          "edgeConditional",
+          "isLoggingName",
+          "isNoiseExternal",
+          "symbolPart"
+        ]
+      },
+      "graph_in": {
+        "edges": 0,
+        "expected": 1,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 0,
+        "latency_ms": 27
+      }
+    },
+    {
+      "function": "ExtractEdges",
+      "source_file": "internal/graph/go_extractor.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 10,
+        "expected": 6,
+        "matched": 5,
+        "precision": 0.5,
+        "recall": 0.833,
+        "matched_symbols": [
+          "NewParser",
+          "Parse",
+          "extractCalls",
+          "extractContains",
+          "extractImports"
+        ],
+        "missed_symbols": [
+          "NodeText"
+        ]
+      },
+      "graph_in": {
+        "edges": 1,
+        "expected": 1,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 10,
+        "latency_ms": 30
+      }
+    },
+    {
+      "function": "extractAndUpsertEdges",
+      "source_file": "internal/watcher/watcher.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 0,
+        "expected": 6,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "matched_symbols": [],
+        "missed_symbols": [
+          "BeginTx",
+          "Commit",
+          "DeleteGraphEdgesByFile",
+          "ExtractEdgesForFrameworks",
+          "UpsertGraphEdge",
+          "buildEdgeMetadata"
+        ]
+      },
+      "graph_in": {
+        "edges": 0,
+        "expected": 1,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 0,
+        "latency_ms": 26
+      }
+    },
+    {
+      "function": "GraphImpact",
+      "source_file": "internal/server/handlers/impact.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 11,
+        "expected": 6,
+        "matched": 5,
+        "precision": 0.455,
+        "recall": 0.833,
+        "matched_symbols": [
+          "Bind",
+          "Get",
+          "JSON",
+          "NewHTTPError",
+          "collectImpact"
+        ],
+        "missed_symbols": [
+          "GetImpactorsByTargets"
+        ]
+      },
+      "graph_in": {
+        "edges": 1,
+        "expected": 1,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 11,
+        "latency_ms": 28
+      }
+    },
+    {
+      "function": "GraphTrace",
+      "source_file": "internal/server/handlers/trace.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 11,
+        "expected": 7,
+        "matched": 5,
+        "precision": 0.455,
+        "recall": 0.714,
+        "matched_symbols": [
+          "Bind",
+          "Get",
+          "JSON",
+          "NewHTTPError",
+          "traceCallChain"
+        ],
+        "missed_symbols": [
+          "GetOutgoingEdges",
+          "GetOutgoingEdgesBySymbol"
+        ]
+      },
+      "graph_in": {
+        "edges": 1,
+        "expected": 1,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 11,
+        "latency_ms": 29
+      }
+    },
+    {
+      "function": "GraphFlowchart",
+      "source_file": "internal/server/handlers/flowchart.go",
+      "language": "go",
+      "graph_out": {
+        "edges": 13,
+        "expected": 9,
+        "matched": 6,
+        "precision": 0.462,
+        "recall": 0.667,
+        "matched_symbols": [
+          "Bind",
+          "Get",
+          "GetFunctionFlowchartByHandler",
+          "JSON",
+          "NewHTTPError",
+          "resolveFlowchartHandler"
+        ],
+        "missed_symbols": [
+          "ListAllEdgesByWorkspace",
+          "lastDottedSegment",
+          "parseRoute"
+        ]
+      },
+      "graph_in": {
+        "edges": 1,
+        "expected": 1,
+        "matched": 0,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "trace": {
+        "chain_length": 13,
+        "latency_ms": 30
+      }
+    }
+  ]
+}
