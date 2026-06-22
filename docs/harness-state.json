@@ -1,11 +1,11 @@
 {
-  "updated": "2026-05-30",
+  "updated": "2026-06-22",
   "position": {
     "epic": 10,
     "story": "next",
     "branch": "master",
-    "base_commit": "bda265f",
-    "note": "Epic 9 complete: 8/8 stories merged, openspec web-ui archived (2026-05-30-web-ui), Epic #239 closed"
+    "base_commit": "8e3977d",
+    "note": "Epic 10 story 10.1 (watcher realtime cleanup) merged: PR #479, issue #478"
   },
   "debt": [
     {
@@ -64,6 +64,7 @@
     "9.1": { "status": "done", "pr": 241, "issue": 240, "epic_issue": 239, "review": "oracle:0C+0M+0m:PASS", "pr_comments": "merged" },
     "9.3": { "status": "done", "pr": 244, "issue": 243, "epic_issue": 239, "review": "oracle:0C+2M+4m:PASS_after_course_correction", "pr_comments": "merged" },
     "9.6": { "status": "done", "pr": 262, "issue": 249, "epic_issue": 239, "review": "oracle:VERIFIED_after_4_rounds(C1+M1+M2+M3+C2+C3+M4+N1)", "pr_comments": "merged:2026-05-30:bda265f" },
-    "9.8": { "status": "done", "pr": 265, "issue": 251, "epic_issue": 239, "review": "5-agent:security+qa+context=PASS;oracle_fps_documented", "pr_comments": "merged:2026-05-30", "notes": "3.3/3.4 pre-existing b-main failures HARNESS-OVERRIDE'd" }
+    "9.8": { "status": "done", "pr": 265, "issue": 251, "epic_issue": 239, "review": "5-agent:security+qa+context=PASS;oracle_fps_documented", "pr_comments": "merged:2026-05-30", "notes": "3.3/3.4 pre-existing b-main failures HARNESS-OVERRIDE'd" },
+    "10.1": { "status": "done", "pr": 479, "issue": 478, "review": "skipped:tiny_bugfix", "pr_comments": "none", "notes": "watcher realtime cleanup for deleted/renamed files" }
   }
 }
