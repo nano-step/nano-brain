@@ -42,6 +42,7 @@ All notable changes to nano-brain are documented here.
 - Stable result-ordering tiebreaker (`id ASC`) in RRF fusion and recency boost. Equal-score results now have deterministic order across paginated calls. (#358)
 
 ### Fixed
+- Watcher real-time cleanup for deleted/renamed files — document + chunks now cleaned up immediately instead of orphaned until manual reindex (#478, #479)
 - Ruby class index namespace fix (controllers resolve to correct files)
 - Emit unresolved cross-file calls (controllers emit call edges)
 - Watcher runs resolver after ReextractEdgesForWorkspace
