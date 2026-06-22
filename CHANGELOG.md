@@ -2,6 +2,40 @@
 
 All notable changes to nano-brain are documented here.
 
+---
+
+## [Unreleased]
+
+### Added
+- **Ruby/Rails Support** (PRs #467, #469, #471, #473)
+  - Ruby CFG extraction (if/else, loops, begin/rescue, method defs)
+  - Ruby call graph extractor (class/module capture, unresolved edges)
+  - Rails route extraction (resources, get/post/patch/put/delete, namespace)
+  - Ruby class→file index with namespace preference
+  - Cross-file resolver with reconcile edge builder
+  - Flows reach 20-34 nodes (entry → handler → func → calls chain)
+
+- **Agent Memory Benchmarking**
+  - Benchmark framework (20 queries, ground truth, 6 tool runners)
+  - Competitor comparison (LlamaIndex, Qdrant/Mem0)
+  - Fair comparison with same raw source files
+  - Workspace-specific queries (zengamingx, nano-brain, Phil-timeshel)
+  - Results: nano-brain P@5=0.749, MRR=0.967
+
+- **Search Quality Improvements**
+  - BM25 OR fallback — retries with OR semantics when AND returns 0 results
+  - Incoming edges symbol fallback — falls back to symbol name when target_node lookup fails
+  - Debugging-aware search — parallel search mode for debugging queries
+
+### Changed
+- Updated README with visual architecture diagrams (Mermaid)
+- Updated roadmap with deployment, auth, and RBAC sections
+
+### Fixed
+- Ruby class index namespace fix (controllers resolve to correct files)
+- Emit unresolved cross-file calls (controllers emit call edges)
+- Watcher runs resolver after ReextractEdgesForWorkspace
+
 
 ## [Unreleased]
 
