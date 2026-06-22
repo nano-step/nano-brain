@@ -22,12 +22,12 @@ import (
 )
 
 type mockQuerier struct {
-	upsertDocCalls   atomic.Int64
-	upsertChunkCalls atomic.Int64
-	deleteChunkCalls atomic.Int64
-	// sourcePathHash is not synchronized — safe only in sequential test paths.
-	// Add sync.Mutex if tests evolve to exercise concurrent watcher+mock.
-	sourcePathHash map[string]string
+	upsertDocCalls        atomic.Int64
+	upsertChunkCalls      atomic.Int64
+	deleteChunkCalls      atomic.Int64
+	deleteDocCalls        atomic.Int64
+	getDocBySourcePathCalls atomic.Int64
+	sourcePathHash        map[string]string
 }
 
 func newMockQuerier() *mockQuerier {
@@ -61,6 +61,7 @@ func (m *mockQuerier) UpsertChunk(_ context.Context, _ sqlc.UpsertChunkParams) (
 }
 
 func (m *mockQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
+	m.getDocBySourcePathCalls.Add(1)
 	hash, ok := m.sourcePathHash[arg.SourcePath]
 	if !ok {
 		return sqlc.Document{}, sql.ErrNoRows
@@ -72,6 +73,7 @@ func (m *mockQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDoc
 }
 
 func (m *mockQuerier) DeleteDocumentByIDAndWorkspace(_ context.Context, _ sqlc.DeleteDocumentByIDAndWorkspaceParams) (int64, error) {
+	m.deleteDocCalls.Add(1)
 	return 1, nil
 }
 
@@ -660,5 +662,82 @@ func TestBuildEdgeMetadata_DoesNotMutateInput(t *testing.T) {
 	}
 	if _, ok := original["line"]; ok {
 		t.Error("buildEdgeMetadata must not inject 'line' into e.Metadata")
+	}
+}
+
+func TestCleanupDeletedDocument_DeletesDocAndChunks(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 50, 60)
+
+	dir := t.TempDir()
+	workspaceHash := "test-ws-hash"
+	filePath := filepath.Join(dir, "main.go")
+
+	mq.sourcePathHash[filePath] = "abc123"
+
+	err := w.Watch("code", dir, workspaceHash, "**/*.go")
+	if err != nil {
+		t.Fatalf("watch: %v", err)
+	}
+
+	w.cleanupDeletedDocument(filePath)
+
+	if mq.getDocBySourcePathCalls.Load() != 1 {
+		t.Errorf("expected 1 GetDocumentBySourcePath call, got %d", mq.getDocBySourcePathCalls.Load())
+	}
+	if mq.deleteChunkCalls.Load() != 1 {
+		t.Errorf("expected 1 DeleteChunksByDocumentID call, got %d", mq.deleteChunkCalls.Load())
+	}
+	if mq.deleteDocCalls.Load() != 1 {
+		t.Errorf("expected 1 DeleteDocumentByIDAndWorkspace call, got %d", mq.deleteDocCalls.Load())
+	}
+}
+
+func TestCleanupDeletedDocument_NoOpWhenDocNotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 50, 60)
+
+	dir := t.TempDir()
+	workspaceHash := "test-ws-hash"
+	filePath := filepath.Join(dir, "nonexistent.go")
+
+	err := w.Watch("code", dir, workspaceHash, "**/*.go")
+	if err != nil {
+		t.Fatalf("watch: %v", err)
+	}
+
+	w.cleanupDeletedDocument(filePath)
+
+	if mq.getDocBySourcePathCalls.Load() != 1 {
+		t.Errorf("expected 1 GetDocumentBySourcePath call, got %d", mq.getDocBySourcePathCalls.Load())
+	}
+	if mq.deleteChunkCalls.Load() != 0 {
+		t.Errorf("expected 0 DeleteChunksByDocumentID calls, got %d", mq.deleteChunkCalls.Load())
+	}
+	if mq.deleteDocCalls.Load() != 0 {
+		t.Errorf("expected 0 DeleteDocumentByIDAndWorkspace calls, got %d", mq.deleteDocCalls.Load())
+	}
+}
+
+func TestCleanupDeletedDocument_NoOpWhenNoMatchingCollection(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 50, 60)
+
+	w.cleanupDeletedDocument("/some/random/path.go")
+
+	if mq.getDocBySourcePathCalls.Load() != 0 {
+		t.Errorf("expected 0 GetDocumentBySourcePath calls, got %d", mq.getDocBySourcePathCalls.Load())
 	}
 }
