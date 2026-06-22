@@ -1,6 +1,6 @@
 # nano-brain Roadmap
 
-> Last updated: 2026-05-30
+> Last updated: 2026-06-22
 
 ---
 
@@ -22,6 +22,11 @@ Goal: agents know the project context, decision history, and can anticipate what
 | Knowledge graph | Module → function → dependency relationships | ✅ |
 | Impact analytics | Change X → affects Y, Z (cross-file) | ✅ |
 | Call chain tracing | Trace execution path from entry point | ✅ |
+| Control-flow graphs | CFG extraction with branch-aware edges | ✅ |
+| Sequence diagrams | Mermaid sequence diagrams from flow data | ✅ |
+| Ruby/Rails support | Rails routes, controller→service→model chains | ✅ |
+| Ruby cross-file resolution | Class→file index, resolver, reconcile edges | ✅ |
+| Ruby CFG extraction | `if`/`else`, loops, `begin`/`rescue`, method defs | ✅ |
 
 ---
 
@@ -82,9 +87,13 @@ summarization:
 | Tag-based filter | `--tags decision,auth` | ✅ |
 | Supersede | Replace stale memory entries | ✅ |
 | Auto-memory from sessions | Extract decisions from harvested sessions | ✅ |
-| 9 MCP tools | query, search, vsearch, get, write, tags, status, update, wake_up | ✅ |
+| 14 MCP tools | query, search, vsearch, get, write, tags, status, update, wake_up, graph, trace, impact, symbols, flow | ✅ |
 | Hybrid search pipeline | BM25 + pgvector HNSW + RRF fusion + recency decay | ✅ |
+| BM25 OR fallback | Retry with OR semantics when AND returns 0 results | ✅ |
+| Debugging-aware search | Parallel search mode for debugging queries | ✅ |
+| Incoming edges symbol fallback | Fallback to symbol name when target_node lookup fails | ✅ |
 | Benchmarking suite | generate, run, compare, stress | ✅ |
+| Workspace-specific benchmarks | Queries tailored to each project's domain | ✅ |
 | Init onboarding wizard | Interactive config setup on first run | ✅ |
 | Doctor command | Check prerequisites (PG, pgvector, Ollama, model) | ✅ |
 | V1 SQLite migration | Import from V1 format (pure Go, no CGO) | ✅ |
@@ -221,7 +230,14 @@ Phase 5 — CLI Completeness (in progress)
 
 Phase 6 — Enhanced Code Intelligence (in progress)
   ├── ✅ #174 — Symbol extraction with go-tree-sitter (Python extractor shipped)
-  └── ⚠️ Cross-language support — Python via tree-sitter; TypeScript, Rust pending
+  ├── ✅ Ruby/Rails flow & sequence diagrams (PRs #467, #469, #471, #473)
+  │   ├── Ruby CFG extraction (if/else, loops, begin/rescue, method defs)
+  │   ├── Ruby call graph extractor (class/module capture, unresolved edges)
+  │   ├── Rails route extraction (resources, get/post/patch/put/delete, namespace)
+  │   ├── Ruby class→file index with namespace preference
+  │   ├── Cross-file resolver with reconcile edge builder
+  │   └── Flows reach 20-34 nodes (entry → handler → func → calls chain)
+  └── ⚠️ Cross-language support — Python, Ruby via tree-sitter; TypeScript, Rust pending
 
 Phase 7 — Team & Multi-user (Planned)
   ├── Role-based access control (Admin / Developer / Reader)
@@ -234,6 +250,15 @@ Phase 8 — Self-Learning (Discuss)
   ├── Pattern learning from prompt history
   ├── Proactive context pre-loading
   └── Self-lesson extraction
+
+Phase 9 — Agent Memory Benchmarking ✅ (shipped 2026-06)
+  ├── ✅ Benchmark framework (20 queries, ground truth, 6 tool runners)
+  ├── ✅ Competitor comparison (LlamaIndex, Qdrant/Mem0)
+  ├── ✅ Fair comparison with same raw source files
+  ├── ✅ Workspace-specific queries (zengamingx, nano-brain, Phil-timeshel)
+  ├── ✅ BM25 OR fallback for zero-result queries
+  ├── ✅ Results: nano-brain P@5=0.749, MRR=0.967
+  └── ✅ Known issue: 2 Phil-timeshel queries still return 0
 ```
 
 ---
@@ -241,9 +266,10 @@ Phase 8 — Self-Learning (Discuss)
 ## Open Questions
 
 1. **Pillar 4 scope**: Proactive suggestions only, or auto-execution? (Needs design discussion)
-2. **Tree-sitter vs regex**: #174 proposes go-tree-sitter for symbol extraction — worth the binary size increase?
-3. **Cross-workspace search**: #156 — privacy implications of searching across all workspaces?
-4. **Memory consolidation**: #154 — Thompson Sampling for relevance ranking — need benchmarks first?
+2. **Cross-workspace search**: #156 — privacy implications of searching across all workspaces?
+3. **Memory consolidation**: #154 — Thompson Sampling for relevance ranking — need benchmarks first?
+4. **Ruby limitations**: No `before_action`/`after_action`, no ActiveRecord dynamic methods, no metaprogramming — worth implementing?
+5. **Benchmark accuracy**: How to improve P@5 from 0.749 to 0.9+ — better embedding models, HyDE, or reranking?
 
 ### Resolved Questions
 
@@ -252,3 +278,5 @@ Phase 8 — Self-Learning (Discuss)
 - ~~Incremental harvest~~ → On-demand via `POST /api/harvest`, tracks last-harvested per session
 - ~~Claude projects/memory~~ → Not harvesting `~/.claude/projects/` — only transcripts
 - ~~costs.jsonl~~ → Not indexed — analytics-only, not searchable
+- ~~Tree-sitter vs regex~~ → go-tree-sitter for Python, Ruby; regex for Go, JS/TS
+- ~~Agent memory benchmark~~ → nano-brain P@5=0.749 vs LlamaIndex 0.55 vs Qdrant 0.27
