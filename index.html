@@ -248,6 +248,87 @@ supported today. Rust, Java planned.</code>
 
     <hr class="section-divider">
 
+    <section id="flow">
+        <div class="section-header"><h2>Flow Diagrams</h2><p>Understand how your code works at a glance.</p></div>
+        <div class="demo-grid">
+            <div class="demo-card">
+                <h4>Controller Flow</h4>
+                <code>POST /users → UsersController#create
+                   ↓
+              User.create
+                   ↓
+            Mailer.welcome</code>
+            </div>
+            <div class="demo-card">
+                <h4>Payment Flow</h4>
+                <code>API Request → Validate Input
+                      ↓
+              Process Payment → Stripe
+                      ↓
+              Create Order → Database
+                      ↓
+              Send Confirmation → Email</code>
+            </div>
+            <div class="demo-card">
+                <h4>Error Handling</h4>
+                <code>Request → Validate
+         ↓
+   {Valid} → Process → Success
+   {Invalid} → Log Error → Failure</code>
+            </div>
+            <div class="demo-card">
+                <h4>Parallel Execution</h4>
+                <code>Entry Point → Handler
+                ↓              ↓
+         Database          Cache
+                ↓              ↓
+         Response ← ← ← ← ←</code>
+            </div>
+        </div>
+    </section>
+
+    <hr class="section-divider">
+
+    <section id="sequence">
+        <div class="section-header"><h2>Sequence Diagrams</h2><p>Visualize request flow across components.</p></div>
+        <div class="demo-grid">
+            <div class="demo-card">
+                <h4>User Registration</h4>
+                <code>Client → Router → UsersController
+         ↓
+    User.create → Mailer.welcome
+         ↓
+    Redis.cache → Response</code>
+            </div>
+            <div class="demo-card">
+                <h4>Payment Processing</h4>
+                <code>Client → API → PaymentService
+         ↓
+    Stripe.charge → Database.save
+         ↓
+    Webhook → Update Status</code>
+            </div>
+            <div class="demo-card">
+                <h4>Session Harvest</h4>
+                <code>OpenCode DB → Harvester
+         ↓
+    LLM Summarizer → Indexer
+         ↓
+    PostgreSQL → Search</code>
+            </div>
+            <div class="demo-card">
+                <h4>Impact Analysis</h4>
+                <code>Change File → memory_impact
+         ↓
+    Find Callers → Find Dependencies
+         ↓
+    Return Affected Files</code>
+            </div>
+        </div>
+    </section>
+
+    <hr class="section-divider">
+
     <section class="architecture" id="architecture">
         <div class="section-header"><h2>How it works</h2><p>Your AI agent talks to nano-brain via MCP. nano-brain handles everything else.</p></div>
         <div class="arch-visual">
