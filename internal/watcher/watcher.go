@@ -372,10 +372,7 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 		w.fileCacheMu.Lock()
 		delete(w.fileCache, event.Name)
 		w.fileCacheMu.Unlock()
-		// TODO(story-2.x): Implement stale document cleanup. When a file is deleted,
-		// its document+chunks remain in the DB. Consider diffing globbed files against
-		// DB documents in scanCollection to purge orphans.
-		w.logger.Info().Str("file", event.Name).Msg("file removed (deletion not handled, skipping)")
+		w.cleanupDeletedDocument(event.Name)
 	}
 
 	if !debounce.Stop() {
@@ -533,6 +530,57 @@ func (w *Watcher) cleanupIgnoredDocument(ctx context.Context, col watchedCollect
 	w.fileCacheMu.Unlock()
 
 	w.logger.Debug().Str("file", filePath).Str("doc_id", doc.ID.String()).Msg("cleaned up document matching ignore pattern")
+}
+
+// cleanupDeletedDocument deletes the document + chunks for a file that was
+// removed or renamed on disk. Called from handleFSEvent on Remove/Rename ops.
+// Finds the owning collection by matching the file path prefix against
+// registered collections. No-op if the document doesn't exist.
+func (w *Watcher) cleanupDeletedDocument(filePath string) {
+	w.mu.Lock()
+	var cols []watchedCollection
+	for _, col := range w.collections {
+		if strings.HasPrefix(filePath, col.dirPath+string(os.PathSeparator)) || filePath == col.dirPath {
+			cols = append(cols, col)
+		}
+	}
+	w.mu.Unlock()
+
+	if len(cols) == 0 {
+		return
+	}
+
+	ctx := context.Background()
+	for _, col := range cols {
+		doc, err := w.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+			SourcePath:    filePath,
+			WorkspaceHash: col.workspaceHash,
+		})
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return
+			}
+			w.logger.Warn().Err(err).Str("file", filePath).Msg("cleanupDeletedDocument: get document failed")
+			return
+		}
+
+		if err := w.queries.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
+			DocumentID:    doc.ID,
+			WorkspaceHash: col.workspaceHash,
+		}); err != nil {
+			w.logger.Warn().Err(err).Str("file", filePath).Msg("cleanupDeletedDocument: delete chunks failed")
+		}
+
+		if _, err := w.queries.DeleteDocumentByIDAndWorkspace(ctx, sqlc.DeleteDocumentByIDAndWorkspaceParams{
+			ID:            doc.ID,
+			WorkspaceHash: col.workspaceHash,
+		}); err != nil {
+			w.logger.Warn().Err(err).Str("file", filePath).Msg("cleanupDeletedDocument: delete document failed")
+		}
+
+		w.logger.Info().Str("file", filePath).Str("doc_id", doc.ID.String()).Msg("cleaned up deleted document")
+		return
+	}
 }
 
 // cleanupPathPrefix deletes all documents+chunks whose source_path starts
