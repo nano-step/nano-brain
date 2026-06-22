@@ -52,6 +52,12 @@ func (m *mockSearchQuerier) BM25SearchWithTags(_ context.Context, _ sqlc.BM25Sea
 func (m *mockSearchQuerier) BM25SearchAllWithTags(_ context.Context, _ sqlc.BM25SearchAllWithTagsParams) ([]sqlc.BM25SearchAllWithTagsRow, error) {
 	return nil, nil
 }
+func (m *mockSearchQuerier) BM25SearchOR(_ context.Context, _ sqlc.BM25SearchORParams) ([]sqlc.BM25SearchORRow, error) {
+	return nil, nil
+}
+func (m *mockSearchQuerier) BM25SearchAllOR(_ context.Context, _ sqlc.BM25SearchAllORParams) ([]sqlc.BM25SearchAllORRow, error) {
+	return nil, nil
+}
 func (m *mockSearchQuerier) VectorSearch(_ context.Context, _ sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error) {
 	return nil, nil
 }

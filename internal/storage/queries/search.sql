@@ -65,3 +65,28 @@ WHERE c.search_vector @@ websearch_to_tsquery(get_tsvector_config(), sqlc.arg(qu
   AND (sqlc.narg('created_before')::timestamptz IS NULL OR d.created_at <= sqlc.narg('created_before'))
 ORDER BY score DESC, c.id ASC
 LIMIT sqlc.arg(max_results);
+
+-- name: BM25SearchOR :many
+SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(ts_rank_cd(c.search_vector, to_tsquery(get_tsvector_config(), sqlc.arg(query)::text)) AS double precision) AS score
+FROM chunks c
+JOIN documents d ON c.document_id = d.id
+WHERE c.search_vector @@ to_tsquery(get_tsvector_config(), sqlc.arg(query)::text)
+  AND c.workspace_hash = sqlc.arg(workspace_hash)
+  AND (sqlc.narg('chunk_type')::text IS NULL OR c.chunk_type = sqlc.narg('chunk_type'))
+ORDER BY score DESC, c.id ASC
+LIMIT sqlc.arg(max_results);
+
+-- name: BM25SearchAllOR :many
+SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(ts_rank_cd(c.search_vector, to_tsquery(get_tsvector_config(), sqlc.arg(query)::text)) AS double precision) AS score
+FROM chunks c
+JOIN documents d ON c.document_id = d.id
+WHERE c.search_vector @@ to_tsquery(get_tsvector_config(), sqlc.arg(query)::text)
+  AND (sqlc.narg('chunk_type')::text IS NULL OR c.chunk_type = sqlc.narg('chunk_type'))
+ORDER BY score DESC, c.id ASC
+LIMIT sqlc.arg(max_results);
