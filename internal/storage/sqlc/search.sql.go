@@ -194,6 +194,78 @@ func (q *Queries) BM25SearchAll(ctx context.Context, arg BM25SearchAllParams) ([
 	return items, nil
 }
 
+const bM25SearchAllOR = `-- name: BM25SearchAllOR :many
+SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(ts_rank_cd(c.search_vector, to_tsquery(get_tsvector_config(), $1::text)) AS double precision) AS score
+FROM chunks c
+JOIN documents d ON c.document_id = d.id
+WHERE c.search_vector @@ to_tsquery(get_tsvector_config(), $1::text)
+  AND ($2::text IS NULL OR c.chunk_type = $2)
+ORDER BY score DESC, c.id ASC
+LIMIT $3
+`
+
+type BM25SearchAllORParams struct {
+	Query      string
+	ChunkType  sql.NullString
+	MaxResults int32
+}
+
+type BM25SearchAllORRow struct {
+	ID            uuid.UUID
+	DocumentID    uuid.UUID
+	WorkspaceHash string
+	Content       string
+	ChunkIndex    int32
+	Metadata      pqtype.NullRawMessage
+	SourcePath    string
+	Title         string
+	Collection    string
+	Tags          []string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Score         float64
+}
+
+func (q *Queries) BM25SearchAllOR(ctx context.Context, arg BM25SearchAllORParams) ([]BM25SearchAllORRow, error) {
+	rows, err := q.db.QueryContext(ctx, bM25SearchAllOR, arg.Query, arg.ChunkType, arg.MaxResults)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BM25SearchAllORRow
+	for rows.Next() {
+		var i BM25SearchAllORRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DocumentID,
+			&i.WorkspaceHash,
+			&i.Content,
+			&i.ChunkIndex,
+			&i.Metadata,
+			&i.SourcePath,
+			&i.Title,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const bM25SearchAllWithTags = `-- name: BM25SearchAllWithTags :many
 SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
        d.source_path, d.title, d.collection, d.tags,
@@ -257,6 +329,85 @@ func (q *Queries) BM25SearchAllWithTags(ctx context.Context, arg BM25SearchAllWi
 	var items []BM25SearchAllWithTagsRow
 	for rows.Next() {
 		var i BM25SearchAllWithTagsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DocumentID,
+			&i.WorkspaceHash,
+			&i.Content,
+			&i.ChunkIndex,
+			&i.Metadata,
+			&i.SourcePath,
+			&i.Title,
+			&i.Collection,
+			pq.Array(&i.Tags),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const bM25SearchOR = `-- name: BM25SearchOR :many
+SELECT c.id, c.document_id, c.workspace_hash, c.content, c.chunk_index, c.metadata,
+       d.source_path, d.title, d.collection, d.tags,
+       d.created_at, d.updated_at,
+       CAST(ts_rank_cd(c.search_vector, to_tsquery(get_tsvector_config(), $1::text)) AS double precision) AS score
+FROM chunks c
+JOIN documents d ON c.document_id = d.id
+WHERE c.search_vector @@ to_tsquery(get_tsvector_config(), $1::text)
+  AND c.workspace_hash = $2
+  AND ($3::text IS NULL OR c.chunk_type = $3)
+ORDER BY score DESC, c.id ASC
+LIMIT $4
+`
+
+type BM25SearchORParams struct {
+	Query         string
+	WorkspaceHash string
+	ChunkType     sql.NullString
+	MaxResults    int32
+}
+
+type BM25SearchORRow struct {
+	ID            uuid.UUID
+	DocumentID    uuid.UUID
+	WorkspaceHash string
+	Content       string
+	ChunkIndex    int32
+	Metadata      pqtype.NullRawMessage
+	SourcePath    string
+	Title         string
+	Collection    string
+	Tags          []string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Score         float64
+}
+
+func (q *Queries) BM25SearchOR(ctx context.Context, arg BM25SearchORParams) ([]BM25SearchORRow, error) {
+	rows, err := q.db.QueryContext(ctx, bM25SearchOR,
+		arg.Query,
+		arg.WorkspaceHash,
+		arg.ChunkType,
+		arg.MaxResults,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BM25SearchORRow
+	for rows.Next() {
+		var i BM25SearchORRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.DocumentID,

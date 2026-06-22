@@ -43,6 +43,14 @@ func (m *mockQuerier) BM25SearchAllWithTags(ctx context.Context, arg sqlc.BM25Se
 	return []sqlc.BM25SearchAllWithTagsRow{}, nil
 }
 
+func (m *mockQuerier) BM25SearchOR(ctx context.Context, arg sqlc.BM25SearchORParams) ([]sqlc.BM25SearchORRow, error) {
+	return []sqlc.BM25SearchORRow{}, nil
+}
+
+func (m *mockQuerier) BM25SearchAllOR(ctx context.Context, arg sqlc.BM25SearchAllORParams) ([]sqlc.BM25SearchAllORRow, error) {
+	return []sqlc.BM25SearchAllORRow{}, nil
+}
+
 func (m *mockQuerier) VectorSearch(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error) {
 	return []sqlc.VectorSearchRow{}, nil
 }
@@ -277,6 +285,27 @@ func (m *debugMockQuerier) BM25SearchAllWithTags(ctx context.Context, arg sqlc.B
 	return nil, nil
 }
 
+func (m *debugMockQuerier) BM25SearchOR(ctx context.Context, arg sqlc.BM25SearchORParams) ([]sqlc.BM25SearchORRow, error) {
+	if rows, ok := m.bm25Results[arg.Query]; ok {
+		out := make([]sqlc.BM25SearchORRow, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, sqlc.BM25SearchORRow{
+				ID: r.ID, DocumentID: r.DocumentID,
+				WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+				Content: r.Content, SourcePath: r.SourcePath,
+				Collection: r.Collection, Tags: r.Tags,
+				Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			})
+		}
+		return out, nil
+	}
+	return nil, nil
+}
+
+func (m *debugMockQuerier) BM25SearchAllOR(ctx context.Context, arg sqlc.BM25SearchAllORParams) ([]sqlc.BM25SearchAllORRow, error) {
+	return nil, nil
+}
+
 func (m *debugMockQuerier) VectorSearch(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error) {
 	if m.vectorErr != nil {
 		return nil, m.vectorErr
@@ -405,5 +434,73 @@ func TestDebugSearch_RRFMergeDeduplicates(t *testing.T) {
 
 	if len(results) == 0 {
 		t.Fatal("expected at least 1 result")
+	}
+}
+
+func TestBuildORQuery_RemovesStopWords(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"the quick brown fox", "quick | brown | fox"},
+		{"what is the error", "error"},
+		{"explain how to trace the function call", "to | function | call"},
+		{"single", "single"},
+		{"the a an is are was were", ""},
+		{"HOW debug the connection", "connection"},
+	}
+	for _, tt := range tests {
+		got := buildORQuery(tt.input)
+		if got != tt.want {
+			t.Errorf("buildORQuery(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestHybridSearch_ORFallback_WhenBM25ReturnsZero(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+
+	fallbackRow := makeBM25Row(
+		"00000000-0000-0000-0000-000000000001",
+		"00000000-0000-0000-0000-000000000011",
+		"auth.go", "handleLogin validates credentials", "code",
+	)
+
+	q := &debugMockQuerier{
+		bm25Results: map[string][]sqlc.BM25SearchRow{
+			"quick | brown | fox": {fallbackRow},
+		},
+	}
+	embedder := &mockEmbedder{}
+	service := NewSearchService(q, embedder, cfg, logger)
+
+	results, err := service.HybridSearch(context.Background(), "the quick brown fox", "ws1", 10, nil, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Error("expected OR fallback to return results when initial BM25 returns 0")
+	}
+}
+
+func TestHybridSearch_ORFallback_NotTriggeredForShortQuery(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+
+	q := &debugMockQuerier{
+		bm25Results: map[string][]sqlc.BM25SearchRow{},
+	}
+	embedder := &mockEmbedder{}
+	service := NewSearchService(q, embedder, cfg, logger)
+
+	results, err := service.HybridSearch(context.Background(), "error", "ws1", 10, nil, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for short query with no BM25 match, got %d", len(results))
 	}
 }

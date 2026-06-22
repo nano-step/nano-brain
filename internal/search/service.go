@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -17,11 +19,44 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var bm25StopWords = map[string]bool{
+	"the": true, "a": true, "an": true, "is": true, "are": true,
+	"was": true, "were": true, "what": true, "how": true, "why": true,
+	"when": true, "where": true, "explain": true, "show": true, "find": true,
+	"trace": true, "debug": true,
+}
+
+func buildORQuery(query string) string {
+	words := strings.Fields(query)
+	var filtered []string
+	for _, w := range words {
+		lower := strings.ToLower(w)
+		if bm25StopWords[lower] {
+			continue
+		}
+		cleaned := strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+				return r
+			}
+			return -1
+		}, lower)
+		if cleaned != "" {
+			filtered = append(filtered, cleaned)
+		}
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+	return strings.Join(filtered, " | ")
+}
+
 type Querier interface {
 	BM25Search(ctx context.Context, arg sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error)
 	BM25SearchAll(ctx context.Context, arg sqlc.BM25SearchAllParams) ([]sqlc.BM25SearchAllRow, error)
 	BM25SearchWithTags(ctx context.Context, arg sqlc.BM25SearchWithTagsParams) ([]sqlc.BM25SearchWithTagsRow, error)
 	BM25SearchAllWithTags(ctx context.Context, arg sqlc.BM25SearchAllWithTagsParams) ([]sqlc.BM25SearchAllWithTagsRow, error)
+	BM25SearchOR(ctx context.Context, arg sqlc.BM25SearchORParams) ([]sqlc.BM25SearchORRow, error)
+	BM25SearchAllOR(ctx context.Context, arg sqlc.BM25SearchAllORParams) ([]sqlc.BM25SearchAllORRow, error)
 	VectorSearch(ctx context.Context, arg sqlc.VectorSearchParams) ([]sqlc.VectorSearchRow, error)
 	VectorSearchAll(ctx context.Context, arg sqlc.VectorSearchAllParams) ([]sqlc.VectorSearchAllRow, error)
 	VectorSearchWithTags(ctx context.Context, arg sqlc.VectorSearchWithTagsParams) ([]sqlc.VectorSearchWithTagsRow, error)
@@ -447,6 +482,56 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 		return nil, fmt.Errorf("all search legs failed: bm25: %v, vector: %v", bm25Err, vectorErr)
 	}
 
+	orFallback := false
+	if len(bm25Results) == 0 && bm25Err == nil && len(strings.Fields(query)) > 2 {
+		orQuery := buildORQuery(query)
+		if orQuery != "" {
+			s.logger.Debug().Str("original", query).Str("or_query", orQuery).Msg("bm25 returned 0 results, retrying with OR")
+			orFallback = true
+			if workspace == "all" {
+				orRows, err := s.queries.BM25SearchAllOR(gctx, sqlc.BM25SearchAllORParams{
+					Query:      orQuery,
+					ChunkType:  chunkTypeNullStr,
+					MaxResults: fetchLimit,
+				})
+				if err == nil {
+					bm25Results = make([]Result, 0, len(orRows))
+					for _, r := range orRows {
+						bm25Results = append(bm25Results, Result{
+							ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+							WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+							Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+							SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+						})
+					}
+				} else {
+					s.logger.Warn().Err(err).Msg("bm25 OR fallback failed")
+				}
+			} else {
+				orRows, err := s.queries.BM25SearchOR(gctx, sqlc.BM25SearchORParams{
+					Query:         orQuery,
+					WorkspaceHash: workspace,
+					ChunkType:     chunkTypeNullStr,
+					MaxResults:    fetchLimit,
+				})
+				if err == nil {
+					bm25Results = make([]Result, 0, len(orRows))
+					for _, r := range orRows {
+						bm25Results = append(bm25Results, Result{
+							ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+							WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+							Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+							SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+						})
+					}
+				} else {
+					s.logger.Warn().Err(err).Msg("bm25 OR fallback failed")
+				}
+			}
+			_ = orFallback
+		}
+	}
+
 	merged := DynamicRRFMerge(bm25Results, vectorResults, rrfK)
 	deduped := DeduplicateResults(merged)
 	codeAware := ApplyCodeAwareBoost(deduped, query, 1.2, 1.3)
@@ -842,6 +927,56 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 
 	if bm25Err != nil && vectorErr != nil {
 		return nil, fmt.Errorf("all search legs failed: bm25: %v, vector: %v", bm25Err, vectorErr)
+	}
+
+	orFallback := false
+	if len(bm25Results) == 0 && bm25Err == nil && len(strings.Fields(query)) > 2 {
+		orQuery := buildORQuery(query)
+		if orQuery != "" {
+			s.logger.Debug().Str("original", query).Str("or_query", orQuery).Msg("bm25 returned 0 results, retrying with OR")
+			orFallback = true
+			if workspace == "all" {
+				orRows, err := s.queries.BM25SearchAllOR(gctx, sqlc.BM25SearchAllORParams{
+					Query:      orQuery,
+					ChunkType:  chunkTypeNullStr,
+					MaxResults: fetchLimit,
+				})
+				if err == nil {
+					bm25Results = make([]Result, 0, len(orRows))
+					for _, r := range orRows {
+						bm25Results = append(bm25Results, Result{
+							ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+							WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+							Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+							SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+						})
+					}
+				} else {
+					s.logger.Warn().Err(err).Msg("bm25 OR fallback failed")
+				}
+			} else {
+				orRows, err := s.queries.BM25SearchOR(gctx, sqlc.BM25SearchORParams{
+					Query:         orQuery,
+					WorkspaceHash: workspace,
+					ChunkType:     chunkTypeNullStr,
+					MaxResults:    fetchLimit,
+				})
+				if err == nil {
+					bm25Results = make([]Result, 0, len(orRows))
+					for _, r := range orRows {
+						bm25Results = append(bm25Results, Result{
+							ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+							WorkspaceHash: r.WorkspaceHash, Title: r.Title, Content: r.Content,
+							Score: r.Score, Tags: r.Tags, Collection: r.Collection,
+							SourcePath: r.SourcePath, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+						})
+					}
+				} else {
+					s.logger.Warn().Err(err).Msg("bm25 OR fallback failed")
+				}
+			}
+			_ = orFallback
+		}
 	}
 
 	merged := DynamicRRFMerge(bm25Results, vectorResults, rrfK)
