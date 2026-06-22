@@ -108,17 +108,23 @@ summarization:
 
 **Use case:** Deploy one nano-brain server for the entire team. Every developer's AI agent connects to the same PostgreSQL instance — decisions, architecture notes, and code intelligence are instantly shared. New team members get full project context from day one without any per-machine setup.
 
-| Feature | Description | Status |
+### Authentication
+
+| Method | Description | Status |
 |---|---|---|
 | Bearer token auth | Single shared token for all users | ✅ |
 | Basic auth | Username/password per user | ✅ |
-| Role-based access control | Admin / Developer / Reader roles | ❌ |
-| Admin role | Full read/write + config + workspace management | ❌ |
-| Developer role | Read/write memory, scoped to assigned workspaces | ❌ |
-| Reader role | Read-only access (search, get, wake-up, status) | ❌ |
-| Per-token role assignment | Each `nbt_` token carries a role | ❌ |
-| Per-user basic auth role | Role assigned per username in config | ❌ |
-| Audit log | Who wrote/deleted what, when | ❌ |
+| TLS termination | HTTPS support (native or reverse proxy) | ❌ |
+| Rate limiting | Per-user, per-IP request limits | ❌ |
+| CORS configuration | Restrict allowed origins | ❌ |
+
+### Authorization (Role-Based Access Control)
+
+| Role | Description | Status |
+|---|---|---|
+| Admin | Full read/write + config + workspace management | ❌ |
+| Developer | Read/write memory, scoped to assigned workspaces | ❌ |
+| Reader | Read-only access (search, get, wake-up, status) | ❌ |
 
 ### Role Matrix
 
@@ -133,6 +139,17 @@ summarization:
 | Collection create / delete | ✅ | ✅ | ❌ |
 | Reindex / harvest | ✅ | ✅ | ❌ |
 
+### Deployment Options
+
+| Option | Description | Status |
+|---|---|---|
+| Local machine | Ollama + Docker, single user | ✅ |
+| VPS / team server | Shared memory across machines | ✅ |
+| Build from source | Go binary, no CGO | ✅ |
+| Docker Compose | Production-ready container setup | ❌ |
+| Kubernetes / Helm | Cloud-native deployment | ❌ |
+| Cloud managed | AWS RDS, GCP Cloud SQL, Azure DB | ❌ |
+
 ### Config sketch (proposed)
 
 ```yaml
@@ -146,6 +163,7 @@ server:
       - username: bob
         password_hash: "$2a$10$..."
         role: developer
+        workspaces: ["abc123..."]  # scoped to specific workspaces
       - username: reviewer
         password_hash: "$2a$10$..."
         role: reader
@@ -154,8 +172,17 @@ server:
         role: admin
       - token: "nbt_dev_..."
         role: developer
+        workspaces: ["abc123..."]
       - token: "nbt_readonly_..."
         role: reader
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+    burst: 10
+  cors:
+    enabled: true
+    allowed_origins:
+      - "https://app.example.com"
 ```
 
 ---
@@ -259,6 +286,37 @@ Phase 9 — Agent Memory Benchmarking ✅ (shipped 2026-06)
   ├── ✅ BM25 OR fallback for zero-result queries
   ├── ✅ Results: nano-brain P@5=0.749, MRR=0.967
   └── ✅ Known issue: 2 Phil-timeshel queries still return 0
+
+Phase 10 — Deployment & Security (Planned)
+  ├── Deployment guides
+  │   ├── ✅ Local machine (Ollama + Docker, ~5 min)
+  │   ├── ✅ VPS / team server (shared memory across machines)
+  │   ├── ✅ Build from source
+  │   ├── ⚠️ Docker Compose production setup
+  │   ├── ❌ Kubernetes / Helm chart
+  │   ├── ❌ Cloud provider guides (AWS, GCP, Azure)
+  │   └── ❌ CI/CD integration (GitHub Actions, GitLab CI)
+  ├── Authentication & authorization
+  │   ├── ✅ Bearer token auth (single shared token)
+  │   ├── ✅ Basic auth (username/password per user)
+  │   ├── ❌ Role-based access control (Admin / Developer / Reader)
+  │   ├── ❌ Per-token role assignment (each `nbt_` token carries a role)
+  │   ├── ❌ Per-user basic auth role (role assigned per username)
+  │   ├── ❌ Workspace-scoped access (Developer role limited to assigned workspaces)
+  │   └── ❌ Audit log (who wrote/deleted what, when)
+  ├── Security hardening
+  │   ├── ❌ Rate limiting (per-user, per-IP)
+  │   ├── ❌ Request size limits (prevent abuse)
+  │   ├── ❌ CORS configuration (restrict origins)
+  │   ├── ❌ TLS termination (HTTPS support)
+  │   ├── ❌ Input validation & sanitization
+  │   └── ❌ Secrets management (env vars, not config files)
+  └── Observability
+      ├── ✅ Search telemetry (local-only, 90-day retention)
+      ├── ❌ Prometheus metrics endpoint
+      ├── ❌ Structured logging with request IDs
+      ├── ❌ Health check enhancements (dependency checks)
+      └── ❌ Distributed tracing (OpenTelemetry)
 ```
 
 ---
@@ -270,6 +328,9 @@ Phase 9 — Agent Memory Benchmarking ✅ (shipped 2026-06)
 3. **Memory consolidation**: #154 — Thompson Sampling for relevance ranking — need benchmarks first?
 4. **Ruby limitations**: No `before_action`/`after_action`, no ActiveRecord dynamic methods, no metaprogramming — worth implementing?
 5. **Benchmark accuracy**: How to improve P@5 from 0.749 to 0.9+ — better embedding models, HyDE, or reranking?
+6. **Deployment target**: Self-hosted VPS vs cloud-managed (RDS, Cloud SQL) — which to prioritize?
+7. **Auth granularity**: Is workspace-scoped access enough, or do we need collection-level permissions?
+8. **TLS**: Should nano-brain handle TLS termination, or rely on reverse proxy (nginx, Caddy)?
 
 ### Resolved Questions
 
