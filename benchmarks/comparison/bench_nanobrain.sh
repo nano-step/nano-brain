@@ -38,13 +38,13 @@ for ws_name in $(list_workspaces); do
 
   echo "  Workspace: $ws_name ($ws_hash)"
 
-  TOTAL_QUERIES=$(python3 -c "import json; print(len(json.load(open('$QUERIES_FILE'))['queries']))")
+  TOTAL_QUERIES=$(python3 -c "import json; print(len(json.load(open('$QUERIES_FILE')).get('queries_by_workspace', {}).get('$ws_name', json.load(open('$QUERIES_FILE')).get('queries', []))))")
 
   for i in $(seq 0 $((TOTAL_QUERIES - 1))); do
-    QUERY=$(python3 -c "import json; print(json.load(open('$QUERIES_FILE'))['queries'][$i]['query'])")
-    ID=$(python3 -c "import json; print(json.load(open('$QUERIES_FILE'))['queries'][$i]['id'])")
-    CATEGORY=$(python3 -c "import json; print(json.load(open('$QUERIES_FILE'))['queries'][$i]['category'])")
-    EXPECT=$(python3 -c "import json; print(json.dumps(json.load(open('$QUERIES_FILE'))['queries'][$i]['expect']))")
+    QUERY=$(python3 -c "import json; d=json.load(open('$QUERIES_FILE')); qs=d.get('queries_by_workspace',{}).get('$ws_name', d.get('queries',[])); print(qs[$i]['query'])")
+    ID=$(python3 -c "import json; d=json.load(open('$QUERIES_FILE')); qs=d.get('queries_by_workspace',{}).get('$ws_name', d.get('queries',[])); print(qs[$i]['id'])")
+    CATEGORY=$(python3 -c "import json; d=json.load(open('$QUERIES_FILE')); qs=d.get('queries_by_workspace',{}).get('$ws_name', d.get('queries',[])); print(qs[$i]['category'])")
+    EXPECT=$(python3 -c "import json; d=json.load(open('$QUERIES_FILE')); qs=d.get('queries_by_workspace',{}).get('$ws_name', d.get('queries',[])); print(json.dumps(qs[$i]['expect']))")
 
     echo -n "    [$((i+1))/$TOTAL_QUERIES] $QUERY ... "
 
@@ -74,20 +74,34 @@ for ws_name in $(list_workspaces); do
     fi
 
     RESULTS_JSON="$RESULTS_JSON$(python3 -c "
-import json
+import json, sys
+ws_name = sys.argv[1]
+query_id = sys.argv[2]
+query = sys.argv[3]
+category = sys.argv[4]
+latency_ms = int(sys.argv[5])
+results_count = int(sys.argv[6])
+p5 = float(sys.argv[7])
+mrr = float(sys.argv[8])
+recall = float(sys.argv[9])
+snippets_json = sys.argv[10]
+try:
+    snippets = json.loads(snippets_json)
+except:
+    snippets = []
 print(json.dumps({
-    'workspace': '$ws_name',
-    'query_id': '$ID',
-    'query': '''$QUERY''',
-    'category': '$CATEGORY',
-    'latency_ms': $LATENCY_MS,
-    'results_count': $RESULT_COUNT,
-    'p_at_5': $P5,
-    'mrr': $MRR,
-    'recall': $RECALL,
-    'snippets': json.loads('''$SNIPPETS''')
+    'workspace': ws_name,
+    'query_id': query_id,
+    'query': query,
+    'category': category,
+    'latency_ms': latency_ms,
+    'results_count': results_count,
+    'p_at_5': p5,
+    'mrr': mrr,
+    'recall': recall,
+    'snippets': snippets
 }))
-")"
+" "$ws_name" "$ID" "$QUERY" "$CATEGORY" "$LATENCY_MS" "$RESULT_COUNT" "$P5" "$MRR" "$RECALL" "$SNIPPETS")"
 
     echo "P@5=$P5 MRR=$MRR recall=$RECALL ${LATENCY_MS}ms results=$RESULT_COUNT"
   done

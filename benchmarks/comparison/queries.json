@@ -4,126 +4,372 @@
     "zengamingx": "d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
     "Phil-timeshel": "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95"
   },
-  "queries": [
-    {
-      "id": "fu1",
-      "query": "How does topup work?",
-      "category": "feature-understanding",
-      "expect": ["topup", "balance", "payment"]
-    },
-    {
-      "id": "fu2",
-      "query": "What is the payment flow?",
-      "category": "feature-understanding",
-      "expect": ["payment", "checkout", "charge"]
-    },
-    {
-      "id": "fu3",
-      "query": "How does the auth system work?",
-      "category": "feature-understanding",
-      "expect": ["auth", "login", "session", "token"]
-    },
-    {
-      "id": "fu4",
-      "query": "Explain the order lifecycle",
-      "category": "feature-understanding",
-      "expect": ["order", "status", "create", "complete"]
-    },
-    {
-      "id": "fu5",
-      "query": "What does the webhook handler do?",
-      "category": "feature-understanding",
-      "expect": ["webhook", "handler", "event", "callback"]
-    },
-    {
-      "id": "db1",
-      "query": "Why might a payment fail?",
-      "category": "debugging",
-      "expect": ["error", "fail", "timeout", "reject"]
-    },
-    {
-      "id": "db2",
-      "query": "Trace the error path in order processing",
-      "category": "debugging",
-      "expect": ["error", "exception", "retry", "catch"]
-    },
-    {
-      "id": "db3",
-      "query": "What happens when Redis is down?",
-      "category": "debugging",
-      "expect": ["redis", "cache", "fallback", "error"]
-    },
-    {
-      "id": "db4",
-      "query": "Debug the authentication flow",
-      "category": "debugging",
-      "expect": ["auth", "debug", "error", "validate"]
-    },
-    {
-      "id": "db5",
-      "query": "Why is the webhook not processing?",
-      "category": "debugging",
-      "expect": ["webhook", "queue", "retry", "fail"]
-    },
-    {
-      "id": "ar1",
-      "query": "How are services connected?",
-      "category": "architecture",
-      "expect": ["service", "connect", "api", "endpoint"]
-    },
-    {
-      "id": "ar2",
-      "query": "What calls the UserController?",
-      "category": "architecture",
-      "expect": ["controller", "route", "call", "handler"]
-    },
-    {
-      "id": "ar3",
-      "query": "How is the database structured?",
-      "category": "architecture",
-      "expect": ["database", "schema", "table", "model"]
-    },
-    {
-      "id": "ar4",
-      "query": "What is the relationship between orders and payments?",
-      "category": "architecture",
-      "expect": ["order", "payment", "relation", "foreign"]
-    },
-    {
-      "id": "ar5",
-      "query": "How does caching work?",
-      "category": "architecture",
-      "expect": ["cache", "redis", "ttl", "expire"]
-    },
-    {
-      "id": "cs1",
-      "query": "What did we decide about rate limiting?",
-      "category": "cross-session",
-      "expect": ["rate", "limit", "decision", "throttle"]
-    },
-    {
-      "id": "cs2",
-      "query": "Find past bug fixes for authentication",
-      "category": "cross-session",
-      "expect": ["fix", "bug", "auth", "patch"]
-    },
-    {
-      "id": "cs3",
-      "query": "What was the performance optimization we discussed?",
-      "category": "cross-session",
-      "expect": ["performance", "optimization", "speed", "cache"]
-    },
-    {
-      "id": "cs4",
-      "query": "Show me the database migration history",
-      "category": "cross-session",
-      "expect": ["migration", "schema", "version", "database"]
-    },
-    {
-      "id": "cs5",
-      "query": "What security concerns were raised?",
-      "category": "cross-session",
-      "expect": ["security", "vulnerability", "auth", "encrypt"]
-    }
-  ]
+  "queries_by_workspace": {
+    "zengamingx": [
+      {
+        "id": "zg-fu1",
+        "query": "payment flow checkout",
+        "category": "feature-understanding",
+        "expect": ["payment", "checkout", "charge", "monnect"]
+      },
+      {
+        "id": "zg-fu2",
+        "query": "order system transaction",
+        "category": "feature-understanding",
+        "expect": ["order", "uuskin", "transaction"]
+      },
+      {
+        "id": "zg-fu3",
+        "query": "webhook handler event",
+        "category": "feature-understanding",
+        "expect": ["webhook", "handler", "event", "callback"]
+      },
+      {
+        "id": "zg-fu4",
+        "query": "store checkout flow",
+        "category": "feature-understanding",
+        "expect": ["store", "checkout", "cart", "payment"]
+      },
+      {
+        "id": "zg-fu5",
+        "query": "user limitation limit",
+        "category": "feature-understanding",
+        "expect": ["limitation", "user", "limit", "restriction"]
+      },
+      {
+        "id": "zg-db1",
+        "query": "payment error fail",
+        "category": "debugging",
+        "expect": ["error", "fail", "timeout", "reject"]
+      },
+      {
+        "id": "zg-db2",
+        "query": "webhook queue retry",
+        "category": "debugging",
+        "expect": ["webhook", "queue", "retry", "fail"]
+      },
+      {
+        "id": "zg-db3",
+        "query": "topup error fail",
+        "category": "debugging",
+        "expect": ["topup", "error", "fail", "retry"]
+      },
+      {
+        "id": "zg-db4",
+        "query": "order error debug",
+        "category": "debugging",
+        "expect": ["order", "error", "debug", "trace"]
+      },
+      {
+        "id": "zg-db5",
+        "query": "payment fail timeout",
+        "category": "debugging",
+        "expect": ["payment", "error", "fail", "timeout"]
+      },
+      {
+        "id": "zg-ar1",
+        "query": "services connected api",
+        "category": "architecture",
+        "expect": ["service", "connect", "api", "endpoint"]
+      },
+      {
+        "id": "zg-ar2",
+        "query": "database schema table",
+        "category": "architecture",
+        "expect": ["database", "schema", "table", "model"]
+      },
+      {
+        "id": "zg-ar3",
+        "query": "dota schema item",
+        "category": "architecture",
+        "expect": ["dota", "schema", "item", "price"]
+      },
+      {
+        "id": "zg-ar4",
+        "query": "api endpoint route",
+        "category": "architecture",
+        "expect": ["api", "endpoint", "route", "request"]
+      },
+      {
+        "id": "zg-ar5",
+        "query": "Redis cache ttl",
+        "category": "architecture",
+        "expect": ["redis", "cache", "ttl", "expire"]
+      },
+      {
+        "id": "zg-cs1",
+        "query": "tradebot price update",
+        "category": "cross-session",
+        "expect": ["tradebot", "price", "update", "bot"]
+      },
+      {
+        "id": "zg-cs2",
+        "query": "skin trading dota",
+        "category": "cross-session",
+        "expect": ["skin", "trade", "exchange", "dota"]
+      },
+      {
+        "id": "zg-cs3",
+        "query": "payment method monnect",
+        "category": "cross-session",
+        "expect": ["payment", "method", "monnect", "card"]
+      },
+      {
+        "id": "zg-cs4",
+        "query": "haloskin delivery order",
+        "category": "cross-session",
+        "expect": ["haloskin", "delivery", "skin", "order"]
+      },
+      {
+        "id": "zg-cs5",
+        "query": "payment limitation restriction",
+        "category": "cross-session",
+        "expect": ["payment", "limitation", "limit", "restriction"]
+      }
+    ],
+    "nano-brain": [
+      {
+        "id": "nb-fu1",
+        "query": "hybrid search BM25",
+        "category": "feature-understanding",
+        "expect": ["search", "BM25", "vector", "RRF"]
+      },
+      {
+        "id": "nb-fu2",
+        "query": "embedding pipeline vector",
+        "category": "feature-understanding",
+        "expect": ["embed", "vector", "model", "dimension"]
+      },
+      {
+        "id": "nb-fu3",
+        "query": "watcher fsnotify file",
+        "category": "feature-understanding",
+        "expect": ["watcher", "fsnotify", "file", "change"]
+      },
+      {
+        "id": "nb-fu4",
+        "query": "session harvesting opencode",
+        "category": "feature-understanding",
+        "expect": ["harvest", "session", "opencode", "claude"]
+      },
+      {
+        "id": "nb-fu5",
+        "query": "markdown chunking heading",
+        "category": "feature-understanding",
+        "expect": ["chunk", "markdown", "heading", "split"]
+      },
+      {
+        "id": "nb-db1",
+        "query": "embed error fail timeout",
+        "category": "debugging",
+        "expect": ["embed", "error", "fail", "timeout"]
+      },
+      {
+        "id": "nb-db2",
+        "query": "search rank score fusion",
+        "category": "debugging",
+        "expect": ["search", "rank", "score", "fusion"]
+      },
+      {
+        "id": "nb-db3",
+        "query": "index error fail chunk",
+        "category": "debugging",
+        "expect": ["index", "error", "fail", "chunk"]
+      },
+      {
+        "id": "nb-db4",
+        "query": "watcher detect fsnotify",
+        "category": "debugging",
+        "expect": ["watcher", "error", "detect", "fsnotify"]
+      },
+      {
+        "id": "nb-db5",
+        "query": "Ollama error fail",
+        "category": "debugging",
+        "expect": ["ollama", "error", "fail", "timeout"]
+      },
+      {
+        "id": "nb-ar1",
+        "query": "services connected handler",
+        "category": "architecture",
+        "expect": ["service", "connect", "handler", "route"]
+      },
+      {
+        "id": "nb-ar2",
+        "query": "database schema migration",
+        "category": "architecture",
+        "expect": ["database", "schema", "table", "migration"]
+      },
+      {
+        "id": "nb-ar3",
+        "query": "BM25 rank tsvector",
+        "category": "architecture",
+        "expect": ["BM25", "rank", "tsvector", "tsquery"]
+      },
+      {
+        "id": "nb-ar4",
+        "query": "vector HNSW pgvector",
+        "category": "architecture",
+        "expect": ["vector", "HNSW", "pgvector", "cosine"]
+      },
+      {
+        "id": "nb-ar5",
+        "query": "RRF fusion rank",
+        "category": "architecture",
+        "expect": ["RRF", "fusion", "rank", "merge"]
+      },
+      {
+        "id": "nb-cs1",
+        "query": "config reload RWMutex",
+        "category": "cross-session",
+        "expect": ["config", "reload", "hot", "RWMutex"]
+      },
+      {
+        "id": "nb-cs2",
+        "query": "knowledge graph node",
+        "category": "cross-session",
+        "expect": ["graph", "node", "edge", "symbol"]
+      },
+      {
+        "id": "nb-cs3",
+        "query": "MCP handler tool",
+        "category": "cross-session",
+        "expect": ["MCP", "handler", "tool", "request"]
+      },
+      {
+        "id": "nb-cs4",
+        "query": "migration goose schema",
+        "category": "cross-session",
+        "expect": ["migration", "goose", "schema", "version"]
+      },
+      {
+        "id": "nb-cs5",
+        "query": "storage pool sqlc",
+        "category": "cross-session",
+        "expect": ["storage", "pool", "sqlc", "query"]
+      }
+    ],
+    "Phil-timeshel": [
+      {
+        "id": "pt-fu1",
+        "query": "user registration flow",
+        "category": "feature-understanding",
+        "expect": ["registration", "user", "signup", "create"]
+      },
+      {
+        "id": "pt-fu2",
+        "query": "print order flow",
+        "category": "feature-understanding",
+        "expect": ["order", "print", "physical", "status"]
+      },
+      {
+        "id": "pt-fu3",
+        "query": "payment flow stripe",
+        "category": "feature-understanding",
+        "expect": ["payment", "stripe", "confirm", "charge"]
+      },
+      {
+        "id": "pt-fu4",
+        "query": "mailer gift card",
+        "category": "feature-understanding",
+        "expect": ["mailer", "email", "gift", "notification"]
+      },
+      {
+        "id": "pt-fu5",
+        "query": "user profile edit",
+        "category": "feature-understanding",
+        "expect": ["profile", "user", "edit", "update"]
+      },
+      {
+        "id": "pt-db1",
+        "query": "webhook error dropbox",
+        "category": "debugging",
+        "expect": ["webhook", "error", "dropbox", "print"]
+      },
+      {
+        "id": "pt-db2",
+        "query": "payments controller error",
+        "category": "debugging",
+        "expect": ["payment", "error", "stripe", "controller"]
+      },
+      {
+        "id": "pt-db3",
+        "query": "print order error worker",
+        "category": "debugging",
+        "expect": ["print", "order", "error", "worker"]
+      },
+      {
+        "id": "pt-db4",
+        "query": "Stripe error fail",
+        "category": "debugging",
+        "expect": ["stripe", "error", "fail", "payment"]
+      },
+      {
+        "id": "pt-db5",
+        "query": "print order fail",
+        "category": "debugging",
+        "expect": ["print", "order", "error", "fail"]
+      },
+      {
+        "id": "pt-ar1",
+        "query": "controllers routes",
+        "category": "architecture",
+        "expect": ["controller", "route", "api", "action"]
+      },
+      {
+        "id": "pt-ar2",
+        "query": "database schema activerecord",
+        "category": "architecture",
+        "expect": ["database", "schema", "table", "activerecord"]
+      },
+      {
+        "id": "pt-ar3",
+        "query": "Sidekiq worker job",
+        "category": "architecture",
+        "expect": ["sidekiq", "worker", "job", "queue"]
+      },
+      {
+        "id": "pt-ar4",
+        "query": "routes namespace resource",
+        "category": "architecture",
+        "expect": ["routes", "controller", "namespace", "resource"]
+      },
+      {
+        "id": "pt-ar5",
+        "query": "StripeHelper payment",
+        "category": "architecture",
+        "expect": ["stripe", "helper", "payment", "charge"]
+      },
+      {
+        "id": "pt-cs1",
+        "query": "print worker job queue",
+        "category": "cross-session",
+        "expect": ["print", "worker", "job", "queue"]
+      },
+      {
+        "id": "pt-cs2",
+        "query": "Dropbox sync folder",
+        "category": "cross-session",
+        "expect": ["dropbox", "sync", "folder", "update"]
+      },
+      {
+        "id": "pt-cs3",
+        "query": "gift card mailer email",
+        "category": "cross-session",
+        "expect": ["gift", "card", "mailer", "email"]
+      },
+      {
+        "id": "pt-cs4",
+        "query": "internal print orders controller",
+        "category": "cross-session",
+        "expect": ["internal", "print", "order", "controller"]
+      },
+      {
+        "id": "pt-cs5",
+        "query": "customerio identify worker",
+        "category": "cross-session",
+        "expect": ["customerio", "identify", "worker", "job"]
+      }
+    ]
+  }
 }

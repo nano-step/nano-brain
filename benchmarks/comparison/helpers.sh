@@ -21,7 +21,8 @@ query_nano_brain() {
   local escaped_query
   escaped_query=$(python3 -c "import json; print(json.dumps('$query'))" 2>/dev/null || echo "\"$query\"")
 
-  curl -s -X POST "$MCP_ENDPOINT" \
+  local response
+  response=$(curl -s -X POST "$MCP_ENDPOINT" \
     -H "Content-Type: application/json" \
     -d "{
       \"jsonrpc\": \"2.0\",
@@ -35,7 +36,9 @@ query_nano_brain() {
           \"max_results\": $max_results
         }
       }
-    }" 2>/dev/null || echo '{"error": "request failed"}'
+    }" 2>/dev/null || echo '{"error": "request failed"}')
+
+  echo "$response" | grep '^data:' | sed 's/^data: //' | head -1
 }
 
 # query_nano_brain_hybrid <workspace> <query> [max_results]
@@ -48,7 +51,8 @@ query_nano_brain_hybrid() {
   local escaped_query
   escaped_query=$(python3 -c "import json; print(json.dumps('$query'))" 2>/dev/null || echo "\"$query\"")
 
-  curl -s -X POST "$MCP_ENDPOINT" \
+  local response
+  response=$(curl -s -X POST "$MCP_ENDPOINT" \
     -H "Content-Type: application/json" \
     -d "{
       \"jsonrpc\": \"2.0\",
@@ -62,7 +66,9 @@ query_nano_brain_hybrid() {
           \"max_results\": $max_results
         }
       }
-    }" 2>/dev/null || echo '{"error": "request failed"}'
+    }" 2>/dev/null || echo '{"error": "request failed"}')
+
+  echo "$response" | grep '^data:' | sed 's/^data: //' | head -1
 }
 
 # --- Result parsing helpers ---
@@ -129,7 +135,7 @@ measure_latency() {
 # measure_latency_ms
 # Returns current time in milliseconds (for manual timing).
 now_ms() {
-  date +%s%N 2>/dev/null | awk '{print int($1/1000000)}' || python3 -c 'import time; print(int(time.time()*1000))'
+  python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo "0"
 }
 
 # --- Scoring helpers ---
@@ -260,8 +266,49 @@ list_workspaces() {
   python3 -c "
 import json
 data = json.load(open('$QUERIES_FILE'))
-for name in data.get('workspaces', {}):
+# New format: queries_by_workspace keys
+for name in data.get('queries_by_workspace', {}):
     print(name)
+# Fallback: old format workspaces keys
+if not data.get('queries_by_workspace'):
+    for name in data.get('workspaces', {}):
+        print(name)
+" 2>/dev/null || echo ""
+}
+
+# list_queries <workspace_name>
+# Returns JSON lines of queries for a specific workspace.
+list_queries() {
+  local ws_name="$1"
+  python3 -c "
+import json
+data = json.load(open('$QUERIES_FILE'))
+if 'queries_by_workspace' in data and '$ws_name' in data['queries_by_workspace']:
+    for q in data['queries_by_workspace']['$ws_name']:
+        print(json.dumps(q))
+elif 'queries' in data:
+    for q in data['queries']:
+        print(json.dumps(q))
+" 2>/dev/null || echo ""
+}
+
+# list_queries <workspace_name>
+# Returns queries for a specific workspace from queries.json.
+# New format: queries_by_workspace[workspace]
+# Fallback: old format queries[]
+list_queries() {
+  local ws_name="$1"
+  python3 -c "
+import json
+data = json.load(open('$QUERIES_FILE'))
+# New format
+if 'queries_by_workspace' in data and '$ws_name' in data['queries_by_workspace']:
+    for q in data['queries_by_workspace']['$ws_name']:
+        print(json.dumps(q))
+# Fallback: old format
+elif 'queries' in data:
+    for q in data['queries']:
+        print(json.dumps(q))
 " 2>/dev/null || echo ""
 }
 
