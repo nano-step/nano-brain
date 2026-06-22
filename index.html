@@ -139,6 +139,20 @@
         @media(max-width:768px){.nav-links{display:none}.stats-bar{gap:32px}.feature-grid,.usecase-grid,.demo-grid,.ruby-grid,.benchmark-grid,.mcp-grid,.docs-grid,.steps{grid-template-columns:1fr}.contributing-content{grid-template-columns:1fr}.arch-flow{flex-direction:column}.arch-arrow{transform:rotate(90deg)}}
         .mermaid{display:flex;justify-content:center;padding:16px;background:var(--bg);border-radius:8px}
         .mermaid svg{max-width:100%}
+        .roadmap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:1200px;margin:0 auto}
+        .roadmap-phase{padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
+        .roadmap-phase h3{font-size:16px;font-weight:600;margin-bottom:12px}
+        .roadmap-phase ul{list-style:none}
+        .roadmap-phase ul li{font-size:13px;color:var(--text-2);padding:4px 0;border-bottom:1px solid var(--border)}
+        .roadmap-phase ul li:last-child{border-bottom:none}
+        .status-badge{display:inline-block;padding:4px 12px;border-radius:100px;font-size:11px;font-weight:500;margin-bottom:12px}
+        .status-badge.done{background:rgba(34,197,94,.15);color:var(--accent)}
+        .status-badge.current{background:rgba(249,115,22,.15);color:var(--orange)}
+        .status-badge.next{background:rgba(161,161,170,.15);color:var(--text-2)}
+        .roadmap-phase.done{border-color:rgba(34,197,94,.3)}
+        .roadmap-phase.current{border-color:rgba(249,115,22,.3)}
+        .roadmap-phase.next{opacity:.7}
+        @media(max-width:768px){.roadmap-grid{grid-template-columns:1fr}}
     </style>
 </head>
 <body>
@@ -573,6 +587,68 @@ CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain</code>
                 <p>internal/ — 17 packages (config, server, storage, search, embed, watcher, harvest, mcp, graph...)</p>
                 <p>migrations/ — Database migrations</p>
                 <p>benchmarks/ — Performance benchmarks</p>
+            </div>
+        </div>
+    </section>
+
+    <hr class="section-divider">
+
+    <section id="roadmap">
+        <div class="section-header"><h2>Roadmap</h2><p>Where we're headed.</p></div>
+        <div class="roadmap-grid">
+            <div class="roadmap-phase done">
+                <h3>Phase 1-3 — Foundation</h3>
+                <div class="status-badge done">Done</div>
+                <ul>
+                    <li>File indexing, watcher, chunking, embedding</li>
+                    <li>OpenCode + Claude Code session harvesters</li>
+                    <li>Hybrid search (BM25 + vector + RRF)</li>
+                    <li>14 MCP tools</li>
+                    <li>Code intelligence (graphs, tracing, impact)</li>
+                    <li>Ruby/Rails flow diagrams</li>
+                </ul>
+            </div>
+            <div class="roadmap-phase done">
+                <h3>Phase 4-6 — Hardening</h3>
+                <div class="status-badge done">Done</div>
+                <ul>
+                    <li>Ollama context length overflow fix</li>
+                    <li>UTF-8 null byte fix</li>
+                    <li>Incremental reindex (partial)</li>
+                    <li>Tree-sitter symbol extraction</li>
+                    <li>Cross-language support</li>
+                </ul>
+            </div>
+            <div class="roadmap-phase current">
+                <h3>Phase 7 — Team & Multi-user</h3>
+                <div class="status-badge current">In Progress</div>
+                <ul>
+                    <li>Role-based access control</li>
+                    <li>Admin / Developer / Reader roles</li>
+                    <li>Per-token role assignment</li>
+                    <li>Workspace-scoped access</li>
+                    <li>Audit log</li>
+                </ul>
+            </div>
+            <div class="roadmap-phase next">
+                <h3>Phase 8 — Deployment</h3>
+                <div class="status-badge next">Planned</div>
+                <ul>
+                    <li>Docker Compose production setup</li>
+                    <li>Kubernetes / Helm chart</li>
+                    <li>Cloud provider guides</li>
+                    <li>CI/CD integration</li>
+                </ul>
+            </div>
+            <div class="roadmap-phase next">
+                <h3>Phase 9 — Self-Learning</h3>
+                <div class="status-badge next">Discuss</div>
+                <ul>
+                    <li>Memory consolidation + categorization</li>
+                    <li>Pattern learning from sessions</li>
+                    <li>Proactive context pre-loading</li>
+                    <li>Self-lesson extraction</li>
+                </ul>
             </div>
         </div>
     </section>
