@@ -7,6 +7,12 @@ All notable changes to nano-brain are documented here.
 ## [2026.6.22] — 2026-06-22
 
 ### Added
+- **Ruby/Rails Enhancement** (PR #482)
+  - Node format: `file.rb::ClassName#methodName` (was `file.rb::method`)
+  - Cross-file resolver rewritten: regex → tree-sitter AST scanning
+  - CFG extractor: singleton_method support for class methods/scopes
+  - RailsDSLEdgeExtractor: associations, callbacks, concerns, Sidekiq detection
+  - Convention paths: Service, Job, Worker, Mailer, Policy, Serializer
 - **Ruby/Rails Support** (PRs #467, #469, #471, #473)
   - Ruby CFG extraction (if/else, loops, begin/rescue, method defs)
   - Ruby call graph extractor (class/module capture, unresolved edges)
