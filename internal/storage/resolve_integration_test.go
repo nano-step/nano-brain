@@ -31,9 +31,9 @@ func TestResolveWorkspaceParam_Name(t *testing.T) {
 	queries := sqlc.New(db)
 
 	hash := "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-	setupWorkspace(t, queries, ctx, hash, "nano-brain", "/projects/nano-brain")
+	setupWorkspace(t, queries, ctx, hash, "resolve-name-test-ws", "/projects/resolve-name-test")
 
-	got, err := storage.ResolveWorkspaceParam(ctx, queries, "nano-brain")
+	got, err := storage.ResolveWorkspaceParam(ctx, queries, "resolve-name-test-ws")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,9 +50,9 @@ func TestResolveWorkspaceParam_CaseInsensitive(t *testing.T) {
 	queries := sqlc.New(db)
 
 	hash := "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3"
-	setupWorkspace(t, queries, ctx, hash, "Test-Workspace", "/projects/test-workspace")
+	setupWorkspace(t, queries, ctx, hash, "Resolve-CI-Test-WS", "/projects/resolve-ci-test")
 
-	got, err := storage.ResolveWorkspaceParam(ctx, queries, "test-workspace")
+	got, err := storage.ResolveWorkspaceParam(ctx, queries, "resolve-ci-test-ws")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
