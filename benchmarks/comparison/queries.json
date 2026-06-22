@@ -1,11 +1,11 @@
 {
   "workspaces": {
     "nano-brain": "7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
-    "zengamingx": "d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
-    "Phil-timeshel": "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95"
+    "gaming-platform": "d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+    "rails-project": "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95"
   },
   "queries_by_workspace": {
-    "zengamingx": [
+    "gaming-platform": [
       {
         "id": "zg-fu1",
         "query": "payment flow checkout",
@@ -249,7 +249,7 @@
         "expect": ["storage", "pool", "sqlc", "query"]
       }
     ],
-    "Phil-timeshel": [
+    "rails-project": [
       {
         "id": "pt-fu1",
         "query": "user registration flow",

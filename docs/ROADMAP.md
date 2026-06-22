@@ -282,10 +282,10 @@ Phase 9 — Agent Memory Benchmarking ✅ (shipped 2026-06)
   ├── ✅ Benchmark framework (20 queries, ground truth, 6 tool runners)
   ├── ✅ Competitor comparison (LlamaIndex, Qdrant/Mem0)
   ├── ✅ Fair comparison with same raw source files
-  ├── ✅ Workspace-specific queries (zengamingx, nano-brain, Phil-timeshel)
+  ├── ✅ Workspace-specific queries (gaming-platform, nano-brain, rails-project)
   ├── ✅ BM25 OR fallback for zero-result queries
   ├── ✅ Results: nano-brain P@5=0.749, MRR=0.967
-  └── ✅ Known issue: 2 Phil-timeshel queries still return 0
+  └── ✅ Known issue: 2 rails-project queries still return 0
 
 Phase 10 — Deployment & Security (Planned)
   ├── Deployment guides

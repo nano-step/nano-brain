@@ -135,9 +135,9 @@ We benchmarked nano-brain against other memory tools using 60 domain-specific qu
 
 | Workspace | Queries | Avg P@5 | Avg MRR | Avg Results |
 |-----------|---------|---------|---------|-------------|
-| zengamingx (gaming) | 20 | 0.783 | 1.000 | 4.8 |
+| gaming-platform (gaming) | 20 | 0.783 | 1.000 | 4.8 |
 | nano-brain (Go) | 20 | 0.800 | 1.000 | 4.8 |
-| Phil-timeshel (Rails) | 20 | 0.662 | 0.900 | 3.3 |
+| rails-project (Rails) | 20 | 0.662 | 0.900 | 3.3 |
 
 **Key insight:** nano-brain performs consistently across different codebases (gaming platform, Go codebase, Rails app).
 

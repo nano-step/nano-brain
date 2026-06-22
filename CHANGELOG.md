@@ -19,7 +19,7 @@ All notable changes to nano-brain are documented here.
   - Benchmark framework (20 queries, ground truth, 6 tool runners)
   - Competitor comparison (LlamaIndex, Qdrant/Mem0)
   - Fair comparison with same raw source files
-  - Workspace-specific queries (zengamingx, nano-brain, Phil-timeshel)
+  - Workspace-specific queries (gaming-platform, nano-brain, rails-project)
   - Results: nano-brain P@5=0.749, MRR=0.967
 
 - **Search Quality Improvements**
