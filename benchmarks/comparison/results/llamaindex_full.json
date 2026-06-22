@@ -1,0 +1,342 @@
+{
+  "tool": "llamaindex",
+  "note": "full corpus, BAAI/bge-small-en-v1.5",
+  "workspaces": {
+    "zengamingx": {
+      "avg_p_at_5": 0.61,
+      "avg_mrr": 0.817,
+      "avg_latency_ms": 40,
+      "queries_run": 20,
+      "results": [
+        {
+          "query": "How does topup work?",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 56,
+          "p_at_5": 0.0,
+          "mrr": 0
+        },
+        {
+          "query": "What is the payment flow?",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 57,
+          "p_at_5": 1.0,
+          "mrr": 1.0
+        },
+        {
+          "query": "How does the auth system work?",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 52,
+          "p_at_5": 0.4,
+          "mrr": 1.0
+        },
+        {
+          "query": "Explain the order lifecycle",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 33,
+          "p_at_5": 0.6,
+          "mrr": 1.0
+        },
+        {
+          "query": "What does the webhook handler do?",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 38,
+          "p_at_5": 0.8,
+          "mrr": 1.0
+        },
+        {
+          "query": "Why might a payment fail?",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 53,
+          "p_at_5": 1.0,
+          "mrr": 1.0
+        },
+        {
+          "query": "Trace the error path in order processing",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 45,
+          "p_at_5": 1.0,
+          "mrr": 1.0
+        },
+        {
+          "query": "What happens when Redis is down?",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 59,
+          "p_at_5": 0.8,
+          "mrr": 0.5
+        },
+        {
+          "query": "Debug the authentication flow",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 26,
+          "p_at_5": 1.0,
+          "mrr": 1.0
+        },
+        {
+          "query": "Why is the webhook not processing?",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 35,
+          "p_at_5": 0.8,
+          "mrr": 1.0
+        },
+        {
+          "query": "How are services connected?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 26,
+          "p_at_5": 0.4,
+          "mrr": 0.5
+        },
+        {
+          "query": "What calls the UserController?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 31,
+          "p_at_5": 0.6,
+          "mrr": 0.5
+        },
+        {
+          "query": "How is the database structured?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 26,
+          "p_at_5": 1.0,
+          "mrr": 1.0
+        },
+        {
+          "query": "What is the relationship between orders and payments?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 42,
+          "p_at_5": 0.4,
+          "mrr": 0.333
+        },
+        {
+          "query": "How does caching work?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 32,
+          "p_at_5": 0.4,
+          "mrr": 1.0
+        },
+        {
+          "query": "What did we decide about rate limiting?",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 49,
+          "p_at_5": 0.4,
+          "mrr": 1.0
+        },
+        {
+          "query": "Find past bug fixes for authentication",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 28,
+          "p_at_5": 0.2,
+          "mrr": 1.0
+        },
+        {
+          "query": "What was the performance optimization we discussed?",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 26,
+          "p_at_5": 0.6,
+          "mrr": 1.0
+        },
+        {
+          "query": "Show me the database migration history",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 67,
+          "p_at_5": 0.6,
+          "mrr": 1.0
+        },
+        {
+          "query": "What security concerns were raised?",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 22,
+          "p_at_5": 0.2,
+          "mrr": 0.5
+        }
+      ]
+    },
+    "nanobrain": {
+      "avg_p_at_5": 0.65,
+      "avg_mrr": 0.772,
+      "avg_latency_ms": 32,
+      "queries_run": 20,
+      "results": [
+        {
+          "query": "How does topup work?",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 40,
+          "p_at_5": 0.6,
+          "mrr": 1.0
+        },
+        {
+          "query": "What is the payment flow?",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 26,
+          "p_at_5": 0.4,
+          "mrr": 1.0
+        },
+        {
+          "query": "How does the auth system work?",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 24,
+          "p_at_5": 1.0,
+          "mrr": 1.0
+        },
+        {
+          "query": "Explain the order lifecycle",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 33,
+          "p_at_5": 0.8,
+          "mrr": 1.0
+        },
+        {
+          "query": "What does the webhook handler do?",
+          "category": "feature-understanding",
+          "total": 5,
+          "latency_ms": 37,
+          "p_at_5": 0.8,
+          "mrr": 1.0
+        },
+        {
+          "query": "Why might a payment fail?",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 40,
+          "p_at_5": 1.0,
+          "mrr": 1.0
+        },
+        {
+          "query": "Trace the error path in order processing",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 25,
+          "p_at_5": 1.0,
+          "mrr": 1.0
+        },
+        {
+          "query": "What happens when Redis is down?",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 33,
+          "p_at_5": 1.0,
+          "mrr": 1.0
+        },
+        {
+          "query": "Debug the authentication flow",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 36,
+          "p_at_5": 0.8,
+          "mrr": 0.5
+        },
+        {
+          "query": "Why is the webhook not processing?",
+          "category": "debugging",
+          "total": 5,
+          "latency_ms": 17,
+          "p_at_5": 0.8,
+          "mrr": 1.0
+        },
+        {
+          "query": "How are services connected?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 22,
+          "p_at_5": 0.2,
+          "mrr": 0.2
+        },
+        {
+          "query": "What calls the UserController?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 30,
+          "p_at_5": 0.4,
+          "mrr": 1.0
+        },
+        {
+          "query": "How is the database structured?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 45,
+          "p_at_5": 0.8,
+          "mrr": 1.0
+        },
+        {
+          "query": "What is the relationship between orders and payments?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 28,
+          "p_at_5": 0.6,
+          "mrr": 0.5
+        },
+        {
+          "query": "How does caching work?",
+          "category": "architecture",
+          "total": 5,
+          "latency_ms": 39,
+          "p_at_5": 0.4,
+          "mrr": 0.25
+        },
+        {
+          "query": "What did we decide about rate limiting?",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 24,
+          "p_at_5": 0.0,
+          "mrr": 0
+        },
+        {
+          "query": "Find past bug fixes for authentication",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 29,
+          "p_at_5": 0.8,
+          "mrr": 1.0
+        },
+        {
+          "query": "What was the performance optimization we discussed?",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 38,
+          "p_at_5": 0.8,
+          "mrr": 1.0
+        },
+        {
+          "query": "Show me the database migration history",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 34,
+          "p_at_5": 0.8,
+          "mrr": 1.0
+        },
+        {
+          "query": "What security concerns were raised?",
+          "category": "cross-session",
+          "total": 5,
+          "latency_ms": 45,
+          "p_at_5": 0.0,
+          "mrr": 0
+        }
+      ]
+    }
+  }
+}
