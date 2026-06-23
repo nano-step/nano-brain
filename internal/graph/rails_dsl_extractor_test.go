@@ -110,7 +110,7 @@ end
 		edgesByKey[e.TargetNode] = e
 	}
 
-	expectedTargets := []string{"orders", "profile", "company", "roles"}
+	expectedTargets := []string{"Order", "Profile", "Company", "Role"}
 	for _, target := range expectedTargets {
 		if _, ok := edgesByKey[target]; !ok {
 			t.Errorf("expected edge with TargetNode=%q", target)
@@ -161,11 +161,11 @@ end
 		edgesByKey[e.TargetNode] = e
 	}
 
-	if _, ok := edgesByKey["authenticate!"]; !ok {
-		t.Error("expected edge with TargetNode='authenticate!'")
+	if _, ok := edgesByKey["ApplicationController#authenticate!"]; !ok {
+		t.Error("expected edge with TargetNode='ApplicationController#authenticate!'")
 	}
-	if _, ok := edgesByKey["track_event"]; !ok {
-		t.Error("expected edge with TargetNode='track_event'")
+	if _, ok := edgesByKey["ApplicationController#track_event"]; !ok {
+		t.Error("expected edge with TargetNode='ApplicationController#track_event'")
 	}
 
 	for _, e := range edges {
@@ -389,8 +389,8 @@ end
 		t.Fatalf("expected 1 edge, got %d: %v", len(edges), edges)
 	}
 
-	if edges[0].TargetNode != "posts" {
-		t.Errorf("expected TargetNode='posts', got %q", edges[0].TargetNode)
+	if edges[0].TargetNode != "Post" {
+		t.Errorf("expected TargetNode='Post', got %q", edges[0].TargetNode)
 	}
 }
 

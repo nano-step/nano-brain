@@ -22,6 +22,11 @@ WHERE workspace_hash = $1
 ORDER BY start_line
 LIMIT 1;
 
+-- name: GetFunctionFlowchartByEntry :one
+SELECT id, workspace_hash, entry, source_file, start_line, end_line, status, cfg, created_at, updated_at
+FROM function_flowcharts
+WHERE workspace_hash = $1 AND entry = $2;
+
 -- name: DeleteFunctionFlowchartsByFile :exec
 DELETE FROM function_flowcharts WHERE workspace_hash = $1 AND source_file = $2;
 

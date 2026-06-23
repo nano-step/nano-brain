@@ -204,7 +204,7 @@ func (r *RubyCrossFileResolver) BuildReconcileEdges(edges []Edge) []Edge {
 		for _, entry := range entries {
 			result = append(result, Edge{
 				SourceNode: handler,
-				TargetNode: entry.FilePath + "::" + ctrlName + "#" + action,
+				TargetNode: entry.FilePath + "::" + ctrlShort + "#" + action,
 				Kind:       EdgeReconcile,
 				SourceFile: e.SourceFile,
 				Line:       e.Line,
