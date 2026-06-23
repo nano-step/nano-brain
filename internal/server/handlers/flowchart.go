@@ -120,7 +120,11 @@ func resolveFlowchartHandler(ctx context.Context, q FlowchartQuerier, workspace,
 
 	// Not an HTTP route — treat the entry itself as a handler name/symbol.
 	if idx := strings.Index(entry, "::"); idx >= 0 {
-		return entry[idx+2:], "", "", nil
+		symbolPart := entry[idx+2:]
+		if hashIdx := strings.Index(symbolPart, "#"); hashIdx >= 0 {
+			return symbolPart[hashIdx+1:], "", "", nil
+		}
+		return symbolPart, "", "", nil
 	}
 	return lastDottedSegment(entry), "", "", nil
 }

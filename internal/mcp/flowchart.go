@@ -51,9 +51,15 @@ func registerMemoryFlowchart(server *mcpsdk.Server, a *Adapter) {
 
 			// Handle Ruby format: look up by entry format
 			if startLine == -1 && endLine == -1 {
-				// Ruby method format: file.rb::ClassName#method
-				// Look up by entry format
-				entry := node
+				// Ruby CFG stores entries as "file.rb::method" (no class prefix).
+				// Input is "file.rb::ClassName#method" — strip the ClassName# prefix.
+				symbol := node[len(file)+2:]
+				var entry string
+				if hashIdx := strings.Index(symbol, "#"); hashIdx >= 0 {
+					entry = file + "::" + symbol[hashIdx+1:]
+				} else {
+					entry = file + "::" + symbol
+				}
 				fc, err := a.queries.GetFunctionFlowchartByEntry(ctx, sqlc.GetFunctionFlowchartByEntryParams{
 					WorkspaceHash: ws,
 					Entry:         entry,
