@@ -1,6 +1,7 @@
 package graph_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/nano-brain/nano-brain/internal/graph"
@@ -110,7 +111,7 @@ end
 		edgesByKey[e.TargetNode] = e
 	}
 
-	expectedTargets := []string{"orders", "profile", "company", "roles"}
+	expectedTargets := []string{"Order", "Profile", "Company", "Role"}
 	for _, target := range expectedTargets {
 		if _, ok := edgesByKey[target]; !ok {
 			t.Errorf("expected edge with TargetNode=%q", target)
@@ -161,11 +162,11 @@ end
 		edgesByKey[e.TargetNode] = e
 	}
 
-	if _, ok := edgesByKey["authenticate!"]; !ok {
-		t.Error("expected edge with TargetNode='authenticate!'")
+	if _, ok := edgesByKey["ApplicationController#authenticate!"]; !ok {
+		t.Error("expected edge with TargetNode='ApplicationController#authenticate!'")
 	}
-	if _, ok := edgesByKey["track_event"]; !ok {
-		t.Error("expected edge with TargetNode='track_event'")
+	if _, ok := edgesByKey["ApplicationController#track_event"]; !ok {
+		t.Error("expected edge with TargetNode='ApplicationController#track_event'")
 	}
 
 	for _, e := range edges {
@@ -389,8 +390,8 @@ end
 		t.Fatalf("expected 1 edge, got %d: %v", len(edges), edges)
 	}
 
-	if edges[0].TargetNode != "posts" {
-		t.Errorf("expected TargetNode='posts', got %q", edges[0].TargetNode)
+	if edges[0].TargetNode != "Post" {
+		t.Errorf("expected TargetNode='Post', got %q", edges[0].TargetNode)
 	}
 }
 
@@ -423,5 +424,40 @@ end
 	}
 	if edges[0].Line != 2 {
 		t.Errorf("expected Line=2, got %d", edges[0].Line)
+	}
+}
+
+func TestSingularize(t *testing.T) {
+	ex := newRailsDSLEdgeExtractor(t)
+	tests := []struct {
+		name       string
+		assocName  string
+		wantTarget string
+	}{
+		{"basic_plural", "users", "User"},
+		{"us_suffix", "status", "Status"},
+		{"is_suffix", "basis", "Basis"},
+		{"is_suffix_analysis", "analysis", "Analysis"},
+		{"ies_rule", "categories", "Category"},
+		{"ses_rule", "addresses", "Address"},
+		{"ses_rule_statuses", "statuses", "Status"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := []byte(fmt.Sprintf(`class TestModel < ApplicationRecord
+  has_many :%s
+end
+`, tt.assocName))
+			edges, err := ex.ExtractEdges("app/models/test_model.rb", src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(edges) != 1 {
+				t.Fatalf("expected 1 edge, got %d", len(edges))
+			}
+			if edges[0].TargetNode != tt.wantTarget {
+				t.Errorf("TargetNode = %q, want %q", edges[0].TargetNode, tt.wantTarget)
+			}
+		})
 	}
 }

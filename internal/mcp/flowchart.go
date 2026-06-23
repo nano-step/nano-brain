@@ -17,10 +17,10 @@ func registerMemoryFlowchart(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_flowchart",
-			Description: "Return the control-flow graph (flowchart) for a specific function, identified by 'file::startLine-endLine' (e.g. 'src/routes/purchase.ts::15-48'). The CFG has decision/step/terminal nodes and labeled branch edges. Returns found:false when no flowchart is stored for that span (e.g. a non-JS/TS function, since CFG extraction is JS/TS only) or when flow indexing is disabled.",
+			Description: "Return the control-flow graph (flowchart) for a specific function, identified by 'file::startLine-endLine' (e.g. 'src/routes/purchase.ts::15-48') or 'file.rb::ClassName#method' (e.g. 'app/controllers/users_controller.rb::UsersController#create'). The CFG has decision/step/terminal nodes and labeled branch edges. Returns found:false when no flowchart is stored for that span or when flow indexing is disabled.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"node":      {"type": "string", "description": "Function span as 'file::startLine-endLine', e.g. 'src/routes/purchase.ts::15-48'"},
+				"node":      {"type": "string", "description": "Function span as 'file::startLine-endLine' or 'file.rb::ClassName#method'"},
 			}, []string{"workspace", "node"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -49,6 +49,34 @@ func registerMemoryFlowchart(server *mcpsdk.Server, a *Adapter) {
 				return errResult(perr.Error()), nil
 			}
 
+			// Handle Ruby format: look up by entry format
+			if startLine == -1 && endLine == -1 {
+				// Ruby method format: file.rb::ClassName#method
+				// Look up by entry format
+				entry := node
+				fc, err := a.queries.GetFunctionFlowchartByEntry(ctx, sqlc.GetFunctionFlowchartByEntryParams{
+					WorkspaceHash: ws,
+					Entry:         entry,
+				})
+				if err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						return textResult(map[string]any{
+							"found": false,
+							"node":  node,
+						})
+					}
+					return errResult(fmt.Sprintf("flowchart query failed: %v", err)), nil
+				}
+
+				return textResult(map[string]any{
+					"found":  true,
+					"entry":  fc.Entry,
+					"status": fc.Status,
+					"cfg":    json.RawMessage(fc.Cfg),
+				})
+			}
+
+			// JS/TS format: look up by file and line range
 			fc, err := a.queries.GetFunctionFlowchart(ctx, sqlc.GetFunctionFlowchartParams{
 				WorkspaceHash: ws,
 				SourceFile:    file,
@@ -75,13 +103,23 @@ func registerMemoryFlowchart(server *mcpsdk.Server, a *Adapter) {
 	)
 }
 
-// parseFlowchartNode parses a "file::startLine-endLine" identifier.
+// parseFlowchartNode parses a "file::startLine-endLine" or "file.rb::ClassName#method" identifier.
 func parseFlowchartNode(node string) (file string, startLine, endLine int, err error) {
 	parts := strings.SplitN(node, "::", 2)
 	if len(parts) != 2 || parts[0] == "" {
-		return "", 0, 0, errors.New("node must be 'file::startLine-endLine'")
+		return "", 0, 0, errors.New("node must be 'file::startLine-endLine' or 'file.rb::ClassName#method'")
 	}
 	file = parts[0]
+	
+	// Check if this is a Ruby method format (contains #)
+	if strings.Contains(parts[1], "#") {
+		// Ruby format: file.rb::ClassName#method
+		// We need to look up the flowchart by entry format
+		// For now, return a special case that the caller handles
+		return file, -1, -1, nil
+	}
+	
+	// JS/TS format: file::startLine-endLine
 	lineRange := strings.SplitN(parts[1], "-", 2)
 	if len(lineRange) != 2 {
 		return "", 0, 0, errors.New("node line range must be 'startLine-endLine'")

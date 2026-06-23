@@ -69,6 +69,35 @@ func (q *Queries) GetFunctionFlowchart(ctx context.Context, arg GetFunctionFlowc
 	return i, err
 }
 
+const getFunctionFlowchartByEntry = `-- name: GetFunctionFlowchartByEntry :one
+SELECT id, workspace_hash, entry, source_file, start_line, end_line, status, cfg, created_at, updated_at
+FROM function_flowcharts
+WHERE workspace_hash = $1 AND entry = $2
+`
+
+type GetFunctionFlowchartByEntryParams struct {
+	WorkspaceHash string
+	Entry         string
+}
+
+func (q *Queries) GetFunctionFlowchartByEntry(ctx context.Context, arg GetFunctionFlowchartByEntryParams) (FunctionFlowchart, error) {
+	row := q.db.QueryRowContext(ctx, getFunctionFlowchartByEntry, arg.WorkspaceHash, arg.Entry)
+	var i FunctionFlowchart
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceHash,
+		&i.Entry,
+		&i.SourceFile,
+		&i.StartLine,
+		&i.EndLine,
+		&i.Status,
+		&i.Cfg,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getFunctionFlowchartByHandler = `-- name: GetFunctionFlowchartByHandler :one
 SELECT id, workspace_hash, entry, source_file, start_line, end_line, status, cfg, created_at, updated_at
 FROM function_flowcharts

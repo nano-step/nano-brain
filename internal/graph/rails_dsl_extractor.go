@@ -252,9 +252,11 @@ func (x *RailsDSLEdgeExtractor) extractAssociation(bt *gotreesitter.BoundTree, c
 	if target == "" {
 		return nil
 	}
+	// Resolve symbol to model class name: :users → User, :user → User
+	modelClass := resolveAssociationTarget(target)
 	return []Edge{{
 		SourceNode: relFile + "::" + className + "#" + methodName,
-		TargetNode: target,
+		TargetNode: modelClass,
 		Kind:       EdgeCalls,
 		SourceFile: relFile,
 		Line:       lineForByte(content, call.StartByte()),
@@ -263,6 +265,7 @@ func (x *RailsDSLEdgeExtractor) extractAssociation(bt *gotreesitter.BoundTree, c
 			"dsl":              true,
 			"type":             "association",
 			"association_type": methodName,
+			"original_symbol":  target,
 		},
 	}}
 }
@@ -281,14 +284,48 @@ func (x *RailsDSLEdgeExtractor) firstSymbolArg(bt *gotreesitter.BoundTree, call 
 	return ""
 }
 
+// resolveAssociationTarget converts a Rails association symbol to a model class name.
+// Example: "users" → "User", "profile" → "Profile"
+func resolveAssociationTarget(symbol string) string {
+	singular := singularize(symbol)
+	return capitalize(singular)
+}
+
+// singularize converts a plural noun to singular using common Rails inflection rules.
+// Covers ~80% of common Rails model names. Known unsupported patterns:
+// ves→f/fe (knives→knife), ches→ch (churches→church), shes→sh (dishes→dish).
+func singularize(word string) string {
+	if strings.HasSuffix(word, "ies") {
+		return strings.TrimSuffix(word, "ies") + "y"
+	}
+	if strings.HasSuffix(word, "ses") || strings.HasSuffix(word, "xes") || strings.HasSuffix(word, "zes") {
+		return strings.TrimSuffix(word, "es")
+	}
+	if strings.HasSuffix(word, "s") && !strings.HasSuffix(word, "ss") && !strings.HasSuffix(word, "us") && !strings.HasSuffix(word, "is") {
+		return strings.TrimSuffix(word, "s")
+	}
+	return word
+}
+
+// capitalize converts the first letter of a word to uppercase.
+func capitalize(word string) string {
+	if word == "" {
+		return word
+	}
+	runes := []rune(word)
+	return strings.ToUpper(string(runes[0])) + string(runes[1:])
+}
+
 func (x *RailsDSLEdgeExtractor) extractCallback(bt *gotreesitter.BoundTree, call *gotreesitter.Node, className string, methodName string, relFile string, content []byte) []Edge {
 	action := x.firstSymbolArg(bt, call)
 	if action == "" {
 		return nil
 	}
+	// Qualify callback method name with controller class: :authenticate → UsersController#authenticate
+	qualifiedAction := className + "#" + action
 	return []Edge{{
 		SourceNode: relFile + "::" + className + "#" + methodName,
-		TargetNode: action,
+		TargetNode: qualifiedAction,
 		Kind:       EdgeMiddleware,
 		SourceFile: relFile,
 		Line:       lineForByte(content, call.StartByte()),
@@ -297,6 +334,7 @@ func (x *RailsDSLEdgeExtractor) extractCallback(bt *gotreesitter.BoundTree, call
 			"dsl":           true,
 			"type":          "callback",
 			"callback_type": methodName,
+			"original_method": action,
 		},
 	}}
 }

@@ -237,7 +237,7 @@ func TestBuildReconcileEdges_namespaced(t *testing.T) {
 	found := false
 	for _, e := range reconcileEdges {
 		if e.SourceNode == "Api::V1::UsersController#index" &&
-			e.TargetNode == "app/controllers/api/v1/users_controller.rb::UsersController#index" {
+			e.TargetNode == "app/controllers/api/v1/users_controller.rb::Api::V1::UsersController#index" {
 			found = true
 		}
 	}
@@ -267,7 +267,7 @@ func TestBuildReconcileEdges_namespaced_controllerCollision(t *testing.T) {
 	found := false
 	for _, e := range reconcileEdges {
 		if e.SourceNode == "Api::V1::TokensController#create" &&
-			e.TargetNode == "app/controllers/api/v1/tokens_controller.rb::TokensController#create" {
+			e.TargetNode == "app/controllers/api/v1/tokens_controller.rb::Api::V1::TokensController#create" {
 			found = true
 		}
 	}
