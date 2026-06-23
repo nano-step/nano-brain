@@ -379,7 +379,60 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 					if _, exists := nodeMap[target]; !exists {
 						addNode(FlowNode{ID: target, Name: target, Role: classifyRole(target)})
 					}
-					queue = append(queue, bfsItem{bareName: target, depth: item.depth, parentFile: callerFile})
+					for _, out := range idx.bySource[e.TargetNode] {
+						if out.Kind == graph.EdgeIntegration {
+							target := out.TargetNode
+							if isNoiseIntegration(target) {
+								continue
+							}
+							if _, exists := nodeMap[target]; !exists {
+								addNode(FlowNode{ID: target, Name: target, Role: RoleIntegration})
+							}
+							addEdge(FlowEdge{From: item.bareName, To: target, Kind: "integration", Line: out.Line, Conditional: edgeConditional(out), ConditionLabel: edgeConditionLabel(out)})
+							continue
+						}
+						if out.Kind == graph.EdgeReconcile {
+							continue
+						}
+						if out.Kind != graph.EdgeCalls {
+							continue
+						}
+						target := out.TargetNode
+						targetSources := idx.bySymbol[target]
+						if isLoggingName(target) || (len(targetSources) == 0 && isNoiseExternal(target)) {
+							continue
+						}
+						if fanout >= maxFanout {
+							break
+						}
+						fanout++
+						var targetRole Role
+						if len(targetSources) == 0 {
+							targetRole = RoleExternal
+						} else {
+							targetRole = classifyRole(target)
+						}
+						ambiguous := false
+						if len(targetSources) > 0 {
+							files := make(map[string]bool)
+							for _, ts := range targetSources {
+								files[ts.SourceFile] = true
+							}
+							ambiguous = len(files) > 1
+						}
+						if existing, ok := nodeMap[target]; ok {
+							if ambiguous && !existing.Ambiguous {
+								existing.Ambiguous = true
+								nodeMap[target] = existing
+							}
+						} else {
+							addNode(FlowNode{ID: target, Name: target, Role: targetRole, Ambiguous: ambiguous})
+						}
+						addEdge(FlowEdge{From: item.bareName, To: target, Kind: "calls", Line: out.Line, Conditional: edgeConditional(out), ConditionLabel: edgeConditionLabel(out)})
+						if targetRole != RoleExternal {
+							queue = append(queue, bfsItem{bareName: target, depth: item.depth + 1})
+						}
+					}
 					continue
 				}
 
