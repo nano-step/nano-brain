@@ -33,7 +33,7 @@ The agent memory space in 2026:
 ### 1. Search Quality
 - **Query set**: 20 queries (feature understanding, debugging, architecture, cross-session)
 - **Metrics**: P@5, P@10, MRR, recall@20
-- **Workspaces**: nano-brain, zengamingx, Phil-timeshel
+- **Workspaces**: nano-brain, express-app, rails-app
 - **Comparison**: nano-brain hybrid vs each tool's search
 
 ### 2. Code Intelligence (nano-brain unique)
@@ -53,7 +53,7 @@ The agent memory space in 2026:
 
 ### 5. Resource Usage
 - **Metrics**: Memory (RSS), CPU (steady state), disk (index size)
-- **Workload**: After indexing nano-brain + zengamingx workspaces (~50K docs)
+- **Workload**: After indexing nano-brain + express-app workspaces (~50K docs)
 - **Comparison**: Go binary vs Python + database + embedding service
 
 ## Decisions
@@ -62,7 +62,7 @@ The agent memory space in 2026:
 Use the same query set across all tools — 20 queries covering feature understanding, debugging, architecture, and cross-session recall. We already have query sets from our LLM benchmarks.
 
 ### Decision 2: Real Workspaces
-Run benchmarks against real workspaces (nano-brain, zengamingx, Phil-timeshel) — not synthetic data. Real codebases test edge cases like incomplete code, mixed languages, and stale docs.
+Run benchmarks against real workspaces (nano-brain, express-app, rails-app) — not synthetic data. Real codebases test edge cases like incomplete code, mixed languages, and stale docs.
 
 ### Decision 3: Docker Isolation
 Run comparison tools in Docker containers. Some tools (Mem0, Cognee) require Python + database + embedding services. Docker isolates these from our Go environment.

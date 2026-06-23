@@ -2,7 +2,7 @@
   "tool": "mem0_vector_only",
   "note": "same raw files, Qdrant in-memory, BAAI/bge-small-en-v1.5",
   "workspaces": {
-    "zengamingx": {
+    "express-app": {
       "avg_p_at_5": 0.27,
       "avg_mrr": 0.418,
       "avg_latency_ms": 1,

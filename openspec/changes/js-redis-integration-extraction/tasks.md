@@ -20,5 +20,5 @@
 - [x] 4.1 Add unit tests for Redis edge extraction (get, set, setEx, del, publish) in `js_integration_extractor_test.go`
 - [x] 4.2 Add test for `redis.get()` is NOT classified as HTTP GET
 - [x] 4.3 Run `go test -race -short ./...`
-- [ ] 4.4 Index zengamingx workspace and verify Redis edges appear in flow diagrams
+- [ ] 4.4 Index express-app workspace and verify Redis edges appear in flow diagrams
 - [ ] 4.5 Run `go test -race -tags=integration ./...`

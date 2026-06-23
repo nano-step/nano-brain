@@ -16,7 +16,7 @@
 `POST /api/v1/graph/flowchart` SHALL return the control-flow graph of the entry's handler as `{ found, entry, method, path, cfg, status }`.
 
 #### Scenario: Flowchart requested for a JS/TS handler with branches
-- **WHEN** a client POSTs `{ entry: "POST /zengamingx/api/game" }`
+- **WHEN** a client POSTs `{ entry: "POST /express-app/api/game" }`
 - **AND** the handler has a stored CFG
 - **THEN** the response has `found: true`
 - **AND** `cfg.nodes` includes `decision` and `terminal` nodes
@@ -57,5 +57,5 @@ A new MCP tool `memory_flowchart` SHALL return the CFG spec for a given node loc
 The flowchart endpoint SHALL resolve the entry to a handler's source location using the existing HTTP edges, then look up the CFG by location.
 
 #### Scenario: Entry resolves to handler location
-- **WHEN** `POST /zengamingx/api/game` maps to `routes/game.ts::15-42` via HTTP edges
+- **WHEN** `POST /express-app/api/game` maps to `routes/game.ts::15-42` via HTTP edges
 - **THEN** the endpoint queries `function_flowcharts` by `(workspace_hash, source_file, start_line, end_line)`

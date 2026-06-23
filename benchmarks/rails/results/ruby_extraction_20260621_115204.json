@@ -1,6 +1,6 @@
 {
   "benchmark": "ruby_extraction",
-  "workspace": "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95",
+  "workspace": "PLACEHOLDER_WORKSPACE_HASH_PHIL",
   "server": "http://localhost:3199",
   "endpoints_extracted": 236,
   "expected_routes": 40,

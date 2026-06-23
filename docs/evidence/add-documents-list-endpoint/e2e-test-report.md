@@ -7,7 +7,7 @@ Browser: Chrome DevTools (Chromium 148)
 ## Test #1: GET /api/v1/documents response shape ✅ PASS
 
 ```bash
-$ curl 'http://localhost:3199/api/v1/documents?workspace=37b36e...&collection=session-summary' | jq '.documents[0] | keys'
+$ curl 'http://localhost:3199/api/v1/documents?workspace=PLACEHOLDER_HASH...&collection=session-summary' | jq '.documents[0] | keys'
 [
   "collection",
   "created_at",
@@ -25,7 +25,7 @@ All 9 expected fields present. Returns 775 session-summary documents.
 
 ## Test #2: Filter combinations ✅ PASS
 
-In-browser fetch tests on production data (workspace=capyhome, 8812 docs):
+In-browser fetch tests on production data (workspace=next-app, 8812 docs):
 
 | Filter | Endpoint | Result count | Verdict |
 |---|---|---|---|
@@ -36,12 +36,12 @@ In-browser fetch tests on production data (workspace=capyhome, 8812 docs):
 
 ## Test #3: /ui/memory page renders ✅ PASS
 
-Loaded http://localhost:3199/ui/memory?workspace=37b36e... in browser via Chrome DevTools.
+Loaded http://localhost:3199/ui/memory?workspace=PLACEHOLDER_HASH... in browser via Chrome DevTools.
 
 Memory page renders without errors:
 - 8812 documents shown in table
 - Tag filter chips: function, interface, javascript, method, opencode, python, summary, symbol, type, typescript
-- Workspace selector shows "capyhome 37b36e"
+- Workspace selector shows "next-app PLACEHOLDER_HASH"
 - Side nav navigation works
 - No console errors
 

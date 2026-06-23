@@ -59,12 +59,12 @@
 - [ ] 7.4 Test ambiguous class resolution (multiple files → edges to all + metadata)
 - [ ] 7.5 Test reconcile edge traversal (HTTP entry → reconcile → calls chain)
 - [ ] 7.6 Test end-to-end flow: extract → index → resolve → flow builder
-- [ ] 7.7 Verify Phil-timeshel flows show 5+ nodes per controller action
+- [ ] 7.7 Verify rails-app flows show 5+ nodes per controller action
 
 ## 8. Validation
 
 - [ ] 8.1 Run `go build ./... && go test -race -short ./...`
 - [ ] 8.2 Run harness validation ladder
 - [ ] 8.3 Run smoke:e2e with test server on port 3199
-- [ ] 8.4 Verify Phil-timeshel sequence diagrams show controller→service→model chains
+- [ ] 8.4 Verify rails-app sequence diagrams show controller→service→model chains
 - [ ] 8.5 Document results in PR description

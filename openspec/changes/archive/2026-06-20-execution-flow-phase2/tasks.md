@@ -28,5 +28,5 @@ Ordered for incremental, independently-verifiable delivery. Each numbered group 
 
 ## 5. Verification & docs
 - [ ] 5.1 Full build and test suite green.
-- [ ] 5.2 Dogfood: re-extract zengamingx CFGs, verify branch edges appear.
+- [ ] 5.2 Dogfood: re-extract express-app CFGs, verify branch edges appear.
 - [ ] 5.3 Update AGENTS.md docs for `internal/graph` (Known limitations section).

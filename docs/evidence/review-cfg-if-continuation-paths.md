@@ -11,7 +11,7 @@
 ### Verification
 - `go build ./...` ✅
 - `go test -race -short ./internal/graph/...` ✅ (24 tests)
-- Dogfood: `setUserEmail` in zengamingx now shows full flow (21 nodes) including DB update, email check, commit
+- Dogfood: `setUserEmail` in express-app now shows full flow (21 nodes) including DB update, email check, commit
 - Branch edges: yes/no for if-else, try/catch for try blocks — all working
 
 ### Pre-existing failures (NOT from this change)

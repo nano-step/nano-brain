@@ -56,7 +56,7 @@ Existing `GET /api/v1/workspaces` returns:
 ```json
 {
   "workspaces": [
-    {"hash": "37b3...", "name": "capyhome", "doc_count": 9061, "chunk_count": 12704}
+    {"hash": "37b3...", "name": "next-app", "doc_count": 9061, "chunk_count": 12704}
   ]
 }
 ```
@@ -68,7 +68,7 @@ Frontend type already exists in `web/src/api/types.ts` as `WorkspaceListItem` (v
 1. **Unit / hook:** Mock `apiFetch` returning 2 workspaces; assert table renders both rows.
 2. **Hook:** Mock DELETE returning 200; assert list refetched.
 3. **Browser E2E (port 3199):**
-   - Navigate `/ui/workspaces` → table populated with capyhome + 18 others
+   - Navigate `/ui/workspaces` → table populated with next-app + 18 others
    - Click "Remove" on a test workspace (`e2e-test-project` — 0 docs, safe to delete)
    - Type wrong name → confirm button disabled
    - Type correct name → confirm enabled, click → 200, row disappears from table

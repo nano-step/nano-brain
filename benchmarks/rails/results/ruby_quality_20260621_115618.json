@@ -1,6 +1,6 @@
 {
   "benchmark": "ruby_quality",
-  "workspace": "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95",
+  "workspace": "PLACEHOLDER_WORKSPACE_HASH_PHIL",
   "total_cases": 10,
   "passed": 9,
   "avg_nodes_per_flow": 3.0,

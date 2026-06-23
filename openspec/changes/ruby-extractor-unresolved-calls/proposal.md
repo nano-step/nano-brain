@@ -14,4 +14,4 @@ The cross-file resolver (PR #469) was designed to resolve bare call targets to q
 
 - **Code affected**: `internal/graph/ruby_extractor.go` — `extractCalls` method (~5 lines changed)
 - **Risk**: Low — existing same-file behavior preserved; new edges are additional
-- **Verification**: Phil-timeshel flows should show controller→service→model chains (5+ nodes)
+- **Verification**: rails-app flows should show controller→service→model chains (5+ nodes)

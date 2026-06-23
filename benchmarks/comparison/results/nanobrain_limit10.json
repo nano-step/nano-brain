@@ -2,7 +2,7 @@
   "tool": "nanobrain",
   "note": "full corpus, limit=10",
   "workspaces": {
-    "zengamingx": {
+    "express-app": {
       "avg_p_at_5": 0.83,
       "avg_mrr": 0.9,
       "avg_latency_ms": 114,

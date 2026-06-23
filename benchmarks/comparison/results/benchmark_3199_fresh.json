@@ -2,7 +2,7 @@
   "tool": "nanobrain",
   "server": "3199-fresh",
   "workspaces": {
-    "zengamingx": {
+    "express-app": {
       "avg_p_at_5": 0.02,
       "avg_mrr": 0.1,
       "avg_latency_ms": 6,

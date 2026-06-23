@@ -19,8 +19,8 @@
 
 - [ ] 3.1 Create `benchmarks/comparison/bench_search_quality.sh` — P@5, MRR, recall@20
 - [ ] 3.2 Run against nano-brain workspace (our own codebase)
-- [ ] 3.3 Run against zengamingx workspace (large mixed-language codebase)
-- [ ] 3.4 Run against Phil-timeshel workspace (Rails project)
+- [ ] 3.3 Run against express-app workspace (large mixed-language codebase)
+- [ ] 3.4 Run against rails-app workspace (Rails project)
 - [ ] 3.5 Generate `results/search_quality.json`
 
 ## 4. Performance Benchmark

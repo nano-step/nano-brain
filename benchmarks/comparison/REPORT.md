@@ -2,7 +2,7 @@
 
 **Date:** June 22, 2026  
 **Author:** Benchmark Analysis  
-**Data Sources:** Internal benchmarks (nano-brain, zengamingx, phil workspaces), public documentation for competitors
+**Data Sources:** Internal benchmarks (nano-brain, express-app, rails workspaces), public documentation for competitors
 
 ---
 
@@ -30,9 +30,9 @@ Tested across three real workspaces with 20 queries each, covering feature under
 
 | Workspace | P@5 | MRR | Avg Latency (ms) | Notes |
 |-----------|-----|-----|-------------------|-------|
-| zengamingx | 0.830 | 0.900 | 73 | Large codebase, complex queries |
+| express-app | 0.830 | 0.900 | 73 | Large codebase, complex queries |
 | nanobrain | 0.800 | 0.950 | 40 | Medium codebase, self-referential |
-| phil | 0.450 | 0.567 | 34 | Smaller codebase, sparse indexing |
+| rails | 0.450 | 0.567 | 34 | Smaller codebase, sparse indexing |
 | **Average** | **0.693** | **0.806** | **49** | |
 
 ### 2.2 Per-Category Breakdown (nanobrain workspace)
@@ -58,7 +58,7 @@ No competitor published benchmark data on our query set. The following is based 
 
 ### 2.4 Assessment
 
-nano-brain's P@5 of 0.80 on its own workspace is solid. The MRR of 0.95 means the first result is almost always relevant. The phil workspace (P@5=0.45) pulls the average down, likely due to sparser indexing or less curated content, not a search algorithm weakness.
+nano-brain's P@5 of 0.80 on its own workspace is solid. The MRR of 0.95 means the first result is almost always relevant. The rails workspace (P@5=0.45) pulls the average down, likely due to sparser indexing or less curated content, not a search algorithm weakness.
 
 Competitors optimize for different query types. Mem0 and Zep target conversation recall. Cognee and GraphRAG target document-level knowledge graphs. None of them index code symbols or execution flows, so a direct search quality comparison on code queries isn't meaningful.
 
@@ -145,8 +145,8 @@ The 0% callers accuracy is a critical weakness. Incoming edge resolution require
 | Operation | Workspace | Avg Latency (ms) | Notes |
 |-----------|-----------|-------------------|-------|
 | Hybrid search | nanobrain | 40 | BM25 + vector + RRF |
-| Hybrid search | zengamingx | 73 | Larger corpus |
-| Hybrid search | phil | 34 | Smaller corpus |
+| Hybrid search | express-app | 73 | Larger corpus |
+| Hybrid search | rails | 34 | Smaller corpus |
 | Code intel (MCP call) | nano-brain | 29 | Graph, trace, impact |
 | **Overall average** | | **44** | |
 
@@ -264,7 +264,7 @@ nano-brain occupies the upper-left quadrant: code intelligence + hybrid search. 
 1. **Use nano-brain for code-heavy projects.** The code intelligence features are unmatched. If you work on a codebase larger than 50k lines, the impact analysis alone justifies adoption.
 2. **Don't rely on code intelligence for interface-heavy code yet.** The 0% callers accuracy and zero outgoing edges for interface dispatch functions means `memory_impact` and `memory_graph` (incoming) will miss critical relationships in Go code using interfaces, or any language with dynamic dispatch.
 3. **Combine with a conversation memory tool if needed.** nano-brain's session harvesting is good for context recall, but Mem0 or Zep are better if conversation history is your primary use case.
-4. **The phil workspace results suggest content quality matters.** P@5 of 0.45 on a smaller workspace indicates that sparse or poorly structured content degrades search. Curate your indexed content.
+4. **The rails workspace results suggest content quality matters.** P@5 of 0.45 on a smaller workspace indicates that sparse or poorly structured content degrades search. Curate your indexed content.
 
 ### 7.2 For nano-brain Development
 

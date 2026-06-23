@@ -2,8 +2,8 @@
   "tool": "mem0-vector-only",
   "config": "Qdrant in-memory, all-MiniLM-L6-v2, no LLM extraction (Mem0 requires LLM for full functionality)",
   "workspaces": {
-    "zengamingx": {
-      "workspace": "zengamingx",
+    "express-app": {
+      "workspace": "express-app",
       "queries_run": 20,
       "avg_p_at_5": 0.83,
       "avg_mrr": 0.963,
@@ -512,7 +512,7 @@
           "mrr": 0.25,
           "top_titles": [
             "nano-brain Search Quality: Week-by-Week Checklist & Tasks",
-            "Summary: Explore zengamingx workspace (@explore subagent)",
+            "Summary: Explore express-app workspace (@explore subagent)",
             "Summary: Phase 4: PageRank importance computation + boost (@Sisyphus-Junior subagent)"
           ]
         },

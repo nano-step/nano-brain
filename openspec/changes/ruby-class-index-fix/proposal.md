@@ -12,4 +12,4 @@ The Ruby class index resolves controller short names to wrong files. `TokensCont
 
 - **Code affected**: `internal/graph/ruby_class_index.go` — Lookup method fix
 - **Risk**: Low — only changes lookup priority, no schema or API changes
-- **Verification**: Phil-timeshel flows should show controller→service→model chains
+- **Verification**: rails-app flows should show controller→service→model chains

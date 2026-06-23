@@ -7,7 +7,7 @@
 ## Files Changed
 - `internal/graph/rails_extractor.go` (747 lines) — Rails route extraction via tree-sitter Ruby
 - `internal/graph/rails_extractor_test.go` (158 lines) — 7 unit tests
-- `internal/graph/testdata/rails/routes.rb` (31 lines) — fixture with real Phil-timeshel patterns
+- `internal/graph/testdata/rails/routes.rb` (31 lines) — fixture with real rails-app patterns
 - `internal/graph/detector.go` — detectRails via Gemfile check
 - `internal/graph/detector_test.go` — 3 Rails detection tests
 - `cmd/nano-brain/main.go` — register RailsExtractor

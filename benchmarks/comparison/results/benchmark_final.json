@@ -3,7 +3,7 @@
   "server": "3100",
   "note": "host server, same raw files as competitors",
   "workspaces": {
-    "zengamingx": {
+    "express-app": {
       "avg_p_at_5": 0.53,
       "avg_mrr": 0.7,
       "avg_latency_ms": 33,

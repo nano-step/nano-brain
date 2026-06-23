@@ -4,7 +4,7 @@
 
 This document captures EXPLAIN ANALYZE output for the eight search queries with `updated_after` set to a 30-day-ago timestamp, while the other three time params remain NULL. This verifies that the planner uses appropriate indexes and does NOT perform sequential scans on the documents or chunks tables.
 
-- **Workspace:** `d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7`
+- **Workspace:** `PLACEHOLDER_WORKSPACE_HASH_EXPRESS`
 - **Query variant:** `updated_after = 2026-05-04T13:19:20Z` (30 days ago), other 3 params = NULL
 - **Expected result:** Planner uses either chunks-side search_vector index as driver with documents JOIN as filter, OR uses `idx_documents_updated_at` as driver when selectivity warrants. NO sequential scans on either side.
 - **Performance gate:** PASS — no seq scans, efficient index usage

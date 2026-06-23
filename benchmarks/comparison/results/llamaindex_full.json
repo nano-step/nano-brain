@@ -2,7 +2,7 @@
   "tool": "llamaindex",
   "note": "full corpus, BAAI/bge-small-en-v1.5",
   "workspaces": {
-    "zengamingx": {
+    "express-app": {
       "avg_p_at_5": 0.61,
       "avg_mrr": 0.817,
       "avg_latency_ms": 40,

@@ -53,19 +53,19 @@ Clicked workspace button. Dropdown listbox shows all 19 workspaces with:
 
 Examples observed:
 - `alpha` `ws_alpha` · 6 docs
-- `capyhome` `37b36e28` · 8,812 docs
+- `next-app` `PLACEHOLDER_HASH` · 8,812 docs
 - `nano-brain` `7f443561` · 3,641 docs
-- `zengamingx` `d1915ee1` · 1,749 docs
+- `express-app` `PLACEHOLDER_HASH` · 1,749 docs
 
 Screenshot: `ui-test-dropdown-open.png`
 
 ## Test #4: Workspace selection updates URL ✅ PASS
 
-Clicked `capyhome` option. URL updated to `?workspace=37b36e2888c7...`. localStorage `nano-brain.workspace` updated.
+Clicked `next-app` option. URL updated to `?workspace=PLACEHOLDER_HASH...`. localStorage `nano-brain.workspace` updated.
 
 ## Test #5: Dashboard data loads after selection ⚠️ PARTIAL (UNRELATED BUG)
 
-After selecting capyhome + page reload, dashboard threw error: "Cannot convert undefined or null to object".
+After selecting next-app + page reload, dashboard threw error: "Cannot convert undefined or null to object".
 
 **Root cause** (out of scope for this PR): `/api/v1/stats?workspace=<hash>` endpoint has the SAME contract drift pattern — backend returns:
 ```json

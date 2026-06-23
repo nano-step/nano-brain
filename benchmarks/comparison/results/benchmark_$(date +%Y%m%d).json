@@ -1,7 +1,7 @@
 {
   "tool": "nanobrain",
   "search": {
-    "zengamingx": {
+    "express-app": {
       "avg_p_at_5": 0.53,
       "avg_mrr": 0.7,
       "avg_latency_ms": 62,

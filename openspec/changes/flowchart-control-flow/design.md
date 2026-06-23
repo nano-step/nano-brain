@@ -2,20 +2,20 @@
 
 ## Goal
 
-Derive a readable **flowchart of a handler's logic** (decisions, branches, outcomes) from the source AST, deterministically and without the LLM. **Phase 1: JS/TS HTTP handlers (zengamingx workspace), intra-procedural.** Go in Phase 2.
+Derive a readable **flowchart of a handler's logic** (decisions, branches, outcomes) from the source AST, deterministically and without the LLM. **Phase 1: JS/TS HTTP handlers (express-app workspace), intra-procedural.** Go in Phase 2.
 
 ## Deep-Design Conflict Resolution
 
 | Topic | Metis | Oracle | Resolution | Confidence |
 |-------|-------|--------|------------|------------|
-| Language choice | Go-first for dogfooding | JS/TS-first (users need it) | **JS/TS first** — zengamingx workspace is the main project that must be supported first | HIGH |
+| Language choice | Go-first for dogfooding | JS/TS-first (users need it) | **JS/TS first** — express-app workspace is the main project that must be supported first | HIGH |
 | Storage model | Enrich existing conditional pipeline | Separate table is correct | **Both** — Phase 1a enriches existing; Phase 1b adds dedicated CFG | MEDIUM |
 | API design | New endpoint OR enrich existing format | Keep format polymorphism | **New endpoint** `POST /api/v1/graph/flowchart` — avoids response-shape collision | HIGH |
 | MCP tool | New tool over modifying memory_flow | Same | **New tool `memory_flowchart`** — MCP contracts are stricter | HIGH |
 | Function keying | Key by symbol | Key by symbol | **Key by location** `file::startLine-endLine` — anonymous functions have no symbol | HIGH |
 | Condition labels | Accept raw predicates | Accept raw predicates | **Raw predicates** — no NLP/LLM in Phase 1 | HIGH |
 | Layout | Spine+gutter is insufficient | Spine+gutter is sufficient for Phase 1 | **Spine+gutter only** — fallback to Graph for complex cases | HIGH |
-| Dashboard | Separate repo, separate timeline | Same | **Phase 1b** — API + dashboard ship together for zengamingx | HIGH |
+| Dashboard | Separate repo, separate timeline | Same | **Phase 1b** — API + dashboard ship together for express-app | HIGH |
 
 ## 1. Two-Phase Delivery
 
@@ -37,7 +37,7 @@ Zero new infrastructure. Enriches the existing `conditional` boolean on graph ed
 
 ### Phase 1b: Dedicated CFG Extraction (2 weeks)
 
-Full control-flow graph extraction for JS/TS HTTP handlers (zengamingx workspace).
+Full control-flow graph extraction for JS/TS HTTP handlers (express-app workspace).
 
 **New components:**
 - `internal/graph/cflow.go` — CFG types + `ControlFlowExtractor` interface
@@ -207,14 +207,14 @@ Mermaid renderer labels conditional edges with their predicates.
 
 ```jsonc
 // Request
-{ "entry": "POST /zengamingx/api/game" }
+{ "entry": "POST /express-app/api/game" }
 
 // Response (CFG found)
 {
   "found": true,
-  "entry": "POST /zengamingx/api/game",
+  "entry": "POST /express-app/api/game",
   "method": "POST",
-  "path": "/zengamingx/api/game",
+  "path": "/express-app/api/game",
   "cfg": {
     "source_file": "routes/game.ts",
     "start_line": 15,
@@ -228,14 +228,14 @@ Mermaid renderer labels conditional edges with their predicates.
 // Response (no CFG)
 {
   "found": true,
-  "entry": "POST /zengamingx/api/game",
+  "entry": "POST /express-app/api/game",
   "cfg": null
 }
 
 // Response (CFG too complex)
 {
   "found": true,
-  "entry": "POST /zengamingx/api/game",
+  "entry": "POST /express-app/api/game",
   "cfg": null,
   "status": "too_complex"
 }
@@ -291,13 +291,13 @@ New `Flowchart.tsx` with spine+gutter layout (guard-clause handlers). Fallback t
 |-------|----------|-------|--------------|
 | **Phase 0** | 1 day | Validate gotreesitter `ChildByFieldName` on JS/TS grammar | Yes |
 | **Phase 1a** | 2-3 days | Enrich existing `conditional` → `ConditionLabel`; surface in JSON + mermaid | Yes |
-| **Phase 1b** | 2 weeks | JS/TS CFG extractor + `function_flowcharts` table + new endpoint + new MCP tool + dashboard | Yes (zengamingx) |
+| **Phase 1b** | 2 weeks | JS/TS CFG extractor + `function_flowcharts` table + new endpoint + new MCP tool + dashboard | Yes (express-app) |
 | **Phase 2** | Future | Go extractor, full layout, loops/try/catch, condition condenser | Yes (nano-brain) |
 
 ## 9. Decisions & Risks
 
 - **Static over LLM** — deterministic, exact, no token cost; the trade-off is no natural-language paraphrase of conditions (we show the raw predicate text). Accepted per product direction.
-- **JS/TS first for zengamingx** — zengamingx workspace is the main project that must be supported first. Go comes later in Phase 2.
+- **JS/TS first for express-app** — express-app workspace is the main project that must be supported first. Go comes later in Phase 2.
 - **Location-based keying** — anonymous functions have no symbol; `file::startLine-endLine` is universal.
 - **New endpoint over format polymorphism** — avoids response-shape collision; clean separation of concerns.
 - **New MCP tool over modifying memory_flow** — MCP contracts are stricter; breaking changes cascade to all clients.

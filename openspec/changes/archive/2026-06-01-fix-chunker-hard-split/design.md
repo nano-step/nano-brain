@@ -179,4 +179,4 @@ Pure additive post-process. Rollback = revert the PR. No data migration. Existin
 
 - `go test -race -short ./internal/chunk/...` PASS
 - `go test -race -short ./...` PASS
-- Real-world test: re-index capyhome workspace (contains long-line minified files) and grep server log for `chunk truncated before embedding` — should be zero after fix.
+- Real-world test: re-index next-app workspace (contains long-line minified files) and grep server log for `chunk truncated before embedding` — should be zero after fix.

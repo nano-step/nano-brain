@@ -1,6 +1,6 @@
 ## Context
 
-Benchmark reveals nano-brain loses to LlamaIndex on zengamingx (P@5=0.53 vs 0.55). Investigation found 3 root causes — all fixable without changing architecture.
+Benchmark reveals nano-brain loses to LlamaIndex on express-app (P@5=0.53 vs 0.55). Investigation found 3 root causes — all fixable without changing architecture.
 
 ## Decisions
 

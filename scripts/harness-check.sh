@@ -608,6 +608,15 @@ phase_pre_merge() {
 
     # 3.13 smoke:ui — REMOVED (UI migrated to standalone dashboard repo)
     add_check "SKIP" "3.13 smoke:ui deprecated (dashboard split complete)"
+
+    # 3.14 No real workspace names/paths/hashes in staged files (privacy gate)
+    privacy_patterns='Phil-timeshel\|capyhome\|zengamingx\|/Users/tamlh/workspaces/self/Projects/'
+    privacy_hits=$(git diff --cached --name-only 2>/dev/null | head -100 | xargs grep -l "$privacy_patterns" --include='*.go' --include='*.md' --include='*.json' --include='*.sh' --include='*.yml' 2>/dev/null || true)
+    if [[ -n "$privacy_hits" ]]; then
+        add_check "FAIL" "3.14 Real workspace names/paths found in staged files — use generic placeholders" "privacy"
+    else
+        add_check "PASS" "3.14 No real workspace names in staged files (privacy gate)"
+    fi
 }
 
 phase_post_merge() {

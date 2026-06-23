@@ -128,7 +128,7 @@
 ### Verification
 - [x] `go build ./...` passes
 - [x] `go test -race -short ./...` passes
-- [ ] Manual test: `POST /api/v1/graph/flowchart` with `{"entry": "POST /zengamingx/api/game"}` returns a CFG
+- [ ] Manual test: `POST /api/v1/graph/flowchart` with `{"entry": "POST /express-app/api/game"}` returns a CFG
 - [ ] Manual test: MCP `memory_flowchart` returns a CFG
 - [ ] Manual test: Dashboard Flow panel shows Flowchart toggle and renders CFG
 

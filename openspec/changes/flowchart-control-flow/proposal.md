@@ -8,7 +8,7 @@ The data to answer this exists in the source AST (every `if`/`switch`/`return`),
 
 A multi-agent deep-design pipeline (Metis + Oracle + cross-critique + Momus sanity) identified critical issues with the original proposal:
 
-1. **JS/TS-first for zengamingx** — zengamingx workspace is the main project that must be supported first. JS/TS CFG extraction ships before Go.
+1. **JS/TS-first for express-app** — express-app workspace is the main project that must be supported first. JS/TS CFG extraction ships before Go.
 2. **Anonymous functions can't be keyed by symbol** — Express handlers are often anonymous arrow functions. Keying by `(workspace_hash, source_node = file::symbol)` fails for these. **Solution: key by `file::startLine-endLine`.**
 3. **Readable condition labels aren't achievable statically** — The mock showed "valid game id?" but static extraction gives raw predicates like `!param || (param != 730 && param != 570 && …)`. **Solution: accept raw predicates as default; optional LLM pass for labels in Phase 2.**
 4. **Single-function scope produces trivial charts for clean code** — Well-architected controllers delegate to services. The real logic lives cross-function. **Solution: honest documentation — Phase 1 is thin-handler only; cross-function is Phase 3.**
@@ -29,7 +29,7 @@ A quick win that ships immediately useful enrichment with zero new infrastructur
 
 ### Phase 1b (2 weeks): JS/TS CFG Extraction + Dashboard
 
-Full control-flow graph extraction for JS/TS HTTP handlers (zengamingx workspace):
+Full control-flow graph extraction for JS/TS HTTP handlers (express-app workspace):
 
 - **New** `internal/graph/cflow.go` — CFG types + `ControlFlowExtractor` interface
 - **New** `internal/graph/js_cflow.go` — JS/TS CFG extractor (supports Express, Koa, Fastify handlers)

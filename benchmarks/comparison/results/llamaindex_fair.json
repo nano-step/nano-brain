@@ -2,7 +2,7 @@
   "tool": "llamaindex",
   "note": "same raw source files, BAAI/bge-small-en-v1.5",
   "workspaces": {
-    "zengamingx": {
+    "express-app": {
       "avg_p_at_5": 0.55,
       "avg_mrr": 0.727,
       "avg_latency_ms": 201,

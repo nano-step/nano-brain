@@ -13,5 +13,5 @@
 
 - [ ] 3.1 Rebuild binary, restart test server, reindex Phil workspace
 - [ ] 3.2 Verify controller files now have outgoing call edges via `memory_graph`
-- [ ] 3.3 Verify Phil-timeshel flows show 5+ nodes per controller action
+- [ ] 3.3 Verify rails-app flows show 5+ nodes per controller action
 - [ ] 3.4 Commit, push, create PR, run harness check, merge

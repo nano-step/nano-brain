@@ -44,7 +44,7 @@
 - [x] 6.3 go test -race -short ./... PASS
 - [x] 6.4 Rebuild web (npm run build)
 - [x] 6.5 Rebuild dev binary
-- [x] 6.6 curl /api/v1/graph/overview returns nodes + edges (231 nodes + 400 edges, code mode capyhome)
+- [x] 6.6 curl /api/v1/graph/overview returns nodes + edges (231 nodes + 400 edges, code mode next-app)
 - [x] 6.7 Browser devtools: /ui/graph auto-loads graph (no input) — verified 166-node code graph rendered
 - [x] 6.8 Switch Code/Knowledge tabs re-fetches — verified empty-state copy on knowledge mode
 - [x] 6.9 Type focus → switches to neighborhood (no behavior change to focused path)

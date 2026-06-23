@@ -60,4 +60,4 @@
 - [x] 8.1 `go build ./...` passes
 - [x] 8.2 `go test -race -short ./...` passes
 - [x] 8.3 `go vet ./...` passes
-- [x] 8.4 Verify: nano-brain detects ["echo","go"], zengamingx detects ["express"] (from tradeit-backend/package.json 1 level deep), capyhome detects [], flow POST /payouts found:true
+- [x] 8.4 Verify: nano-brain detects ["echo","go"], express-app detects ["express"] (from tradeit-backend/package.json 1 level deep), next-app detects [], flow POST /payouts found:true

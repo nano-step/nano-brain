@@ -2,8 +2,8 @@
   "tool": "llamaindex",
   "config": "in-memory SimpleVectorStore, default embeddings, chunk_size=512",
   "workspaces": {
-    "zengamingx": {
-      "workspace": "zengamingx",
+    "express-app": {
+      "workspace": "express-app",
       "queries_run": 20,
       "avg_p_at_5": 0.85,
       "avg_mrr": 0.96,
@@ -318,7 +318,7 @@
           "top_titles": [
             "Phase 1.5: Oracle cross-critique of Metis (@oracle subagent)",
             "TG1+TG2: Benchmark setup + tool integration scripts (@Sisyphus-Junior subagent)",
-            "Explore Phil-timeshel workspace (@explore subagent)"
+            "Explore rails-app workspace (@explore subagent)"
           ]
         },
         {
@@ -513,7 +513,7 @@
           "top_titles": [
             "nano-brain Search Quality: Week-by-Week Checklist & Tasks",
             "Summary: Phase 4: PageRank importance computation + boost (@Sisyphus-Junior subagent)",
-            "Summary: Explore zengamingx workspace (@explore subagent)"
+            "Summary: Explore express-app workspace (@explore subagent)"
           ]
         },
         {

@@ -4,7 +4,7 @@
 
 This document captures baseline EXPLAIN ANALYZE output for the four representative search queries used in the time-range filter feature (issue #360). These baseline plans are captured **before** any time-WHERE clauses are added (Task 3). The data demonstrates:
 
-1. **Workspace:** `d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7`
+1. **Workspace:** `PLACEHOLDER_WORKSPACE_HASH_EXPRESS`
 2. **Total chunks:** 576,413 (large fixture)
 3. **Indexes now present:** `idx_documents_created_at` and `idx_documents_updated_at` (created by migration 00015)
 4. **Query patterns:** 2 BM25 variants (with/without tags), 2 Vector variants (skipped — no embeddings in test DB)

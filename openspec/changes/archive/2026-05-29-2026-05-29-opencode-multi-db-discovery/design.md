@@ -46,7 +46,7 @@ OpenCode CLI moved from one global SQLite (or filesystem JSON) to **one SQLite p
 
 **What**: Treat sessions whose project has empty or root-path worktree as out-of-scope.
 
-**Why**: Empirical inspection of the user's `~/.ai-sandbox/opencode-dbs/` shows three DBs (`lgc-*`, `tools-*`, `zengamingx-*`) have `project.id='global', worktree='/', name='global'` containing 9, 174, and 1544 sessions respectively. These are OpenCode's "no project" sessions (started outside any git repo). They cannot match any registered nano-brain workspace by definition (no nano-brain user registers `/`) and harvesting them would either fail the workspace-hash lookup or produce a synthetic workspace with no useful path.
+**Why**: Empirical inspection of the user's `~/.ai-sandbox/opencode-dbs/` shows three DBs (`lgc-*`, `tools-*`, `express-app-*`) have `project.id='global', worktree='/', name='global'` containing 9, 174, and 1544 sessions respectively. These are OpenCode's "no project" sessions (started outside any git repo). They cannot match any registered nano-brain workspace by definition (no nano-brain user registers `/`) and harvesting them would either fail the workspace-hash lookup or produce a synthetic workspace with no useful path.
 
 **Alternative considered**: index them under a synthetic `global` workspace. Rejected because:
 1. The user's clarification answer leans on OpenCode's existing per-project scoping ("opencode chỉ thấy session của project đó thôi"), implying global sessions are intentionally not user-facing per-project.

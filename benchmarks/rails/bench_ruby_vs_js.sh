@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ruby vs JS Extraction Comparison Benchmark
 #
-# Compares Ruby extraction metrics (Phil-timeshel) vs JS/TS (zengamingx):
+# Compares Ruby extraction metrics (rails-app) vs JS/TS (express-app):
 #   - Extraction speed (time per file)
 #   - Edges per file
 #   - Flow traversal time
@@ -14,7 +14,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/helpers.sh"
 
-PHIL_WS="becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95"
+PHIL_WS="PLACEHOLDER_WORKSPACE_HASH_PHIL"
 
 if ! server_healthy; then
   echo "ERROR: Server not running on $SERVER_URL"
@@ -26,7 +26,7 @@ echo "==> Ruby vs JS Extraction Comparison"
 echo "    Server: $SERVER_URL"
 echo ""
 
-echo "==> Measuring Ruby extraction (Phil-timeshel)..."
+echo "==> Measuring Ruby extraction (rails-app)..."
 RUBY_ENDPOINTS=$(api_get "/api/v1/graph/flow/endpoints?workspace=$PHIL_WS" | python3 -c '
 import json,sys
 try:

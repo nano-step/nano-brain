@@ -4,7 +4,7 @@
 
 This document captures EXPLAIN ANALYZE output for the eight search queries after adding optional time-range WHERE clauses. All four time parameters are NULL, verifying that the query plans are identical to the pre-filter baseline.
 
-- **Workspace:** `d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7`
+- **Workspace:** `PLACEHOLDER_WORKSPACE_HASH_EXPRESS`
 - **Query variant:** All 4 time params = NULL (omit-all case)
 - **Expected result:** Plans MUST match baseline in scan/index node selection (identical cost structure)
 - **Regression gate:** PASS — all omit-all plans identical to baseline

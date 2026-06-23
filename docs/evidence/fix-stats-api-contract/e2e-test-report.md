@@ -7,7 +7,7 @@ Browser: Chrome DevTools (Chromium 148)
 ## Test #1: Stats API response shape ✅ PASS
 
 ```bash
-$ curl 'http://localhost:3199/api/v1/stats?workspace=37b36e...' | jq 'keys'
+$ curl 'http://localhost:3199/api/v1/stats?workspace=PLACEHOLDER_HASH...' | jq 'keys'
 [
   "chunks_by_embed_status",
   "chunks_total",
@@ -40,7 +40,7 @@ Sample populated values:
 
 ## Test #2: Dashboard renders without errors ✅ PASS
 
-Loaded http://localhost:3199/ui/dashboard?workspace=37b36e... in browser via Chrome DevTools.
+Loaded http://localhost:3199/ui/dashboard?workspace=PLACEHOLDER_HASH... in browser via Chrome DevTools.
 
 Dashboard renders correctly with all cards populated:
 - SERVER: vdev, up 0h 1m

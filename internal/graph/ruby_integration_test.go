@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultTestServerURL = "http://localhost:3199"
-	philWorkspaceHash    = "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95"
+	testRailWorkspaceHash    = "becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95"
 )
 
 func testServerURL() string {
@@ -30,7 +30,7 @@ func testWorkspace() string {
 	if v := os.Getenv("NANO_BRAIN_TEST_WORKSPACE"); v != "" {
 		return v
 	}
-	return philWorkspaceHash
+	return testRailWorkspaceHash
 }
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
@@ -133,7 +133,7 @@ func apiGet(t *testing.T, path string) apiResponse {
 }
 
 // TestRailRouteExtraction verifies that route extraction produces the expected
-// HTTP edges for the Phil-timeshel Rails project.
+// HTTP edges for the rails-app Rails project.
 func TestRailRouteExtraction(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -283,7 +283,7 @@ func TestRubyReconcileEdges(t *testing.T) {
 }
 
 // TestRubyClassIndex verifies that class→file mapping works for the
-// Phil-timeshel controllers and models.
+// rails-app controllers and models.
 func TestRubyClassIndex(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")

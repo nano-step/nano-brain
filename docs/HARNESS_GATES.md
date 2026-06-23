@@ -143,6 +143,7 @@ Run before creating or merging a PR. All checks must be green.
 | 3.8 | PR linked to GitHub issue | PR body contains `Closes #N` |
 | 3.9 | PR targets `b-main` (NOT master) | `gh pr view --json baseRefName` = `b-main` |
 | 3.10 | Self-review evidence exists for this story | `ls docs/evidence/self-review-*.md` for current story |
+| 3.11 | No real workspace names/paths/hashes in staged files | `grep -rn 'Phil-timeshel\|capyhome\|zengamingx\|/Users/tamlh/workspaces/self/Projects/' --include='*.go' --include='*.md' --include='*.json' --include='*.sh' --include='*.yml' .` = empty |
 
 ---
 

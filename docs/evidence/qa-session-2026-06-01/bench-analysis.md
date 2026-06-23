@@ -1,6 +1,6 @@
 # Benchmark Analysis — 2026-06-08
 
-**Workspace:** zengamingx (hash `d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7`)
+**Workspace:** express-app (hash `PLACEHOLDER_WORKSPACE_HASH_EXPRESS`)
 **Version under test:** dev (with fixed `deriveQuery`)
 **Tool:** `nano-brain bench` (internal/bench/*)
 

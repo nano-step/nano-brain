@@ -180,6 +180,29 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - **NEVER kill processes with broad `pkill -f`/`lsof | xargs kill` patterns.** They can take down Postgres (the Docker container `nanobrain-pg`) or Docker itself. Capture the exact PID when you launch a server (e.g. `echo $! > /tmp/nb-bench.pid`) and kill only that PID.
 - Postgres runs as a **Docker container** (`nanobrain-pg`, image `pgvector/pgvector:pg17`, volume `docker_nanobrain_pgdata`) via `docker compose`. Data survives container restarts; if 5432 is down, bring it back with `docker compose up -d postgres` — do not start a stray brew/native cluster on 5432.
 
+## ⛔ CRITICAL: Privacy — No Real Workspace Names (MANDATORY)
+
+**NEVER commit, push, or publish real workspace names, paths, or hashes.** These are private user data.
+
+**Forbidden in any committed file, PR body, issue body, or public output:**
+- Real workspace names (`Phil-timeshel`, `capyhome`, `zengamingx`, etc.)
+- Real workspace hashes (SHA-256 from the `workspaces` table)
+- Real filesystem paths (`/Users/tamlh/...`, `/home/user/...`, etc.)
+
+**Use generic placeholders instead:**
+| Real | Placeholder |
+|------|-------------|
+| Any private workspace name | `rails-app`, `next-app`, `express-app` |
+| Any workspace hash | `PLACEHOLDER_HASH` |
+| Any user home path | `/data/workspaces/<generic-name>` |
+
+**Before committing or creating a PR/issue**, grep for known private names:
+```bash
+grep -rn 'Phil-timeshel\|capyhome\|zengamingx\|/Users/tamlh/workspaces/self/Projects/' --include='*.go' --include='*.md' --include='*.json' --include='*.sh' --include='*.yml' .
+```
+
+**Exception:** `nano-brain` itself (`/Users/tamlh/workspaces/self/AI/Tools/nano-brain`) is the open-source project — its path is public.
+
 ## Git Worktree Rules (MANDATORY)
 
 **All worktrees MUST live inside the repo, under `.opencode/worktrees/`.**

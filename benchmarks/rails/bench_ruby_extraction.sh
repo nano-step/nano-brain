@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ruby Extraction Performance Benchmark
 #
-# Measures extraction quality and performance against the Phil-timeshel workspace:
+# Measures extraction quality and performance against the rails-app workspace:
 #   - Time to extract all Ruby edges (route + call graph + CFG)
 #   - Number of routes extracted vs expected
 #   - Number of cross-file calls resolved
@@ -16,7 +16,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/helpers.sh"
 
-PHIL_WS="becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95"
+PHIL_WS="PLACEHOLDER_WORKSPACE_HASH_PHIL"
 
 if ! server_healthy; then
   echo "ERROR: Server not running on $SERVER_URL"
@@ -41,7 +41,7 @@ except:
     print(0)
 ')
 
-# Expected routes from Phil-timeshel config/routes.rb (verified manually)
+# Expected routes from rails-app config/routes.rb (verified manually)
 EXPECTED_ROUTES=40
 echo "    Extracted routes: $TOTAL_ENDPOINTS (expected ~$EXPECTED_ROUTES)"
 echo ""

@@ -122,7 +122,7 @@ Feature-flag phases 2–4 (`?renderer=g6`) so old and new render side-by-side un
 - **Manual / e2e:** the existing tunnel + browser harness — load each panel,
   confirm parity vs the flagged-off renderer, exercise zoom/expand/filter.
 - **Perf:** measure render time + bundle size before/after on the largest
-  workspace (zengamingx) at depth 4.
+  workspace (express-app) at depth 4.
 
 ## 9. Risks & mitigations
 

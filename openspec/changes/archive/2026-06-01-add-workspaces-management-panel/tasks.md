@@ -30,7 +30,7 @@
 - [x] 5.1 `go build ./...` exit 0
 - [x] 5.2 `cd web && npm run build` succeeds (new bundle `index-B-B1eEoa.js`)
 - [x] 5.3 Rebuild dev binary
-- [x] 5.4 Browser DevTools E2E: navigated `/ui/workspaces`, all 19 workspaces shown, current pill on capyhome, Switch disabled on current
+- [x] 5.4 Browser DevTools E2E: navigated `/ui/workspaces`, all 19 workspaces shown, current pill on next-app, Switch disabled on current
 - [x] 5.5 E2E: clicked Remove on `e2e-test-project` (0 docs), modal opened with correct copy + disabled confirm, typed name, button enabled, clicked Remove → row disappeared, count 19→18
 - [x] 5.6 Per-row Switch button visible on all non-current rows (interactive switch verified via UI snapshot)
 - [x] 5.7 No console errors

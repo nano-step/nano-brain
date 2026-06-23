@@ -13,7 +13,7 @@ Comparing nano-brain against these solutions gives us:
 ## What Changes
 
 - Research and install 5+ agent memory comparison tools
-- Run standardized benchmarks against real workspaces (nano-brain, zengamingx, Phil-timeshel)
+- Run standardized benchmarks against real workspaces (nano-brain, express-app, rails-app)
 - Measure: search quality, recall accuracy, code intelligence, latency, throughput
 - Generate comparison report with competitive positioning
 - No changes to nano-brain code — this is a research/benchmark task

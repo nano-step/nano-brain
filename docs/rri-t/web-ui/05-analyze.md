@@ -102,7 +102,7 @@
 ### Finding 6: LOW — Hybrid Query Latency Near 500ms Limit
 - **TC:** TC-WUI-069
 - **Severity:** Low
-- **Detail:** Hybrid query took 0.464s for the `nano-brain` workspace (6386 docs). Target is < 0.5s. Larger workspaces (e.g., `capyhome` with 70K docs) may exceed the limit.
+- **Detail:** Hybrid query took 0.464s for the `nano-brain` workspace (6386 docs). Target is < 0.5s. Larger workspaces (e.g., `next-app` with 70K docs) may exceed the limit.
 - **Impact:** Search may feel slow on very large workspaces.
 - **Recommendation:** Monitor. Consider query optimization for workspaces > 10K docs.
 

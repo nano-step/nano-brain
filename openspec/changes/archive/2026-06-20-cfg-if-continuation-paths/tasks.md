@@ -16,4 +16,4 @@
 
 - [ ] 3.1 Build: `go build ./...`
 - [ ] 3.2 Test: `go test -race -short ./internal/graph/...`
-- [ ] 3.3 Manual test: dogfood on zengamingx `setUserEmail` — verify DB update, email check, commit all appear in CFG
+- [ ] 3.3 Manual test: dogfood on express-app `setUserEmail` — verify DB update, email check, commit all appear in CFG

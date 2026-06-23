@@ -7,7 +7,7 @@ The `JSIntegrationExtractor` in `internal/graph/js_integration_extractor.go` han
 
 Redis calls like `redis.get(key)` hit the HTTP method check (`get`) and get classified as HTTP calls — which is incorrect. `redis.set(key, val)` doesn't match any pattern and is silently dropped.
 
-The zengamingx codebase uses Redis extensively: cache reads/writes, distributed locks, session storage, pub/sub channels.
+The express-app codebase uses Redis extensively: cache reads/writes, distributed locks, session storage, pub/sub channels.
 
 ## Goals / Non-Goals
 

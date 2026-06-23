@@ -57,7 +57,7 @@ NANO_BRAIN_EMBEDDING_PROVIDER="" \
 
 ## Test Workspace
 
-- **Hash:** `d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7`
+- **Hash:** `PLACEHOLDER_WORKSPACE_HASH_EXPRESS`
 - **Source:** Task 1 baseline evidence (`issue-360-explain-baseline.md`)
 - **DB:** `nanobrain_dev` (shared with production 3100 daemon)
 - **Chunks:** 576,413 (large fixture, good for filtering)
@@ -75,7 +75,7 @@ NANO_BRAIN_EMBEDDING_PROVIDER="" \
 curl -sf -X POST http://localhost:3199/api/v1/query \
   -H "Content-Type: application/json" \
   -d '{
-    "workspace":"d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+    "workspace":"PLACEHOLDER_WORKSPACE_HASH_EXPRESS",
     "query":"time-range",
     "updated_after":"30d",
     "max_results":3
@@ -132,7 +132,7 @@ curl -sf -X POST http://localhost:3199/api/v1/query \
 curl -sf -X POST http://localhost:3199/api/v1/search \
   -H "Content-Type: application/json" \
   -d '{
-    "workspace":"d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+    "workspace":"PLACEHOLDER_WORKSPACE_HASH_EXPRESS",
     "query":"design",
     "created_after":"2026-05-01T00:00:00Z",
     "max_results":3
@@ -172,7 +172,7 @@ curl -sf -X POST http://localhost:3199/api/v1/search \
 curl -sf -X POST http://localhost:3199/api/v1/vsearch \
   -H "Content-Type: application/json" \
   -d '{
-    "workspace":"d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+    "workspace":"PLACEHOLDER_WORKSPACE_HASH_EXPRESS",
     "query":"memory system",
     "created_after":"2026-05-01T00:00:00Z",
     "created_before":"2026-06-05T00:00:00Z",
@@ -213,7 +213,7 @@ curl -sf -X POST http://localhost:3199/api/v1/vsearch \
 curl -i -X POST http://localhost:3199/api/v1/query \
   -H "Content-Type: application/json" \
   -d '{
-    "workspace":"d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+    "workspace":"PLACEHOLDER_WORKSPACE_HASH_EXPRESS",
     "query":"x",
     "updated_after":"banana",
     "max_results":1
@@ -248,7 +248,7 @@ Date: Wed, 03 Jun 2026 14:22:27 GMT
 curl -i -X POST http://localhost:3199/api/v1/query \
   -H "Content-Type: application/json" \
   -d '{
-    "workspace":"d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7",
+    "workspace":"PLACEHOLDER_WORKSPACE_HASH_EXPRESS",
     "query":"x",
     "updated_after":"-30d",
     "max_results":1
@@ -278,7 +278,7 @@ Content-Type: application/json
 **Command:**
 ```bash
 ./bin/nano-brain search "test" \
-  --workspace=d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7 \
+  --workspace=PLACEHOLDER_WORKSPACE_HASH_EXPRESS \
   --updated-after=30d
 ```
 
@@ -321,7 +321,7 @@ Content-Type: application/json
 **Command:**
 ```bash
 ./bin/nano-brain search "test" \
-  --workspace=d1915ee19311546a064576fc5df565da7ab20fe1c4a81c97e3ba6e9059d977b7 \
+  --workspace=PLACEHOLDER_WORKSPACE_HASH_EXPRESS \
   --updated-after=banana
 ```
 

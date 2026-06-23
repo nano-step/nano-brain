@@ -1,6 +1,6 @@
 ## Why
 
-The `JSIntegrationExtractor` does not detect Redis operations (`redis.get()`, `redis.set()`, `redis.del()`, `redis.setEx()`, `redis.publish()`, `redis.expire()`). These are heavily used throughout the zengamingx codebase (cache reads, trade locks, session storage, pub/sub) but never appear in flow diagrams or sequence diagrams.
+The `JSIntegrationExtractor` does not detect Redis operations (`redis.get()`, `redis.set()`, `redis.del()`, `redis.setEx()`, `redis.publish()`, `redis.expire()`). These are heavily used throughout the express-app codebase (cache reads, trade locks, session storage, pub/sub) but never appear in flow diagrams or sequence diagrams.
 
 Current detection only covers: HTTP calls (axios/fetch), queue publish (emit/send), queue consume (subscribe/on). Redis is the most critical missing integration — it's the cache layer, distributed lock mechanism, and pub/sub backbone.
 

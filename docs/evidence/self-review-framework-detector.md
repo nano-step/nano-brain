@@ -39,7 +39,7 @@
 ### Test Coverage
 - ✅ 13 unit tests: Echo, Gin, Express, devDependencies, malformed, empty, filtering
 - ✅ go test -race -short passes
-- ✅ Live verification: nano-brain=["echo","go"], zengamingx=["express"], capyhome=[]
+- ✅ Live verification: nano-brain=["echo","go"], express-app=["express"], next-app=[]
 
 ### Pre-existing Issues (not from this PR)
 - ⚠️ 3.3: express_integration_test.go middleware count assertion (pre-existing)

@@ -41,5 +41,5 @@ Note: `fullWalkAndExtract` in `reindex_cfg.go` already loads nested `.nano-brain
 - [ ] 6.1 Build: `go build ./...`
 - [ ] 6.2 Test: `go test -race -short ./internal/server/handlers/...`
 - [ ] 6.3 Test: `go test -race -short ./internal/watcher/...`
-- [ ] 6.4 Manual test: run full reindex on zengamingx, verify `docker-data` and other ignored dirs are skipped
+- [ ] 6.4 Manual test: run full reindex on express-app, verify `docker-data` and other ignored dirs are skipped
 - [ ] 6.5 Manual test: run incremental reindex, verify now-ignored files are skipped

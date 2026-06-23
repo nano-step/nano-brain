@@ -25,6 +25,6 @@
 
 - [x] 4.1 Write unit tests for deduplication logic (`dedup_test.go`)
 - [x] 4.2 Write unit tests for snippet generation (`snippet_test.go`) and ranking (`ranking_test.go`)
-- [ ] 4.3 Run integration tests with real zengamingx workspace
+- [ ] 4.3 Run integration tests with real express-app workspace
 - [ ] 4.4 Benchmark search performance (ensure P50 < 10ms)
 - [ ] 4.5 Build meaningful benchmark with file-path ground truth (not generic keywords)

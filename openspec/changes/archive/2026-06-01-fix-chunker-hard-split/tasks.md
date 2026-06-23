@@ -25,7 +25,7 @@
 - [x] 3.2 `go vet ./...` clean
 - [x] 3.3 `go test -race -short ./internal/chunk/...` — 13 new tests + all existing + fuzz seeds PASS
 - [x] 3.4 `go test -race -short ./...` — full suite PASS, no regression
-- [ ] 3.5 Live test on dev server: deferred to post-merge (would require re-indexing capyhome which takes hours and is not blocking)
+- [ ] 3.5 Live test on dev server: deferred to post-merge (would require re-indexing next-app which takes hours and is not blocking)
 
 ## 4. Evidence
 

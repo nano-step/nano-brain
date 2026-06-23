@@ -3,19 +3,19 @@
 **Date**: 2026-05-29
 **Branch**: feat/opencode-multi-db-discovery
 **Build**: CGO_ENABLED=0 go build -o /tmp/nano-brain-test ./cmd/nano-brain
-**Config**: harvester.opencode.db_root: /Users/tamlh/.ai-sandbox/opencode-dbs
+**Config**: harvester.opencode.db_root: /home/user/.ai-sandbox/opencode-dbs
 
 ## Discovery output (extracted from startup log)
 
 ```
 {"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/ai-sandbox-wrapper-a5c4bcc8/opencode.db","reason":"worktree_not_registered","worktree":"/Users/tamlh/workspaces/self/AI/Tools/ai-sandbox-wrapper","message":"scan skip"}
-{"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/capyhome-222fa770/opencode.db","reason":"worktree_not_registered","worktree":"/Users/tamlh/workspaces/self/Projects/SudoX/capyhome","message":"scan skip"}
+{"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/next-app-PLACEHOLDER/opencode.db","reason":"worktree_not_registered","worktree":"/data/workspaces/next-app","message":"scan skip"}
 {"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/lgc-0581d81e/opencode.db","reason":"global_or_empty_worktree","message":"scan skip"}
 {"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/open-design-mcp-c82de6f8/opencode.db","reason":"worktree_not_registered","worktree":"/Users/tamlh/workspaces/self/AI/Tools/open-design-mcp","message":"scan skip"}
 {"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/opencode-worktree-plugin-3cf9cddb/opencode.db","reason":"worktree_not_registered","worktree":"/Users/tamlh/workspaces/self/AI/Tools/opencode-worktree-plugin","message":"scan skip"}
 {"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/tools-0b9b7f3c/opencode.db","reason":"global_or_empty_worktree","message":"scan skip"}
-{"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/tradeit-admin-4be8d531/opencode.db","reason":"worktree_not_registered","worktree":"/Users/tamlh/workspaces/NUSTechnology/Projects/zengamingx/tradeit-admin","message":"scan skip"}
-{"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/zengamingx-47f14ed6/opencode.db","reason":"global_or_empty_worktree","message":"scan skip"}
+{"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/express-app-tradeit-admin-PLACEHOLDER/opencode.db","reason":"worktree_not_registered","worktree":"/data/workspaces/express-app/tradeit-admin","message":"scan skip"}
+{"level":"debug","path":"/Users/tamlh/.ai-sandbox/opencode-dbs/express-app-PLACEHOLDER/opencode.db","reason":"global_or_empty_worktree","message":"scan skip"}
 {"level":"info","db_path":"/Users/tamlh/.ai-sandbox/opencode-dbs/nano-brain-ab295520/opencode.db","worktree":"/Users/tamlh/workspaces/self/AI/Tools/nano-brain","workspace_hash":"7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f","message":"opencode per-project db harvester registered"}
 {"level":"info","component":"opencode-sqlite-harvester","count":299,"message":"found opencode sessions"}
 ```

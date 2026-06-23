@@ -1,6 +1,6 @@
 ## Why
 
-Flow visualization currently only supports Go frameworks (Echo, Gin, net/http). The zengamingx workspace—and many other TypeScript/JavaScript projects—use Express.js, NestJS, and Nuxt.js, which have no HTTP route extraction. Without route extraction, the Flow dashboard shows nothing for these projects, making the feature unusable for the majority of the user base.
+Flow visualization currently only supports Go frameworks (Echo, Gin, net/http). The express-app workspace—and many other TypeScript/JavaScript projects—use Express.js, NestJS, and Nuxt.js, which have no HTTP route extraction. Without route extraction, the Flow dashboard shows nothing for these projects, making the feature unusable for the majority of the user base.
 
 ## What Changes
 

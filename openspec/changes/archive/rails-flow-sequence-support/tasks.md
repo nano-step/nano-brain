@@ -66,7 +66,7 @@
 - [ ] 8.3 Add CFG extraction completeness benchmark (parse controller, verify node/edge count)
 - [ ] 8.4 Add flow builder end-to-end benchmark (entry → full flow)
 - [ ] 8.5 Add comparison benchmark: Ruby vs JS/TS extraction speed
-- [ ] 8.6 Run benchmarks against Phil-timeshel Rails project
+- [ ] 8.6 Run benchmarks against rails-app Rails project
 - [ ] 8.7 Document benchmark results in PR description
 
 ## 9. Documentation
@@ -78,7 +78,7 @@
 
 ## 10. Integration Testing
 
-- [ ] 10.1 Test with Phil-timeshel Rails project (routes.rb + controllers + models)
+- [ ] 10.1 Test with rails-app Rails project (routes.rb + controllers + models)
 - [ ] 10.2 Test with at least one additional Rails project
 - [ ] 10.3 Verify end-to-end flow: extract → build → render
 - [ ] 10.4 Run full test suite to ensure no regressions

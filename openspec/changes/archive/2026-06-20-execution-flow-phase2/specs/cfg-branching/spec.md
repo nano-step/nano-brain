@@ -104,4 +104,4 @@ The extractor SHALL continue to cap CFGs at 500 nodes. Branch edges increase edg
 1. `go test -race -short ./internal/graph/...` passes with branch-edge assertions
 2. All existing tests continue to pass (no regression)
 3. `go build ./...` and `go test -race -short ./...` pass
-4. Live verification: re-extract CFGs for zengamingx workspace, confirm branch edges appear in `memory_flowchart` response
+4. Live verification: re-extract CFGs for express-app workspace, confirm branch edges appear in `memory_flowchart` response

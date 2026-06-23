@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ruby Flow Quality Benchmark
 #
-# Measures the quality of Ruby flow extraction against the Phil-timeshel workspace:
+# Measures the quality of Ruby flow extraction against the rails-app workspace:
 #   - For 10 controller actions, requests flow via memory_flow MCP
 #   - Verifies: flow has 3+ nodes (not just entry→handler)
 #   - Verifies: flow includes at least one cross-file call
@@ -15,7 +15,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/helpers.sh"
 
-PHIL_WS="becf297d74539d99bb858bb91dd79b0611d2e47fd946e92149a1887af02b8d95"
+PHIL_WS="PLACEHOLDER_WORKSPACE_HASH_PHIL"
 
 if ! server_healthy; then
   echo "ERROR: Server not running on $SERVER_URL"
