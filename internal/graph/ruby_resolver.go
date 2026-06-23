@@ -9,10 +9,10 @@ import (
 )
 
 type RubyCrossFileResolver struct {
-	classIndex    *RubyClassIndex
-	lang          *gotreesitter.Language
-	logger        zerolog.Logger
-	useFallback   bool
+	classIndex  *RubyClassIndex
+	lang        *gotreesitter.Language
+	logger      zerolog.Logger
+	useFallback bool
 }
 
 func NewRubyCrossFileResolver(classIndex *RubyClassIndex, logger zerolog.Logger) *RubyCrossFileResolver {
@@ -206,6 +206,51 @@ func (r *RubyCrossFileResolver) BuildReconcileEdges(edges []Edge) []Edge {
 			result = append(result, Edge{
 				SourceNode: handler,
 				TargetNode: entry.FilePath + "::" + ctrlShort + "#" + action,
+				Kind:       EdgeReconcile,
+				SourceFile: e.SourceFile,
+				Line:       e.Line,
+				Language:   "ruby",
+			})
+		}
+	}
+
+	return result
+}
+
+// BuildAssociationReconcileEdges produces reconcile edges for DSL association
+// edges whose target is a bare class name (e.g. "Order"). The reconcile edge
+// bridges the bare name to the file-qualified node (e.g. "app/models/order.rb::Order")
+// so the flow builder BFS can reach the model definition.
+func (r *RubyCrossFileResolver) BuildAssociationReconcileEdges(edges []Edge) []Edge {
+	var result []Edge
+
+	for _, e := range edges {
+		if e.Kind != EdgeCalls {
+			continue
+		}
+		if e.Metadata == nil || e.Metadata["type"] != "association" {
+			continue
+		}
+
+		className := e.TargetNode
+		if className == "" || !isRubyClassName(className) {
+			continue
+		}
+
+		var entries []classEntry
+		if r.useFallback {
+			entries = r.classIndex.Lookup(className)
+		} else {
+			entries = r.classIndex.LookupStrict(className)
+		}
+		if len(entries) == 0 {
+			continue
+		}
+
+		for _, entry := range entries {
+			result = append(result, Edge{
+				SourceNode: className,
+				TargetNode: entry.FilePath + "::" + className,
 				Kind:       EdgeReconcile,
 				SourceFile: e.SourceFile,
 				Line:       e.Line,

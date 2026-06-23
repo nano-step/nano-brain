@@ -466,3 +466,105 @@ end`)
 		t.Error("expected resolved call to app/models/user.rb::find")
 	}
 }
+
+func TestBuildAssociationReconcileEdges(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "app/models/user.rb", TargetNode: "app/models/user.rb::User", Kind: graph.EdgeContains},
+		{SourceNode: "app/models/order.rb", TargetNode: "app/models/order.rb::Order", Kind: graph.EdgeContains},
+		{SourceNode: "app/models/user.rb::User#has_many", TargetNode: "Order", Kind: graph.EdgeCalls,
+			Metadata: map[string]any{"type": "association", "dsl": true, "association_type": "has_many"}},
+	}
+
+	resolver := newTestResolver(edges)
+	reconcileEdges := resolver.BuildAssociationReconcileEdges(edges)
+
+	if len(reconcileEdges) == 0 {
+		t.Fatal("expected at least 1 association reconcile edge")
+	}
+
+	found := false
+	for _, e := range reconcileEdges {
+		if e.Kind == graph.EdgeReconcile &&
+			e.SourceNode == "Order" &&
+			e.TargetNode == "app/models/order.rb::Order" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected reconcile edge from Order to app/models/order.rb::Order")
+		for _, e := range reconcileEdges {
+			t.Logf("  kind=%s %s -> %s", e.Kind, e.SourceNode, e.TargetNode)
+		}
+	}
+}
+
+func TestBuildAssociationReconcileEdges_namespaced(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "app/models/admin/user.rb", TargetNode: "app/models/admin/user.rb::Admin::User", Kind: graph.EdgeContains},
+		{SourceNode: "app/models/post.rb", TargetNode: "app/models/post.rb::Post", Kind: graph.EdgeContains},
+		{SourceNode: "app/models/admin/user.rb::Admin::User#has_many", TargetNode: "Post", Kind: graph.EdgeCalls,
+			Metadata: map[string]any{"type": "association", "dsl": true, "association_type": "has_many"}},
+	}
+
+	resolver := newTestResolver(edges)
+	reconcileEdges := resolver.BuildAssociationReconcileEdges(edges)
+
+	found := false
+	for _, e := range reconcileEdges {
+		if e.SourceNode == "Post" &&
+			e.TargetNode == "app/models/post.rb::Post" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected reconcile edge for Post")
+		for _, e := range reconcileEdges {
+			t.Logf("  %s -> %s", e.SourceNode, e.TargetNode)
+		}
+	}
+}
+
+func TestBuildAssociationReconcileEdges_fallback(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "app/models/user.rb::User#has_many", TargetNode: "NonexistentModel", Kind: graph.EdgeCalls,
+			Metadata: map[string]any{"type": "association", "dsl": true, "association_type": "has_many"}},
+	}
+
+	idx := graph.BuildClassIndex(edges)
+	logger := zerolog.Nop()
+	resolver := graph.NewRubyCrossFileResolver(idx, logger)
+	reconcileEdges := resolver.BuildAssociationReconcileEdges(edges)
+
+	if len(reconcileEdges) == 0 {
+		t.Fatal("expected reconcile edge via rails convention fallback")
+	}
+
+	found := false
+	for _, e := range reconcileEdges {
+		if e.SourceNode == "NonexistentModel" &&
+			e.TargetNode == "app/models/nonexistent_model.rb::NonexistentModel" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected reconcile edge via rails convention fallback")
+		for _, e := range reconcileEdges {
+			t.Logf("  %s -> %s", e.SourceNode, e.TargetNode)
+		}
+	}
+}
+
+func TestBuildAssociationReconcileEdges_skipsNonAssociation(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "app/models/user.rb", TargetNode: "app/models/user.rb::User", Kind: graph.EdgeContains},
+		{SourceNode: "app/models/user.rb::User#has_many", TargetNode: "Order", Kind: graph.EdgeCalls,
+			Metadata: map[string]any{"dsl": true}},
+	}
+
+	resolver := newTestResolver(edges)
+	reconcileEdges := resolver.BuildAssociationReconcileEdges(edges)
+
+	if len(reconcileEdges) != 0 {
+		t.Errorf("expected 0 reconcile edges for non-association calls edge, got %d", len(reconcileEdges))
+	}
+}
