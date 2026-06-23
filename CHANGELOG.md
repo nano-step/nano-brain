@@ -52,6 +52,7 @@ All notable changes to nano-brain are documented here.
 - Ruby class index namespace fix (controllers resolve to correct files)
 - Emit unresolved cross-file calls (controllers emit call edges)
 - Watcher runs resolver after ReextractEdgesForWorkspace
+- Rails association reconciliation now preserves association call edges, keeps association metadata through DB reloads, and bridges bare DSL targets like `Order` to file-qualified model nodes for downstream graph/flow traversal
 
 ### Internal
 - Extracted `TruncateSnippet` helper from `internal/server/handlers/search.go` to `internal/search/snippet.go` so HTTP and MCP layers share the same rune-aware truncation.
