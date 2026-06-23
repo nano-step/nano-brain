@@ -262,6 +262,15 @@ func (w *Watcher) TriggerRescanByName(collectionName, workspaceHash string) bool
 	defer w.mu.Unlock()
 	for path, col := range w.collections {
 		if col.name == collectionName && col.workspaceHash == workspaceHash {
+			if w.frameworkDetector != nil {
+				fws := w.frameworkDetector.Detect(col.dirPath)
+				if len(fws) > 0 {
+					w.logger.Debug().Strs("frameworks", fws).Str("dir", col.dirPath).Msg("framework re-detection during reindex")
+				}
+				updated := w.collections[col.dirPath]
+				updated.detectedFrameworks = fws
+				w.collections[col.dirPath] = updated
+			}
 			w.dirty[path] = true
 			return true
 		}
@@ -636,7 +645,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	// The refreshed list is stored on the collection and consumed per-file by
 	// ExtractEdgesForFrameworks; no global extractor state is mutated.
 	if w.frameworkDetector != nil {
-		if base := filepath.Base(filePath); base == "go.mod" || base == "package.json" {
+		if base := filepath.Base(filePath); base == "go.mod" || base == "package.json" || base == "Gemfile" {
 			fws := w.frameworkDetector.Detect(col.dirPath)
 			w.logger.Debug().Strs("frameworks", fws).Str("file", filePath).Msg("framework re-detection triggered by manifest change")
 			w.mu.Lock()
