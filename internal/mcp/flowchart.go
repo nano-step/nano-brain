@@ -53,7 +53,7 @@ func registerMemoryFlowchart(server *mcpsdk.Server, a *Adapter) {
 			if startLine == -1 && endLine == -1 {
 				// Ruby method format: file.rb::ClassName#method
 				// Look up by entry format
-				entry := file + "::" + strings.SplitN(node, "::", 2)[1]
+				entry := node
 				fc, err := a.queries.GetFunctionFlowchartByEntry(ctx, sqlc.GetFunctionFlowchartByEntryParams{
 					WorkspaceHash: ws,
 					Entry:         entry,

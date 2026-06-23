@@ -1,6 +1,7 @@
 package graph_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/nano-brain/nano-brain/internal/graph"
@@ -410,7 +411,7 @@ func TestRailsDSLEdgeExtractor_NonRubyFile(t *testing.T) {
 func TestRailsDSLEdgeExtractor_LineNumbers(t *testing.T) {
 	ex := newRailsDSLEdgeExtractor(t)
 	src := []byte(`class User < ApplicationRecord
-  has_many :orders
+   has_many :orders
 end
 `)
 	edges, err := ex.ExtractEdges("app/models/user.rb", src)
@@ -423,5 +424,40 @@ end
 	}
 	if edges[0].Line != 2 {
 		t.Errorf("expected Line=2, got %d", edges[0].Line)
+	}
+}
+
+func TestSingularize(t *testing.T) {
+	ex := newRailsDSLEdgeExtractor(t)
+	tests := []struct {
+		name       string
+		assocName  string
+		wantTarget string
+	}{
+		{"basic_plural", "users", "User"},
+		{"us_suffix", "status", "Status"},
+		{"is_suffix", "basis", "Basis"},
+		{"is_suffix_analysis", "analysis", "Analysis"},
+		{"ies_rule", "categories", "Category"},
+		{"ses_rule", "addresses", "Address"},
+		{"ses_rule_statuses", "statuses", "Status"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := []byte(fmt.Sprintf(`class TestModel < ApplicationRecord
+  has_many :%s
+end
+`, tt.assocName))
+			edges, err := ex.ExtractEdges("app/models/test_model.rb", src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(edges) != 1 {
+				t.Fatalf("expected 1 edge, got %d", len(edges))
+			}
+			if edges[0].TargetNode != tt.wantTarget {
+				t.Errorf("TargetNode = %q, want %q", edges[0].TargetNode, tt.wantTarget)
+			}
+		})
 	}
 }

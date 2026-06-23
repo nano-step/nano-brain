@@ -299,7 +299,7 @@ func singularize(word string) string {
 	if strings.HasSuffix(word, "ses") || strings.HasSuffix(word, "xes") || strings.HasSuffix(word, "zes") {
 		return strings.TrimSuffix(word, "es")
 	}
-	if strings.HasSuffix(word, "s") && !strings.HasSuffix(word, "ss") {
+	if strings.HasSuffix(word, "s") && !strings.HasSuffix(word, "ss") && !strings.HasSuffix(word, "us") && !strings.HasSuffix(word, "is") {
 		return strings.TrimSuffix(word, "s")
 	}
 	return word
@@ -310,7 +310,8 @@ func capitalize(word string) string {
 	if word == "" {
 		return word
 	}
-	return strings.ToUpper(word[:1]) + word[1:]
+	runes := []rune(word)
+	return strings.ToUpper(string(runes[0])) + string(runes[1:])
 }
 
 func (x *RailsDSLEdgeExtractor) extractCallback(bt *gotreesitter.BoundTree, call *gotreesitter.Node, className string, methodName string, relFile string, content []byte) []Edge {
