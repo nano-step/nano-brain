@@ -40,11 +40,12 @@ type reindexCFGResponse struct {
 	DurationMs    int64  `json:"duration_ms"`
 }
 
-var jsTSExts = map[string]bool{
+var cfgExts = map[string]bool{
 	".js":  true,
 	".jsx": true,
 	".ts":  true,
 	".tsx": true,
+	".rb":  true,
 }
 
 func ReindexCFG(queries ReindexCFGQuerier, graphReg *graph.Registry, logger zerolog.Logger) echo.HandlerFunc {
@@ -135,7 +136,7 @@ func incrementalExtract(ctx context.Context, workspace, codeRoot string, docs []
 			continue
 		}
 		ext := strings.ToLower(filepath.Ext(doc.SourcePath))
-		if !jsTSExts[ext] {
+		if !cfgExts[ext] {
 			continue
 		}
 		if filter != nil && filter.ShouldSkip(doc.SourcePath, false) {
@@ -205,7 +206,7 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 
 		if !d.IsDir() {
 			ext := strings.ToLower(filepath.Ext(path))
-			if jsTSExts[ext] {
+			if cfgExts[ext] {
 				filesProcessed++
 				reqLog.Debug().Str("file", path).Int("processed", filesProcessed).Msg("reindex-cfg: processing file")
 				if err := processFile(ctx, workspace, path, codeRoot, graphReg, queries); err != nil {
