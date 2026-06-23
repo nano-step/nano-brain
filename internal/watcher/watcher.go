@@ -19,7 +19,6 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
-	gitignore "github.com/sabhiram/go-gitignore"
 	"github.com/nano-brain/nano-brain/internal/chunker"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
@@ -28,6 +27,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/rs/zerolog"
+	gitignore "github.com/sabhiram/go-gitignore"
 	"github.com/sqlc-dev/pqtype"
 	"golang.org/x/time/rate"
 )
@@ -66,19 +66,19 @@ type fileState struct {
 }
 
 type Watcher struct {
-	db             *sql.DB
-	queries        WatcherQuerier
-	graphQuerier   GraphQuerier
-	logger         zerolog.Logger
-	debounceMs     int
-	pollInterval   int
-	maxFileSize    int64
-	chunkOverlap   int
+	db                *sql.DB
+	queries           WatcherQuerier
+	graphQuerier      GraphQuerier
+	logger            zerolog.Logger
+	debounceMs        int
+	pollInterval      int
+	maxFileSize       int64
+	chunkOverlap      int
 	symbolRegistry    *symbol.Registry
 	graphRegistry     *graph.Registry
 	frameworkDetector *graph.FrameworkDetector
 	embedQueue        *embed.Queue
-	dispatcher     *chunker.Dispatcher
+	dispatcher        *chunker.Dispatcher
 
 	fsw         *fsnotify.Watcher
 	mu          sync.Mutex
@@ -96,8 +96,8 @@ type Watcher struct {
 	summarizeNotify func()
 	flowNotify      func(string)
 
-	fileCache   map[string]fileState
-	fileCacheMu sync.RWMutex
+	fileCache    map[string]fileState
+	fileCacheMu  sync.RWMutex
 	hasNewEvents atomic.Bool
 }
 
@@ -1119,7 +1119,7 @@ func (w *Watcher) writeChunks(ctx context.Context, q WatcherQuerier, docID uuid.
 	// Step 1: Upsert ALL new chunks (ON CONFLICT handles both new inserts and updates)
 	ids := make([]uuid.UUID, 0, len(chunks))
 	newHashes := make(map[string]bool, len(chunks))
-	
+
 	for _, ch := range chunks {
 		id, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
 			DocumentID:        docID,
@@ -1196,20 +1196,26 @@ func (w *Watcher) resolveRubyCrossFileCalls(ctx context.Context, col watchedColl
 		return
 	}
 
-	var containsEdges, callsEdges, httpEdges []graph.Edge
+	var containsEdges, callsEdges, httpEdges, assocEdges, existingReconcileEdges []graph.Edge
 	for _, ge := range allEdges {
 		e := sqlcGraphEdgeToGraphEdge(ge)
 		switch e.Kind {
 		case graph.EdgeContains:
 			containsEdges = append(containsEdges, e)
 		case graph.EdgeCalls:
-			callsEdges = append(callsEdges, e)
+			if e.Metadata != nil && e.Metadata["type"] == "association" {
+				assocEdges = append(assocEdges, e)
+			} else {
+				callsEdges = append(callsEdges, e)
+			}
 		case graph.EdgeHTTP:
 			httpEdges = append(httpEdges, e)
+		case graph.EdgeReconcile:
+			existingReconcileEdges = append(existingReconcileEdges, e)
 		}
 	}
 
-	if len(callsEdges) == 0 && len(httpEdges) == 0 {
+	if len(callsEdges) == 0 && len(httpEdges) == 0 && len(assocEdges) == 0 && len(existingReconcileEdges) == 0 {
 		return
 	}
 
@@ -1226,8 +1232,10 @@ func (w *Watcher) resolveRubyCrossFileCalls(ctx context.Context, col watchedColl
 	}
 
 	reconcileEdges := resolver.BuildReconcileEdges(httpEdges)
+	assocReconcileEdges := resolver.BuildAssociationReconcileEdges(assocEdges)
+	reconcileEdges = append(reconcileEdges, assocReconcileEdges...)
 
-	if len(resolvedEdges) == 0 && len(reconcileEdges) == 0 {
+	if len(resolvedEdges) == 0 && len(reconcileEdges) == 0 && len(assocEdges) == 0 {
 		return
 	}
 
@@ -1246,6 +1254,21 @@ func (w *Watcher) resolveRubyCrossFileCalls(ctx context.Context, col watchedColl
 	}
 
 	tqTx := sqlc.New(tx)
+	for _, e := range assocEdges {
+		meta, _ := buildEdgeMetadata(e)
+		if err := tqTx.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+			WorkspaceHash: col.workspaceHash,
+			SourceNode:    e.SourceNode,
+			TargetNode:    e.TargetNode,
+			EdgeType:      string(e.Kind),
+			SourceFile:    e.SourceFile,
+			Metadata:      meta,
+		}); err != nil {
+			w.logger.Warn().Err(err).Str("edge", e.SourceNode+"->"+e.TargetNode).Msg("ruby resolver: upsert association edge failed")
+			return
+		}
+	}
+
 	for _, e := range resolvedEdges {
 		meta, _ := buildEdgeMetadata(e)
 		if err := tqTx.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
@@ -1332,6 +1355,7 @@ func sqlcGraphEdgeToGraphEdge(ge sqlc.GraphEdge) graph.Edge {
 			if l, ok := meta["language"].(string); ok {
 				e.Language = l
 			}
+			e.Metadata = meta
 		}
 	}
 	return e

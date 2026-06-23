@@ -353,6 +353,32 @@ func TestReconcileEdgeTraversal(t *testing.T) {
 	}
 }
 
+// TestNamespacedControllerReconciliation is a regression test for the Rails
+// namespaced-controller continuation bug. When an HTTP edge points to
+// "Api::V2::StoriesController#sync", the symbolPart of that name is
+// "StoriesController#sync" (the namespace prefix Api::V2:: is stripped by
+// LastIndex("::")). A reconcile edge connects this handler name to the full
+// source node, and calls edges from that source node have the same symbolPart.
+// In the BFS, sameFileIDs scoping against the routes-file parent then drops
+// the calls-edge source node because it lives in the controller file, not the
+// routes file — so downstream calls are never discovered.
+func TestNamespacedControllerReconciliation(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "POST /api/v2/stories/sync", TargetNode: "Api::V2::StoriesController#sync", Kind: graph.EdgeHTTP, SourceFile: "code-copy-timeshel-api/config/routes.rb"},
+		{SourceNode: "Api::V2::StoriesController#sync", TargetNode: "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync", Kind: graph.EdgeReconcile, SourceFile: "code-copy-timeshel-api/config/routes.rb"},
+		{SourceNode: "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync", TargetNode: "Story.sync_all", Kind: graph.EdgeCalls, SourceFile: "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb"},
+	}
+
+	f := flow.BuildFlow(edges, "POST /api/v2/stories/sync", 10, 10)
+
+	if _, ok := nodeByID(f.Nodes, "Story.sync_all"); !ok {
+		t.Error("expected downstream call Story.sync_all to be reached via reconcile + calls edges; namespaced controller reconciliation bug — sameFileIDs scoped calls edge source node out")
+	}
+	if !hasEdge(f.Edges, "Api::V2::StoriesController#sync", "Story.sync_all", "calls") {
+		t.Error("expected calls edge Api::V2::StoriesController#sync → Story.sync_all")
+	}
+}
+
 // TestReconcileEdgeDoesNotConsumeDepth verifies that reconcile edges do not
 // increment the depth counter, so they act as transparent rewires.
 func TestReconcileEdgeDoesNotConsumeDepth(t *testing.T) {

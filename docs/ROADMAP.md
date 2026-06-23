@@ -1,6 +1,6 @@
 # nano-brain Roadmap
 
-> Last updated: 2026-06-22
+> Last updated: 2026-06-23
 
 ---
 
@@ -27,6 +27,7 @@ Goal: agents know the project context, decision history, and can anticipate what
 | Ruby/Rails support | Rails routes, controller→service→model chains | ✅ |
 | Ruby cross-file resolution | Class→file index, resolver, reconcile edges | ✅ |
 | Ruby CFG extraction | `if`/`else`, loops, `begin`/`rescue`, method defs | ✅ |
+| Nuxt/Next frontend support | Framework-aware route extraction, API handlers, page/component graph traversal for modern frontend repos | ❌ Planned |
 
 ---
 
@@ -264,6 +265,10 @@ Phase 6 — Enhanced Code Intelligence (in progress)
   │   ├── Ruby class→file index with namespace preference
   │   ├── Cross-file resolver with reconcile edge builder
   │   └── Flows reach 20-34 nodes (entry → handler → func → calls chain)
+  ├── ❌ Nuxt/Next support
+  │   ├── Framework-aware route extraction for `pages/`, `app/`, `server/api`, and Nuxt file routing
+  │   ├── Frontend entry→component→data-fetch flow tracing
+  │   └── API handler + server action + middleware graph support
   └── ⚠️ Cross-language support — Python, Ruby via tree-sitter; TypeScript, Rust pending
 
 Phase 7 — Team & Multi-user (Planned)
@@ -331,6 +336,7 @@ Phase 10 — Deployment & Security (Planned)
 6. **Deployment target**: Self-hosted VPS vs cloud-managed (RDS, Cloud SQL) — which to prioritize?
 7. **Auth granularity**: Is workspace-scoped access enough, or do we need collection-level permissions?
 8. **TLS**: Should nano-brain handle TLS termination, or rely on reverse proxy (nginx, Caddy)?
+9. **Frontend scope**: For Next/Nuxt, should we prioritize route extraction first, or end-to-end page→component→API flow tracing?
 
 ### Resolved Questions
 

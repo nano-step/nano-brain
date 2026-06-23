@@ -104,6 +104,9 @@ end
 		if e.Line == 0 {
 			t.Errorf("expected non-zero Line for edge %+v", e)
 		}
+		if e.Metadata == nil || e.Metadata["type"] != "association" {
+			t.Errorf("expected metadata type='association' for edge %+v", e)
+		}
 	}
 
 	edgesByKey := map[string]graph.Edge{}

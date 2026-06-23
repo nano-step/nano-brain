@@ -122,6 +122,80 @@ func TestGraphFlow_KnownEntry_ReturnsMermaid(t *testing.T) {
 	}
 }
 
+func TestGraphFlow_RailsNamespacedController(t *testing.T) {
+	wsHash, q := setupFlowTest(t)
+	ctx := context.Background()
+
+	railsEdges := []struct {
+		source, target, etype string
+		sourceFile            string
+	}{
+		{
+			source: "POST /api/v2/stories/sync",
+			target: "Api::V2::StoriesController#sync",
+			etype:  "http",
+		},
+		{
+			source:     "Api::V2::StoriesController#sync",
+			target:     "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync",
+			etype:      "reconcile",
+			sourceFile: "code-copy-timeshel-api/config/routes.rb",
+		},
+		{
+			source:     "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync",
+			target:     "Story.sync!",
+			etype:      "calls",
+			sourceFile: "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb",
+		},
+	}
+	for _, e := range railsEdges {
+		if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+			WorkspaceHash: wsHash,
+			SourceNode:    e.source,
+			TargetNode:    e.target,
+			EdgeType:      e.etype,
+			SourceFile:    e.sourceFile,
+			Metadata:      []byte("{}"),
+		}); err != nil {
+			t.Fatalf("upsert edge %s->%s: %v", e.source, e.target, err)
+		}
+	}
+
+	flowCfg := config.FlowConfig{Enabled: true, MaxDepth: 5, MaxFanout: 10}
+	resp := callFlowHandler(t, q, flowCfg, wsHash, map[string]any{
+		"entry": "POST /api/v2/stories/sync",
+	})
+
+	if found, _ := resp["found"].(bool); !found {
+		t.Fatalf("expected found=true for Rails namespaced controller, got resp=%v", resp)
+	}
+	if resp["entry"] != "POST /api/v2/stories/sync" {
+		t.Errorf("entry = %v, want 'POST /api/v2/stories/sync'", resp["entry"])
+	}
+	chain, ok := resp["chain"].([]any)
+	if !ok || len(chain) == 0 {
+		t.Fatalf("expected non-empty chain, got %v", resp["chain"])
+	}
+	edges, ok := resp["edges"].([]any)
+	if !ok || len(edges) == 0 {
+		t.Fatalf("expected non-empty edges array, got %v", resp["edges"])
+	}
+	foundCalls := false
+	for _, raw := range edges {
+		edge, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if kind, _ := edge["kind"].(string); kind == "calls" {
+			foundCalls = true
+			break
+		}
+	}
+	if !foundCalls {
+		t.Fatal("expected at least one 'calls' edge in response — BuildFlow bySymbol lookup does not call symbolPart on bareName, so namespaced controller calls edges are missed")
+	}
+}
+
 func TestGraphFlow_UnknownEntry_NotFound(t *testing.T) {
 	wsHash, q := setupFlowTest(t)
 
