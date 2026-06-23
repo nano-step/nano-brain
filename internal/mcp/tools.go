@@ -1666,10 +1666,6 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
-			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
-			if err != nil {
-				return errResult(err.Error()), nil
-			}
 			direction := argString(args, "direction")
 			if direction == "" {
 				direction = "out"
@@ -1768,10 +1764,6 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
-			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
-			if err != nil {
-				return errResult(err.Error()), nil
-			}
 			maxDepth := argInt(args, "max_depth", 5, 10)
 			pathStyle := argString(args, "paths")
 
@@ -1862,10 +1854,6 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			node := argString(args, "node")
 			if node == "" {
 				return errResult("node is required"), nil
-			}
-			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
-			if err != nil {
-				return errResult(err.Error()), nil
 			}
 			edgeType := argString(args, "edge_type")
 			direction := argString(args, "direction")
