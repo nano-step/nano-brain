@@ -292,6 +292,8 @@ func resolveAssociationTarget(symbol string) string {
 }
 
 // singularize converts a plural noun to singular using common Rails inflection rules.
+// Covers ~80% of common Rails model names. Known unsupported patterns:
+// ves→f/fe (knives→knife), ches→ch (churches→church), shes→sh (dishes→dish).
 func singularize(word string) string {
 	if strings.HasSuffix(word, "ies") {
 		return strings.TrimSuffix(word, "ies") + "y"

@@ -411,7 +411,7 @@ func TestRailsDSLEdgeExtractor_NonRubyFile(t *testing.T) {
 func TestRailsDSLEdgeExtractor_LineNumbers(t *testing.T) {
 	ex := newRailsDSLEdgeExtractor(t)
 	src := []byte(`class User < ApplicationRecord
-   has_many :orders
+  has_many :orders
 end
 `)
 	edges, err := ex.ExtractEdges("app/models/user.rb", src)
