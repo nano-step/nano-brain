@@ -34,11 +34,12 @@ func NewRubyCrossFileResolverNoFallback(classIndex *RubyClassIndex, logger zerol
 }
 
 func (r *RubyCrossFileResolver) ResolveEdges(edges []Edge, fileContents map[string][]byte) []Edge {
-	var result []Edge
 	seen := map[string]bool{}
+	result := make([]Edge, 0, len(edges))
+	result = append(result, edges...)
 
 	for _, e := range edges {
-		result = append(result, e)
+		seen[e.SourceNode+"->"+e.TargetNode] = true
 	}
 
 	for filePath, content := range fileContents {
