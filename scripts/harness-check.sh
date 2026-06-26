@@ -441,19 +441,42 @@ phase_pre_merge() {
         add_check "SKIP" "3.4 golangci-lint not installed"
     fi
     
-    # 3.5 Review Gate verdict (R27: must contain literal 'Review Verdict: PASS')
-    review_files=$(find docs/evidence -name "review-*.md" 2>/dev/null || true)
-    if [[ -z "$review_files" ]]; then
-        add_check "SKIP" "3.5 Review gate evidence not yet created"
-    else
-        latest_review=$(echo "$review_files" | head -1)
-        if grep -qE '^Review Verdict: PASS' "$latest_review"; then
-            add_check "PASS" "3.5 Review Verdict: PASS in $latest_review (R27)"
-        elif grep -qE '^Review Verdict: FAIL' "$latest_review"; then
-            add_check "FAIL" "3.5 Review Verdict: FAIL in $latest_review — fix before merge" "R27"
+    # 3.5 Review Gate verdict (R27: literal 'Review Verdict: PASS') +
+    #     reviewer independence (R88: review MUST be done by a separate agent —
+    #     the implementing agent may NOT self-review/self-approve its own code).
+    rg_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    rg_sid=$(echo "$rg_branch" | sed 's|^[^/]*/||' | sed 's/-.*//g' 2>/dev/null || echo "")
+    # Only the review file for THIS story counts — a stale cross-story review must
+    # not satisfy the gate. The [[ -n rg_sid ]] guard is load-bearing: an empty
+    # sid would turn the glob into review-*.md and match every review.
+    # Match the sid as a whole segment (followed by '.md' or '-slug'), never a
+    # prefix: sid '49' must NOT match review-497.md.
+    story_review=""
+    if [[ -n "$rg_sid" ]]; then
+        story_review=$(find docs/evidence -type f \( -name "review-${rg_sid}.md" -o -name "review-${rg_sid}-*.md" \) 2>/dev/null | head -1)
+    fi
+    if [[ -n "$story_review" ]]; then
+        # Note: this checks that an independent reviewer is *declared*; it is an
+        # honesty guardrail, not a tamper-proof control. Identity-bound external
+        # review is enforced separately by the PR bot review (gate 3.6).
+        if grep -qE '^Review Verdict: FAIL' "$story_review"; then
+            add_check "FAIL" "3.5 Review Verdict: FAIL in $story_review — fix before merge" "R27"
+        elif ! grep -qE '^Review Verdict: PASS' "$story_review"; then
+            add_check "FAIL" "3.5 $story_review missing 'Review Verdict: PASS|FAIL' line" "R27"
         else
-            add_check "FAIL" "3.5 $latest_review missing 'Review Verdict: PASS|FAIL' line" "R27"
+            reviewer=$(grep -iE '^Reviewer:' "$story_review" | head -1 | sed 's/^[Rr]eviewer:[[:space:]]*//')
+            if [[ -z "$reviewer" ]]; then
+                add_check "FAIL" "3.5 $story_review has no 'Reviewer:' line (R88: name the independent review agent)" "R88"
+            elif echo "$reviewer" | grep -qiE '\b(self|author|implementer)\b'; then
+                add_check "FAIL" "3.5 $story_review reviewer '$reviewer' is the author — review must be a separate agent (R88)" "R88"
+            else
+                add_check "PASS" "3.5 Review Verdict: PASS by independent reviewer '$reviewer' (R27, R88)"
+            fi
         fi
+    elif find docs/evidence -name "review-*.md" -type f 2>/dev/null | grep -q .; then
+        add_check "FAIL" "3.5 No review-${rg_sid}*.md for this story (R88: independent review required)" "R88"
+    else
+        add_check "SKIP" "3.5 Review gate evidence not yet created"
     fi
     
     # 3.6 Gemini comment triage (R31) + override check (R7)
