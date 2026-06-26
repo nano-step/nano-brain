@@ -12,6 +12,7 @@ const rubyQuery = `
 (singleton_method name: (identifier) @name) @decl
 (class name: (constant) @name) @decl
 (module name: (constant) @name) @decl
+(assignment left: (constant) @name) @decl
 `
 
 type RubySymbolExtractor struct {
@@ -83,6 +84,8 @@ func rubyNodeKind(bt *gotreesitter.BoundTree, node *gotreesitter.Node) Kind {
 		return KindType
 	case "method":
 		return KindFunction
+	case "assignment":
+		return KindConst
 	}
 	return KindFunction
 }

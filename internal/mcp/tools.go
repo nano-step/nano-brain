@@ -290,20 +290,20 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_query",
 			Description: "Hybrid search (BM25 + vector + RRF + recency). Auto-detects temporal phrases. Use group_by='document' to deduplicate. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"query":            {"type": "string", "description": "Search query"},
-				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"max_results":      {"type": "number", "description": "Max results (default 10, max 100)"},
-				"cursor":           {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
-				"include_content":  {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
-				"chunk_type":       {"type": "string", "description": "Filter by chunk type: 'raw' or 'symbol'. Omit for all."},
-				"created_after":    {"type": "string", "description": "Filter to documents whose created_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"created_before":   {"type": "string", "description": "Filter to documents whose created_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"updated_after":    {"type": "string", "description": "Filter to documents whose updated_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"updated_before":   {"type": "string", "description": "Filter to documents whose updated_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"time_format":      {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
-				"fields":           {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
-				"group_by":         {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
-				"mode":             {"type": "string", "description": "Search mode: 'debugging' runs parallel code/session/config searches with source labels. Omit for standard hybrid search."},
+				"query":           {"type": "string", "description": "Search query"},
+				"workspace":       {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
+				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
+				"cursor":          {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
+				"include_content": {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
+				"chunk_type":      {"type": "string", "description": "Filter by chunk type: 'raw' or 'symbol'. Omit for all."},
+				"created_after":   {"type": "string", "description": "Filter to documents whose created_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"created_before":  {"type": "string", "description": "Filter to documents whose created_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"updated_after":   {"type": "string", "description": "Filter to documents whose updated_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"updated_before":  {"type": "string", "description": "Filter to documents whose updated_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"time_format":     {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
+				"fields":          {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
+				"group_by":        {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
+				"mode":            {"type": "string", "description": "Search mode: 'debugging' runs parallel code/session/config searches with source labels. Omit for standard hybrid search."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -434,7 +434,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 					Tags:       r.Tags,
 					Collection: r.Collection, SourcePath: r.SourcePath,
 					CreatedAt: createdAt, UpdatedAt: updatedAt,
-					HasMore:    len(r.Content) > mcpSnippetLen,
+					HasMore: len(r.Content) > mcpSnippetLen,
 				}
 				if includeContent {
 					item.Content = r.Content
@@ -480,21 +480,21 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_search",
 			Description: "BM25 text search. Auto-detects temporal phrases. Use group_by='document' to deduplicate. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"query":            {"type": "string", "description": "Search query"},
-				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"max_results":      {"type": "number", "description": "Max results (default 10, max 100)"},
-				"tags":             {"type": "array", "description": "Filter by tags", "items": map[string]any{"type": "string"}},
-				"cursor":           {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
-				"include_content":  {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
-				"chunk_type":       {"type": "string", "description": "Filter by chunk type: 'raw' or 'symbol'. Omit for all."},
-				"created_after":    {"type": "string", "description": "Filter to documents whose created_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"created_before":   {"type": "string", "description": "Filter to documents whose created_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"updated_after":    {"type": "string", "description": "Filter to documents whose updated_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"updated_before":   {"type": "string", "description": "Filter to documents whose updated_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"time_format":      {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
-				"fields":           {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
-				"group_by":         {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
-				"mode":             {"type": "string", "description": "Search mode: 'debugging' runs parallel code/session/config searches with source labels. Omit for standard BM25 search."},
+				"query":           {"type": "string", "description": "Search query"},
+				"workspace":       {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
+				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
+				"tags":            {"type": "array", "description": "Filter by tags", "items": map[string]any{"type": "string"}},
+				"cursor":          {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
+				"include_content": {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
+				"chunk_type":      {"type": "string", "description": "Filter by chunk type: 'raw' or 'symbol'. Omit for all."},
+				"created_after":   {"type": "string", "description": "Filter to documents whose created_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"created_before":  {"type": "string", "description": "Filter to documents whose created_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"updated_after":   {"type": "string", "description": "Filter to documents whose updated_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"updated_before":  {"type": "string", "description": "Filter to documents whose updated_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"time_format":     {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
+				"fields":          {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
+				"group_by":        {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
+				"mode":            {"type": "string", "description": "Search mode: 'debugging' runs parallel code/session/config searches with source labels. Omit for standard BM25 search."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -615,16 +615,16 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 						createdAt = r.CreatedAt
 						updatedAt = r.UpdatedAt
 					}
-				item := mcpSearchResultItem{
-					ID: r.ID, DocumentID: r.DocumentID,
-					WorkspaceHash: "", Title: r.Title,
-					Snippet:    search.ExtractRelevantSnippet(r.Content, query, mcpSnippetLen),
-					Score:      r.Score,
-					Tags:       r.Tags,
-					Collection: r.Collection, SourcePath: r.SourcePath,
-					CreatedAt: createdAt, UpdatedAt: updatedAt,
-					HasMore:    len(r.Content) > mcpSnippetLen,
-				}
+					item := mcpSearchResultItem{
+						ID: r.ID, DocumentID: r.DocumentID,
+						WorkspaceHash: "", Title: r.Title,
+						Snippet:    search.ExtractRelevantSnippet(r.Content, query, mcpSnippetLen),
+						Score:      r.Score,
+						Tags:       r.Tags,
+						Collection: r.Collection, SourcePath: r.SourcePath,
+						CreatedAt: createdAt, UpdatedAt: updatedAt,
+						HasMore: len(r.Content) > mcpSnippetLen,
+					}
 					if includeContent {
 						item.Content = r.Content
 					}
@@ -667,13 +667,13 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			}
 
 			type bm25Row struct {
-				ID, DocumentID             string
-				WorkspaceHash, Title       string
-				Content, SourcePath        string
-				Collection                 string
-				Tags                       []string
-				Score                      float64
-				CreatedAt, UpdatedAt       time.Time
+				ID, DocumentID       string
+				WorkspaceHash, Title string
+				Content, SourcePath  string
+				Collection           string
+				Tags                 []string
+				Score                float64
+				CreatedAt, UpdatedAt time.Time
 			}
 			var allRows []bm25Row
 
@@ -681,7 +681,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				if len(tags) > 0 {
 					rows, err := a.queries.BM25SearchAllWithTags(ctx, sqlc.BM25SearchAllWithTagsParams{
 						Query: query, Tags: tags, MaxResults: fetchLimit,
-						ChunkType: chunkTypeNull,
+						ChunkType:    chunkTypeNull,
 						CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 					})
 					if err != nil {
@@ -699,7 +699,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				} else {
 					rows, err := a.queries.BM25SearchAll(ctx, sqlc.BM25SearchAllParams{
 						Query: query, MaxResults: fetchLimit,
-						ChunkType: chunkTypeNull,
+						ChunkType:    chunkTypeNull,
 						CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 					})
 					if err != nil {
@@ -718,7 +718,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			} else if len(tags) > 0 {
 				rows, err := a.queries.BM25SearchWithTags(ctx, sqlc.BM25SearchWithTagsParams{
 					Query: query, WorkspaceHash: ws, Tags: tags, MaxResults: fetchLimit,
-					ChunkType: chunkTypeNull,
+					ChunkType:    chunkTypeNull,
 					CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
@@ -736,7 +736,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			} else {
 				rows, err := a.queries.BM25Search(ctx, sqlc.BM25SearchParams{
 					Query: query, WorkspaceHash: ws, MaxResults: fetchLimit,
-					ChunkType: chunkTypeNull,
+					ChunkType:    chunkTypeNull,
 					CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
@@ -783,7 +783,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 					Tags:       r.Tags,
 					Collection: r.Collection, SourcePath: r.SourcePath,
 					CreatedAt: createdAt, UpdatedAt: updatedAt,
-					HasMore:    len(r.Content) > mcpSnippetLen,
+					HasMore: len(r.Content) > mcpSnippetLen,
 				}
 				if includeContent {
 					item.Content = r.Content
@@ -829,19 +829,19 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_vsearch",
 			Description: "Vector similarity search using embeddings. Auto-detects temporal phrases. Use group_by='document' to deduplicate. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"query":            {"type": "string", "description": "Search query"},
-				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"max_results":      {"type": "number", "description": "Max results (default 10, max 100)"},
-				"cursor":           {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
-				"include_content":  {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
-				"chunk_type":       {"type": "string", "description": "Filter by chunk type: 'raw' or 'symbol'. Omit for all."},
-				"created_after":    {"type": "string", "description": "Filter to documents whose created_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"created_before":   {"type": "string", "description": "Filter to documents whose created_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"updated_after":    {"type": "string", "description": "Filter to documents whose updated_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"updated_before":   {"type": "string", "description": "Filter to documents whose updated_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
-				"time_format":      {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
-				"fields":           {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
-				"group_by":         {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
+				"query":           {"type": "string", "description": "Search query"},
+				"workspace":       {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
+				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
+				"cursor":          {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
+				"include_content": {"type": "boolean", "description": "Set to true to include full chunk content alongside the snippet. Defaults to false. Increases response size; prefer memory_get for fetching one full document."},
+				"chunk_type":      {"type": "string", "description": "Filter by chunk type: 'raw' or 'symbol'. Omit for all."},
+				"created_after":   {"type": "string", "description": "Filter to documents whose created_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"created_before":  {"type": "string", "description": "Filter to documents whose created_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"updated_after":   {"type": "string", "description": "Filter to documents whose updated_at is >= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"updated_before":  {"type": "string", "description": "Filter to documents whose updated_at is <= this value. Accepts RFC3339 timestamp or relative duration ('30d', '1w', '720h'). Negative or zero durations rejected."},
+				"time_format":     {"type": "string", "description": "Timestamp format: 'rfc3339' (default) or 'epoch' (unix seconds, saves tokens)"},
+				"fields":          {"type": "string", "description": "Comma-separated field list to return (e.g. 'id,title,snippet,source_path'). Default: all fields. 'id' is always included."},
+				"group_by":        {"type": "string", "description": "Group results: 'document' returns only best chunk per document. Default: no grouping."},
 			}, []string{"query", "workspace"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -939,13 +939,13 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 			}
 
 			type vsRow struct {
-				ID, DocumentID             string
-				WorkspaceHash, Title       string
-				Content, SourcePath        string
-				Collection                 string
-				Tags                       []string
-				Score                      float64
-				CreatedAt, UpdatedAt       time.Time
+				ID, DocumentID       string
+				WorkspaceHash, Title string
+				Content, SourcePath  string
+				Collection           string
+				Tags                 []string
+				Score                float64
+				CreatedAt, UpdatedAt time.Time
 			}
 			var allRows []vsRow
 
@@ -954,7 +954,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					MaxResults:     fetchLimit,
 					ChunkType:      chunkTypeNull,
-					CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
+					CreatedAfter:   ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
 					return errResult(fmt.Sprintf("vector search failed: %v", err)), nil
@@ -975,7 +975,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 					WorkspaceHash:  ws,
 					MaxResults:     fetchLimit,
 					ChunkType:      chunkTypeNull,
-					CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
+					CreatedAfter:   ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
 					return errResult(fmt.Sprintf("vector search failed: %v", err)), nil
@@ -990,92 +990,92 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 						Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 					})
 				}
-		}
-
-		// Stable secondary sort by id ASC on tied scores. Keeps cursor
-		// pagination deterministic without forcing PostgreSQL to satisfy
-		// a multi-column ORDER BY through the HNSW index (#358).
-		sort.SliceStable(allRows, func(i, j int) bool {
-			if allRows[i].Score != allRows[j].Score {
-				return allRows[i].Score > allRows[j].Score
 			}
-			return allRows[i].ID < allRows[j].ID
-		})
 
-		groupBy := argString(args, "group_by")
-		if groupBy == "" {
-			groupBy = "document"
-		}
-		if groupBy == "document" {
-			vsearchResults := make([]search.Result, len(allRows))
-			for i, r := range allRows {
-				vsearchResults[i] = search.Result{
-					ID: r.ID, DocumentID: r.DocumentID,
-					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
-					Content: r.Content, SourcePath: r.SourcePath,
-					Collection: r.Collection, Tags: r.Tags,
-					Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			// Stable secondary sort by id ASC on tied scores. Keeps cursor
+			// pagination deterministic without forcing PostgreSQL to satisfy
+			// a multi-column ORDER BY through the HNSW index (#358).
+			sort.SliceStable(allRows, func(i, j int) bool {
+				if allRows[i].Score != allRows[j].Score {
+					return allRows[i].Score > allRows[j].Score
+				}
+				return allRows[i].ID < allRows[j].ID
+			})
+
+			groupBy := argString(args, "group_by")
+			if groupBy == "" {
+				groupBy = "document"
+			}
+			if groupBy == "document" {
+				vsearchResults := make([]search.Result, len(allRows))
+				for i, r := range allRows {
+					vsearchResults[i] = search.Result{
+						ID: r.ID, DocumentID: r.DocumentID,
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+						Content: r.Content, SourcePath: r.SourcePath,
+						Collection: r.Collection, Tags: r.Tags,
+						Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					}
+				}
+				deduped := deduplicateByDocument(vsearchResults)
+				allRows = make([]vsRow, len(deduped))
+				for i, r := range deduped {
+					allRows[i] = vsRow{
+						ID: r.ID, DocumentID: r.DocumentID,
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+						Content: r.Content, SourcePath: r.SourcePath,
+						Collection: r.Collection, Tags: r.Tags,
+						Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					}
 				}
 			}
-			deduped := deduplicateByDocument(vsearchResults)
-			allRows = make([]vsRow, len(deduped))
-			for i, r := range deduped {
-				allRows[i] = vsRow{
-					ID: r.ID, DocumentID: r.DocumentID,
-					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
-					Content: r.Content, SourcePath: r.SourcePath,
-					Collection: r.Collection, Tags: r.Tags,
-					Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-				}
-			}
-		}
 
-		if groupBy == "document" {
-			vsearchResults := make([]search.Result, len(allRows))
-			for i, r := range allRows {
-				vsearchResults[i] = search.Result{
-					ID: r.ID, DocumentID: r.DocumentID,
-					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
-					Content: r.Content, SourcePath: r.SourcePath,
-					Collection: r.Collection, Tags: r.Tags,
-					Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			if groupBy == "document" {
+				vsearchResults := make([]search.Result, len(allRows))
+				for i, r := range allRows {
+					vsearchResults[i] = search.Result{
+						ID: r.ID, DocumentID: r.DocumentID,
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+						Content: r.Content, SourcePath: r.SourcePath,
+						Collection: r.Collection, Tags: r.Tags,
+						Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					}
+				}
+				deduped := deduplicateByDocument(vsearchResults)
+				allRows = make([]vsRow, len(deduped))
+				for i, r := range deduped {
+					allRows[i] = vsRow{
+						ID: r.ID, DocumentID: r.DocumentID,
+						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+						Content: r.Content, SourcePath: r.SourcePath,
+						Collection: r.Collection, Tags: r.Tags,
+						Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					}
 				}
 			}
-			deduped := deduplicateByDocument(vsearchResults)
-			allRows = make([]vsRow, len(deduped))
-			for i, r := range deduped {
-				allRows[i] = vsRow{
-					ID: r.ID, DocumentID: r.DocumentID,
-					WorkspaceHash: r.WorkspaceHash, Title: r.Title,
-					Content: r.Content, SourcePath: r.SourcePath,
-					Collection: r.Collection, Tags: r.Tags,
-					Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-				}
-			}
-		}
 
-		total := len(allRows)
+			total := len(allRows)
 			hasMore := total > offset+maxResults
 			pageEnd := offset + maxResults
 			if pageEnd > total {
 				pageEnd = total
 			}
-		pageStart := offset
-		if pageStart > total {
-			pageStart = total
-		}
-		page := allRows[pageStart:pageEnd]
-
-		items := make([]mcpSearchResultItem, len(page))
-		for i, r := range page {
-			var createdAt, updatedAt interface{}
-			if timeFormat == "epoch" {
-				createdAt = r.CreatedAt.Unix()
-				updatedAt = r.UpdatedAt.Unix()
-			} else {
-				createdAt = r.CreatedAt
-				updatedAt = r.UpdatedAt
+			pageStart := offset
+			if pageStart > total {
+				pageStart = total
 			}
+			page := allRows[pageStart:pageEnd]
+
+			items := make([]mcpSearchResultItem, len(page))
+			for i, r := range page {
+				var createdAt, updatedAt interface{}
+				if timeFormat == "epoch" {
+					createdAt = r.CreatedAt.Unix()
+					updatedAt = r.UpdatedAt.Unix()
+				} else {
+					createdAt = r.CreatedAt
+					updatedAt = r.UpdatedAt
+				}
 				item := mcpSearchResultItem{
 					ID: r.ID, DocumentID: r.DocumentID,
 					WorkspaceHash: "", Title: r.Title,
@@ -1084,7 +1084,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 					Tags:       r.Tags,
 					Collection: r.Collection, SourcePath: r.SourcePath,
 					CreatedAt: createdAt, UpdatedAt: updatedAt,
-					HasMore:    len(r.Content) > mcpSnippetLen,
+					HasMore: len(r.Content) > mcpSnippetLen,
 				}
 				if includeContent {
 					item.Content = r.Content
@@ -1195,14 +1195,14 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 					s = 1
 				}
 				e := endLine
-			if e < 1 || e > total {
-				e = total
-			}
-			if s > total || s > e {
-				content = ""
-			} else {
-				content = strings.Join(lines[s-1:e], "\n")
-			}
+				if e < 1 || e > total {
+					e = total
+				}
+				if s > total || s > e {
+					content = ""
+				} else {
+					content = strings.Join(lines[s-1:e], "\n")
+				}
 			}
 
 			supersedes := ""
@@ -1666,6 +1666,10 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
+			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
+			if err != nil {
+				return errResult(err.Error()), nil
+			}
 			direction := argString(args, "direction")
 			if direction == "" {
 				direction = "out"
@@ -1764,6 +1768,10 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
+			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
+			if err != nil {
+				return errResult(err.Error()), nil
+			}
 			maxDepth := argInt(args, "max_depth", 5, 10)
 			pathStyle := argString(args, "paths")
 
@@ -1788,11 +1796,21 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 				if cur.depth >= maxDepth {
 					continue
 				}
-				edges, err := a.queries.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
-					WorkspaceHash: ws,
-					SourceNode:    cur.node,
-					Column3:       "calls",
-				})
+				var edges []sqlc.GraphEdge
+				var err error
+				if strings.Contains(cur.node, "::") {
+					edges, err = a.queries.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
+						WorkspaceHash: ws,
+						SourceNode:    cur.node,
+						Column3:       "calls",
+					})
+				} else {
+					edges, err = a.queries.GetOutgoingEdgesBySymbol(ctx, sqlc.GetOutgoingEdgesBySymbolParams{
+						WorkspaceHash: ws,
+						SourceNode:    cur.node,
+						Column3:       "calls",
+					})
+				}
 				if err != nil {
 					return errResult(fmt.Sprintf("trace query failed: %v", err)), nil
 				}
@@ -1854,6 +1872,10 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			node := argString(args, "node")
 			if node == "" {
 				return errResult("node is required"), nil
+			}
+			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
+			if err != nil {
+				return errResult(err.Error()), nil
 			}
 			edgeType := argString(args, "edge_type")
 			direction := argString(args, "direction")
@@ -2072,10 +2094,10 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_flow",
 			Description: "Visualize the execution flow for an HTTP entry point (e.g. 'POST /api/v1/write'). Shows the middleware chain, handler, and downstream call chain as a node list and optional Mermaid diagram. Returns found:false when the entry is not indexed or flow indexing is disabled.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"entry":            {"type": "string", "description": "HTTP entry point to visualize, e.g. 'POST /api/v1/write'"},
-				"max_depth":        {"type": "number", "description": "Max call-chain depth 1-10 (default: config value)"},
-				"format":           {"type": "string", "description": "Output format: 'mermaid' (default), 'sequence' (sequence diagram), or 'json'"},
+				"workspace":         {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
+				"entry":             {"type": "string", "description": "HTTP entry point to visualize, e.g. 'POST /api/v1/write'"},
+				"max_depth":         {"type": "number", "description": "Max call-chain depth 1-10 (default: config value)"},
+				"format":            {"type": "string", "description": "Output format: 'mermaid' (default), 'sequence' (sequence diagram), or 'json'"},
 				"stitch_workspaces": {"type": "array", "description": "Target workspace hashes to stitch cross-service integration edges against", "items": map[string]any{"type": "string"}},
 			}, []string{"workspace", "entry"}),
 		},
@@ -2130,21 +2152,15 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				edges = append(edges, e)
 			}
 
-			// An entry is only "found" if an http edge actually originates from
-			// it. BuildFlow always emits the entry node itself, so node count
-			// cannot distinguish a real flow from an unknown entry.
-			hasEntry := false
-			for _, e := range edges {
-				if e.Kind == graph.EdgeHTTP && e.SourceNode == entry {
-					hasEntry = true
-					break
-				}
-			}
-			if !hasEntry {
+			// HTTP routes are the primary entries. If no HTTP edge matches, allow a
+			// Rails/Ruby class, job, worker, or service entry that has indexed graph
+			// edges. BuildFlow always emits the entry node itself, so node count cannot
+			// distinguish a real flow from an unknown entry.
+			if !mcpHasFlowEntry(edges, entry) {
 				return textResult(map[string]any{
 					"found":   false,
 					"entry":   entry,
-					"message": "entry not found among http edges",
+					"message": "entry not found among flow edges",
 				})
 			}
 
@@ -2229,6 +2245,37 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 			return textResult(result)
 		},
 	)
+}
+
+func mcpHasFlowEntry(edges []graph.Edge, entry string) bool {
+	for _, e := range edges {
+		if e.Kind == graph.EdgeHTTP && e.SourceNode == entry {
+			return true
+		}
+	}
+	if strings.Contains(entry, " ") {
+		return false
+	}
+	for _, e := range edges {
+		if e.SourceNode == entry || mcpFlowSymbolMatches(mcpFlowSymbolPart(e.SourceNode), entry) {
+			return true
+		}
+		if e.Kind == graph.EdgeContains && (e.TargetNode == entry || mcpFlowSymbolMatches(mcpFlowSymbolPart(e.TargetNode), entry)) {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpFlowSymbolPart(node string) string {
+	if idx := strings.LastIndex(node, "::"); idx >= 0 {
+		return node[idx+2:]
+	}
+	return node
+}
+
+func mcpFlowSymbolMatches(symbol, entry string) bool {
+	return symbol == entry || (!strings.Contains(entry, "#") && strings.HasPrefix(symbol, entry+"#"))
 }
 
 func loadCFGsForFlow(ctx context.Context, q flow.CFGQuerier, ws, format string, f flow.Flow) []flow.FlowCFGs {
