@@ -41,7 +41,9 @@ This writes `benchmarks/capability/baseline_v1.json`. Commit it. Subsequent runs
 
 ## Metrics
 
-- **recall** (per task) — `matched / (expect_symbols + expect_files)`. A value of 1.0 means every expected item was found somewhere in the tool responses.
+- **fixed recall** — score from the task's declared fixed tool calls. This remains the diagnostic layer for raw tool behavior.
+- **agent recall / recall** — score after deterministic agent-oriented retrieval augments fixed results with broad question search, input-query search, and symbol lookup from code identifiers. This is the primary score because nano-brain is designed for agents.
+- **recall** (per task) — `matched / (expect_symbols + expect_files)`. A value of 1.0 means every expected item was found somewhere in the retrieved context.
 - **by_category** — mean recall across all tasks in that category.
 - **overall** — mean recall across all tasks.
 
@@ -58,7 +60,7 @@ This writes `benchmarks/capability/baseline_v1.json`. Commit it. Subsequent runs
 
 ## Scoring rules
 
-For each task, all listed tools are called and their responses unioned into two sets:
+For each task, all listed fixed tools are called first and their responses unioned into two sets:
 
 - **Names** — symbol names, function names, chain/external names
 - **Paths** — source paths, file parts of node ids
@@ -67,6 +69,14 @@ An `expect_symbols` entry matches if it is a **case-insensitive substring** of a
 An `expect_files` entry matches if it is a **case-insensitive substring** of any path in the paths set.
 
 A failed tool call contributes no strings (the task just scores low). The harness never aborts the run on a per-tool error.
+
+When `dataset.agent.enabled` is true, the runner then performs a deterministic agent-oriented retrieval pass using only the task question and input, never the expected answers. The current shared workflow is:
+
+1. `query_question` — hybrid-search the natural-language question.
+2. `query_input` — hybrid-search the task's explicit query input, if present.
+3. `symbols_identifiers` — extract likely code identifiers from question/input and look them up with symbols.
+
+The final score is computed over the union of fixed and agent-retrieved context; fixed recall is still printed for diagnosis.
 
 ## Regression policy
 

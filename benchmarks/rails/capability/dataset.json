@@ -1,0 +1,308 @@
+{
+  "$comment": "Static capability benchmark for a Rails photo-print pipeline. Measures whether nano-brain can answer real developer/support questions about story sync, Dropbox uploads, print orders, billing, and status transitions. Ground-truth expects key symbols and files a correct answer MUST surface. Do NOT edit expectations to make a run pass; only edit when the correct answer genuinely changes.",
+  "workspace": "rails-app",
+  "version": 1,
+  "agent": {
+    "enabled": true,
+    "tools": ["query_question", "query_input", "symbols_identifiers"],
+    "max_symbol_queries": 8
+  },
+  "tasks": [
+    {
+      "id": "flow-story-sync",
+      "category": "flow",
+      "question": "What happens end-to-end when a client POSTs to /api/v2/stories/sync?",
+      "tools": [
+        "flow"
+      ],
+      "input": {
+        "entry": "POST /api/v2/stories/sync"
+      },
+      "expect_symbols": [
+        "StoriesController",
+        "sync",
+        "Story",
+        "Moment",
+        "create_print_orders"
+      ]
+    },
+    {
+      "id": "flow-dropbox-upload",
+      "category": "flow",
+      "question": "Trace the flow when a Dropbox folder update triggers new file uploads for a story.",
+      "tools": [
+        "flow"
+      ],
+      "input": {
+        "entry": "DropboxFolderUpdateJob"
+      },
+      "expect_symbols": [
+        "DropboxFolderUpdateJob",
+        "DropboxUploadManager",
+        "Story",
+        "Moment"
+      ]
+    },
+    {
+      "id": "flow-print-order-submit",
+      "category": "flow",
+      "question": "What is the request flow when a print order is submitted or confirmed for the first time?",
+      "tools": [
+        "flow"
+      ],
+      "input": {
+        "entry": "POST /api/v2/print_orders"
+      },
+      "expect_symbols": [
+        "PrintOrdersController",
+        "create",
+        "PrintOrder",
+        "OrderEventNotifierService",
+        "STATUS_CONFIRMED"
+      ]
+    },
+    {
+      "id": "support-why-not-printed",
+      "category": "support-root-cause",
+      "question": "A customer says their photo didn't print. Walk through what could go wrong between story creation and the printing worker picking up the job.",
+      "tools": [
+        "query",
+        "trace"
+      ],
+      "input": {
+        "query": "story print order billing worker printing worker photo not printed"
+      },
+      "expect_symbols": [
+        "StoryPrintPerformer",
+        "BillingWorker",
+        "PrintingWorker",
+        "PrintOrder",
+        "create_print_orders"
+      ],
+      "expect_files": [
+        "app/models/story.rb",
+        "app/workers/billing_worker.rb",
+        "app/workers/printing_worker.rb"
+      ]
+    },
+    {
+      "id": "support-story-stuck-paid",
+      "category": "support-root-cause",
+      "question": "Why is a print order stuck before confirmation or shipping?",
+      "tools": [
+        "query",
+        "symbols"
+      ],
+      "input": {
+        "query": "print order status confirmed shipped rejected printing worker PrintOrder state machine"
+      },
+      "expect_symbols": [
+        "PrintingWorker",
+        "PrintOrder",
+        "StoryPrintPerformer",
+        "STATUS_CONFIRMED",
+        "STATUS_SHIPPED"
+      ],
+      "expect_files": [
+        "app/workers/printing_worker.rb",
+        "app/models/print_order.rb"
+      ]
+    },
+    {
+      "id": "impact-story-create-print-orders",
+      "category": "impact",
+      "question": "What breaks if I change the Story#create_print_orders method?",
+      "tools": [
+        "impact"
+      ],
+      "input": {
+        "node": "Story#create_print_orders",
+        "max_depth": 3
+      },
+      "expect_files": [
+        "app/models/story.rb",
+        "app/workers/billing_worker.rb",
+        "engines/print_engine/app/services/print_engine/print_order_manager.rb"
+      ]
+    },
+    {
+      "id": "impact-dropbox-upload-manager",
+      "category": "impact",
+      "question": "Who depends on DropboxUploadManager and what would break if its interface changed?",
+      "tools": [
+        "impact"
+      ],
+      "input": {
+        "node": "DropboxUploadManager",
+        "max_depth": 3
+      },
+      "expect_files": [
+        "engines/print_engine/app/services/print_engine/dropbox_upload_manager.rb",
+        "engines/print_engine/app/services/print_engine/dropbox_service.rb",
+        "engines/print_engine/app/services/print_engine/file_extract_service.rb"
+      ]
+    },
+    {
+      "id": "trace-billing-worker",
+      "category": "trace",
+      "question": "What does BillingWorker call downstream when it processes a story?",
+      "tools": [
+        "trace"
+      ],
+      "input": {
+        "node": "BillingWorker#perform",
+        "max_depth": 4
+      },
+      "expect_symbols": [
+        "PrintOrder",
+        "StoryPrintPerformer",
+        "PrintingWorker"
+      ]
+    },
+    {
+      "id": "trace-story-print-performer",
+      "category": "trace",
+      "question": "Walk the call chain from StoryPrintPerformer through to the actual print job submission.",
+      "tools": [
+        "trace"
+      ],
+      "input": {
+        "node": "StoryPrintPerformer",
+        "max_depth": 5
+      },
+      "expect_symbols": [
+        "PrintingWorker",
+        "PrintJob",
+        "PrintOrderManager"
+      ]
+    },
+    {
+      "id": "symbol-print-order",
+      "category": "symbol-lookup",
+      "question": "Where is the PrintOrder model and its status constants defined?",
+      "tools": [
+        "symbols"
+      ],
+      "input": {
+        "query": "PrintOrder"
+      },
+      "expect_files": [
+        "app/models/print_order.rb",
+        "app/models/concerns/print_order_status.rb"
+      ]
+    },
+    {
+      "id": "symbol-order-event-notifier",
+      "category": "symbol-lookup",
+      "question": "Where is the order event notifier implemented and what status transitions does it handle?",
+      "tools": [
+        "symbols",
+        "query"
+      ],
+      "input": {
+        "query": "OrderEventNotifierService confirmed rejected shipped status"
+      },
+      "expect_files": [
+        "engines/print_engine/app/services/print_engine/order_event_notifier_service.rb"
+      ],
+      "expect_symbols": [
+        "OrderEventNotifierService",
+        "STATUS_SHIPPED",
+        "STATUS_REJECTED",
+        "STATUS_CONFIRMED"
+      ]
+    },
+    {
+      "id": "qa-status-transitions",
+      "category": "search-qa",
+      "question": "What are all the valid statuses for a print order, from sent through confirmation, shipping, or rejection?",
+      "tools": [
+        "query"
+      ],
+      "input": {
+        "query": "print order status sent confirmed shipped rejected error ready"
+      },
+      "expect_symbols": [
+        "STATUS_SENT",
+        "STATUS_CONFIRMED",
+        "STATUS_SHIPPED",
+        "STATUS_REJECTED",
+        "STATUS_ERROR"
+      ],
+      "expect_files": [
+        "app/models/print_order.rb"
+      ]
+    },
+    {
+      "id": "state-transition-order-lifecycle",
+      "category": "state-transition",
+      "question": "Map the print-order lifecycle: which worker, controller, or service triggers each status change, and in what order?",
+      "tools": [
+        "query",
+        "trace"
+      ],
+      "input": {
+        "query": "print order lifecycle controller worker billing printing confirmed shipped rejected status change"
+      },
+      "expect_symbols": [
+        "PrintOrdersController",
+        "BillingWorker",
+        "PrintingWorker",
+        "OrderEventNotifierService",
+        "STATUS_CONFIRMED",
+        "STATUS_SHIPPED"
+      ],
+      "expect_files": [
+        "app/controllers/api/v2/print_orders_controller.rb",
+        "app/workers/billing_worker.rb",
+        "app/workers/printing_worker.rb"
+      ]
+    },
+    {
+      "id": "multi-dropbox-impact-trace",
+      "category": "multi-tool",
+      "question": "Show the Dropbox folder update and upload-manager flow for internal print orders.",
+      "tools": [
+        "query",
+        "symbols"
+      ],
+      "input": {
+        "query": "DropboxFolderUpdateJob DropboxUploadManager InternalPrintOrder OrderEventNotifierService FileExtractService DropboxService",
+        "entry": "DropboxFolderUpdateJob",
+        "node": "DropboxUploadManager",
+        "max_depth": 4
+      },
+      "expect_symbols": [
+        "DropboxFolderUpdateJob",
+        "DropboxUploadManager",
+        "InternalPrintOrder",
+        "OrderEventNotifierService"
+      ],
+      "expect_files": [
+        "engines/print_engine/app/jobs/print_engine/dropbox_folder_update_job.rb",
+        "engines/print_engine/app/services/print_engine/dropbox_upload_manager.rb"
+      ]
+    },
+    {
+      "id": "multi-notify-blast-radius",
+      "category": "multi-tool",
+      "question": "Find OrderEventNotifierService, then show what would break if its call method signature changed.",
+      "tools": [
+        "symbols",
+        "query"
+      ],
+      "input": {
+        "query": "OrderEventNotifierService OrderEvent create confirmation status rejected accepted",
+        "node": "OrderEventNotifierService#call",
+        "max_depth": 3
+      },
+      "expect_files": [
+        "engines/print_engine/app/services/print_engine/order_event_notifier_service.rb"
+      ],
+      "expect_symbols": [
+        "OrderEventNotifierService",
+        "OrderEvent"
+      ]
+    }
+  ]
+}

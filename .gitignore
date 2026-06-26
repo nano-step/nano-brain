@@ -43,3 +43,7 @@ ai/test-case/
 .opencode/plugin/harness-loop/dist/
 .opencode/commands/
 nano-brain-test
+
+# Benchmark runtime outputs
+benchmarks/rails/capability/results_current.json
+benchmarks/rails/capability/baseline_v1.json

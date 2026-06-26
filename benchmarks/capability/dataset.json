@@ -2,6 +2,11 @@
   "$comment": "Static capability benchmark for nano-brain. Frozen developer questions about the nano-brain codebase itself, each with hand-curated ground-truth answers (key symbols/files a correct answer MUST surface). Measures how well nano-brain's tools — combined — help understand the real codebase. SUT: the live nano-brain server indexed on the nano-brain repo. Improve scores over time vs baseline_v1.json. Do NOT edit expectations to make a run pass; only edit when the correct answer genuinely changes.",
   "workspace": "nano-brain",
   "version": 1,
+  "agent": {
+    "enabled": true,
+    "tools": ["query_question", "query_input", "symbols_identifiers"],
+    "max_symbol_queries": 8
+  },
   "tasks": [
     {
       "id": "flow-query-execution",
