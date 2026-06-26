@@ -84,6 +84,10 @@ type Watcher struct {
 	mu          sync.Mutex
 	collections map[string]watchedCollection
 	dirty       map[string]bool
+	// watchedDirs tracks every directory currently registered with fsnotify.
+	// fsnotify is non-recursive, so each subdirectory must be added individually
+	// for edits inside it to fire events (issue #497). Guarded by mu.
+	watchedDirs map[string]bool
 	// hotRegisterCh signals Run() that a workspace was registered at runtime so
 	// the dirty map should be processed without waiting for fsnotify events.
 	// Buffered=1 so WatchWithFilter never blocks. See issue #308.
@@ -128,6 +132,7 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 		chunkOverlap:  cfg.Watcher.ChunkOverlap,
 		collections:   make(map[string]watchedCollection),
 		dirty:         make(map[string]bool),
+		watchedDirs:   make(map[string]bool),
 		hotRegisterCh: make(chan struct{}, 1),
 		fileCache:     make(map[string]fileState),
 	}
@@ -222,6 +227,7 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 		if err := w.fsw.Add(absPath); err != nil {
 			return fmt.Errorf("watch dir %s: %w", absPath, err)
 		}
+		w.watchedDirs[absPath] = true
 		// Mark dirty + nudge Run() so processDirty runs an immediate scan.
 		// Without this, fsnotify only fires on FUTURE changes — existing files in a
 		// freshly-registered workspace never get queued for embedding until server
@@ -248,9 +254,8 @@ func (w *Watcher) Unwatch(dirPath string) error {
 	delete(w.collections, absPath)
 	delete(w.dirty, absPath)
 
-	if w.fsw != nil {
-		_ = w.fsw.Remove(absPath)
-	}
+	// Remove the root watch plus every recursive subdirectory watch under it.
+	w.unwatchTreeLocked(absPath)
 	return nil
 }
 
@@ -292,6 +297,9 @@ func (w *Watcher) Run(ctx context.Context) error {
 
 	w.mu.Lock()
 	w.fsw = fsw
+	// fsw is brand new here; drop any stale watch bookkeeping from a prior run.
+	// Subdirectory watches are re-added by the initial scanCollection walk.
+	w.watchedDirs = make(map[string]bool)
 	for absPath, col := range w.collections {
 		if _, err := os.Stat(absPath); err != nil {
 			w.logger.Info().Str("dir", absPath).Str("collection", col.name).Msg("collection path not found, skipping watch")
@@ -301,6 +309,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 			w.logger.Warn().Err(err).Str("dir", absPath).Msg("failed to add watch")
 			continue
 		}
+		w.watchedDirs[absPath] = true
 		w.logger.Info().Str("dir", absPath).Str("collection", col.name).Msg("watching directory")
 	}
 	w.mu.Unlock()
@@ -369,11 +378,15 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 
 	w.hasNewEvents.Store(true)
 
-	dir := filepath.Dir(event.Name)
-
+	// Mark the owning collection (by path prefix) dirty, not just the exact
+	// parent dir. With recursive watches an event can come from any depth, so
+	// matching only collections[parentDir] would miss every subdirectory edit
+	// (issue #497). The dirty collection is re-walked on the next debounce tick.
 	w.mu.Lock()
-	if _, ok := w.collections[dir]; ok {
-		w.dirty[dir] = true
+	for root, col := range w.collections {
+		if event.Name == root || strings.HasPrefix(event.Name, col.dirPath+string(os.PathSeparator)) {
+			w.dirty[root] = true
+		}
 	}
 	w.mu.Unlock()
 
@@ -381,6 +394,9 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 		w.fileCacheMu.Lock()
 		delete(w.fileCache, event.Name)
 		w.fileCacheMu.Unlock()
+		w.mu.Lock()
+		w.unwatchTreeLocked(event.Name)
+		w.mu.Unlock()
 		w.cleanupDeletedDocument(event.Name)
 	}
 
@@ -423,6 +439,46 @@ func (w *Watcher) processAll(ctx context.Context) {
 
 	for _, col := range cols {
 		w.scanCollection(ctx, col)
+	}
+}
+
+// watchDir registers an fsnotify watch on dir unless it is already watched.
+// Idempotent and safe to call on every scan, which is how newly-created
+// subdirectories get picked up. fsnotify is non-recursive, so each directory
+// in the tree must be added individually (issue #497).
+//
+// ponytail: a watch costs one fd; excluded dirs (node_modules, .git, vendor…)
+// are SkipDir'd before this is ever called, so the fd count tracks source
+// dirs only. If Add fails (e.g. fd limit), we log and fall back to the
+// periodic poll for that subtree rather than aborting the scan.
+func (w *Watcher) watchDir(dir string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.fsw == nil || w.watchedDirs[dir] {
+		return
+	}
+	if err := w.fsw.Add(dir); err != nil {
+		w.logger.Warn().Err(err).Str("dir", dir).
+			Msg("failed to add recursive watch; edits here rely on periodic reindex")
+		return
+	}
+	w.watchedDirs[dir] = true
+}
+
+// unwatchTreeLocked removes the fsnotify watch for path and every watched
+// subdirectory beneath it, clearing them from watchedDirs. Deleting only the
+// exact path would strand nested entries, so a later recreate of a subtree
+// would be skipped by watchDir and never re-watched (#497 review). Caller must
+// hold w.mu.
+func (w *Watcher) unwatchTreeLocked(path string) {
+	prefix := path + string(os.PathSeparator)
+	for dir := range w.watchedDirs {
+		if dir == path || strings.HasPrefix(dir, prefix) {
+			if w.fsw != nil {
+				_ = w.fsw.Remove(dir)
+			}
+			delete(w.watchedDirs, dir)
+		}
 	}
 }
 
@@ -474,7 +530,9 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 			return nil
 		}
 
-		if !d.IsDir() {
+		if d.IsDir() {
+			w.watchDir(path)
+		} else {
 			w.processFile(ctx, col, path)
 		}
 		return nil
