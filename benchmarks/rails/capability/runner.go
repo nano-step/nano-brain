@@ -30,7 +30,7 @@ func DefaultConfig() Config {
 	}
 	workspace := os.Getenv("NANO_BRAIN_WORKSPACE")
 	if workspace == "" {
-		workspace = "nano-brain"
+		workspace = "rails-app"
 	}
 	return Config{
 		ServerURL: serverURL,
