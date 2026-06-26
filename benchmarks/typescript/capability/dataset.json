@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "workspace": "typescript-app",
+  "agent": {
+    "enabled": true,
+    "tools": ["query_question", "query_input", "symbols_identifiers"],
+    "max_symbol_queries": 8
+  },
+  "tasks": [
+    {
+      "id": "ts-cs2-pricing",
+      "category": "search-qa",
+      "question": "Find the CS2 item pricing model and pricing manager logic.",
+      "tools": ["query"],
+      "input": {
+        "query": "CS2 item price pricing manager price source exchange rate PriceModel"
+      },
+      "expect_symbols": ["PriceModel"],
+      "expect_files": ["PriceModel.ts", "instruction-pricing-manager.md"]
+    },
+    {
+      "id": "ts-inventory-read",
+      "category": "symbol-lookup",
+      "question": "Locate the inventory code that reads CS2 assets and user inventory.",
+      "tools": ["symbols", "query"],
+      "input": {
+        "query": "CS2 inventory getInv getUserInventory getCSGOAssetProperties InventoryOS",
+        "kind": "",
+        "max_results": 20
+      },
+      "expect_symbols": ["InventoryOS", "getInv", "getUserInventory", "getCSGOAssetProperties"],
+      "expect_files": ["InventoryOS.ts", "index.ts"]
+    },
+    {
+      "id": "ts-trade-status",
+      "category": "search-qa",
+      "question": "Find trade offer status handling and recheck/revert logic.",
+      "tools": ["query"],
+      "input": {
+        "query": "trade offer status lifecycle checkOffer recheckTradeStatus revert trade state"
+      },
+      "expect_symbols": ["TRADE_PROCESS_STATES", "checkOffer", "recheckTradeStatus", "checkRevertOffer"],
+      "expect_files": ["enums.js", "index.ts", "cron.js"]
+    },
+    {
+      "id": "ts-item-models",
+      "category": "search-qa",
+      "question": "Find TypeScript models/interfaces that describe tradable item/product data.",
+      "tools": ["query", "symbols"],
+      "input": {
+        "query": "ProductModel ItemInfo ItemsMetaItems TypeScript interface item model",
+        "kind": "",
+        "max_results": 20
+      },
+      "expect_symbols": ["ProductModel", "ItemInfo"],
+      "expect_files": ["ProductModel.ts", "ItemsMetaItems.ts"]
+    },
+    {
+      "id": "ts-steam-id",
+      "category": "search-qa",
+      "question": "Find SteamID and app context helpers used when matching trade items.",
+      "tools": ["query"],
+      "input": {
+        "query": "SteamID 64 bit partnerIdToSteamId64 steamOffset CONTEXT_IDS matchedSteamAssetIds"
+      },
+      "expect_symbols": ["CONTEXT_IDS", "partnerIdToSteamId64", "steamOffset", "matchedSteamAssetIds"],
+      "expect_files": ["helper.ts", "helpers.js"]
+    },
+    {
+      "id": "ts-trading-workflow",
+      "category": "search-qa",
+      "question": "Find CS2 trading workflow documentation and item schema/repository code.",
+      "tools": ["query"],
+      "input": {
+        "query": "CS2 trading workflow item schema item repository trade offer inventory parser"
+      },
+      "expect_files": ["csfloat-workflow.md", "itemSchemas.ts", "itemRepo.js"]
+    },
+    {
+      "id": "ts-price-to-inventory-multi-tool",
+      "category": "multi-tool",
+      "question": "Use search and symbols to connect pricing data models with inventory asset retrieval.",
+      "tools": ["query", "symbols"],
+      "input": {
+        "query": "PriceModel InventoryOS getCSGOAssetProperties item pricing inventory TypeScript",
+        "kind": "",
+        "max_results": 20
+      },
+      "expect_symbols": ["PriceModel", "InventoryOS", "getCSGOAssetProperties"],
+      "expect_files": ["PriceModel.ts", "InventoryOS.ts", "index.ts"]
+    },
+    {
+      "id": "ts-trade-state-multi-tool",
+      "category": "multi-tool",
+      "question": "Use search and symbols to connect trade state constants with trade recheck handlers.",
+      "tools": ["query", "symbols"],
+      "input": {
+        "query": "TRADE_PROCESS_STATES checkOffer recheckTradeStatus checkRevertOffer trade status",
+        "kind": "",
+        "max_results": 20
+      },
+      "expect_symbols": ["TRADE_PROCESS_STATES", "checkOffer", "recheckTradeStatus"],
+      "expect_files": ["enums.js", "index.ts"]
+    }
+  ]
+}
