@@ -741,3 +741,84 @@ func TestCleanupDeletedDocument_NoOpWhenNoMatchingCollection(t *testing.T) {
 		t.Errorf("expected 0 GetDocumentBySourcePath calls, got %d", mq.getDocBySourcePathCalls.Load())
 	}
 }
+
+// TestScanCollection_WatchesSubdirectories verifies that scanning a collection
+// registers an fsnotify watch on every (non-skipped) directory in the tree, not
+// just the root. fsnotify is non-recursive, so without per-dir watches edits in
+// subdirectories never fire events (issue #497).
+func TestScanCollection_WatchesSubdirectories(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "internal", "embed")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "x.md"), []byte("# x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+
+	fsw, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fsw.Close()
+	w.fsw = fsw
+
+	col := watchedCollection{name: "c", dirPath: root, workspaceHash: "ws", globPattern: "*.md"}
+	w.scanCollection(context.Background(), col)
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, want := range []string{root, filepath.Join(root, "internal"), sub} {
+		if !w.watchedDirs[want] {
+			t.Errorf("expected dir to be watched: %s (watchedDirs=%v)", want, w.watchedDirs)
+		}
+	}
+}
+
+// TestSubdirEdit_IndexedWithoutRootActivity is the end-to-end regression for
+// issue #497: a file created in a nested subdirectory must be indexed off its
+// own fsnotify event, with no activity at the workspace root.
+func TestSubdirEdit_IndexedWithoutRootActivity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping timing-sensitive test in short mode")
+	}
+
+	root := t.TempDir()
+	sub := filepath.Join(root, "nested", "deep")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 100, 3600)
+
+	if err := w.Watch("c", root, "ws", "*.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+
+	// Let the initial scan run and register the recursive subdir watch.
+	time.Sleep(300 * time.Millisecond)
+	baseline := mq.upsertDocCalls.Load()
+
+	// Write a new file ONLY in the deep subdir — no root-level activity.
+	if err := os.WriteFile(filepath.Join(sub, "new.md"), []byte("# new\nbody text"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(400 * time.Millisecond) // > debounce (100ms)
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	if got := mq.upsertDocCalls.Load(); got <= baseline {
+		t.Fatalf("expected subdir edit to be indexed (upsert calls > %d), got %d", baseline, got)
+	}
+}
