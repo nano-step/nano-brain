@@ -288,9 +288,9 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_query",
-			Description: "Hybrid search (BM25 + vector + RRF + recency). Auto-detects temporal phrases. Use group_by='document' to deduplicate. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
+			Description: "DEFAULT FIRST TOOL for broad agent questions: hybrid search (BM25 + vector + RRF + recency). Use for domain/codebase understanding, past decisions, and natural-language questions. For exact errors/identifiers use memory_search; for fuzzy concepts where wording may differ use memory_vsearch. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Use group_by='document' to deduplicate and paginate via cursor.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"query":           {"type": "string", "description": "Search query"},
+				"query":           {"type": "string", "description": "Natural-language task or domain question. Start here for broad codebase understanding before falling back to exact search or symbols."},
 				"workspace":       {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
 				"cursor":          {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
@@ -478,9 +478,9 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_search",
-			Description: "BM25 text search. Auto-detects temporal phrases. Use group_by='document' to deduplicate. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
+			Description: "Exact keyword/BM25 search for literal text: error messages, log lines, function/class names, file names, config keys, and known identifiers. Use memory_query first for broad questions; use memory_symbols for known code symbols. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Use group_by='document' to deduplicate and paginate via cursor.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"query":           {"type": "string", "description": "Search query"},
+				"query":           {"type": "string", "description": "Exact words to match, such as an error string, identifier, symbol name, file name, route, or config key."},
 				"workspace":       {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
 				"tags":            {"type": "array", "description": "Filter by tags", "items": map[string]any{"type": "string"}},
@@ -827,9 +827,9 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_vsearch",
-			Description: "Vector similarity search using embeddings. Auto-detects temporal phrases. Use group_by='document' to deduplicate. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Paginate via cursor. Optional params for token efficiency: fields (comma-separated field list), time_format (rfc3339|epoch, default rfc3339).",
+			Description: "Fuzzy semantic/vector search for concepts where exact words may differ. Use when memory_query or memory_search miss relevant context, or when asking for similar ideas/patterns. Not ideal for exact identifiers; use memory_search or memory_symbols instead. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Use group_by='document' to deduplicate and paginate via cursor.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"query":           {"type": "string", "description": "Search query"},
+				"query":           {"type": "string", "description": "Semantic concept or behavior to find when exact terms may not appear in the source text."},
 				"workspace":       {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
 				"cursor":          {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
@@ -1128,9 +1128,9 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_get",
-			Description: "Get a document by ID or path",
+			Description: "Fetch full content for one known document. Use after memory_query/memory_search/memory_vsearch when a result snippet is relevant and you need exact text or line slices. Do not use for broad discovery; search first, then get one selected hit.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"path":       {"type": "string", "description": "Document source_path, UUID (auto-detected), or #<uuid> for explicit ID lookup"},
+				"path":       {"type": "string", "description": "Document source_path, UUID (auto-detected), or #<uuid> from a search result for explicit ID lookup"},
 				"workspace":  {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"start_line": {"type": "number", "description": "Start line (1-indexed, inclusive)"},
 				"end_line":   {"type": "number", "description": "End line (1-indexed, inclusive)"},
@@ -1230,7 +1230,7 @@ func registerMemoryWrite(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_write",
-			Description: "Write or update a document in memory",
+			Description: "Persist a durable decision, lesson, summary, or handoff for future agents. Use at the end of work or after important discoveries; do not use for transient scratch notes. Writes are workspace-scoped and require a registered workspace.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"content":     {"type": "string", "description": "Document content"},
 				"workspace":   {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
@@ -1408,7 +1408,7 @@ func registerMemoryTags(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_tags",
-			Description: "List collections in a workspace",
+			Description: "List collections/tags in a workspace. Use to discover available memory categories before filtered searches, not for code navigation.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 			}, []string{"workspace"}),
@@ -1457,7 +1457,7 @@ func registerMemoryStatus(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_status",
-			Description: "Server and embedding queue status",
+			Description: "Server, database, and embedding queue health. Use when search results look stale/missing, after indexing a workspace, or before assuming nano-brain has no relevant context. Check queue_pending before relying on vector/hybrid results.",
 			InputSchema: toolSchema(map[string]map[string]any{}, nil),
 		},
 		func(ctx context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -1491,7 +1491,7 @@ func registerMemoryUpdate(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_update",
-			Description: "Trigger re-embedding of a workspace",
+			Description: "Trigger re-embedding/reindexing work for a registered workspace. Use only when indexed content appears stale after checking memory_status; normal file watching should handle routine updates.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 			}, []string{"workspace"}),
@@ -1517,7 +1517,7 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_wake_up",
-			Description: "Workspace briefing with recent activity and stats",
+			Description: "Session-start workspace briefing. Call first when entering a workspace to orient the agent with recent memories, active collections, stats, and last activity before deeper search.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
 				"limit":     {"type": "number", "description": "Number of recent memories (default 10, max 50)"},
@@ -1644,12 +1644,12 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_graph",
-			Description: "Query the knowledge graph: find imports, calls, and symbol containment relationships for a node. Node accepts workspace-relative or absolute paths (e.g. \"internal/x.go::F\" or \"/abs/path/internal/x.go::F\").",
+			Description: "One-hop code graph lookup. Use for direct callers/callees, imports, and containment around a known file or file::symbol. For broad blast radius before editing use memory_impact; for downstream chains use memory_trace. Node accepts workspace-relative or absolute paths (e.g. \"internal/x.go::F\" or \"/abs/path/internal/x.go::F\").",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"node":      {"type": "string", "description": "Source node (file path or file::symbol). Accepts workspace-relative or absolute."},
-				"direction": {"type": "string", "description": "Edge direction: out (default), in, both"},
-				"edge_type": {"type": "string", "description": "Filter by edge type: contains, imports, calls (empty = all)"},
+				"node":      {"type": "string", "description": "Known file path or file::symbol to inspect. Use memory_symbols first if you only know the symbol name."},
+				"direction": {"type": "string", "description": "Edge direction: out (what this node calls/imports/contains), in (direct callers/importers/containers), both"},
+				"edge_type": {"type": "string", "description": "Filter by edge type: contains, imports, calls (empty = all). Use calls for execution relationships."},
 				"paths":     {"type": "string", "description": "Output path style: \"absolute\" (default, current behavior) or \"relative\" (strip workspace prefix from edge source/target where present)"},
 			}, []string{"workspace", "node"}),
 		},
@@ -1747,10 +1747,10 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_trace",
-			Description: "Trace the call chain from an entry symbol — shows what a function calls, transitively, with cycle detection. Node accepts workspace-relative or absolute paths.",
+			Description: "Downstream call-chain trace from a known entry symbol. Use to answer 'what does this function eventually call?' with transitive calls and cycle detection. For one-hop neighbors use memory_graph; for affected callers before edits use memory_impact. Node accepts workspace-relative or absolute paths.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"node":      {"type": "string", "description": "Entry symbol (e.g. file::FunctionName). Accepts workspace-relative or absolute."},
+				"node":      {"type": "string", "description": "Known entry symbol (e.g. file::FunctionName) whose downstream calls should be followed. Use memory_symbols first if needed."},
 				"max_depth": {"type": "number", "description": "Max traversal depth 1-10 (default 5)"},
 				"paths":     {"type": "string", "description": "Output path style: \"absolute\" (default) or \"relative\""},
 			}, []string{"workspace", "node"}),
@@ -1850,11 +1850,11 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_impact",
-			Description: "Find what would be affected if a node (file or symbol) changes — reverse import/call lookup with optional depth traversal. Node accepts workspace-relative or absolute paths.",
+			Description: "Pre-change blast-radius analysis. Use before editing/refactoring a file or symbol to find affected callers/importers/dependents via reverse import/call traversal. For direct one-hop relationships use memory_graph; for downstream calls use memory_trace. Node accepts workspace-relative or absolute paths.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"node":      {"type": "string", "description": "The node to analyze (file path or file::symbol). Accepts workspace-relative or absolute."},
-				"direction": {"type": "string", "description": "Edge direction: \"in\" (default, what affects the node), \"out\" (what the node affects)"},
+				"node":      {"type": "string", "description": "File path or file::symbol you plan to change. Use paths='relative' to save tokens in large workspaces."},
+				"direction": {"type": "string", "description": "Edge direction: \"in\" (default, affected callers/importers/dependents), \"out\" (dependencies this node uses)"},
 				"edge_type": {"type": "string", "description": "Filter by edge type: imports, calls (empty = all)"},
 				"max_depth": {"type": "number", "description": "Traversal depth 1-3 (default 1)"},
 				"paths":     {"type": "string", "description": "Output path style: \"absolute\" (default) or \"relative\""},
@@ -1970,10 +1970,10 @@ func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_symbols",
-			Description: "Search code symbols (functions, types, methods, interfaces) extracted from indexed source files",
+			Description: "Code symbol lookup. Use when you know or suspect a function, method, class, interface, type, const, or variable name and need its source file/signature before graph/impact/trace. Prefer this over free-text search for exact code identifiers.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"query":     {"type": "string", "description": "Symbol name filter (partial match)"},
+				"query":     {"type": "string", "description": "Symbol name or partial identifier to locate, such as PriceModel, handleSubmit, UserService, or TRADE_PROCESS_STATES"},
 				"kind":      {"type": "string", "description": "Symbol kind: function, method, type, interface, struct, const, var"},
 				"limit":     {"type": "number", "description": "Max results (default 50)"},
 			}, []string{"workspace"}),
@@ -2092,10 +2092,10 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_flow",
-			Description: "Visualize the execution flow for an HTTP entry point (e.g. 'POST /api/v1/write'). Shows the middleware chain, handler, and downstream call chain as a node list and optional Mermaid diagram. Returns found:false when the entry is not indexed or flow indexing is disabled.",
+			Description: "HTTP/request execution-flow visualization. Use for route-level questions like 'what happens on POST /api/v1/write?' Shows middleware, handler, downstream calls, and optional Mermaid/sequence output. For non-HTTP symbol chains use memory_trace; for one function CFG use memory_flowchart. Returns found:false when the entry is not indexed or flow indexing is disabled.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace":         {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"entry":             {"type": "string", "description": "HTTP entry point to visualize, e.g. 'POST /api/v1/write'"},
+				"entry":             {"type": "string", "description": "HTTP route entry point to visualize, e.g. 'POST /api/v1/write'. Use method + path when possible."},
 				"max_depth":         {"type": "number", "description": "Max call-chain depth 1-10 (default: config value)"},
 				"format":            {"type": "string", "description": "Output format: 'mermaid' (default), 'sequence' (sequence diagram), or 'json'"},
 				"stitch_workspaces": {"type": "array", "description": "Target workspace hashes to stitch cross-service integration edges against", "items": map[string]any{"type": "string"}},

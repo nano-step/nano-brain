@@ -17,10 +17,10 @@ func registerMemoryFlowchart(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_flowchart",
-			Description: "Return the control-flow graph (flowchart) for a specific function, identified by 'file::startLine-endLine' (e.g. 'src/routes/purchase.ts::15-48') or 'file.rb::ClassName#method' (e.g. 'app/controllers/users_controller.rb::UsersController#create'). The CFG has decision/step/terminal nodes and labeled branch edges. Returns found:false when no flowchart is stored for that span or when flow indexing is disabled.",
+			Description: "Function-level control-flow graph (CFG). Use when you need branches/conditionals inside one function, not cross-function calls. Identify the function by 'file::startLine-endLine' (e.g. 'src/routes/purchase.ts::15-48') or 'file.rb::ClassName#method' (e.g. 'app/controllers/users_controller.rb::UsersController#create'). For HTTP route execution flow use memory_flow; for downstream calls use memory_trace. Returns found:false when no flowchart is stored for that span or when flow indexing is disabled.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
-				"node":      {"type": "string", "description": "Function span as 'file::startLine-endLine' or 'file.rb::ClassName#method'"},
+				"node":      {"type": "string", "description": "Single function span as 'file::startLine-endLine' or 'file.rb::ClassName#method'. Use memory_symbols first if you need to locate the function."},
 			}, []string{"workspace", "node"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -116,7 +116,7 @@ func parseFlowchartNode(node string) (file string, startLine, endLine int, err e
 		return "", 0, 0, errors.New("node must be 'file::startLine-endLine' or 'file.rb::ClassName#method'")
 	}
 	file = parts[0]
-	
+
 	// Check if this is a Ruby method format (contains #)
 	if strings.Contains(parts[1], "#") {
 		// Ruby format: file.rb::ClassName#method
@@ -124,7 +124,7 @@ func parseFlowchartNode(node string) (file string, startLine, endLine int, err e
 		// For now, return a special case that the caller handles
 		return file, -1, -1, nil
 	}
-	
+
 	// JS/TS format: file::startLine-endLine
 	lineRange := strings.SplitN(parts[1], "-", 2)
 	if len(lineRange) != 2 {

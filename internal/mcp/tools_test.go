@@ -8,8 +8,8 @@ import (
 	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
-	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/config"
+	internalmcp "github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/rs/zerolog"
 )
 
@@ -74,6 +74,48 @@ func TestRegisterTools_CountAndNames(t *testing.T) {
 	for i := range expected {
 		if got[i] != expected[i] {
 			t.Errorf("tool[%d] = %q, want %q", i, got[i], expected[i])
+		}
+	}
+}
+
+func TestRegisterTools_AgentToolSelectionGuidance(t *testing.T) {
+	session, ctx := setupTestClient(t)
+
+	result, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	tools := make(map[string]string, len(result.Tools))
+	for _, tool := range result.Tools {
+		tools[tool.Name] = tool.Description
+	}
+
+	checks := map[string][]string{
+		"memory_query":     {"DEFAULT FIRST TOOL", "broad agent questions"},
+		"memory_search":    {"Exact keyword/BM25", "error messages"},
+		"memory_vsearch":   {"Fuzzy semantic/vector", "exact words may differ"},
+		"memory_get":       {"after memory_query", "need exact text"},
+		"memory_write":     {"Persist a durable decision", "future agents"},
+		"memory_status":    {"search results look stale", "queue_pending"},
+		"memory_wake_up":   {"Session-start workspace briefing", "before deeper search"},
+		"memory_symbols":   {"Code symbol lookup", "function, method, class"},
+		"memory_graph":     {"One-hop code graph lookup", "direct callers/callees"},
+		"memory_impact":    {"Pre-change blast-radius analysis", "before editing"},
+		"memory_trace":     {"Downstream call-chain trace", "eventually call"},
+		"memory_flow":      {"HTTP/request execution-flow", "route-level questions"},
+		"memory_flowchart": {"Function-level control-flow graph", "branches/conditionals"},
+	}
+
+	for name, phrases := range checks {
+		desc, ok := tools[name]
+		if !ok {
+			t.Fatalf("tool %s not registered", name)
+		}
+		for _, phrase := range phrases {
+			if !strings.Contains(desc, phrase) {
+				t.Errorf("%s description missing guidance phrase %q; description=%q", name, phrase, desc)
+			}
 		}
 	}
 }
