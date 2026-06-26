@@ -253,6 +253,18 @@ git worktree move ../nano-brain-foo .opencode/worktrees/feat-NNN-short-name
 **Entry:** `cmd/nano-brain/` — CLI dispatcher + server startup. `internal/` — 17 packages.
 **Injection pattern:** config, logger, `*pgxpool.Pool` passed at construction; `sqlc.Queries` wraps the pool.
 
+### Agent-Oriented Design Principles
+
+nano-brain is **built for agents, not humans**. Every design decision optimizes for how agents actually work:
+
+1. **MCP is the primary interface.** Agents call tools, not REST APIs. Every capability is a tool call.
+2. **50ms latency target for code intelligence.** Agents skip tools that are slow. `memory_impact`, `memory_trace`, `memory_graph` must be sub-50ms.
+3. **Impact analysis is the #1 use case.** "What breaks if I change this?" — the most common agent query. Pre-computed blast radius via reverse BFS.
+4. **Call chains > control flow.** Agents trace execution across files (inter-procedural), not within functions (intra-procedural). Optimize `memory_trace` and `memory_graph` over `memory_flowchart`.
+5. **Component composition > internal logic.** For frontend frameworks, "who uses this component?" is more valuable than "what does the template do?"
+6. **Session continuity matters.** Agents work across sessions. `memory_write` at end of session, `memory_wake_up` + `memory_query` at start.
+7. **Structured results, not raw bytes.** Agents don't want 500-line file dumps. They want structured data: symbol names, line numbers, edge lists, blast radius counts.
+
 ### Cross-Cutting Conventions
 
 - **Errors:** `fmt.Errorf("<context>: %w", err)` — no custom error types, no bare `errors.New` in callers

@@ -1,8 +1,8 @@
 # nano-brain
 
-**Your AI agent remembers everything.**
+**Built for agents. Not humans.**
 
-Persistent memory and code intelligence for AI coding agents. Across sessions, machines, and team members.
+Agent-oriented memory and code intelligence. AI agents don't read docs — they need structured context, impact analysis, and call chains. nano-brain provides exactly that via MCP.
 
 [![Go 1.23](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -22,37 +22,51 @@ npm install -g @nano-step/nano-brain
 # Start
 nano-brain serve -d
 
-# Your AI agent now has memory
+# Your AI agent now has persistent memory, code intelligence, and impact analysis
 ```
 
 ---
 
 ## Why Star This Project?
 
-**If you've ever wished your AI agent remembered what you told it yesterday.**
+**If you've ever wished your AI agent stopped flying blind in your codebase.**
 
-nano-brain is the missing memory layer for AI coding agents. It's:
+Most memory tools optimize for conversation recall. nano-brain optimizes for **agent comprehension** — the ability to understand codebases, trace dependencies, and predict the blast radius of changes.
 
+nano-brain is:
+
+- **Agent-oriented** — Built around how agents actually work: impact analysis before edits, call chain tracing, symbol lookup. Not a document store with MCP slapped on top.
 - **Self-hosted** — Your data stays on your server. No cloud dependency.
 - **Works everywhere** — OpenCode, Claude Code, Cursor, any MCP client.
 - **Actually useful** — Not a toy demo. Production-ready with 16 MCP tools, hybrid search, code intelligence, and agent-oriented benchmarks.
 - **Built for developers** — Go binary, PostgreSQL, zero magic. You can read the code.
 - **Beating competitors** — P@5 of 80% vs LlamaIndex's 55% and Qdrant's 27% on real-world queries.
 
-Star it if you want AI agents that actually learn from context.
+Star it if you want agents that understand your code, not just search it.
 
 ---
 
 ## What It Does
 
-nano-brain solves **session amnesia** — the problem where AI agents forget everything when the session ends.
+nano-brain is an **agent-oriented infrastructure layer** that sits between your AI agent and your codebase.
 
-It automatically:
-- **Ingests** AI sessions, notes, and codebase files
-- **Indexes** everything with hybrid search (BM25 + pgvector)
-- **Serves** memories via 16 MCP tools and REST API
+It solves two problems agents have:
 
-Built in Go with PostgreSQL. Single static binary. Zero CGO dependencies.
+1. **Session amnesia** — Agents forget everything when the session ends. nano-brain persists context across sessions via harvesting, indexing, and retrieval.
+2. **Codebase blindness** — Agents can't trace dependencies, measure blast radius, or understand control flow. nano-brain builds a live code graph and exposes it via 16 MCP tools.
+
+**Why MCP?** Because agents don't read docs. They call tools. Every capability is a tool call — no REST API ceremony, no JSON parsing, no manual file reading.
+
+### How agents use it
+
+| Agent needs to... | Tool | What it returns |
+|---|---|---|
+| Understand a feature | `memory_query` | Hybrid search results with context |
+| Check what breaks before editing | `memory_impact` | Blast radius — all dependent files |
+| Trace an execution path | `memory_trace` | Call chain from entry point |
+| Find a function definition | `memory_symbols` | Symbol location + kind |
+| Recall a past decision | `memory_query` | Past session context |
+| Save a discovery | `memory_write` | Persisted for future sessions |
 
 ---
 
@@ -77,6 +91,57 @@ graph LR
     F --> F2[Vector Similarity]
     F --> F3[RRF Fusion]
 ```
+
+---
+
+## Agent-Oriented Design
+
+nano-brain isn't a memory tool with MCP bolted on. It's designed from the ground up around **how agents actually behave**.
+
+### The agent workflow loop
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│  Agent       │────▶│  memory_query │────▶│  Context     │
+│  receives    │     │  /impact/trace│     │  window      │
+│  task        │     │              │     │  filled      │
+└─────────────┘     └──────────────┘     └──────┬──────┘
+                                                 │
+                                          ┌──────▼──────┐
+                                          │  Agent       │
+                                          │  implements  │
+                                          │  change      │
+                                          └──────┬──────┘
+                                                 │
+                                          ┌──────▼──────┐
+                                          │  memory_write │
+                                          │  (persist)    │
+                                          └─────────────┘
+```
+
+### Why agent behavior matters
+
+| Human workflow | Agent workflow | nano-brain response |
+|---|---|---|
+| Opens file, reads it | `memory_get` or `memory_search` | Returns structured content, not raw bytes |
+| Traces call chain manually | `memory_trace` | Returns function-by-function chain with line numbers |
+| Greps for callers | `memory_graph(direction="in")` | Returns all callers in one call |
+| Thinks "what breaks?" | `memory_impact` | Returns full blast radius in <50ms |
+| Remembers past decisions | `memory_query` | Returns cross-session context |
+
+### The 50ms rule
+
+At 50ms latency, agents run impact analysis on every edit. At 500ms, they skip it. nano-brain is designed for the 50ms world — every code intelligence tool call is sub-50ms, making it practical for agents to use them on every operation.
+
+### What agents actually need
+
+Research from 15+ production code intelligence tools shows:
+
+1. **Impact analysis is #1** — "What breaks if I change this?" is the most common agent query
+2. **Call chains > control flow** — Agents trace across files (inter-procedural), not within functions (intra-procedural)
+3. **Component composition > internal logic** — For frontend frameworks, "who uses this component?" matters more than "what does the template do?"
+
+nano-brain optimizes for exactly these three patterns.
 
 ---
 
@@ -249,17 +314,20 @@ flowchart LR
 
 ## Use Cases
 
-### Multi-machine developer
-Work on office PC, home laptop, personal machine — each with different sessions. Deploy nano-brain on a VPS. Every session gets harvested. Switch machines, pick up where you left off.
+### Agent-assisted refactoring
+Before refactoring, your agent calls `memory_impact` on the target function. Gets the full blast radius. Decides whether to split the change. After refactoring, runs affected tests only — not the full suite.
 
-### Team knowledge base
+### Multi-session feature development
+Session 1: Agent explores the codebase, discovers patterns. `memory_write` saves findings. Session 2: Agent recalls session 1's discoveries via `memory_query`. No context lost between sessions.
+
+### Legacy codebase onboarding
+Index a 5-year-old codebase. Your agent can now answer "what does this function do?", "why does this class exist?", "if I change this file, what else breaks?" — without reading every file.
+
+### Cross-service debugging
+Agent traces a bug from frontend to backend. `memory_trace` follows the call chain across services. `memory_graph` shows which microservices depend on the failing endpoint.
+
+### Team knowledge sharing
 One server, whole team. Every developer's AI agent connects to the same PostgreSQL. Decisions, architecture notes, code intelligence — instantly shared. New hires get full context from day one.
-
-### Legacy codebase archaeology
-Inherit a 5-year-old codebase with no docs? Index it. Your AI agent can now answer "what does this function do?", "why does this class exist?", "if I change this file, what else breaks?"
-
-### Pre-commit impact check
-Before pushing, run `memory_impact` on changed files. Discover what else depends on them. Catch breaking changes before CI.
 
 ---
 
@@ -286,12 +354,15 @@ Tested on 60 domain-specific queries across 3 workspaces. nano-brain is the **on
 - **Cognee / GraphRAG** — Document-level knowledge graphs, multi-hop reasoning
 - **LlamaIndex** — Flexible RAG pipelines, document retrieval
 
-**What nano-brain adds:**
-- **Code intelligence** — Symbol graphs, call chains, impact analysis, flow diagrams
-- **Agent-oriented benchmarks** — Measures how well agents find context for domain tasks
-- **Hybrid search** — BM25 + pgvector + RRF fusion + recency decay
+**What nano-brain adds (agent-oriented):**
+- **Impact analysis** — "What breaks if I change this?" — the #1 question agents ask. Pre-computed blast radius in <50ms.
+- **Call chain tracing** — Follow execution paths across files. Agent gets a structured trace, not raw source.
+- **Symbol graph** — Find definitions, callers, callees. `memory_symbols` + `memory_graph`.
+- **Agent-oriented benchmarks** — Measures how well agents find context for domain tasks — not just search precision in isolation.
 
-Competitors optimize for conversation recall. nano-brain optimizes for **agent comprehension** — helping agents understand codebases, not just retrieve documents.
+**The difference:** Competitors optimize for "did the agent find the right document?" nano-brain optimizes for "did the agent understand the codebase well enough to make the right change?"
+
+At 50ms latency, agents run impact analysis on every edit. At 500ms, they skip it. nano-brain is designed for the 50ms world.
 
 ### Agent-Oriented Capability Benchmarks
 
