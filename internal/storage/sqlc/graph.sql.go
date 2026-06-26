@@ -86,7 +86,7 @@ func (q *Queries) ExistsDocByID(ctx context.Context, arg ExistsDocByIDParams) (b
 const getImpactors = `-- name: GetImpactors :many
 SELECT DISTINCT source_node, edge_type
 FROM graph_edges
-WHERE workspace_hash = $1 AND target_node = $2
+WHERE workspace_hash = $1 AND (target_node = $2 OR split_part(target_node, '::', 2) = $2)
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, source_node
 `
@@ -128,7 +128,7 @@ func (q *Queries) GetImpactors(ctx context.Context, arg GetImpactorsParams) ([]G
 const getImpactorsByTargets = `-- name: GetImpactorsByTargets :many
 SELECT DISTINCT source_node, target_node, edge_type
 FROM graph_edges
-WHERE workspace_hash = $1 AND target_node = ANY($2::text[])
+WHERE workspace_hash = $1 AND (target_node = ANY($2::text[]) OR split_part(target_node, '::', 2) = ANY($2::text[]))
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, source_node
 `

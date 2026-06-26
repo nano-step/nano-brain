@@ -252,6 +252,12 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 		addNode(handlerNode)
 		addEdge(FlowEdge{From: entry, To: handlerName, Kind: "http"})
 	}
+	if len(handlerNames) == 0 && !strings.Contains(entry, " ") {
+		handlerNames = append(handlerNames, entry)
+		if !strings.Contains(entry, "#") {
+			handlerNames = append(handlerNames, entry+"#perform")
+		}
+	}
 
 	// Step 3: attach middleware edges (source → handler) as guards.
 	// Middleware edges have source = middleware symbol, target = handler bare name.
