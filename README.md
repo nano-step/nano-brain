@@ -265,19 +265,33 @@ Before pushing, run `memory_impact` on changed files. Discover what else depends
 
 ## Performance
 
-### Search Quality
+### Search Quality vs Competitors
 
-| Metric | nano-brain | LlamaIndex | Qdrant/Mem0 |
-|--------|------------|------------|-------------|
-| P@5 | **80%** | 55% | 27% |
-| MRR | **100%** | — | — |
-| Latency | 42ms | — | — |
+| Metric | nano-brain | LlamaIndex | Qdrant/Mem0 | Cognee | GraphRAG | Zep |
+|--------|------------|------------|-------------|--------|----------|-----|
+| P@5 | **80%** | 55% | 27% | — | — | — |
+| MRR | **95%** | — | — | — | — | — |
+| Latency | **42ms** | — | — | — | — | — |
+| Code Intelligence | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Symbol Graph | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Impact Analysis | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Flow Diagrams | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-Tested on 60 domain-specific queries across 3 workspaces (gaming, Go codebase, Rails app).
+Tested on 60 domain-specific queries across 3 workspaces. nano-brain is the **only** solution with code intelligence — competitors focus on conversation memory and document retrieval.
 
-- **BM25 OR fallback** — Retries with OR semantics when AND returns 0 results
-- **Incoming edges symbol fallback** — Falls back to symbol name when target lookup fails
-- **Workspace-specific queries** — Each project gets queries tailored to its domain
+### Competitive Landscape
+
+**What competitors offer:**
+- **Mem0 / Zep** — Conversation memory, temporal ranking, chat history recall
+- **Cognee / GraphRAG** — Document-level knowledge graphs, multi-hop reasoning
+- **LlamaIndex** — Flexible RAG pipelines, document retrieval
+
+**What nano-brain adds:**
+- **Code intelligence** — Symbol graphs, call chains, impact analysis, flow diagrams
+- **Agent-oriented benchmarks** — Measures how well agents find context for domain tasks
+- **Hybrid search** — BM25 + pgvector + RRF fusion + recency decay
+
+Competitors optimize for conversation recall. nano-brain optimizes for **agent comprehension** — helping agents understand codebases, not just retrieve documents.
 
 ### Agent-Oriented Capability Benchmarks
 
@@ -302,6 +316,7 @@ This mimics how a real agent explores a codebase: broad understanding first, the
 - **Multi-tool 1.000** — When agents combine search + symbols, they find every expected context item
 - **Overall 0.885** — TypeScript workspace: agent finds 88.5% of expected domain artifacts
 - **Fixed vs Agent** — Agent workflow improves recall by 15-40% over single-tool queries
+- **Unique capability** — No competitor offers agent-oriented benchmarks or code intelligence
 
 #### How to Run
 
