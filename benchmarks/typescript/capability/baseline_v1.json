@@ -1,0 +1,134 @@
+{
+  "version": "1",
+  "overall": 0.85,
+  "by_category": {
+    "multi-tool": 1,
+    "search-qa": 0.76,
+    "symbol-lookup": 1
+  },
+  "tasks": [
+    {
+      "id": "ts-cs2-pricing",
+      "category": "search-qa",
+      "recall": 1,
+      "fixed_recall": 1,
+      "agent_recall": 1,
+      "matched": [
+        "PriceModel",
+        "PriceModel.ts",
+        "instruction-pricing-manager.md"
+      ],
+      "missed": null
+    },
+    {
+      "id": "ts-inventory-read",
+      "category": "symbol-lookup",
+      "recall": 1,
+      "fixed_recall": 0.833,
+      "agent_recall": 1,
+      "matched": [
+        "InventoryOS",
+        "getInv",
+        "getUserInventory",
+        "getCSGOAssetProperties",
+        "InventoryOS.ts",
+        "index.ts"
+      ],
+      "missed": null
+    },
+    {
+      "id": "ts-trade-status",
+      "category": "search-qa",
+      "recall": 0.7142857142857143,
+      "fixed_recall": 0.714,
+      "agent_recall": 0.714,
+      "matched": [
+        "checkOffer",
+        "recheckTradeStatus",
+        "checkRevertOffer",
+        "index.ts",
+        "cron.js"
+      ],
+      "missed": [
+        "TRADE_PROCESS_STATES",
+        "enums.js"
+      ]
+    },
+    {
+      "id": "ts-item-models",
+      "category": "search-qa",
+      "recall": 0.75,
+      "fixed_recall": 0.75,
+      "agent_recall": 0.75,
+      "matched": [
+        "ProductModel",
+        "ItemInfo",
+        "ProductModel.ts"
+      ],
+      "missed": [
+        "ItemsMetaItems.ts"
+      ]
+    },
+    {
+      "id": "ts-steam-id",
+      "category": "search-qa",
+      "recall": 1,
+      "fixed_recall": 1,
+      "agent_recall": 1,
+      "matched": [
+        "CONTEXT_IDS",
+        "partnerIdToSteamId64",
+        "steamOffset",
+        "matchedSteamAssetIds",
+        "helper.ts",
+        "helpers.js"
+      ],
+      "missed": null
+    },
+    {
+      "id": "ts-trading-workflow",
+      "category": "search-qa",
+      "recall": 0.3333333333333333,
+      "fixed_recall": 0.333,
+      "agent_recall": 0.333,
+      "matched": [
+        "csfloat-workflow.md"
+      ],
+      "missed": [
+        "itemSchemas.ts",
+        "itemRepo.js"
+      ]
+    },
+    {
+      "id": "ts-price-to-inventory-multi-tool",
+      "category": "multi-tool",
+      "recall": 1,
+      "fixed_recall": 0.333,
+      "agent_recall": 1,
+      "matched": [
+        "PriceModel",
+        "InventoryOS",
+        "getCSGOAssetProperties",
+        "PriceModel.ts",
+        "InventoryOS.ts",
+        "index.ts"
+      ],
+      "missed": null
+    },
+    {
+      "id": "ts-trade-state-multi-tool",
+      "category": "multi-tool",
+      "recall": 1,
+      "fixed_recall": 0.8,
+      "agent_recall": 1,
+      "matched": [
+        "TRADE_PROCESS_STATES",
+        "checkOffer",
+        "recheckTradeStatus",
+        "enums.js",
+        "index.ts"
+      ],
+      "missed": null
+    }
+  ]
+}
