@@ -137,15 +137,15 @@ func TestGraphFlow_RailsNamespacedController(t *testing.T) {
 		},
 		{
 			source:     "Api::V2::StoriesController#sync",
-			target:     "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync",
+			target:     "rails-app/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync",
 			etype:      "reconcile",
-			sourceFile: "code-copy-timeshel-api/config/routes.rb",
+			sourceFile: "rails-app/config/routes.rb",
 		},
 		{
-			source:     "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync",
+			source:     "rails-app/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync",
 			target:     "Story.sync!",
 			etype:      "calls",
-			sourceFile: "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb",
+			sourceFile: "rails-app/app/controllers/api/v2/stories_controller.rb",
 		},
 	}
 	for _, e := range railsEdges {
@@ -193,6 +193,54 @@ func TestGraphFlow_RailsNamespacedController(t *testing.T) {
 	}
 	if !foundCalls {
 		t.Fatal("expected at least one 'calls' edge in response — BuildFlow bySymbol lookup does not call symbolPart on bareName, so namespaced controller calls edges are missed")
+	}
+}
+
+func TestGraphFlow_NonHTTPJobEntry(t *testing.T) {
+	wsHash, q := setupFlowTest(t)
+	ctx := context.Background()
+
+	edges := []struct {
+		source, target, etype string
+		sourceFile            string
+	}{
+		{
+			source:     "app/jobs/dropbox_folder_update_job.rb::DropboxFolderUpdateJob#perform",
+			target:     "DropboxUploadManager#upload",
+			etype:      "calls",
+			sourceFile: "app/jobs/dropbox_folder_update_job.rb",
+		},
+		{
+			source:     "engines/print_engine/app/services/dropbox_upload_manager.rb::DropboxUploadManager#upload",
+			target:     "Story#create_print_orders",
+			etype:      "calls",
+			sourceFile: "engines/print_engine/app/services/dropbox_upload_manager.rb",
+		},
+	}
+	for _, e := range edges {
+		if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+			WorkspaceHash: wsHash,
+			SourceNode:    e.source,
+			TargetNode:    e.target,
+			EdgeType:      e.etype,
+			SourceFile:    e.sourceFile,
+			Metadata:      []byte("{}"),
+		}); err != nil {
+			t.Fatalf("upsert edge %s->%s: %v", e.source, e.target, err)
+		}
+	}
+
+	flowCfg := config.FlowConfig{Enabled: true, MaxDepth: 5, MaxFanout: 10}
+	resp := callFlowHandler(t, q, flowCfg, wsHash, map[string]any{
+		"entry": "DropboxFolderUpdateJob",
+	})
+
+	if found, _ := resp["found"].(bool); !found {
+		t.Fatalf("expected found=true for non-HTTP job entry, got resp=%v", resp)
+	}
+	chain, ok := resp["chain"].([]any)
+	if !ok || len(chain) == 0 {
+		t.Fatalf("expected non-empty chain for non-HTTP job entry, got %v", resp["chain"])
 	}
 }
 

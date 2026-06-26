@@ -101,6 +101,45 @@ end
 	}
 }
 
+func TestRubyExtractor_Constants(t *testing.T) {
+	e, err := symbol.NewRubySymbolExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	src := []byte(`
+module PrintOrderStatus
+  STATUS_ORDER_SUBMITTED = "submitted"
+  STATUS_ORDER_PAID = "paid"
+end
+
+class PrintOrder
+  STATUS_ORDER_PRINTING = "printing"
+end
+`)
+	syms, err := e.Extract("app/models/concerns/print_order_status.rb", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]symbol.Kind{
+		"PrintOrderStatus":       symbol.KindType,
+		"PrintOrder":             symbol.KindType,
+		"STATUS_ORDER_SUBMITTED": symbol.KindConst,
+		"STATUS_ORDER_PAID":      symbol.KindConst,
+		"STATUS_ORDER_PRINTING":  symbol.KindConst,
+	}
+	got := make(map[string]symbol.Kind)
+	for _, s := range syms {
+		got[s.Name] = s.Kind
+	}
+	for name, kind := range want {
+		if got[name] != kind {
+			t.Errorf("Ruby %s: want %s got %s", name, kind, got[name])
+		}
+	}
+}
+
 func TestRubyExtractor_Language(t *testing.T) {
 	e, err := symbol.NewRubySymbolExtractor()
 	if err != nil {
