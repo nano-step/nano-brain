@@ -42,6 +42,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryFlow(server, a)
 	registerMemoryFlowchart(server, a)
 	registerMemoryWorkspacesResolve(server, a)
+	registerMemoryWorkspacesList(server, a)
 }
 
 func toolSchema(props map[string]map[string]any, required []string) json.RawMessage {
@@ -2321,4 +2322,40 @@ func appendStitchedToFlow(f *flow.Flow, stitched []flow.FlowEdge) {
 		}
 		f.Edges = append(f.Edges, se)
 	}
+}
+
+func registerMemoryWorkspacesList(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_workspaces_list",
+			Description: "List all registered workspaces with their paths, hashes, and document counts. Use this to find the correct workspace hash before calling other tools. Returns empty list if no workspaces are registered.",
+			InputSchema: toolSchema(map[string]map[string]any{}, []string{}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			rows, err := a.queries.ListWorkspacesWithStats(ctx)
+			if err != nil {
+				return errResult(fmt.Sprintf("list workspaces failed: %v", err)), nil
+			}
+
+			workspaces := make([]map[string]any, 0, len(rows))
+			for _, r := range rows {
+				ws := map[string]any{
+					"workspace_hash": r.Hash,
+					"name":           r.Name,
+					"root_path":      r.Path,
+					"document_count": r.DocumentCount,
+					"chunk_count":    r.ChunkCount,
+				}
+				if t, ok := r.LastDocumentUpdated.(time.Time); ok {
+					ws["last_document_updated"] = t.Format(time.RFC3339)
+				}
+				workspaces = append(workspaces, ws)
+			}
+
+			return textResult(map[string]any{
+				"workspaces": workspaces,
+				"count":      len(workspaces),
+			})
+		},
+	)
 }

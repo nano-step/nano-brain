@@ -162,8 +162,8 @@ func TestToolRegistration_ListToolsUnderRaceDetector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if len(result.Tools) != 16 {
-		t.Errorf("expected 16 tools, got %d", len(result.Tools))
+	if len(result.Tools) != 17 {
+		t.Errorf("expected 17 tools, got %d", len(result.Tools))
 	}
 }
 

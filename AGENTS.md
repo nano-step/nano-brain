@@ -18,15 +18,22 @@ All operations are MCP tool calls. Every tool takes a `workspace` (SHA-256 hash;
 | Catch up at session start | `memory_wake_up` | `workspace` |
 | Fetch one doc by ID/path | `memory_get` | `workspace`, `path` |
 | Check daemon health | `memory_status` | (none) |
+| List all registered workspaces | `memory_workspaces_list` | (none) |
 
 ### Session Workflow
 
-**Start of session:** Resolve workspace once, then wake up + query the topic.
+**Start of session:** List workspaces first, then resolve and query.
 
 ```
-memory_workspaces_resolve(path="<project root>")  // → workspace hash
+memory_workspaces_list()                    // → list all workspaces with paths
+memory_workspaces_resolve(path="<path>")   // → workspace hash (if you know the path)
 memory_wake_up(workspace=<hash>, limit=8)
 memory_query(workspace=<hash>, query="<task topic>")
+```
+
+**If you don't know the workspace path:**
+```
+memory_workspaces_list()  // → find workspace by name or path
 ```
 
 **End of session:** Save key decisions, patterns discovered, and debugging insights.
