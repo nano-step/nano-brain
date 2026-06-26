@@ -822,3 +822,54 @@ func TestSubdirEdit_IndexedWithoutRootActivity(t *testing.T) {
 		t.Fatalf("expected subdir edit to be indexed (upsert calls > %d), got %d", baseline, got)
 	}
 }
+
+// TestUnwatchTree_ClearsNestedAndAllowsRewatch covers the #497 review finding:
+// removing a directory must clear its nested watch entries (not just the exact
+// path), otherwise watchDir would skip re-watching a recreated subtree.
+func TestUnwatchTree_ClearsNestedAndAllowsRewatch(t *testing.T) {
+	root := t.TempDir()
+	a := filepath.Join(root, "a")
+	b := filepath.Join(a, "b")
+	if err := os.MkdirAll(b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+	fsw, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fsw.Close()
+	w.fsw = fsw
+
+	col := watchedCollection{name: "c", dirPath: root, workspaceHash: "ws", globPattern: "*.md"}
+	w.scanCollection(context.Background(), col)
+
+	w.mu.Lock()
+	for _, p := range []string{root, a, b} {
+		if !w.watchedDirs[p] {
+			w.mu.Unlock()
+			t.Fatalf("precondition: %s should be watched (watchedDirs=%v)", p, w.watchedDirs)
+		}
+	}
+	// Remove the subtree rooted at a/.
+	w.unwatchTreeLocked(a)
+	if w.watchedDirs[a] || w.watchedDirs[b] {
+		w.mu.Unlock()
+		t.Fatalf("nested watch entries not cleared on remove: %v", w.watchedDirs)
+	}
+	if !w.watchedDirs[root] {
+		w.mu.Unlock()
+		t.Fatal("root watch should survive removal of a nested subtree")
+	}
+	w.mu.Unlock()
+
+	// A recreated subdirectory must be watchable again (no stale entry blocking it).
+	w.watchDir(b)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.watchedDirs[b] {
+		t.Fatal("recreated subdirectory was not re-watched (stale watchedDirs entry)")
+	}
+}

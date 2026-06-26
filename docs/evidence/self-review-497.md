@@ -35,6 +35,11 @@ Change type: **bug-fix** · Lane: code · Scope: `internal/watcher`
 ## Resolution Status
 - All findings: **RESOLVED**. No open critical/major issues.
 - Independent review (oh-my-claudecode:code-reviewer): **Review Verdict: PASS** (see `review-497.md`).
+- PR review (gemini-code-assist) on #498 found a real follow-up bug: `handleFSEvent`
+  deleted only the exact `watchedDirs` entry on dir remove/rename, stranding nested
+  entries so a recreated subtree would be skipped by `watchDir`. **RESOLVED** —
+  extracted `unwatchTreeLocked` (prefix sweep) now used by both `handleFSEvent` and
+  `Unwatch`; covered by `TestUnwatchTree_ClearsNestedAndAllowsRewatch`.
 
 ## Validation
 - `CGO_ENABLED=0 go build ./...` — PASS

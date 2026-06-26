@@ -255,15 +255,7 @@ func (w *Watcher) Unwatch(dirPath string) error {
 	delete(w.dirty, absPath)
 
 	// Remove the root watch plus every recursive subdirectory watch under it.
-	prefix := absPath + string(os.PathSeparator)
-	for dir := range w.watchedDirs {
-		if dir == absPath || strings.HasPrefix(dir, prefix) {
-			if w.fsw != nil {
-				_ = w.fsw.Remove(dir)
-			}
-			delete(w.watchedDirs, dir)
-		}
-	}
+	w.unwatchTreeLocked(absPath)
 	return nil
 }
 
@@ -403,7 +395,7 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 		delete(w.fileCache, event.Name)
 		w.fileCacheMu.Unlock()
 		w.mu.Lock()
-		delete(w.watchedDirs, event.Name)
+		w.unwatchTreeLocked(event.Name)
 		w.mu.Unlock()
 		w.cleanupDeletedDocument(event.Name)
 	}
@@ -471,6 +463,23 @@ func (w *Watcher) watchDir(dir string) {
 		return
 	}
 	w.watchedDirs[dir] = true
+}
+
+// unwatchTreeLocked removes the fsnotify watch for path and every watched
+// subdirectory beneath it, clearing them from watchedDirs. Deleting only the
+// exact path would strand nested entries, so a later recreate of a subtree
+// would be skipped by watchDir and never re-watched (#497 review). Caller must
+// hold w.mu.
+func (w *Watcher) unwatchTreeLocked(path string) {
+	prefix := path + string(os.PathSeparator)
+	for dir := range w.watchedDirs {
+		if dir == path || strings.HasPrefix(dir, prefix) {
+			if w.fsw != nil {
+				_ = w.fsw.Remove(dir)
+			}
+			delete(w.watchedDirs, dir)
+		}
+	}
 }
 
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
