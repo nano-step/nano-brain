@@ -35,7 +35,7 @@ nano-brain is the missing memory layer for AI coding agents. It's:
 
 - **Self-hosted** — Your data stays on your server. No cloud dependency.
 - **Works everywhere** — OpenCode, Claude Code, Cursor, any MCP client.
-- **Actually useful** — Not a toy demo. Production-ready with 14 MCP tools, hybrid search, and code intelligence.
+- **Actually useful** — Not a toy demo. Production-ready with 16 MCP tools, hybrid search, code intelligence, and agent-oriented benchmarks.
 - **Built for developers** — Go binary, PostgreSQL, zero magic. You can read the code.
 - **Beating competitors** — P@5 of 80% vs LlamaIndex's 55% and Qdrant's 27% on real-world queries.
 
@@ -50,7 +50,7 @@ nano-brain solves **session amnesia** — the problem where AI agents forget eve
 It automatically:
 - **Ingests** AI sessions, notes, and codebase files
 - **Indexes** everything with hybrid search (BM25 + pgvector)
-- **Serves** memories via 14 MCP tools and REST API
+- **Serves** memories via 16 MCP tools and REST API
 
 Built in Go with PostgreSQL. Single static binary. Zero CGO dependencies.
 
@@ -124,24 +124,26 @@ graph LR
 
 Auto-ingest from OpenCode and Claude Code sessions. Map-reduce LLM summarization. Incremental harvest with dedup.
 
-### 14 MCP Tools
+### 16 MCP Tools
 
 | Tool | Description |
 |------|-------------|
-| `memory_query` | Hybrid search (BM25 + vector + RRF) |
-| `memory_search` | BM25 keyword search |
-| `memory_vsearch` | Vector similarity search |
-| `memory_get` | Get document by path |
+| `memory_query` | Hybrid search — default first tool for broad questions |
+| `memory_search` | BM25 keyword search for exact text/errors |
+| `memory_vsearch` | Vector similarity for fuzzy concepts |
+| `memory_get` | Get document by path or ID |
 | `memory_write` | Write/update document |
-| `memory_graph` | Knowledge graph view |
-| `memory_trace` | Call chain trace |
-| `memory_impact` | Cross-file impact analysis |
-| `memory_symbols` | Symbol search |
-| `memory_flow` | Execution flow visualization |
+| `memory_graph` | One-hop callers/callees/imports |
+| `memory_trace` | Downstream call chain trace |
+| `memory_impact` | Pre-change blast radius analysis |
+| `memory_symbols` | Symbol search (functions, types, interfaces) |
+| `memory_flow` | HTTP route execution flow |
+| `memory_flowchart` | Function-level control-flow graph |
+| `memory_workspaces_resolve` | Resolve path to workspace hash |
 | `memory_tags` | List tags with counts |
-| `memory_status` | Server status |
+| `memory_status` | Server and queue health |
 | `memory_update` | Trigger re-embedding |
-| `memory_wake_up` | Workspace briefing |
+| `memory_wake_up` | Session-start workspace briefing |
 
 ---
 
@@ -263,7 +265,7 @@ Before pushing, run `memory_impact` on changed files. Discover what else depends
 
 ## Performance
 
-### Benchmark Results
+### Search Quality
 
 | Metric | nano-brain | LlamaIndex | Qdrant/Mem0 |
 |--------|------------|------------|-------------|
@@ -273,11 +275,68 @@ Before pushing, run `memory_impact` on changed files. Discover what else depends
 
 Tested on 60 domain-specific queries across 3 workspaces (gaming, Go codebase, Rails app).
 
-### Search Quality
-
 - **BM25 OR fallback** — Retries with OR semantics when AND returns 0 results
 - **Incoming edges symbol fallback** — Falls back to symbol name when target lookup fails
 - **Workspace-specific queries** — Each project gets queries tailored to its domain
+
+### Agent-Oriented Capability Benchmarks
+
+nano-brain is built for agents. These benchmarks measure how well agents can **find relevant context for real-world domain tasks** using nano-brain's MCP tools — not just search quality in isolation.
+
+Each benchmark runs a deterministic agent workflow:
+1. **query_question** — natural-language domain question
+2. **query_input** — optimized search query
+3. **symbols_identifiers** — symbol lookup for known identifiers
+
+This mimics how a real agent explores a codebase: broad understanding first, then targeted retrieval.
+
+#### Scores
+
+| Workspace | Domain | Overall | Multi-tool | Search-QA | Symbol-Lookup |
+|-----------|--------|---------|------------|-----------|---------------|
+| **nano-brain** | Go daemon | **1.000** | 1.000 | 1.000 | 1.000 |
+| **TypeScript** | CS2 item trading | **0.885** | 1.000 | 0.817 | 1.000 |
+| **Rails** | CS2 item trading | **0.795** | 1.000 | 0.726 | 0.667 |
+
+**What this means:**
+- **Multi-tool 1.000** — When agents combine search + symbols, they find every expected context item
+- **Overall 0.885** — TypeScript workspace: agent finds 88.5% of expected domain artifacts
+- **Fixed vs Agent** — Agent workflow improves recall by 15-40% over single-tool queries
+
+#### How to Run
+
+```bash
+# TypeScript workspace (CS2 item trading domain)
+NANO_BRAIN_URL=http://localhost:3100 \
+NANO_BRAIN_WORKSPACE=<your-workspace-hash> \
+go test -v -tags=capbench -run TestCapabilityBenchmark \
+  ./benchmarks/typescript/capability/
+
+# Rails workspace (CS2 item trading domain)
+NANO_BRAIN_URL=http://localhost:3100 \
+NANO_BRAIN_WORKSPACE=<your-workspace-hash> \
+go test -v -tags=capbench -run TestCapabilityBenchmark \
+  ./benchmarks/rails/capability/
+
+# nano-brain itself (Go daemon)
+NANO_BRAIN_URL=http://localhost:3100 \
+NANO_BRAIN_WORKSPACE=nano-brain \
+go test -v -tags=capbench -run TestCapabilityBenchmark \
+  ./benchmarks/capability/
+```
+
+#### Task Categories
+
+| Category | What It Tests | Tools Used |
+|----------|---------------|------------|
+| **search-qa** | Domain concept retrieval via search | `query_question`, `query_input` |
+| **symbol-lookup** | Known identifier resolution | `query_input`, `symbols_identifiers` |
+| **multi-tool** | Cross-tool workflow (search → symbols) | All three tools in sequence |
+
+See individual benchmark READMEs for full task breakdowns:
+- [`benchmarks/typescript/capability/README.md`](benchmarks/typescript/capability/README.md)
+- [`benchmarks/rails/capability/README.md`](benchmarks/rails/capability/README.md)
+- [`benchmarks/capability/README.md`](benchmarks/capability/README.md)
 
 ---
 
