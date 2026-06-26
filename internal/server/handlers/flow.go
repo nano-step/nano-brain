@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -50,15 +51,15 @@ type flowGraphEdge struct {
 }
 
 type flowResponse struct {
-	Found     bool           `json:"found"`
-	Entry     string         `json:"entry"`
-	Method    string         `json:"method,omitempty"`
-	Path      string         `json:"path,omitempty"`
-	Chain     []flowNode     `json:"chain"`
-	Externals []flowNode     `json:"externals"`
-	Nodes     []flowNode     `json:"nodes"`
+	Found     bool            `json:"found"`
+	Entry     string          `json:"entry"`
+	Method    string          `json:"method,omitempty"`
+	Path      string          `json:"path,omitempty"`
+	Chain     []flowNode      `json:"chain"`
+	Externals []flowNode      `json:"externals"`
+	Nodes     []flowNode      `json:"nodes"`
 	Edges     []flowGraphEdge `json:"edges"`
-	Mermaid   string         `json:"mermaid,omitempty"`
+	Mermaid   string          `json:"mermaid,omitempty"`
 }
 
 // GraphFlow handles POST /api/v1/graph/flow.
@@ -68,7 +69,7 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 	return func(c echo.Context) error {
 		if !flowCfg.Enabled {
 			return c.JSON(http.StatusOK, map[string]any{
-				"found":    false,
+				"found":   false,
 				"message": "flow indexing disabled",
 			})
 		}
@@ -99,14 +100,15 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 
 		edges := convertEdges(rawEdges)
 
-		// An entry is only "found" if an http edge actually originates from it.
-		// BuildFlow always emits the entry node itself, so node count cannot
+		// HTTP routes are the primary entries. If no HTTP edge matches, allow a
+		// Rails/Ruby class, job, worker, or service entry that has indexed graph
+		// edges. BuildFlow always emits the entry node itself, so node count cannot
 		// distinguish a real flow from an unknown entry.
-		if !hasHTTPEntry(edges, req.Entry) {
+		if !hasFlowEntry(edges, req.Entry) {
 			return c.JSON(http.StatusOK, map[string]any{
 				"found":   false,
 				"entry":   req.Entry,
-				"message": "entry not found among http edges",
+				"message": "entry not found among flow edges",
 			})
 		}
 
@@ -234,6 +236,35 @@ func hasHTTPEntry(edges []graph.Edge, entry string) bool {
 		}
 	}
 	return false
+}
+
+func hasFlowEntry(edges []graph.Edge, entry string) bool {
+	if hasHTTPEntry(edges, entry) {
+		return true
+	}
+	if strings.Contains(entry, " ") {
+		return false
+	}
+	for _, e := range edges {
+		if e.SourceNode == entry || flowSymbolMatches(flowSymbolPart(e.SourceNode), entry) {
+			return true
+		}
+		if e.Kind == graph.EdgeContains && (e.TargetNode == entry || flowSymbolMatches(flowSymbolPart(e.TargetNode), entry)) {
+			return true
+		}
+	}
+	return false
+}
+
+func flowSymbolPart(node string) string {
+	if idx := strings.LastIndex(node, "::"); idx >= 0 {
+		return node[idx+2:]
+	}
+	return node
+}
+
+func flowSymbolMatches(symbol, entry string) bool {
+	return symbol == entry || (!strings.Contains(entry, "#") && strings.HasPrefix(symbol, entry+"#"))
 }
 
 // convertEdges maps sqlc.GraphEdge rows to graph.Edge values.

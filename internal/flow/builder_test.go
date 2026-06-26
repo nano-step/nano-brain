@@ -126,6 +126,38 @@ func TestExternalLeaf(t *testing.T) {
 	}
 }
 
+func TestNonHTTPJobEntry(t *testing.T) {
+	edges := []graph.Edge{
+		{
+			SourceNode: "app/jobs/dropbox_folder_update_job.rb::DropboxFolderUpdateJob#perform",
+			TargetNode: "DropboxUploadManager#upload",
+			Kind:       graph.EdgeCalls,
+			SourceFile: "app/jobs/dropbox_folder_update_job.rb",
+		},
+		{
+			SourceNode: "engines/print_engine/app/services/dropbox_upload_manager.rb::DropboxUploadManager#upload",
+			TargetNode: "Story#create_print_orders",
+			Kind:       graph.EdgeCalls,
+			SourceFile: "engines/print_engine/app/services/dropbox_upload_manager.rb",
+		},
+	}
+
+	f := flow.BuildFlow(edges, "DropboxFolderUpdateJob", 10, 10)
+
+	if _, ok := nodeByID(f.Nodes, "DropboxFolderUpdateJob"); !ok {
+		t.Error("expected non-HTTP entry node")
+	}
+	if _, ok := nodeByID(f.Nodes, "DropboxUploadManager#upload"); !ok {
+		t.Error("expected downstream service call from job perform")
+	}
+	if _, ok := nodeByID(f.Nodes, "Story#create_print_orders"); !ok {
+		t.Error("expected second-hop story call from service")
+	}
+	if !hasEdge(f.Edges, "DropboxFolderUpdateJob#perform", "DropboxUploadManager#upload", "calls") {
+		t.Error("expected calls edge from job perform seed to upload manager")
+	}
+}
+
 // TestMiddlewareGuard verifies middleware edges are attached without consuming depth.
 func TestMiddlewareGuard(t *testing.T) {
 	edges := []graph.Edge{
@@ -364,9 +396,9 @@ func TestReconcileEdgeTraversal(t *testing.T) {
 // routes file — so downstream calls are never discovered.
 func TestNamespacedControllerReconciliation(t *testing.T) {
 	edges := []graph.Edge{
-		{SourceNode: "POST /api/v2/stories/sync", TargetNode: "Api::V2::StoriesController#sync", Kind: graph.EdgeHTTP, SourceFile: "code-copy-timeshel-api/config/routes.rb"},
-		{SourceNode: "Api::V2::StoriesController#sync", TargetNode: "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync", Kind: graph.EdgeReconcile, SourceFile: "code-copy-timeshel-api/config/routes.rb"},
-		{SourceNode: "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync", TargetNode: "Story.sync_all", Kind: graph.EdgeCalls, SourceFile: "code-copy-timeshel-api/app/controllers/api/v2/stories_controller.rb"},
+		{SourceNode: "POST /api/v2/stories/sync", TargetNode: "Api::V2::StoriesController#sync", Kind: graph.EdgeHTTP, SourceFile: "rails-app/config/routes.rb"},
+		{SourceNode: "Api::V2::StoriesController#sync", TargetNode: "rails-app/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync", Kind: graph.EdgeReconcile, SourceFile: "rails-app/config/routes.rb"},
+		{SourceNode: "rails-app/app/controllers/api/v2/stories_controller.rb::Api::V2::StoriesController#sync", TargetNode: "Story.sync_all", Kind: graph.EdgeCalls, SourceFile: "rails-app/app/controllers/api/v2/stories_controller.rb"},
 	}
 
 	f := flow.BuildFlow(edges, "POST /api/v2/stories/sync", 10, 10)
