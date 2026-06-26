@@ -191,6 +191,7 @@ func TestConcurrentToolCalls_NoRace(t *testing.T) {
 		{Name: "memory_vsearch", Arguments: map[string]any{"workspace": "ws-1", "query": "vector test"}},
 		{Name: "memory_tags", Arguments: map[string]any{"workspace": "ws-1"}},
 		{Name: "memory_wake_up", Arguments: map[string]any{"workspace": "ws-1"}},
+		{Name: "memory_workspaces_list", Arguments: map[string]any{}},
 	}
 
 	const goroutines = 20
@@ -238,6 +239,7 @@ func TestConcurrentMixedToolCalls_NoRace(t *testing.T) {
 		{"memory_vsearch", map[string]any{"workspace": "ws-b", "query": "vector beta"}},
 		{"memory_tags", map[string]any{"workspace": "ws-a"}},
 		{"memory_wake_up", map[string]any{"workspace": "ws-b", "limit": float64(5)}},
+		{"memory_workspaces_list", map[string]any{}},
 	}
 
 	const goroutines = 50
