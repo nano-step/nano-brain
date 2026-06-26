@@ -398,6 +398,19 @@ error/edge path (auth fail, rate limit, malformed input, etc.).
 After user-flow tests pass, a **fresh review agent** verifies the implementation.
 The reviewer **must not be** the implementing agent.
 
+> **R88 (hard rule): the code review pass MUST be performed by a separate,
+> spawned sub-agent. The agent that wrote the code MUST NOT review or approve
+> its own code in the same context.** Self-review (`## Self-Review` evidence) is
+> required but is NOT a substitute for the independent review gate. The review
+> evidence file MUST name an independent `Reviewer:` (e.g. a spawned
+> `code-reviewer`/Oracle sub-agent) that is distinct from the author — gate 3.5
+> fails if the `Reviewer:` is missing or names the author/self/implementer.
+> Rationale: an author's review inherits the author's blind spots; an
+> independent agent reviews cold and catches what the author's mental model
+> assumed away. Gate 3.5 verifies the verdict is *declared* by a named
+> independent reviewer (an honesty guardrail, not tamper-proof); the
+> identity-bound external check is the PR bot review at gate 3.6.
+
 **What the reviewer checks:**
 1. Read `git diff <default-branch>` + the proposal, design, and spec.
 2. For each acceptance criterion, find evidence (test output, screenshot,
