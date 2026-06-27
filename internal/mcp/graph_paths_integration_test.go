@@ -37,13 +37,16 @@ func setupGraphMCP(t *testing.T) (context.Context, string, *mcpsdk.ClientSession
 		t.Fatalf("upsert workspace: %v", err)
 	}
 
+	// Nodes are seeded in the WORKSPACE-RELATIVE canonical form (the storage
+	// convention since #450). wsPath is retained only as the workspace Path so
+	// the canonicalizer can strip absolute inputs back to this same relative form.
 	edges := []struct {
 		source, target, etype string
 	}{
-		{wsPath + "/internal/storage/migrate.go::RunMigrations", "context", "calls"},
-		{wsPath + "/internal/storage/migrate.go::RunMigrations", wsPath + "/internal/storage/migrate.go::GetCurrentVersion", "calls"},
-		{wsPath + "/internal/storage/migrate.go", wsPath + "/internal/storage/migrate.go::RunMigrations", "contains"},
-		{wsPath + "/cmd/main.go::startServer", wsPath + "/internal/storage/migrate.go::RunMigrations", "calls"},
+		{"internal/storage/migrate.go::RunMigrations", "context", "calls"},
+		{"internal/storage/migrate.go::RunMigrations", "internal/storage/migrate.go::GetCurrentVersion", "calls"},
+		{"internal/storage/migrate.go", "internal/storage/migrate.go::RunMigrations", "contains"},
+		{"cmd/main.go::startServer", "internal/storage/migrate.go::RunMigrations", "calls"},
 	}
 	for _, e := range edges {
 		if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
@@ -96,7 +99,10 @@ func unmarshalGraphResp(t *testing.T, result *mcpsdk.CallToolResult) map[string]
 	return out
 }
 
-func TestMemoryGraph_RelativeNodeInputResolvesToAbsolute(t *testing.T) {
+// TestMemoryGraph_RelativeNodeInputMatchesRelativeStorage verifies that a
+// workspace-relative node input passes through the canonicalizer unchanged and
+// byte-matches the relative-form rows in storage.
+func TestMemoryGraph_RelativeNodeInputMatchesRelativeStorage(t *testing.T) {
 	_, wsHash, _, callTool := setupGraphMCP(t)
 
 	rel := callTool("memory_graph", map[string]any{
@@ -127,22 +133,29 @@ func TestMemoryGraph_AbsoluteNodeInputUnchanged(t *testing.T) {
 	}
 }
 
-func TestMemoryGraph_RelativeOutputStripsPrefix(t *testing.T) {
+// TestMemoryGraph_OutputIsRelative verifies that since #501 graph output is
+// workspace-relative in BOTH the default path style (storage is already
+// relative) and the explicit "relative" style (where stripWorkspacePrefix is a
+// harmless no-op on already-relative nodes).
+func TestMemoryGraph_OutputIsRelative(t *testing.T) {
 	_, wsHash, _, callTool := setupGraphMCP(t)
 
-	abs := callTool("memory_graph", map[string]any{
+	def := callTool("memory_graph", map[string]any{
 		"workspace": wsHash,
 		"node":      "internal/storage/migrate.go::RunMigrations",
 		"direction": "out",
 		"edge_type": "calls",
 	})
-	absResp := unmarshalGraphResp(t, abs)
-	edgesAbs := absResp["edges"].([]any)
-	for _, e := range edgesAbs {
+	defResp := unmarshalGraphResp(t, def)
+	edgesDef := defResp["edges"].([]any)
+	for _, e := range edgesDef {
 		em := e.(map[string]any)
 		src := em["source"].(string)
-		if !strings.HasPrefix(src, "/tmp/test-ws-") {
-			t.Errorf("default (absolute) should return absolute source, got %q", src)
+		if strings.HasPrefix(src, "/tmp/") {
+			t.Errorf("default output should be workspace-relative, got absolute %q", src)
+		}
+		if src != "internal/storage/migrate.go::RunMigrations" {
+			t.Errorf("default output source = %q, want relative form", src)
 		}
 	}
 
