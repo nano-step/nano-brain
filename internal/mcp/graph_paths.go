@@ -20,29 +20,31 @@ func splitNodeSymbol(node string) (string, string) {
 	return node, ""
 }
 
-// resolveNodeAgainstWorkspace resolves a workspace-relative node identifier
-// (e.g. "internal/storage/migrate.go::RunMigrations") to its absolute form
-// using the workspace root stored in the workspaces table.
+// resolveNodeAgainstWorkspace canonicalizes a node identifier to its
+// workspace-relative form (e.g. "internal/storage/migrate.go::RunMigrations"),
+// matching how stored source/target nodes are written since #450.
 //
-// Absolute paths and non-path tokens (e.g. import paths like "context") are
-// returned unchanged so the function is safe to call unconditionally and
-// remains backward compatible with callers that already pass absolute paths.
+// Absolute inputs are stripped of the workspace root (so callers that still
+// pass absolute paths intersect the relative storage). Already-relative inputs
+// and non-path tokens (extensionless import specifiers like "context") are
+// returned unchanged, so the function is safe to call unconditionally.
 //
 // An invalid workspace hash returns an error so the caller surfaces a clear
-// message to the agent instead of silently returning zero rows.
+// message to the agent instead of silently returning zero rows. The lookup is
+// only performed for absolute inputs that actually need stripping.
 func resolveNodeAgainstWorkspace(ctx context.Context, queries *sqlc.Queries, workspaceHash, node string) (string, error) {
 	filePart, symbolSuffix := splitNodeSymbol(node)
-	if path.IsAbs(filePart) {
+	if path.Ext(filePart) == "" {
 		return node, nil
 	}
-	if path.Ext(filePart) == "" {
+	if !path.IsAbs(filePart) {
 		return node, nil
 	}
 	ws, err := queries.GetWorkspaceByHash(ctx, workspaceHash)
 	if err != nil {
 		return "", fmt.Errorf("workspace lookup failed: %w", err)
 	}
-	return path.Join(ws.Path, filePart) + symbolSuffix, nil
+	return stripWorkspacePrefix(ws.Path, filePart) + symbolSuffix, nil
 }
 
 // stripWorkspacePrefix removes the workspace root prefix from a node identifier

@@ -6,15 +6,19 @@ import (
 	"testing"
 )
 
+// resolveNodeNoDB mirrors resolveNodeAgainstWorkspace without the DB lookup so
+// the canonicalization rules can be unit-tested directly. The canonical form is
+// workspace-relative: absolute inputs are stripped to relative; already-relative
+// and extensionless tokens pass through unchanged.
 func resolveNodeNoDB(workspaceRoot, node string) string {
 	filePart, sym := splitNodeSymbol(node)
-	if path.IsAbs(filePart) {
-		return node
-	}
 	if path.Ext(filePart) == "" {
 		return node
 	}
-	return path.Join(workspaceRoot, filePart) + sym
+	if !path.IsAbs(filePart) {
+		return node
+	}
+	return stripWorkspacePrefix(workspaceRoot, filePart) + sym
 }
 
 func TestResolveNodeAgainstWorkspace_PassThroughRules(t *testing.T) {
@@ -25,11 +29,16 @@ func TestResolveNodeAgainstWorkspace_PassThroughRules(t *testing.T) {
 	}{
 		{"context", "context"},
 		{"github.com/foo/bar", "github.com/foo/bar"},
+		// Absolute inputs inside the workspace are stripped to relative.
+		{"/Users/me/proj/internal/x.go::F", "internal/x.go::F"},
+		{"/Users/me/proj/internal/x.go", "internal/x.go"},
+		// Absolute inputs outside the workspace pass through unchanged.
 		{"/abs/x.go::F", "/abs/x.go::F"},
 		{"/abs/x.go", "/abs/x.go"},
-		{"internal/x.go::F", "/Users/me/proj/internal/x.go::F"},
-		{"internal/x.go", "/Users/me/proj/internal/x.go"},
-		{"cmd/main.go", "/Users/me/proj/cmd/main.go"},
+		// Already-relative inputs are the canonical form and pass through.
+		{"internal/x.go::F", "internal/x.go::F"},
+		{"internal/x.go", "internal/x.go"},
+		{"cmd/main.go", "cmd/main.go"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {

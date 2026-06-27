@@ -79,6 +79,10 @@ type Watcher struct {
 	frameworkDetector *graph.FrameworkDetector
 	embedQueue        *embed.Queue
 	dispatcher        *chunker.Dispatcher
+	// aliasCache memoizes per-workspace import alias maps (tsconfig paths etc.)
+	// so import target resolution reads each workspace's config once, not per
+	// edge. See internal/graph/import_resolver.go.
+	aliasCache *graph.AliasCache
 
 	fsw         *fsnotify.Watcher
 	mu          sync.Mutex
@@ -135,6 +139,7 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 		watchedDirs:   make(map[string]bool),
 		hotRegisterCh: make(chan struct{}, 1),
 		fileCache:     make(map[string]fileState),
+		aliasCache:    graph.NewAliasCache(),
 	}
 }
 
@@ -912,6 +917,8 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		return
 	}
 
+	w.resolveImportEdges(edges, col)
+
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph tx begin failed")
@@ -954,6 +961,41 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		Str("file", filePath).
 		Int("edges", len(edges)).
 		Msg("graph edges extracted")
+}
+
+// resolveImportEdges rewrites the raw target_node of each EdgeImports edge to a
+// resolved, workspace-relative file path so reverse traversal byte-matches the
+// stored source_node form of the imported file. Non-import edges are left
+// untouched; bare/scoped package specifiers pass through. The exists predicate
+// is os.Stat-backed and memoized for the lifetime of this call (one file's
+// edges), so repeated probes within the file hit the cache.
+func (w *Watcher) resolveImportEdges(edges []graph.Edge, col watchedCollection) {
+	if len(edges) == 0 {
+		return
+	}
+	root := col.dirPath
+	aliasMap := w.aliasCache.Get(root, w.logger)
+
+	statCache := make(map[string]bool)
+	exists := func(relPath string) bool {
+		if hit, ok := statCache[relPath]; ok {
+			return hit
+		}
+		abs := filepath.Join(root, filepath.FromSlash(relPath))
+		fi, err := os.Stat(abs)
+		ok := err == nil && !fi.IsDir()
+		statCache[relPath] = ok
+		return ok
+	}
+
+	for i := range edges {
+		if edges[i].Kind != graph.EdgeImports {
+			continue
+		}
+		edges[i].TargetNode = graph.ResolveImportPath(
+			edges[i].TargetNode, edges[i].SourceFile, root, aliasMap, exists, w.logger,
+		)
+	}
 }
 
 // extractAndUpsertCFGs extracts per-function control-flow graphs for a JS/TS
