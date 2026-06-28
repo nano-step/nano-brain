@@ -149,108 +149,83 @@ Run before creating or merging a PR. All checks must be green.
 | 3.11 | No real workspace names/paths/hashes in staged files | `grep -rn 'Phil-timeshel\|capyhome\|zengamingx\|/Users/tamlh/workspaces/self/Projects/' --include='*.go' --include='*.md' --include='*.json' --include='*.sh' --include='*.yml' .` = empty |
 | 3.12 | E2E workspace test pass — extractor/indexer tested on real project with >100 files | Build binary → start server → index a real workspace → verify edges stored → query memory_graph → 0 errors in logs. **Privacy:** use placeholder names in evidence files, never real workspace names/paths |
 | 3.13 | E2E extractor test pass — all fixtures in `testdata/<feature>/` exercise the extractor with 0 panics, 0 errors | `go test -race -short -run=E2E ./internal/<pkg>/...` — all E2E tests pass. Fixture files are synthetic (never real project content). |
-| 3.14 | Benchmark pass — performance baseline recorded, no regressions vs prior run | `go test -bench=. -benchmem -run=^$ ./internal/<pkg>/... -count=1` — all benchmarks complete. Save results to `docs/evidence/benchmark-<story>.md`. Compare ns/op with baseline: >2x regression = FAIL. |
-
-### E2E workspace test procedure (gate 3.12)
-
-For any story that adds/modifies an extractor, indexer, or code intelligence feature,
-run an E2E test against a real workspace before merge.
-
-**Required for:** user-feature, bug-fix (code intelligence scope)
-**Skip for:** infrastructure, refactor, docs, dependency-bump
-
-```bash
-# 1. Build
-go build -o ./bin/nano-brain ./cmd/nano-brain/
-
-# 2. Start server on test port (NEVER use :3100 dev port)
-NANO_BRAIN_DATABASE_URL="postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable" \
-NANO_BRAIN_SERVER_PORT=3199 \
-NANO_BRAIN_FLOW_ENABLED=true \
-./bin/nano-brain &
-SERVER_PID=$!
-
-# 3. Wait for health
-for i in $(seq 1 15); do curl -sf http://localhost:3199/health >/dev/null && break; sleep 1; done
-
-# 4. Trigger indexing on a real workspace (100+ files)
-curl -X POST http://localhost:3199/api/v1/reindex \
-  -d '{"workspace":"<placeholder-hash>","root":"/data/workspaces/<generic-project>"}'
-
-# 5. Wait for indexing to complete, then verify
-curl -s http://localhost:3199/api/v1/graph/edges?file=<sample-file> | jq '.edges | length'
-
-# 6. Kill server
-kill $SERVER_PID; wait $SERVER_PID 2>/dev/null
-```
-
-**Privacy rules for E2E evidence:**
-- NEVER include real workspace names, paths, or hashes in evidence files
-- Use placeholders: `rails-app`, `next-app`, `express-app`
-- E2E runner scripts must NOT be committed to the repo (run in /tmp only)
-- E2E output containing real paths must NOT appear in PR descriptions
-
-**FAIL conditions:**
-- Binary fails to build → FAIL
-- Server doesn't start within 15s → FAIL
-- Indexing produces 0 edges for a workspace with 100+ source files → FAIL
-- Indexing crashes or panics → FAIL
-- Edge count significantly lower than baseline (compare with prior run) → FAIL
-
-**Evidence:** Paste summary output (file count, edge count, error count) in PR description.
-Use generic descriptions: "indexed <N> files → <M> edges, 0 errors" — no project names.
-
-### E2E extractor test procedure (gate 3.13)
-
-For any story that adds/modifies an extractor, create synthetic fixture files in
-`testdata/<feature>/` and write E2E tests that exercise the full extraction pipeline.
-
-**Required for:** user-feature, bug-fix (code intelligence scope)
-**Skip for:** infrastructure, refactor, docs, dependency-bump
-
-Fixture rules:
-- All fixtures are **synthetic** — never copy from real projects
-- Each fixture is self-contained (no external dependencies)
-- Fixtures cover: basic, edge cases, malformed input, empty input, multi-block
-
-```bash
-go test -race -short -run=E2E ./internal/<pkg>/...
-```
-
-**Evidence:** All E2E tests pass. List fixture names and what each covers in PR description.
+| 3.14 | Capability benchmark pass — recall-based benchmark against live server, no regression vs baseline | `go test -tags=capbench -run=TestCapabilityBenchmark ./benchmarks/<overlay>/capability/` — overall recall >= baseline. Save results to `results_current.json`. |
 
 ### Benchmark procedure (gate 3.14)
 
-For any story that adds/modifies an extractor or parser, add Go `testing.B`
-benchmarks and record a performance baseline.
+For any story that adds/modifies an extractor, indexer, or code intelligence feature,
+create a **capability benchmark** following the Rails pattern (`benchmarks/rails/capability/`).
+This is NOT a raw `go test -bench` — it is an **agent-oriented recall benchmark** that tests
+whether the live server can answer developer questions about the codebase.
 
-**Required for:** user-feature (code intelligence scope)
+**Required for:** user-feature, bug-fix (code intelligence scope)
 **Skip for:** infrastructure, refactor, docs, dependency-bump
 
+#### Structure (follow `benchmarks/rails/capability/` exactly)
+
+```
+benchmarks/<overlay>/capability/
+├── runner.go          ← HTTP client: calls /api/v1/graph/*, /api/v1/symbols, /api/v1/query
+├── capability_test.go ← Build tag: capbench. Loads dataset, runs tasks, scores recall, compares baseline
+├── dataset.json       ← 15-20 developer questions with expect_symbols + expect_files
+├── baseline_v1.json   ← Frozen baseline (CAPBENCH_FREEZE=1)
+├── setup.sh           ← Bootstrap: create nanobrain_test DB, migrate, start server on :3199
+└── README.md
+```
+
+#### runner.go must implement
+
+- `Config{ServerURL, Workspace, Freeze}` from env (`NANO_BRAIN_URL`, `NANO_BRAIN_WORKSPACE`, `CAPBENCH_FREEZE`)
+- `Task{ID, Category, Question, Tools, Input, ExpectSymbols, ExpectFiles}` — same schema as Rails
+- `AgentPlan{Enabled, Tools, MaxSymbolQueries}` — deterministic agent workflow layer
+- Tool callers: `callFlow`, `callImpact`, `callTrace`, `callSymbols`, `callQuery` — POST/GET to `/api/v1/graph/*`
+- `RunTask` → unions results from fixed tools + agent augmentation → `scoreTask`
+- `scoreTask` = `matched / (ExpectSymbols + ExpectFiles)`, case-insensitive substring match
+- `Aggregate` → `BenchResults{Version, Overall, ByCategory, Tasks}`
+
+#### capability_test.go must
+
+1. Skip if server unreachable (`t.Skipf`)
+2. Load `dataset.json`, run all tasks via `RunTask`
+3. Aggregate, print scorecard, write `results_current.json`
+4. If `CAPBENCH_FREEZE=1` → write `baseline_v1.json`, return
+5. Otherwise compare vs `baseline_v1.json` — **FAIL if overall < baseline - 0.001**
+
+#### dataset.json categories for code intelligence
+
+| Category | Example question |
+|----------|-----------------|
+| `graph-out` | "What does Button.vue import?" |
+| `graph-in` | "What files import Button.vue?" |
+| `trace` | "What does handleClick() eventually call?" |
+| `impact` | "What breaks if I change Button.vue?" |
+| `symbol-lookup` | "Where is the useConfirmation composable?" |
+| `multi-tool` | "Show me the flow starting from app.vue and trace all its calls" |
+
+#### Run command
+
 ```bash
-go test -bench=. -benchmem -run=^$ ./internal/<pkg>/... -count=1 2>&1 | tee /tmp/bench-<story>.txt
+# Setup (once)
+cd benchmarks/<overlay>/capability && ./setup.sh
+
+# Run benchmark
+go test -v -tags=capbench -run=TestCapabilityBenchmark ./benchmarks/<overlay>/capability/
+
+# Freeze baseline
+CAPBENCH_FREEZE=1 go test -v -tags=capbench -run=TestCapabilityBenchmark ./benchmarks/<overlay>/capability/
 ```
 
-Save to `docs/evidence/benchmark-<story>.md` with these sections:
+#### FAIL conditions
 
-```markdown
-## Benchmark: <story-name>
-Date: <date>
+- Overall recall < baseline - 0.001 → FAIL
+- Server unreachable → SKIP (not FAIL — benchmark requires live server)
+- Any task panics → FAIL
 
-| Benchmark | ns/op | B/op | allocs/op |
-|-----------|-------|------|-----------|
-| Small | 179µs | 56KB | 520 |
-| Medium | 1.5ms | 472KB | 2919 |
-| Large | 4.1ms | 2.5MB | 7484 |
+#### Privacy
 
-## Regression Check
-- vs prior run: <comparison>
-- Verdict: PASS / FAIL (>2x regression)
-```
-
-**FAIL conditions:**
-- Any benchmark >2x slower than prior recorded baseline → FAIL
-- Any benchmark panics → FAIL
+- Use placeholder workspace names in dataset (`vue-app`, `rails-app`)
+- Actual workspace hash supplied at runtime via `NANO_BRAIN_WORKSPACE`
+- Never commit real workspace names, paths, or hashes
 
 ---
 

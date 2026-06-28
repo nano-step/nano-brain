@@ -220,3 +220,89 @@ func splitContainsTarget(target string) string {
 	}
 	return target
 }
+
+func TestVueSFC_E2E_AgentScenarios(t *testing.T) {
+	ex := newTestVueExtractor(t)
+	passed, failed := 0, 0
+
+	for _, task := range vueTasks {
+		t.Run(task.ID, func(t *testing.T) {
+			content := loadFixture(t, task.Fixture)
+			edges, err := ex.ExtractEdges(task.Fixture, content)
+			if err != nil {
+				t.Fatalf("extract: %v", err)
+			}
+			if task.EdgeType != "" {
+				edges = filterEdges(edges, graph.EdgeKind(task.EdgeType))
+			}
+			switch task.Direction {
+			case "out":
+				edges = graphOutgoing(edges, task.Node)
+			case "in":
+				edges = graphIncoming(edges, task.Node)
+			case "both":
+				out := graphOutgoing(edges, task.Node)
+				in := graphIncoming(edges, task.Node)
+				edges = append(out, in...)
+			}
+			if len(edges) < task.ExpectCount {
+				t.Errorf("got %d edges, want >= %d", len(edges), task.ExpectCount)
+				failed++
+				return
+			}
+			if len(task.ExpectTargets) > 0 {
+				targetSet := make(map[string]bool)
+				for _, e := range edges {
+					targetSet[e.TargetNode] = true
+				}
+				for _, want := range task.ExpectTargets {
+					if !targetSet[want] {
+						t.Errorf("missing expected target %q", want)
+					}
+				}
+			}
+			passed++
+		})
+	}
+	t.Logf("AgentScenarios: %d/%d passed", passed, passed+failed)
+}
+
+func TestVueSFC_E2E_EdgeQuality(t *testing.T) {
+	ex := newTestVueExtractor(t)
+	type edgeRange struct {
+		containsMin, containsMax int
+		importsMin, importsMax   int
+		callsMin, callsMax       int
+	}
+	ranges := map[string]edgeRange{
+		"small-counter.vue":    {containsMin: 2, containsMax: 5, importsMin: 1, importsMax: 3, callsMin: 0, callsMax: 5},
+		"medium-component.vue": {containsMin: 15, containsMax: 30, importsMin: 3, importsMax: 6, callsMin: 5, callsMax: 15},
+		"large-page.vue":       {containsMin: 30, containsMax: 60, importsMin: 15, importsMax: 30, callsMin: 20, callsMax: 60},
+		"template-only.vue":    {containsMin: 0, containsMax: 0, importsMin: 0, importsMax: 0, callsMin: 0, callsMax: 0},
+		"component-heavy.vue":  {containsMin: 5, containsMax: 15, importsMin: 10, importsMax: 20, callsMin: 0, callsMax: 5},
+		"js-script.vue":        {containsMin: 0, containsMax: 5, importsMin: 2, importsMax: 5, callsMin: 0, callsMax: 0},
+		"mixed-blocks.vue":     {containsMin: 5, containsMax: 15, importsMin: 3, importsMax: 6, callsMin: 1, callsMax: 10},
+		"malformed.vue":        {containsMin: 0, containsMax: 5, importsMin: 1, importsMax: 3, callsMin: 0, callsMax: 0},
+	}
+	for name, expect := range ranges {
+		t.Run(name, func(t *testing.T) {
+			content := loadFixture(t, name)
+			edges, err := ex.ExtractEdges(name, content)
+			if err != nil {
+				t.Fatalf("extract: %v", err)
+			}
+			contains := len(filterEdges(edges, graph.EdgeContains))
+			imports := len(filterEdges(edges, graph.EdgeImports))
+			calls := len(filterEdges(edges, graph.EdgeCalls))
+			if contains < expect.containsMin || contains > expect.containsMax {
+				t.Errorf("contains=%d, want [%d,%d]", contains, expect.containsMin, expect.containsMax)
+			}
+			if imports < expect.importsMin || imports > expect.importsMax {
+				t.Errorf("imports=%d, want [%d,%d]", imports, expect.importsMin, expect.importsMax)
+			}
+			if calls < expect.callsMin || calls > expect.callsMax {
+				t.Errorf("calls=%d, want [%d,%d]", calls, expect.callsMin, expect.callsMax)
+			}
+		})
+	}
+}

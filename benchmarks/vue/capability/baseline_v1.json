@@ -1,0 +1,194 @@
+{
+  "version": "1",
+  "overall": 0.988,
+  "by_category": {
+    "graph-out": 1,
+    "multi-tool": 0.929,
+    "search-qa": 1,
+    "symbol-lookup": 1,
+    "trace": 1
+  },
+  "tasks": [
+    {
+      "id": "vue-graph-out-01",
+      "category": "graph-out",
+      "recall": 1,
+      "fixed_recall": 0.833,
+      "agent_recall": 1,
+      "matched": [
+        "cartItemsStore",
+        "useCartItemsStore",
+        "cartType",
+        "addTradeLog",
+        "cartLogNetwork",
+        "tradeit/composables/cart/useCart.js"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-graph-out-02",
+      "category": "graph-out",
+      "recall": 1,
+      "fixed_recall": 0.25,
+      "agent_recall": 1,
+      "matched": [
+        "useUseStyleHelper",
+        "addElementClasses",
+        "removeElementClasses",
+        "tradeit/composables/useStyleHelper.js"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-trace-01",
+      "category": "trace",
+      "recall": 1,
+      "fixed_recall": 0.833,
+      "agent_recall": 1,
+      "matched": [
+        "addTradeLog",
+        "createCartLog",
+        "getAxiosInstance",
+        "post",
+        "useNuxtApp",
+        "useRuntimeConfig"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-trace-02",
+      "category": "trace",
+      "recall": 1,
+      "fixed_recall": 0.857,
+      "agent_recall": 1,
+      "matched": [
+        "buildChartData",
+        "formatChartData",
+        "sortByTime",
+        "getTime",
+        "map",
+        "Number",
+        "pathOr"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-trace-03",
+      "category": "trace",
+      "recall": 1,
+      "fixed_recall": 0.875,
+      "agent_recall": 1,
+      "matched": [
+        "addToHistoryItems",
+        "findIndex",
+        "setItem",
+        "slice",
+        "splice",
+        "stringify",
+        "unshift",
+        "error"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-symbol-01",
+      "category": "symbol-lookup",
+      "recall": 1,
+      "fixed_recall": 0.5,
+      "agent_recall": 1,
+      "matched": [
+        "addTradeLog",
+        "tradeit/composables/cart/useCart.js"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-symbol-02",
+      "category": "symbol-lookup",
+      "recall": 1,
+      "fixed_recall": 0.5,
+      "agent_recall": 1,
+      "matched": [
+        "buildChartData",
+        "tradeit/composables/insight/useInsight.js"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-symbol-03",
+      "category": "symbol-lookup",
+      "recall": 1,
+      "fixed_recall": 0.5,
+      "agent_recall": 1,
+      "matched": [
+        "useUseStyleHelper",
+        "tradeit/composables/useStyleHelper.js"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-search-qa-01",
+      "category": "search-qa",
+      "recall": 1,
+      "fixed_recall": 0.667,
+      "agent_recall": 1,
+      "matched": [
+        "cartItemsStore",
+        "useCartItemsStore",
+        "cartType",
+        "cartLogNetwork",
+        "addTradeLog",
+        "tradeit/composables/cart/useCart.js"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-search-qa-02",
+      "category": "search-qa",
+      "recall": 1,
+      "fixed_recall": 1,
+      "agent_recall": 1,
+      "matched": [
+        "fetchInsightCollectionChartData",
+        "getChartItemData",
+        "fetchContainerChartData",
+        "tradeit/composables/insight/useInsight.js"
+      ],
+      "missed": null
+    },
+    {
+      "id": "vue-multi-01",
+      "category": "multi-tool",
+      "recall": 0.8571428571428571,
+      "fixed_recall": 0.857,
+      "agent_recall": 0.857,
+      "matched": [
+        "addTradeLog",
+        "createCartLog",
+        "getAxiosInstance",
+        "cartItemsStore",
+        "cartType",
+        "tradeit/composables/cart/useCart.js"
+      ],
+      "missed": [
+        "useCartItemsStore"
+      ]
+    },
+    {
+      "id": "vue-multi-02",
+      "category": "multi-tool",
+      "recall": 1,
+      "fixed_recall": 0.833,
+      "agent_recall": 1,
+      "matched": [
+        "buildChartData",
+        "formatChartData",
+        "sortByTime",
+        "fetchInsightCollectionChartData",
+        "getChartItemData",
+        "tradeit/composables/insight/useInsight.js"
+      ],
+      "missed": null
+    }
+  ]
+}
