@@ -148,6 +148,8 @@ Run before creating or merging a PR. All checks must be green.
 | 3.10 | Self-review evidence exists for this story | `ls docs/evidence/self-review-*.md` for current story |
 | 3.11 | No real workspace names/paths/hashes in staged files | `grep -rn 'Phil-timeshel\|capyhome\|zengamingx\|/Users/tamlh/workspaces/self/Projects/' --include='*.go' --include='*.md' --include='*.json' --include='*.sh' --include='*.yml' .` = empty |
 | 3.12 | E2E workspace test pass — extractor/indexer tested on real project with >100 files | Build binary → start server → index a real workspace → verify edges stored → query memory_graph → 0 errors in logs. **Privacy:** use placeholder names in evidence files, never real workspace names/paths |
+| 3.13 | E2E extractor test pass — all fixtures in `testdata/<feature>/` exercise the extractor with 0 panics, 0 errors | `go test -race -short -run=E2E ./internal/<pkg>/...` — all E2E tests pass. Fixture files are synthetic (never real project content). |
+| 3.14 | Benchmark pass — performance baseline recorded, no regressions vs prior run | `go test -bench=. -benchmem -run=^$ ./internal/<pkg>/... -count=1` — all benchmarks complete. Save results to `docs/evidence/benchmark-<story>.md`. Compare ns/op with baseline: >2x regression = FAIL. |
 
 ### E2E workspace test procedure (gate 3.12)
 
@@ -197,6 +199,58 @@ kill $SERVER_PID; wait $SERVER_PID 2>/dev/null
 
 **Evidence:** Paste summary output (file count, edge count, error count) in PR description.
 Use generic descriptions: "indexed <N> files → <M> edges, 0 errors" — no project names.
+
+### E2E extractor test procedure (gate 3.13)
+
+For any story that adds/modifies an extractor, create synthetic fixture files in
+`testdata/<feature>/` and write E2E tests that exercise the full extraction pipeline.
+
+**Required for:** user-feature, bug-fix (code intelligence scope)
+**Skip for:** infrastructure, refactor, docs, dependency-bump
+
+Fixture rules:
+- All fixtures are **synthetic** — never copy from real projects
+- Each fixture is self-contained (no external dependencies)
+- Fixtures cover: basic, edge cases, malformed input, empty input, multi-block
+
+```bash
+go test -race -short -run=E2E ./internal/<pkg>/...
+```
+
+**Evidence:** All E2E tests pass. List fixture names and what each covers in PR description.
+
+### Benchmark procedure (gate 3.14)
+
+For any story that adds/modifies an extractor or parser, add Go `testing.B`
+benchmarks and record a performance baseline.
+
+**Required for:** user-feature (code intelligence scope)
+**Skip for:** infrastructure, refactor, docs, dependency-bump
+
+```bash
+go test -bench=. -benchmem -run=^$ ./internal/<pkg>/... -count=1 2>&1 | tee /tmp/bench-<story>.txt
+```
+
+Save to `docs/evidence/benchmark-<story>.md` with these sections:
+
+```markdown
+## Benchmark: <story-name>
+Date: <date>
+
+| Benchmark | ns/op | B/op | allocs/op |
+|-----------|-------|------|-----------|
+| Small | 179µs | 56KB | 520 |
+| Medium | 1.5ms | 472KB | 2919 |
+| Large | 4.1ms | 2.5MB | 7484 |
+
+## Regression Check
+- vs prior run: <comparison>
+- Verdict: PASS / FAIL (>2x regression)
+```
+
+**FAIL conditions:**
+- Any benchmark >2x slower than prior recorded baseline → FAIL
+- Any benchmark panics → FAIL
 
 ---
 
