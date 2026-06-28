@@ -236,6 +236,47 @@ cmd_exists() {
     command -v "$1" &> /dev/null
 }
 
+# Check GSD phase state from .planning/STATE.md
+# Returns: "none", "in_progress", "completed", or "unknown"
+get_gsd_phase_state() {
+    local state_file=".planning/STATE.md"
+    if [[ ! -f "$state_file" ]]; then
+        echo "unknown"
+        return
+    fi
+    
+    # Matches: **Phase N: Name** (status)
+    local current_phase
+    current_phase=$(grep -E '^\*\*Phase [0-9]+:' "$state_file" 2>/dev/null | head -1 || echo "")
+    
+    if [[ -z "$current_phase" ]]; then
+        echo "none"
+        return
+    fi
+    
+    if echo "$current_phase" | grep -qiE 'in.progress|in_progress'; then
+        echo "in_progress"
+    elif echo "$current_phase" | grep -qiE 'completed|done|finished'; then
+        echo "completed"
+    elif echo "$current_phase" | grep -qiE 'not.started|pending|planned'; then
+        echo "pending"
+    else
+        echo "unknown"
+    fi
+}
+
+has_active_gsd_phase() {
+    local state
+    state=$(get_gsd_phase_state)
+    [[ "$state" == "in_progress" ]]
+}
+
+is_gsd_phase_completed() {
+    local state
+    state=$(get_gsd_phase_state)
+    [[ "$state" == "completed" ]]
+}
+
 # ============================================================================
 # Gate Phase Implementations
 # ============================================================================
@@ -257,19 +298,22 @@ phase_pre_work() {
         add_check "SKIP" "1.1 gh CLI not installed"
     fi
     
-    # 1.2 No active OpenSpec changes
-    if cmd_exists openspec; then
-        ospec_out=$(openspec list 2>/dev/null || echo "")
-        if echo "$ospec_out" | grep -qiE "no (active|pending) changes|^$"; then
-            add_check "PASS" "1.2 No active OpenSpec changes"
-        elif echo "$ospec_out" | grep -qE "active|pending|in-progress"; then
-            add_check "FAIL" "1.2 Active OpenSpec changes still exist"
-        else
-            add_check "PASS" "1.2 No active OpenSpec changes"
-        fi
-    else
-        add_check "SKIP" "1.2 openspec not installed"
-    fi
+    # 1.2 No active GSD phase
+    gsd_state=$(get_gsd_phase_state)
+    case "$gsd_state" in
+        none|completed)
+            add_check "PASS" "1.2 No active GSD phase (state: $gsd_state)"
+            ;;
+        in_progress)
+            add_check "FAIL" "1.2 GSD phase still in progress — complete or archive before starting new feature"
+            ;;
+        pending)
+            add_check "PASS" "1.2 GSD phase pending (not started)"
+            ;;
+        *)
+            add_check "SKIP" "1.2 Cannot determine GSD state (.planning/STATE.md missing or invalid)"
+            ;;
+    esac
     
     # 1.3 GitHub issue exists or skip-conditions met (R89)
     if [[ -n "$ISSUE" ]]; then
@@ -328,6 +372,27 @@ phase_pre_work() {
     else
         add_check "SKIP" "1.6 On master or branch unknown (check after creating feature branch)"
     fi
+    
+    # 1.7 Deep-design completed (normal+ risk only — tiny lane skips)
+    deep_design_file=$(find docs/evidence -name "deep-design-*.md" -type f 2>/dev/null | sort -r | head -1)
+    if [[ -n "$deep_design_file" ]]; then
+        if grep -qE '(Verdict|verdict|PASS|pass)' "$deep_design_file"; then
+            add_check "PASS" "1.7 Deep-design evidence found: $deep_design_file"
+        else
+            add_check "FAIL" "1.7 $deep_design_file missing verdict (PASS/FAIL)"
+        fi
+    else
+        if [[ -n "$ISSUE" ]] && cmd_exists gh; then
+            labels=$(gh issue view "$ISSUE" --json labels --jq '.labels[].name' 2>/dev/null || echo "")
+            if echo "$labels" | grep -q "lane:tiny"; then
+                add_check "SKIP" "1.7 Deep-design skipped (tiny lane)"
+            else
+                add_check "FAIL" "1.7 No deep-design evidence — run deep-design pipeline first"
+            fi
+        else
+            add_check "FAIL" "1.7 No deep-design evidence — run deep-design pipeline first"
+        fi
+    fi
 }
 
 phase_in_progress() {
@@ -342,16 +407,16 @@ phase_in_progress() {
         add_check "FAIL" "2.1 Still on master (should be on feature branch)"
     fi
     
-    # 2.2 OpenSpec change active
-    if cmd_exists openspec; then
-        ospec_out=$(openspec list --json 2>/dev/null || openspec list 2>/dev/null || echo "")
-        if echo "$ospec_out" | grep -qE "active|pending|in-progress"; then
-            add_check "PASS" "2.2 OpenSpec change is active"
-        else
-            add_check "FAIL" "2.2 No active OpenSpec change"
-        fi
+    # 2.2 Active GSD phase exists
+    gsd_state=$(get_gsd_phase_state)
+    if [[ "$gsd_state" == "in_progress" ]]; then
+        add_check "PASS" "2.2 Active GSD phase exists (state: in_progress)"
+    elif [[ "$gsd_state" == "pending" ]]; then
+        add_check "FAIL" "2.2 GSD phase not started — run /gsd-plan-phase or /gsd-execute-phase first"
+    elif [[ "$gsd_state" == "none" ]]; then
+        add_check "FAIL" "2.2 No GSD phase defined — initialize with /gsd-new-project or /gsd-new-milestone"
     else
-        add_check "SKIP" "2.2 openspec not installed"
+        add_check "SKIP" "2.2 Cannot determine GSD state"
     fi
     
     # 2.3 Validation ladder pass
@@ -684,24 +749,22 @@ phase_post_merge() {
         add_check "SKIP" "4.2 gh CLI not installed"
     fi
     
-    # 4.3 OpenSpec archived AND Review Verdict was PASS (R28)
-    if cmd_exists openspec; then
-        ospec_out=$(openspec list 2>/dev/null || echo "")
-        if echo "$ospec_out" | grep -qE "active|pending|in-progress"; then
-            add_check "FAIL" "4.3 OpenSpec change still active"
-        else
-            review_files=$(find docs/evidence -name "review-*.md" -type f 2>/dev/null || true)
-            if [[ -z "$review_files" ]]; then
-                add_check "FAIL" "4.3 OpenSpec archived but no review-*.md evidence (R28)"
-            elif echo "$review_files" | xargs grep -lE '^Review Verdict: PASS' &>/dev/null; then
-                add_check "PASS" "4.3 OpenSpec archived with Review Verdict: PASS (R28)"
-            else
-                add_check "FAIL" "4.3 OpenSpec archived but no Review Verdict: PASS found (R28)"
-            fi
-        fi
-    else
-        add_check "SKIP" "4.3 openspec not installed"
-    fi
+    # 4.3 GSD phase completed
+    gsd_state=$(get_gsd_phase_state)
+    case "$gsd_state" in
+        completed)
+            add_check "PASS" "4.3 GSD phase completed"
+            ;;
+        in_progress)
+            add_check "FAIL" "4.3 GSD phase still in progress — run /gsd-ship-phase to complete"
+            ;;
+        pending|none)
+            add_check "PASS" "4.3 GSD phase not started (no active phase to complete)"
+            ;;
+        *)
+            add_check "SKIP" "4.3 Cannot determine GSD state"
+            ;;
+    esac
     
     # 4.4 Feature branch deleted
     current_branch=$(git branch --show-current 2>/dev/null || echo "unknown")

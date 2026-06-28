@@ -34,7 +34,7 @@ review gate before any work is archived.
          │
          ▼  normal / high-risk
 ┌─────────────────────┐
-│  Propose            │  openspec new change "<name>" → proposal.md + design.md + tasks.md
+│  Propose            │  /gsd-discuss-phase → capture decisions in CONTEXT.md
 │                     │  → update issue #N: link proposal location
 └────────┬────────────┘
          │
@@ -98,7 +98,7 @@ review gate before any work is archived.
          │
          ▼  approved
 ┌─────────────────────┐
-│  Harness Delta      │  merge PR → openspec archive "<name>"
+│  Harness Delta      │  merge PR → /gsd-ship-phase (archive phase)
 │                     │  update docs/stories/, docs/decisions/, docs/TEST_MATRIX.md
 │                     │  capture friction → HARNESS_BACKLOG.md if needed
 │                     │  → close issue #N with link to merged PR
@@ -140,13 +140,13 @@ See `docs/decisions/README.md` for when to write ADRs.
 Human intent / prompt
   └── GitHub Issue tracker (nano-step/nano-brain)
   └── Feature Intake (docs/FEATURE_INTAKE.md)
-        └── OpenSpec change proposal (openspec/changes/<name>/)
+        └── GSD Core phase (CONTEXT.md, PLAN.md files)
               ├── proposal.md   — what and why
               ├── design.md     — how (architecture, data model, API shape)
               ├── specs/        — one spec per behavior slice
               └── tasks.md      — implementation checklist
         └── Story packet (docs/stories/<name>.md)
-              └── links to OpenSpec change, lists acceptance criteria
+              └── links to GSD Core phase, lists acceptance criteria
         └── docs/TEST_MATRIX.md
               └── maps each story to unit / integration / E2E proof
         └── docs/decisions/
@@ -156,17 +156,44 @@ Human intent / prompt
 Before implementation, product docs and proposal artifacts describe intent.
 After implementation, those artifacts plus passing tests are the living contract.
 
-## OpenSpec Integration
+## GSD Core Integration
 
-OpenSpec is the **proposal and design layer** of this harness. Every normal or
-high-risk change must have an OpenSpec change before implementation starts.
+GSD Core is the **phase loop framework** of this harness. Every normal or
+high-risk change must go through the GSD Core phase loop before shipping.
+
+### State Tracking
+
+GSD tracks phase state in `.planning/STATE.md`:
+- **Current Phase**: which phase is active (or "None")
+- **Progress table**: per-phase status (Pending → In Progress → Completed)
+- **Phase directories**: `.planning/phases/<phase>/` with GOAL.md, PLAN.md, TASKS.md
 
 ### Commands
 ```bash
-openspec new change "<name>"            # scaffold change directory
-openspec validate "<name>" --strict     # validate all artifacts
-openspec archive "<name>"               # archive after merge
+/gsd-discuss-phase    # capture implementation decisions
+/gsd-deep-design      # validate design (Metis + Oracle pipeline)
+/gsd-plan-phase       # research, decompose, verify plans
+/gsd-execute-phase    # run plans in parallel waves
+/gsd-verify-work      # check execution matches plans
+/gsd-ship-phase       # create PR, archive phase
 ```
+
+### Gate Integration
+
+Harness gates validate GSD state:
+- **Gate 1.2**: No active GSD phase (all phases Pending or Completed)
+- **Gate 1.7**: Deep-design completed with evidence (normal+ risk)
+- **Gate 2.2**: Active GSD phase exists (current phase = "in progress")
+- **Gate 4.3**: GSD phase completed (current phase = "completed" or moved to next)
+
+### Required Workflow Sequence
+
+For normal/high-risk changes:
+```
+/gsd-discuss-phase → /gsd-deep-design → /gsd-plan-phase → /gsd-execute-phase
+```
+
+**Gate 1.7 enforces:** Deep-design evidence must exist before implementation begins.
 
 ## Deep-Design Gap Analysis
 
@@ -444,7 +471,7 @@ Unmet criteria (if FAIL):
 - [criterion] — missing [evidence type]
 ```
 
-**Rule:** `openspec archive "<name>"` is forbidden until Review Verdict = PASS.
+**Rule:** `/gsd-ship-phase` is forbidden until Review Verdict = PASS.
 
 ## PR + Bot Review Loop
 
@@ -470,7 +497,7 @@ After the local Review Gate passes, push branch and open a PR. The PR triggers y
         ├── comments stylistic only ─► address inline or reply with reason
         │
         ▼
-3. Bot approves → merge → openspec archive "<name>"
+3. Bot approves → merge → /gsd-ship-phase
 ```
 
 **R31: Agent-triaged comment verdicts (do NOT trust Gemini's severity labels).**
@@ -544,6 +571,36 @@ All development transitions are governed by the gate specification in
 2. **R3: All gates must PASS** before proceeding to the next phase.
 3. **R4: FAIL = BLOCK.** Agent must fix failures before continuing.
 4. **R5: Agent MUST NOT start the next feature** until ⑤ NEXT-READY passes.
+5. **R6: Every gate MUST have evidence.** No gate passes without verifiable evidence.
+
+### Gate Evidence Requirements
+
+Every gate check MUST produce evidence. Evidence is saved to `docs/evidence/` with naming convention: `{gate-phase}-{check-id}-{slug}.md`
+
+| Gate Phase | Evidence Format | Example |
+|------------|-----------------|---------|
+| ① PRE-WORK | `{phase}-{check}.md` with outputs | `pre-work-1.7-deep-design.md` |
+| ② IN-PROGRESS | `self-review-{story}.md` | `self-review-497.md` |
+| ③ PRE-MERGE | `review-{story}.md` + `smoke-e2e-{story}.md` | `review-497.md` |
+| ④ POST-MERGE | `post-merge-{pr}.md` | `post-merge-123.md` |
+| ⑤ NEXT-READY | Aggregate check (no separate file) | — |
+| ⑥ RETRO-GATE | `retro-epic-{N}.md` | `retro-epic-10.md` |
+
+**Evidence file structure:**
+```markdown
+## Gate: {phase} — Check {id}
+Date: YYYY-MM-DD
+Commit: {sha}
+
+## Check: {description}
+- Status: PASS | FAIL | SKIP
+- Evidence: {command output or file reference}
+
+## Gate: {phase} — Check {id+1}
+...
+```
+
+**Rule:** `harness-check.sh` validates evidence existence. Missing evidence = FAIL.
 
 Run gates via: `./scripts/harness-check.sh <phase> [options]`
 
@@ -577,7 +634,7 @@ and retro output template.
    qualify as "E2E not applicable."
 4. **Happy-path-only E2E for high-risk changes.** High-risk must cover at least
    one error or edge path.
-5. **Archiving without review verdict.** openspec archive "<name>" is blocked until
+5. **Archiving without review verdict.** `/gsd-ship-phase` is blocked until
    the story shows Review Verdict = PASS with per-criterion evidence.
 6. **Backdating evidence.** Evidence must reference the current implementation
    commit, not a previous passing run.

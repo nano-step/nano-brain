@@ -34,16 +34,19 @@ Gate specification for the nano-brain v2 Go project. Each gate defines the check
 
 Run before starting any new feature.
 
-| # | Check | How to verify |
-|---|-------|---------------|
-| 1.1 | Previous feature PR merged & issue closed | `gh pr list --state merged`, `gh issue view` |
-| 1.2 | Previous OpenSpec change archived | `openspec list` — no active changes |
-| 1.3 | GitHub issue exists for new feature | `gh issue view <N>` |
-| 1.4 | Branch `b-main` up-to-date | `git log origin/b-main..HEAD` = empty |
-| 1.5 | Validation ladder clean on `b-main` | `go build ./... && go test -race -short ./...` |
-| 1.6 | Feature branch created off `b-main` (NOT master) | `git log --oneline b-main..HEAD` — parent is b-main |
+| # | Check | How to verify | Evidence Required |
+|---|-------|---------------|-------------------|
+| 1.1 | Previous feature PR merged & issue closed | `gh pr list --state merged`, `gh issue view` | PR link + issue link |
+| 1.2 | No active GSD phase | `.planning/STATE.md` — current phase is "None" or all phases Pending/Completed | STATE.md snapshot |
+| 1.3 | GitHub issue exists for new feature | `gh issue view <N>` | Issue URL |
+| 1.4 | Branch `b-main` up-to-date | `git log origin/b-main..HEAD` = empty | git log output |
+| 1.5 | Validation ladder clean on `b-main` | `go build ./... && go test -race -short ./...` | Build + test output |
+| 1.6 | Feature branch created off `b-main` (NOT master) | `git log --oneline b-main..HEAD` — parent is b-main | Branch name + parent commit |
+| 1.7 | Deep-design completed (normal+ risk) | `docs/evidence/deep-design-{phase}.md` exists with verdict | Deep-design evidence file |
 
-**SKIP rules:** First feature of the project → skip 1.1 and 1.2.
+**SKIP rules:** 
+- First feature of the project → skip 1.1 and 1.2
+- Tiny lane changes → skip 1.7 (deep-design not required)
 
 ---
 
@@ -54,7 +57,7 @@ Run continuously during development. Check after each story completes.
 | # | Check | How to verify |
 |---|-------|---------------|
 | 2.1 | On feature branch, not `b-main` | `git branch --show-current` ≠ `b-main` |
-| 2.2 | OpenSpec change exists & active | `openspec list` has current change |
+| 2.2 | Active GSD phase exists | `.planning/STATE.md` — current phase shows "in progress" |
 | 2.3 | Validation ladder pass after each story | `go build ./... && go test -race -short ./...` |
 | 2.4 | Self-review after PR creation — Oracle on PR diff, all critical/major findings fixed, evidence saved | Evidence file `docs/evidence/self-review-{story}.md` exists and no unresolved critical/major findings |
 
@@ -155,7 +158,7 @@ Run immediately after the PR merges.
 |---|-------|---------------|
 | 4.1 | PR merged successfully | `gh pr view --json state` = MERGED |
 | 4.2 | GitHub issue auto-closed | `gh issue view <N> --json state` = CLOSED |
-| 4.3 | OpenSpec archived | `openspec archive "<name>"` done |
+| 4.3 | GSD phase completed | `.planning/STATE.md` — current phase marked "completed" or moved to next |
 | 4.4 | Feature branch deleted | `git branch -r` no longer has branch |
 | 4.5 | `b-main` validation pass after merge | `go build ./... && go test -race -short ./...` |
 
