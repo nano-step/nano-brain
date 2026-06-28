@@ -99,7 +99,20 @@ The dataset (`dataset.json`) contains 18 tasks across 7 categories:
 | search-qa | 3 | Semantic questions about features |
 | multi-tool | 2 | Compound queries combining multiple tools |
 
-The dataset uses generic `app/` prefixes for all file paths. When running against a specific workspace, replace `app/` with your actual project prefix (e.g., `frontend/`, `src/`, etc.) in both `input.node` and `expect_files` fields.
+The dataset uses `__PROJECT__` placeholders for file path prefixes. Before running, generate `dataset.json` with your project prefix using the generate script (see below).
+
+## Generating the dataset
+
+The committed `dataset.template.json` uses `__PROJECT__` placeholders instead of real path prefixes. Before running the benchmark, generate `dataset.json` for your specific project:
+
+```bash
+./generate-dataset.sh <your-project>
+# Example: ./generate-dataset.sh tradeit
+```
+
+This replaces all `__PROJECT__` placeholders with your project name, producing a `dataset.json` with real paths that match your workspace.
+
+**Important:** `dataset.json` is gitignored — never commit it. Only `dataset.template.json` and the generate script are committed.
 
 ## Privacy
 

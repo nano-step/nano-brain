@@ -1,0 +1,218 @@
+{
+  "$comment": "Static capability benchmark for a Vue.js codebase. Measures whether nano-brain can answer real developer questions about components, composables, pages, stores, and utilities. Ground-truth expects key symbols and files a correct answer MUST surface. Do NOT edit expectations to make a run pass; only edit when the correct answer genuinely changes.",
+  "workspace": "vue-app",
+  "version": 1,
+  "agent": {
+    "enabled": true,
+    "tools": ["query_question", "query_input", "symbols_identifiers"],
+    "max_symbol_queries": 8
+  },
+  "tasks": [
+    {
+      "id": "vue-graph-out-01",
+      "category": "graph-out",
+      "question": "What does useCart.js import and what symbols does it contain?",
+      "tools": ["query"],
+      "input": {
+        "query": "useCart composable"
+      },
+      "expect_symbols": ["cartItemsStore", "useCartItemsStore", "addTradeLog", "cartType"],
+      "expect_files": ["__PROJECT__/composables/cart/useCart.js"]
+    },
+    {
+      "id": "vue-graph-out-02",
+      "category": "graph-out",
+      "question": "What symbols does useStyleHelper.js contain and what does it depend on?",
+      "tools": ["query"],
+      "input": {
+        "query": "useStyleHelper composable"
+      },
+      "expect_symbols": ["useUseStyleHelper", "addElementClasses", "removeElementClasses"],
+      "expect_files": ["__PROJECT__/composables/useStyleHelper.js"]
+    },
+    {
+      "id": "vue-graph-in-01",
+      "category": "graph-in",
+      "question": "What files import useInventoryState?",
+      "tools": ["impact"],
+      "input": {
+        "node": "__PROJECT__/composables/inventory/useInventoryState",
+        "max_depth": 3
+      },
+      "expect_symbols": ["useInventoryState"],
+      "expect_files": ["__PROJECT__/composables/inventory/useInventoryState"]
+    },
+    {
+      "id": "vue-graph-in-02",
+      "category": "graph-in",
+      "question": "What imports cartLogNetwork?",
+      "tools": ["impact"],
+      "input": {
+        "node": "__PROJECT__/network/cartLogNetwork",
+        "max_depth": 3
+      },
+      "expect_symbols": ["cartLogNetwork"],
+      "expect_files": ["__PROJECT__/network/cartLogNetwork"]
+    },
+    {
+      "id": "vue-trace-01",
+      "category": "trace",
+      "question": "What does addTradeLog() eventually call?",
+      "tools": ["trace"],
+      "input": {
+        "node": "__PROJECT__/composables/cart/useCart.js::addTradeLog",
+        "max_depth": 4
+      },
+      "expect_symbols": ["addTradeLog", "createCartLog", "getAxiosInstance", "post"]
+    },
+    {
+      "id": "vue-trace-02",
+      "category": "trace",
+      "question": "Trace the call chain from buildChartData in useInsight.js.",
+      "tools": ["trace"],
+      "input": {
+        "node": "__PROJECT__/composables/useInsight.js::buildChartData",
+        "max_depth": 4
+      },
+      "expect_symbols": ["buildChartData", "formatChartData", "sortByTime"]
+    },
+    {
+      "id": "vue-trace-03",
+      "category": "trace",
+      "question": "Trace the call chain from addToHistoryItems — what does it call?",
+      "tools": ["trace"],
+      "input": {
+        "node": "__PROJECT__/app/composables/useItemSearch.js::addToHistoryItems",
+        "max_depth": 4
+      },
+      "expect_symbols": ["addToHistoryItems", "findIndex", "setItem", "slice", "splice", "stringify", "unshift"]
+    },
+    {
+      "id": "vue-trace-04",
+      "category": "trace",
+      "question": "What downstream calls does createCartLog make?",
+      "tools": ["trace"],
+      "input": {
+        "node": "__PROJECT__/composables/cart/useCart.js::createCartLog",
+        "max_depth": 3
+      },
+      "expect_symbols": ["createCartLog", "getAxiosInstance", "post"]
+    },
+    {
+      "id": "vue-impact-01",
+      "category": "impact",
+      "question": "What breaks if I change useCart.js?",
+      "tools": ["impact"],
+      "input": {
+        "node": "__PROJECT__/composables/cart/useCart.js",
+        "max_depth": 3
+      },
+      "expect_symbols": ["useCart"],
+      "expect_files": ["__PROJECT__/composables/cart/useCart.js"]
+    },
+    {
+      "id": "vue-impact-02",
+      "category": "impact",
+      "question": "What breaks if I change useStyleHelper.js?",
+      "tools": ["impact"],
+      "input": {
+        "node": "__PROJECT__/composables/useStyleHelper.js",
+        "max_depth": 3
+      },
+      "expect_symbols": ["useStyleHelper"],
+      "expect_files": ["__PROJECT__/composables/useStyleHelper.js"]
+    },
+    {
+      "id": "vue-symbol-01",
+      "category": "symbol-lookup",
+      "question": "Where is addTradeLog defined?",
+      "tools": ["symbols"],
+      "input": {
+        "query": "addTradeLog"
+      },
+      "expect_symbols": ["addTradeLog"],
+      "expect_files": ["__PROJECT__/composables/cart/useCart.js"]
+    },
+    {
+      "id": "vue-symbol-02",
+      "category": "symbol-lookup",
+      "question": "Where is buildChartData defined?",
+      "tools": ["symbols"],
+      "input": {
+        "query": "buildChartData"
+      },
+      "expect_symbols": ["buildChartData"],
+      "expect_files": ["__PROJECT__/composables/useInsight.js"]
+    },
+    {
+      "id": "vue-symbol-03",
+      "category": "symbol-lookup",
+      "question": "Where is useInventoryItemAction defined?",
+      "tools": ["symbols"],
+      "input": {
+        "query": "useInventoryItemAction"
+      },
+      "expect_symbols": ["useInventoryItemAction", "addSelectedSaleItem", "actionButtonText"],
+      "expect_files": ["__PROJECT__/composables/inventory/useInventoryItemAction.js"]
+    },
+    {
+      "id": "vue-search-qa-01",
+      "category": "search-qa",
+      "question": "How does the cart composable work?",
+      "tools": ["query"],
+      "input": {
+        "query": "cart composable"
+      },
+      "expect_symbols": ["cartItemsStore", "useCartItemsStore", "addTradeLog", "cartType", "cartLogNetwork"],
+      "expect_files": ["__PROJECT__/composables/cart/useCart.js", "__PROJECT__/store/useCartItemsStore", "__PROJECT__/network/cartLogNetwork"]
+    },
+    {
+      "id": "vue-search-qa-02",
+      "category": "search-qa",
+      "question": "What composables handle inventory management?",
+      "tools": ["query"],
+      "input": {
+        "query": "inventory composable action sale"
+      },
+      "expect_symbols": ["useInventoryItemAction", "addSelectedSaleItem", "actionButtonText", "areItemDetailsVisible"],
+      "expect_files": ["__PROJECT__/composables/inventory/useInventoryItemAction.js"]
+    },
+    {
+      "id": "vue-search-qa-03",
+      "category": "search-qa",
+      "question": "How does the insight chart data work?",
+      "tools": ["query"],
+      "input": {
+        "query": "insight chart data"
+      },
+      "expect_symbols": ["buildChartData", "InsightRedis", "fetchInsightCollectionChartData", "useInsight"],
+      "expect_files": ["__PROJECT__/composables/useInsight.js"]
+    },
+    {
+      "id": "vue-multi-01",
+      "category": "multi-tool",
+      "question": "Trace the useCart addTradeLog call chain and search for cart-related composables.",
+      "tools": ["trace", "query"],
+      "input": {
+        "node": "__PROJECT__/composables/cart/useCart.js::addTradeLog",
+        "max_depth": 3,
+        "query": "cart composable"
+      },
+      "expect_symbols": ["addTradeLog", "createCartLog", "cartItemsStore", "useCartItemsStore"],
+      "expect_files": ["__PROJECT__/composables/cart/useCart.js", "__PROJECT__/store/useCartItemsStore", "__PROJECT__/network/cartLogNetwork"]
+    },
+    {
+      "id": "vue-multi-02",
+      "category": "multi-tool",
+      "question": "Trace the buildChartData call chain and search for insight-related code.",
+      "tools": ["trace", "query"],
+      "input": {
+        "node": "__PROJECT__/composables/useInsight.js::buildChartData",
+        "max_depth": 4,
+        "query": "insight chart data"
+      },
+      "expect_symbols": ["buildChartData", "formatChartData", "sortByTime", "fetchInsightCollectionChartData"],
+      "expect_files": ["__PROJECT__/composables/useInsight.js"]
+    }
+  ]
+}
