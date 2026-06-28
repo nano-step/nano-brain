@@ -23,10 +23,6 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 
 ## Current Position
 
-<!-- harness-check.sh greps the first `**Phase N:**` line below for state; keep it accurate -->
-**Phase 1: Vue SFC Support** (completed)
-**Phase 2: Import Edge Fix** (pending) — next; run /gsd-plan-phase 2
-
 Phase: 2 of 7 (Import Edge Fix)
 Plan: 0 of TBD in current phase
 Status: Ready to plan

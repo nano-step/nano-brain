@@ -244,21 +244,27 @@ get_gsd_phase_state() {
         echo "unknown"
         return
     fi
-    
-    # Matches: **Phase N: Name** (status)
-    local current_phase
-    current_phase=$(grep -E '^\*\*Phase [0-9]+:' "$state_file" 2>/dev/null | head -1 || echo "")
-    
-    if [[ -z "$current_phase" ]]; then
+
+    # Reads the gsd-core canonical STATE.md format, in priority order:
+    #   1) frontmatter `status:` (project/milestone state)
+    #   2) `## Current Position` -> `Status:` line
+    #   3) legacy `**Phase N: Name** (status)` bold line (back-compat)
+    local fm_status pos_status legacy probe
+    fm_status=$(awk 'NR==1&&/^---[[:space:]]*$/{f=1;next} f&&/^---[[:space:]]*$/{exit} f&&/^status:/{sub(/^status:[[:space:]]*/,"");gsub(/["'"'"']/,"");print;exit}' "$state_file")
+    pos_status=$(grep -iE '^Status:[[:space:]]' "$state_file" 2>/dev/null | head -1 | sed -E 's/^[Ss]tatus:[[:space:]]*//')
+    legacy=$(grep -E '^\*\*Phase [0-9]+:' "$state_file" 2>/dev/null | head -1 || echo "")
+
+    if [[ -z "$fm_status$pos_status$legacy" ]]; then
         echo "none"
         return
     fi
-    
-    if echo "$current_phase" | grep -qiE 'in.progress|in_progress'; then
+
+    probe="$fm_status | $pos_status | $legacy"
+    if echo "$probe" | grep -qiE 'in.?progress|in_progress|executing|verifying'; then
         echo "in_progress"
-    elif echo "$current_phase" | grep -qiE 'completed|done|finished'; then
+    elif echo "$probe" | grep -qiE 'complete|completed|done|finished'; then
         echo "completed"
-    elif echo "$current_phase" | grep -qiE 'not.started|pending|planned'; then
+    elif echo "$probe" | grep -qiE 'ready to (plan|execute)|planning|pending|not.?started|planned'; then
         echo "pending"
     else
         echo "unknown"
