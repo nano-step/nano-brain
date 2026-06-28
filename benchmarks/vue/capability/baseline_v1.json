@@ -1,9 +1,9 @@
 {
   "version": "1",
-  "overall": 0.988,
+  "overall": 1,
   "by_category": {
     "graph-out": 1,
-    "multi-tool": 0.929,
+    "multi-tool": 1,
     "search-qa": 1,
     "symbol-lookup": 1,
     "trace": 1
@@ -13,7 +13,7 @@
       "id": "vue-graph-out-01",
       "category": "graph-out",
       "recall": 1,
-      "fixed_recall": 0.833,
+      "fixed_recall": 0.667,
       "agent_recall": 1,
       "matched": [
         "cartItemsStore",
@@ -130,7 +130,7 @@
       "id": "vue-search-qa-01",
       "category": "search-qa",
       "recall": 1,
-      "fixed_recall": 0.667,
+      "fixed_recall": 1,
       "agent_recall": 1,
       "matched": [
         "cartItemsStore",
@@ -159,20 +159,19 @@
     {
       "id": "vue-multi-01",
       "category": "multi-tool",
-      "recall": 0.8571428571428571,
-      "fixed_recall": 0.857,
-      "agent_recall": 0.857,
+      "recall": 1,
+      "fixed_recall": 1,
+      "agent_recall": 1,
       "matched": [
         "addTradeLog",
         "createCartLog",
         "getAxiosInstance",
         "cartItemsStore",
+        "useCartItemsStore",
         "cartType",
         "tradeit/composables/cart/useCart.js"
       ],
-      "missed": [
-        "useCartItemsStore"
-      ]
+      "missed": null
     },
     {
       "id": "vue-multi-02",

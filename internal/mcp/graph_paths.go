@@ -20,16 +20,27 @@ func splitNodeSymbol(node string) (string, string) {
 	return node, ""
 }
 
-// resolveNodeAgainstWorkspace resolves a workspace-relative node identifier
-// (e.g. "internal/storage/migrate.go::RunMigrations") to its absolute form
-// using the workspace root stored in the workspaces table.
-//
-// Absolute paths and non-path tokens (e.g. import paths like "context") are
-// returned unchanged so the function is safe to call unconditionally and
-// remains backward compatible with callers that already pass absolute paths.
-//
-// An invalid workspace hash returns an error so the caller surfaces a clear
-// message to the agent instead of silently returning zero rows.
+// normalizeNodeForQuery normalizes a node identifier for DB queries.
+// The DB stores workspace-relative paths (e.g. "tradeit/composables/cart/useCart.js").
+// If the agent passes an absolute path, strip the workspace root prefix.
+// If already relative, return as-is.
+func normalizeNodeForQuery(ctx context.Context, queries *sqlc.Queries, workspaceHash, node string) (string, error) {
+	filePart, symbolSuffix := splitNodeSymbol(node)
+
+	if path.IsAbs(filePart) {
+		ws, err := queries.GetWorkspaceByHash(ctx, workspaceHash)
+		if err != nil {
+			return "", fmt.Errorf("workspace lookup failed: %w", err)
+		}
+		normalized := stripWorkspacePrefix(ws.Path, filePart)
+		return normalized + symbolSuffix, nil
+	}
+
+	return node, nil
+}
+
+// Deprecated: resolveNodeAgainstWorkspace converts relative paths to absolute,
+// which is the OPPOSITE of what the DB stores. Use normalizeNodeForQuery instead.
 func resolveNodeAgainstWorkspace(ctx context.Context, queries *sqlc.Queries, workspaceHash, node string) (string, error) {
 	filePart, symbolSuffix := splitNodeSymbol(node)
 	if path.IsAbs(filePart) {

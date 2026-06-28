@@ -1667,7 +1667,7 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
-			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
+			node, err = normalizeNodeForQuery(ctx, a.queries, ws, node)
 			if err != nil {
 				return errResult(err.Error()), nil
 			}
@@ -1769,7 +1769,7 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
-			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
+			node, err = normalizeNodeForQuery(ctx, a.queries, ws, node)
 			if err != nil {
 				return errResult(err.Error()), nil
 			}
@@ -1874,7 +1874,7 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			if node == "" {
 				return errResult("node is required"), nil
 			}
-			node, err = resolveNodeAgainstWorkspace(ctx, a.queries, ws, node)
+			node, err = normalizeNodeForQuery(ctx, a.queries, ws, node)
 			if err != nil {
 				return errResult(err.Error()), nil
 			}
