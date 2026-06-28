@@ -398,6 +398,12 @@ func startServer(configPath string) {
 			graphExtractors = append(graphExtractors, nuxtGE)
 			logger.Info().Msg("execution-flow: nuxt route extractor enabled")
 		}
+		if vueGE, err := graph.NewVueSFCExtractor(); err != nil {
+			logger.Warn().Err(err).Msg("vue sfc extractor init failed, skipping")
+		} else {
+			graphExtractors = append(graphExtractors, vueGE)
+			logger.Info().Msg("execution-flow: vue sfc extractor enabled")
+		}
 		if railsGE, err := graph.NewRailsExtractor(logger); err != nil {
 			logger.Warn().Err(err).Msg("rails route extractor init failed, skipping")
 		} else {

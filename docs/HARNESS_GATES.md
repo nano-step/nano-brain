@@ -147,6 +147,56 @@ Run before creating or merging a PR. All checks must be green.
 | 3.9 | PR targets `b-main` (NOT master) | `gh pr view --json baseRefName` = `b-main` |
 | 3.10 | Self-review evidence exists for this story | `ls docs/evidence/self-review-*.md` for current story |
 | 3.11 | No real workspace names/paths/hashes in staged files | `grep -rn 'Phil-timeshel\|capyhome\|zengamingx\|/Users/tamlh/workspaces/self/Projects/' --include='*.go' --include='*.md' --include='*.json' --include='*.sh' --include='*.yml' .` = empty |
+| 3.12 | E2E workspace test pass — extractor/indexer tested on real project with >100 files | Build binary → start server → index a real workspace → verify edges stored → query memory_graph → 0 errors in logs. **Privacy:** use placeholder names in evidence files, never real workspace names/paths |
+
+### E2E workspace test procedure (gate 3.12)
+
+For any story that adds/modifies an extractor, indexer, or code intelligence feature,
+run an E2E test against a real workspace before merge.
+
+**Required for:** user-feature, bug-fix (code intelligence scope)
+**Skip for:** infrastructure, refactor, docs, dependency-bump
+
+```bash
+# 1. Build
+go build -o ./bin/nano-brain ./cmd/nano-brain/
+
+# 2. Start server on test port (NEVER use :3100 dev port)
+NANO_BRAIN_DATABASE_URL="postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable" \
+NANO_BRAIN_SERVER_PORT=3199 \
+NANO_BRAIN_FLOW_ENABLED=true \
+./bin/nano-brain &
+SERVER_PID=$!
+
+# 3. Wait for health
+for i in $(seq 1 15); do curl -sf http://localhost:3199/health >/dev/null && break; sleep 1; done
+
+# 4. Trigger indexing on a real workspace (100+ files)
+curl -X POST http://localhost:3199/api/v1/reindex \
+  -d '{"workspace":"<placeholder-hash>","root":"/data/workspaces/<generic-project>"}'
+
+# 5. Wait for indexing to complete, then verify
+curl -s http://localhost:3199/api/v1/graph/edges?file=<sample-file> | jq '.edges | length'
+
+# 6. Kill server
+kill $SERVER_PID; wait $SERVER_PID 2>/dev/null
+```
+
+**Privacy rules for E2E evidence:**
+- NEVER include real workspace names, paths, or hashes in evidence files
+- Use placeholders: `rails-app`, `next-app`, `express-app`
+- E2E runner scripts must NOT be committed to the repo (run in /tmp only)
+- E2E output containing real paths must NOT appear in PR descriptions
+
+**FAIL conditions:**
+- Binary fails to build → FAIL
+- Server doesn't start within 15s → FAIL
+- Indexing produces 0 edges for a workspace with 100+ source files → FAIL
+- Indexing crashes or panics → FAIL
+- Edge count significantly lower than baseline (compare with prior run) → FAIL
+
+**Evidence:** Paste summary output (file count, edge count, error count) in PR description.
+Use generic descriptions: "indexed <N> files → <M> edges, 0 errors" — no project names.
 
 ---
 
