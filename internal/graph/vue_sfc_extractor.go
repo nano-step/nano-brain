@@ -106,11 +106,6 @@ func (e *VueSFCExtractor) ExtractEdges(filePath string, content []byte) ([]Edge,
 	defer func() {
 		if result != nil {
 			result.Tree.Release()
-			for _, inj := range result.Injections {
-				if inj.Tree != nil {
-					inj.Tree.Release()
-				}
-			}
 		}
 	}()
 
