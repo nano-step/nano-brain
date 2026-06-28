@@ -1,66 +1,41 @@
 {
   "version": "1",
-  "overall": 0.678,
+  "overall": 0.988,
   "by_category": {
-    "graph-in": 0.75,
-    "graph-out": 0.525,
-    "impact": 0.25,
-    "multi-tool": 0.9,
-    "search-qa": 0.533,
-    "symbol-lookup": 0.583,
+    "graph-out": 1,
+    "multi-tool": 0.929,
+    "search-qa": 1,
+    "symbol-lookup": 1,
     "trace": 1
   },
   "tasks": [
     {
       "id": "vue-graph-out-01",
       "category": "graph-out",
-      "recall": 0.8,
-      "fixed_recall": 0.6,
-      "agent_recall": 0.8,
+      "recall": 1,
+      "fixed_recall": 0.833,
+      "agent_recall": 1,
       "matched": [
         "cartItemsStore",
-        "addTradeLog",
+        "useCartItemsStore",
         "cartType",
+        "addTradeLog",
+        "cartLogNetwork",
         "tradeit/composables/cart/useCart.js"
       ],
-      "missed": [
-        "useCartItemsStore"
-      ]
+      "missed": null
     },
     {
       "id": "vue-graph-out-02",
       "category": "graph-out",
-      "recall": 0.25,
-      "agent_recall": 0.25,
+      "recall": 1,
+      "fixed_recall": 0.25,
+      "agent_recall": 1,
       "matched": [
-        "useUseStyleHelper"
-      ],
-      "missed": [
+        "useUseStyleHelper",
         "addElementClasses",
         "removeElementClasses",
         "tradeit/composables/useStyleHelper.js"
-      ]
-    },
-    {
-      "id": "vue-graph-in-01",
-      "category": "graph-in",
-      "recall": 0.5,
-      "agent_recall": 0.5,
-      "matched": [
-        "tradeit/composables/inventory/useInventoryState"
-      ],
-      "missed": [
-        "useInventoryState"
-      ]
-    },
-    {
-      "id": "vue-graph-in-02",
-      "category": "graph-in",
-      "recall": 1,
-      "agent_recall": 1,
-      "matched": [
-        "cartLogNetwork",
-        "tradeit/network/cartLogNetwork"
       ],
       "missed": null
     },
@@ -68,13 +43,15 @@
       "id": "vue-trace-01",
       "category": "trace",
       "recall": 1,
-      "fixed_recall": 0.75,
+      "fixed_recall": 0.833,
       "agent_recall": 1,
       "matched": [
         "addTradeLog",
         "createCartLog",
         "getAxiosInstance",
-        "post"
+        "post",
+        "useNuxtApp",
+        "useRuntimeConfig"
       ],
       "missed": null
     },
@@ -82,11 +59,16 @@
       "id": "vue-trace-02",
       "category": "trace",
       "recall": 1,
+      "fixed_recall": 0.857,
       "agent_recall": 1,
       "matched": [
         "buildChartData",
         "formatChartData",
-        "sortByTime"
+        "sortByTime",
+        "getTime",
+        "map",
+        "Number",
+        "pathOr"
       ],
       "missed": null
     },
@@ -94,7 +76,7 @@
       "id": "vue-trace-03",
       "category": "trace",
       "recall": 1,
-      "fixed_recall": 0.857,
+      "fixed_recall": 0.875,
       "agent_recall": 1,
       "matched": [
         "addToHistoryItems",
@@ -103,43 +85,10 @@
         "slice",
         "splice",
         "stringify",
-        "unshift"
+        "unshift",
+        "error"
       ],
       "missed": null
-    },
-    {
-      "id": "vue-trace-04",
-      "category": "trace",
-      "recall": 1,
-      "agent_recall": 1,
-      "matched": [
-        "createCartLog",
-        "getAxiosInstance",
-        "post"
-      ],
-      "missed": null
-    },
-    {
-      "id": "vue-impact-01",
-      "category": "impact",
-      "recall": 0.5,
-      "agent_recall": 0.5,
-      "matched": [
-        "useCart"
-      ],
-      "missed": [
-        "tradeit/composables/cart/useCart.js"
-      ]
-    },
-    {
-      "id": "vue-impact-02",
-      "category": "impact",
-      "recall": 0,
-      "matched": null,
-      "missed": [
-        "useStyleHelper",
-        "tradeit/composables/useStyleHelper.js"
-      ]
     },
     {
       "id": "vue-symbol-01",
@@ -156,109 +105,90 @@
     {
       "id": "vue-symbol-02",
       "category": "symbol-lookup",
-      "recall": 0.5,
+      "recall": 1,
       "fixed_recall": 0.5,
-      "agent_recall": 0.5,
+      "agent_recall": 1,
       "matched": [
-        "buildChartData"
+        "buildChartData",
+        "tradeit/composables/insight/useInsight.js"
       ],
-      "missed": [
-        "tradeit/composables/useInsight.js"
-      ]
+      "missed": null
     },
     {
       "id": "vue-symbol-03",
       "category": "symbol-lookup",
-      "recall": 0.25,
-      "agent_recall": 0.25,
+      "recall": 1,
+      "fixed_recall": 0.5,
+      "agent_recall": 1,
       "matched": [
-        "useInventoryItemAction"
+        "useUseStyleHelper",
+        "tradeit/composables/useStyleHelper.js"
       ],
-      "missed": [
-        "addSelectedSaleItem",
-        "actionButtonText",
-        "tradeit/composables/inventory/useInventoryItemAction.js"
-      ]
+      "missed": null
     },
     {
       "id": "vue-search-qa-01",
       "category": "search-qa",
       "recall": 1,
-      "fixed_recall": 1,
+      "fixed_recall": 0.667,
       "agent_recall": 1,
       "matched": [
         "cartItemsStore",
         "useCartItemsStore",
-        "addTradeLog",
         "cartType",
         "cartLogNetwork",
-        "tradeit/composables/cart/useCart.js",
-        "tradeit/store/useCartItemsStore",
-        "tradeit/network/cartLogNetwork"
+        "addTradeLog",
+        "tradeit/composables/cart/useCart.js"
       ],
       "missed": null
     },
     {
       "id": "vue-search-qa-02",
       "category": "search-qa",
-      "recall": 0,
-      "matched": null,
-      "missed": [
-        "useInventoryItemAction",
-        "addSelectedSaleItem",
-        "actionButtonText",
-        "areItemDetailsVisible",
-        "tradeit/composables/inventory/useInventoryItemAction.js"
-      ]
-    },
-    {
-      "id": "vue-search-qa-03",
-      "category": "search-qa",
-      "recall": 0.6,
-      "fixed_recall": 0.6,
-      "agent_recall": 0.6,
-      "matched": [
-        "InsightRedis",
-        "fetchInsightCollectionChartData",
-        "useInsight"
-      ],
-      "missed": [
-        "buildChartData",
-        "tradeit/composables/useInsight.js"
-      ]
-    },
-    {
-      "id": "vue-multi-01",
-      "category": "multi-tool",
       "recall": 1,
       "fixed_recall": 1,
       "agent_recall": 1,
       "matched": [
-        "addTradeLog",
-        "createCartLog",
-        "cartItemsStore",
-        "useCartItemsStore",
-        "tradeit/composables/cart/useCart.js",
-        "tradeit/store/useCartItemsStore",
-        "tradeit/network/cartLogNetwork"
+        "fetchInsightCollectionChartData",
+        "getChartItemData",
+        "fetchContainerChartData",
+        "tradeit/composables/insight/useInsight.js"
       ],
       "missed": null
     },
     {
+      "id": "vue-multi-01",
+      "category": "multi-tool",
+      "recall": 0.8571428571428571,
+      "fixed_recall": 0.857,
+      "agent_recall": 0.857,
+      "matched": [
+        "addTradeLog",
+        "createCartLog",
+        "getAxiosInstance",
+        "cartItemsStore",
+        "cartType",
+        "tradeit/composables/cart/useCart.js"
+      ],
+      "missed": [
+        "useCartItemsStore"
+      ]
+    },
+    {
       "id": "vue-multi-02",
       "category": "multi-tool",
-      "recall": 0.8,
-      "fixed_recall": 0.2,
-      "agent_recall": 0.8,
+      "recall": 1,
+      "fixed_recall": 0.833,
+      "agent_recall": 1,
       "matched": [
         "buildChartData",
         "formatChartData",
         "sortByTime",
-        "fetchInsightCollectionChartData"
+        "fetchInsightCollectionChartData",
+        "getChartItemData",
+        "tradeit/composables/insight/useInsight.js"
       ],
-      "missed": [
-        "tradeit/composables/useInsight.js"
-      ]
+      "missed": null
     }
   ]
 }
