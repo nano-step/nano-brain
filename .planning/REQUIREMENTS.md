@@ -1,10 +1,13 @@
-# REQUIREMENTS.md — nano-brain
+# Requirements: nano-brain
 
-## v1 Requirements (Active)
+**Defined:** 2026-06-28
+**Core Value:** Impact analysis — "What breaks if I change this?" — accurate, sub-50ms
+
+## v1 Requirements
 
 ### Code Intelligence
 
-- [ ] **REQ-CI-01**: Vue SFC code intelligence support — parse .vue files, extract script-level edges, detect component composition via AST
+- [x] **REQ-CI-01**: Vue SFC code intelligence support — parse .vue files, extract script-level edges, detect component composition via AST
 - [ ] **REQ-CI-02**: Fix import edge target resolution — resolve unresolved specifiers in import edges to improve memory_impact accuracy
 - [ ] **REQ-CI-03**: Ruby graph/flowchart/impact improvements — fix Ruby AST parsing gaps for graph, flowchart, impact, deep flow
 - [ ] **REQ-CI-04**: Auto-generate HyDE context hints from project files — improve search quality with project-specific context
@@ -60,7 +63,7 @@
 
 | Requirement | OpenSpec Change | Harness Story | Status |
 |-------------|-----------------|---------------|--------|
-| REQ-CI-01 | vue-sfc-code-intelligence | — | Active |
+| REQ-CI-01 | vue-sfc-code-intelligence | — | Complete |
 | REQ-CI-02 | fix-import-target-resolution | — | Active |
 | REQ-CI-03 | (issue #486) | — | Pending |
 | REQ-CI-04 | (issue #481) | — | Pending |
