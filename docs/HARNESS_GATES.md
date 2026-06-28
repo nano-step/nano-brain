@@ -137,7 +137,7 @@ Run before creating or merging a PR. All checks must be green.
 | 3.2 | `go test -race -short ./...` pass | exit code 0 |
 | 3.3 | `go test -race -tags=integration ./...` pass | exit code 0 |
 | 3.4 | `golangci-lint run` clean (if available) | exit code 0 |
-| 3.5 | Review Gate pass (Oracle or review-work) | evidence in PR/issue |
+| 3.5 | Review Gate pass by an **independent** reviewer (R27 verdict + R88 reviewer ≠ author) | `docs/evidence/review-<story>.md` for THIS story: `Review Verdict: PASS` + a `Reviewer:` naming a separate spawned sub-agent (not self/author/implementer) |
 | 3.6 | PR review comments addressed — all critical/high Gemini comments fixed, medium acknowledged | `gh pr view --comments` — no unresolved critical/high comments |
 | 3.7 | CI workflow pass | `gh pr checks` all green |
 | 3.8 | PR linked to GitHub issue | PR body contains `Closes #N` |

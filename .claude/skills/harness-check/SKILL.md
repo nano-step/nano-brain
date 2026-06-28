@@ -16,14 +16,16 @@ description: |
   "pre-work check", "pre-merge check", "next-ready", "retro gate",
   "can I start next feature", "are gates green".
 
-compatibility: OpenCode with bash + git + go. Optional: gh CLI, openspec CLI, golangci-lint.
+compatibility: Claude Code with bash + git + go. Optional: gh CLI, openspec CLI, golangci-lint.
 ---
 
 # Harness Check
 
 Enforce the harness gate specification defined in `docs/HARNESS_GATES.md`.
 
-> **Tip:** For autonomous development, use the `/harness-on` slash command — it runs this script automatically and injects fix instructions. See `.opencode/plugin/harness-loop/README.md`.
+> **Note:** The autonomous gate loop (`/harness-on`, `.opencode/plugin/harness-loop/`)
+> is OpenCode-only. On Claude Code this skill runs the gates manually / on trigger;
+> you drive the fix-and-re-run loop yourself based on the script output below.
 
 ## Core Rules
 
@@ -100,7 +102,7 @@ When the retro gate triggers:
 
 ## Automatic Trigger Points
 
-The orchestrator (Sisyphus) MUST invoke this skill at these points:
+The orchestrator MUST invoke this skill at these points:
 
 | Trigger | Gate |
 |---------|------|
