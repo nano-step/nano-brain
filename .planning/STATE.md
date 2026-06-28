@@ -2,13 +2,13 @@
 
 ## Current Phase
 
-**Phase 1: Vue SFC Support** (not started)
+**Phase 1: Vue SFC Support** (in progress)
 
 ## Progress
 
 | Phase | Status | Start | End |
 |-------|--------|-------|-----|
-| Phase 1: Vue SFC Support | Pending | — | — |
+| Phase 1: Vue SFC Support | In Progress | 2026-06-28 | — |
 | Phase 2: Import Edge Fix | Pending | — | — |
 | Phase 3: Search Quality | Pending | — | — |
 | Phase 4: Ruby/Rails | Pending | — | — |
