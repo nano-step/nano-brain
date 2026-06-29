@@ -185,3 +185,19 @@ Phases 1–2 parallel. Phases 4 & 6 parallel. Phase 3 depends on 1–2. Phase 5 
 | P@5 (Ruby) | 0.795 | ≥ 0.85 |
 | memory_impact accuracy | Unknown | ≥ 90% |
 | Latency (code intel) | ~42ms | < 50ms |
+
+## Backlog
+
+### Phase 999.1: Avoid full reindex on git worktree create / checkout (BACKLOG)
+
+**Goal:** [Captured for future planning] Reduce indexing lag when a git worktree is created or a branch is checked out. Suspected behavior: the watcher/indexer treats a worktree creation or checkout as a mass file change and re-indexes ALL files, causing significant lag. Likely the workspace content is largely unchanged (same git blobs); indexing should detect unchanged content (e.g. by mtime/hash/git object) and skip or incrementally update rather than full-reindex.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Notes:
+- Reported by user; "feels like" all files get re-indexed on worktree create / checkout — needs verification of the actual trigger before fixing.
+- NOT for immediate fix — parked for investigation.
+- Investigate: fsnotify behavior on worktree dirs, how the indexer decides what changed, whether checkout bumps mtimes triggering full enqueue.
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
