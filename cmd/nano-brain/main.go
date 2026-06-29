@@ -598,6 +598,13 @@ func startServer(configPath string) {
 			}
 		}
 
+		// Migrate legacy "session-summary" docs to the canonical "sessions" collection.
+		// Runs once at startup before the harvest Runner starts; idempotent (second run
+		// returns 0 rows). Non-fatal: a failure is logged but does not abort startup.
+		if _, migErr := harvest.MigrateSessionSummaryToSessions(ctx, db, logger); migErr != nil {
+			logger.Warn().Err(migErr).Msg("session-summary migration failed — continuing without migration")
+		}
+
 		ocHarvesters, ocMode := buildOpenCodeHarvesters(ctx, cfg, db, queries, logger)
 		for i, oh := range ocHarvesters {
 			if i == 0 {
