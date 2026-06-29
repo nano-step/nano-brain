@@ -134,3 +134,13 @@ ORDER BY source_path;
 DELETE FROM documents
 WHERE workspace_hash = $1
   AND collection = 'flows';
+
+-- name: ListDocumentsByTag :many
+-- Cross-workspace tag query: returns documents matching a single tag value
+-- across ALL workspaces. No workspace_hash filter — intentionally global.
+SELECT id, workspace_hash, title, content, source_path, collection, tags, created_at, updated_at
+FROM documents
+WHERE $1::text = ANY(tags)
+  AND collection = $2
+ORDER BY updated_at DESC
+LIMIT $3;
