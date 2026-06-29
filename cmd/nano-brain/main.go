@@ -800,7 +800,8 @@ func buildHarvestSummarizer(cfg *config.Config, db *sql.DB, eq *embed.Queue, log
 		logger.Warn().Msg("LLM client init returned nil, disabling summarization")
 		return nil
 	}
-	pipeline := summarize.NewPipeline(llmClient, nil, cfg.Summarization.Concurrency, logger)
+	relLookup := summarize.NewDBRelationshipLookup(db, logger)
+	pipeline := summarize.NewPipeline(llmClient, relLookup, cfg.Summarization.Concurrency, logger)
 	if pipeline == nil {
 		logger.Warn().Msg("pipeline init returned nil, disabling summarization")
 		return nil

@@ -22,20 +22,40 @@ var _ Harvester = (*Engine)(nil)
 // Discover → Read → normalize → dedup → skip-active → render → summarize/persist → raw fallback.
 // It is source-agnostic: any SessionSource adapter plugs in.
 type Engine struct {
-	source     SessionSource
-	pgDB       *sql.DB
-	summarizer SessionSummarizer
-	logger     zerolog.Logger
+	source          SessionSource
+	pgDB            *sql.DB
+	summarizer      SessionSummarizer
+	ticketExtractor *TicketExtractor
+	logger          zerolog.Logger
 }
 
-// NewEngine constructs an Engine.
+// NewEngine constructs an Engine with ticket extraction using default patterns.
+// Use NewEngineWithTicketPatterns to supply custom patterns from config.
 func NewEngine(source SessionSource, pgDB *sql.DB, summarizer SessionSummarizer, logger zerolog.Logger) *Engine {
+	te, _ := NewTicketExtractor(nil) // default patterns; error impossible with nil input
 	return &Engine{
-		source:     source,
-		pgDB:       pgDB,
-		summarizer: summarizer,
-		logger:     logger.With().Str("component", "harvest-engine").Str("source", source.Name()).Logger(),
+		source:          source,
+		pgDB:            pgDB,
+		summarizer:      summarizer,
+		ticketExtractor: te,
+		logger:          logger.With().Str("component", "harvest-engine").Str("source", source.Name()).Logger(),
 	}
+}
+
+// NewEngineWithTicketPatterns constructs an Engine with configurable ticket
+// regex patterns. Pass nil to use built-in defaults.
+func NewEngineWithTicketPatterns(source SessionSource, pgDB *sql.DB, summarizer SessionSummarizer, patterns []string, logger zerolog.Logger) (*Engine, error) {
+	te, err := NewTicketExtractor(patterns)
+	if err != nil {
+		return nil, err
+	}
+	return &Engine{
+		source:          source,
+		pgDB:            pgDB,
+		summarizer:      summarizer,
+		ticketExtractor: te,
+		logger:          logger.With().Str("component", "harvest-engine").Str("source", source.Name()).Logger(),
+	}, nil
 }
 
 // setSummarizer satisfies the summarizerSettable interface so Runner.WithSummarizer
@@ -123,6 +143,26 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 				continue
 			}
 
+			// Resolve parent tags for ticket inheritance (best-effort, single lookup).
+			var parentTags []string
+			if sess.ParentID != "" {
+				parentPath := "summary://" + e.source.Name() + "/" + sess.ParentID
+				parentDoc, parentErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+					SourcePath:    parentPath,
+					WorkspaceHash: wsHash,
+				})
+				if parentErr == nil {
+					parentTags = parentDoc.Tags
+				}
+			}
+
+			// Extract ticket IDs from content, branch, and inherited parent tags.
+			var ticketTags []string
+			if e.ticketExtractor != nil {
+				tickets := e.ticketExtractor.Extract(md, sess.Branch, parentTags)
+				ticketTags = e.ticketExtractor.AsTags(tickets)
+			}
+
 			if e.summarizer != nil {
 				smeta := SummaryMeta{
 					Source:        e.source.Name(),
@@ -133,10 +173,11 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 					ParentID:      sess.ParentID,
 					Branch:        sess.Branch,
 					Cwd:           sess.Cwd,
+					Tags:          ticketTags,
 				}
 				if sumErr := e.summarizer.SummarizeAndPersist(ctx, md, smeta); sumErr != nil {
 					e.logger.Warn().Err(sumErr).Str("session", sess.SessionID).Msg("engine: summarization failed, falling back to raw")
-					if fbErr := e.writeRawFallback(ctx, sess, md, contentHash, wsHash, sourcePath, enqueuer); fbErr != nil {
+					if fbErr := e.writeRawFallback(ctx, sess, md, contentHash, wsHash, sourcePath, ticketTags, enqueuer); fbErr != nil {
 						e.logger.Error().Err(fbErr).Str("session", sess.SessionID).Msg("engine: raw fallback failed, skipping")
 						errCount++
 						continue
@@ -146,7 +187,7 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 					harvested++
 				}
 			} else {
-				if fbErr := e.writeRawFallback(ctx, sess, md, contentHash, wsHash, sourcePath, enqueuer); fbErr != nil {
+				if fbErr := e.writeRawFallback(ctx, sess, md, contentHash, wsHash, sourcePath, ticketTags, enqueuer); fbErr != nil {
 					e.logger.Error().Err(fbErr).Str("session", sess.SessionID).Msg("engine: raw fallback failed, skipping")
 					errCount++
 					continue
@@ -167,10 +208,12 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 }
 
 // writeRawFallback persists raw rendered markdown to the sessions collection.
+// ticketTags are merged into the document tags (e.g. ["ticket:DEV-4706"]).
 func (e *Engine) writeRawFallback(
 	ctx context.Context,
 	sess NormalizedSession,
 	md, contentHash, wsHash, sourcePath string,
+	ticketTags []string,
 	enqueuer ChunkEnqueuer,
 ) error {
 	metaBytes, _ := marshalJSON(map[string]any{
@@ -185,6 +228,9 @@ func (e *Engine) writeRawFallback(
 		title = e.source.Name() + " session " + sess.SessionID
 	}
 
+	baseTags := []string{e.source.Name(), "session", "fallback"}
+	tags := append(baseTags, ticketTags...)
+
 	chunks := chunk.Split(md, chunk.DefaultConfig())
 	params := sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: wsHash,
@@ -193,7 +239,7 @@ func (e *Engine) writeRawFallback(
 		Content:       md,
 		SourcePath:    sourcePath,
 		Collection:    "sessions",
-		Tags:          []string{e.source.Name(), "session", "fallback"},
+		Tags:          tags,
 		Metadata:      pqtype.NullRawMessage{RawMessage: metaBytes, Valid: true},
 	}
 

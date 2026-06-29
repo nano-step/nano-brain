@@ -108,6 +108,9 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	baseTags := []string{"summary", string(meta.Source)}
+	docTags := append(baseTags, meta.Tags...)
+
 	tq := sqlc.New(tx)
 	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: meta.WorkspaceHash,
@@ -116,7 +119,7 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 		Content:       summaryMarkdown,
 		SourcePath:    sourcePath,
 		Collection:    "sessions",
-		Tags:          []string{"summary", string(meta.Source)},
+		Tags:          docTags,
 		Metadata:      pqtype.NullRawMessage{RawMessage: metaJSON, Valid: true},
 	})
 	if err != nil {
