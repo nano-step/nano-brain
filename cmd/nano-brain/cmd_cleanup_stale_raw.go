@@ -58,7 +58,7 @@ func runCleanupStaleRawCmd(args []string) {
 
 	if dryRun {
 		fmt.Printf("Dry run: %d stale raw OpenCode session document(s) would be deleted.\n", count)
-		fmt.Printf("(Raw docs at 'opencode://session/*' superseded by 'summary://opencode/*' in collection 'session-summary'.)\n")
+		fmt.Printf("(Raw docs at 'opencode://session/*' superseded by 'summary://opencode/*' in collection 'sessions'.)\n")
 		fmt.Printf("No changes written.\n")
 		cliLog.Info().Str("cmd", "cleanup-stale-raw").Int("stale_count", int(count)).Bool("dry_run", true).Msg("cli command completed")
 		return
@@ -85,7 +85,7 @@ func printCleanupStaleRawUsage() {
 
 Delete stale raw OpenCode session documents (source_path 'opencode://session/*'
 in collection 'sessions') that have been superseded by a summarized version
-('summary://opencode/*' in collection 'session-summary').
+('summary://opencode/*' in collection 'sessions').
 
 These raw docs are no longer written by the post-PR#192 harvest pipeline.
 

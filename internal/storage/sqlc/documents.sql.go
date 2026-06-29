@@ -23,10 +23,13 @@ WHERE d_raw.source_path LIKE 'opencode://session/%'
     SELECT 1 FROM documents d_summary
     WHERE d_summary.source_path = 'summary://opencode/' || split_part(d_raw.source_path, '/', 4)
       AND d_summary.workspace_hash = d_raw.workspace_hash
-      AND d_summary.collection = 'session-summary'
+      AND d_summary.collection = 'sessions'
   )
 `
 
+// Post-unification (phase 8), raw and summary session docs both live in
+// collection 'sessions' and are distinguished by source_path scheme:
+// raw = 'opencode://session/%', summary = 'summary://%'.
 func (q *Queries) CountStaleRawOpenCodeDocs(ctx context.Context) (int32, error) {
 	row := q.db.QueryRowContext(ctx, countStaleRawOpenCodeDocs)
 	var n int32
@@ -79,7 +82,7 @@ WHERE d_raw.source_path LIKE 'opencode://session/%'
     SELECT 1 FROM documents d_summary
     WHERE d_summary.source_path = 'summary://opencode/' || split_part(d_raw.source_path, '/', 4)
       AND d_summary.workspace_hash = d_raw.workspace_hash
-      AND d_summary.collection = 'session-summary'
+      AND d_summary.collection = 'sessions'
   )
 `
 
@@ -362,7 +365,8 @@ func (q *Queries) ListSessionDocumentsByWorkspace(ctx context.Context, arg ListS
 const listSummaryDocumentsForBackfill = `-- name: ListSummaryDocumentsForBackfill :many
 SELECT id, workspace_hash, content_hash, title, content, source_path, tags, metadata, created_at
 FROM documents
-WHERE collection = 'session-summary'
+WHERE collection = 'sessions'
+  AND source_path LIKE 'summary://%'
   AND ($1::text = '' OR workspace_hash = $1)
   AND ($2::timestamptz IS NULL OR created_at >= $2)
 ORDER BY created_at ASC
@@ -385,6 +389,9 @@ type ListSummaryDocumentsForBackfillRow struct {
 	CreatedAt     time.Time
 }
 
+// Post-unification (phase 8), summary docs live in collection 'sessions' and
+// are identified by the 'summary://%' source_path scheme (raw session docs in
+// the same collection use 'opencode://%' / 'claude://%' schemes).
 func (q *Queries) ListSummaryDocumentsForBackfill(ctx context.Context, arg ListSummaryDocumentsForBackfillParams) ([]ListSummaryDocumentsForBackfillRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSummaryDocumentsForBackfill, arg.Column1, arg.Column2)
 	if err != nil {

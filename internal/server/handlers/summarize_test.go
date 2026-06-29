@@ -97,8 +97,8 @@ func TestSummarize_Success(t *testing.T) {
 			makeSumDoc("opencode://sessions/sess-003", []string{"opencode"}),
 		},
 		existingByPath: map[string]sqlc.Document{
-			"session-summary://opencode/sess-002": existingDoc(summaryDocID),
-			"session-summary://opencode/sess-003": existingDoc(summaryDocID),
+			"summary://opencode/sess-002": existingDoc(summaryDocID),
+			"summary://opencode/sess-003": existingDoc(summaryDocID),
 		},
 	}
 	sum := &mockSummarizeSummarizer{}
@@ -189,7 +189,7 @@ func TestSummarize_ForceFlag(t *testing.T) {
 			makeSumDoc("opencode://sessions/sess-001", []string{"opencode"}),
 		},
 		existingByPath: map[string]sqlc.Document{
-			"session-summary://opencode/sess-001": existingDoc(summaryDocID),
+			"summary://opencode/sess-001": existingDoc(summaryDocID),
 		},
 	}
 	sum := &mockSummarizeSummarizer{}

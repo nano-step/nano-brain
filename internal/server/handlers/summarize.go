@@ -86,7 +86,10 @@ func TriggerSummarize(
 
 		for _, doc := range docs {
 			sessionID := path.Base(doc.SourcePath)
-			summaryPath := "session-summary://" + sourceFromTags(doc.Tags) + "/" + sessionID
+			// Must match the harvester/persister source_path scheme so dedup
+			// actually finds existing summaries: "summary://<source>/<sessionID>"
+			// in the unified "sessions" collection (phase 8 unification).
+			summaryPath := "summary://" + sourceFromTags(doc.Tags) + "/" + sessionID
 
 			if !req.Force {
 				existing, lookupErr := queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
