@@ -605,6 +605,17 @@ func startServer(configPath string) {
 			logger.Warn().Err(migErr).Msg("session-summary migration failed — continuing without migration")
 		}
 
+		// Backfill ticket tags on pre-phase-8 session docs that have no ticket: tags.
+		// Idempotent: docs already carrying a ticket: tag are skipped on re-runs.
+		// Non-fatal: failure is logged and startup continues.
+		if ticketExtractor, teErr := harvest.NewTicketExtractor(nil); teErr != nil {
+			logger.Warn().Err(teErr).Msg("ticket extractor init failed — skipping session ticket tag backfill")
+		} else if backfillN, backfillErr := harvest.BackfillSessionTicketTags(ctx, db, ticketExtractor, logger); backfillErr != nil {
+			logger.Warn().Err(backfillErr).Msg("session ticket tag backfill failed — continuing without backfill")
+		} else if backfillN > 0 {
+			logger.Info().Int("tagged", backfillN).Msg("session ticket tag backfill complete")
+		}
+
 		ocHarvesters, ocMode := buildOpenCodeHarvesters(ctx, cfg, db, queries, logger)
 		for i, oh := range ocHarvesters {
 			if i == 0 {
