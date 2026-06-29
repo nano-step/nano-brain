@@ -581,6 +581,13 @@ func startServer(configPath string) {
 			}
 		}
 
+		if cfg.Harvester.ClaudeCode.Enabled && cfg.Harvester.ClaudeCode.SessionDir == "" {
+			if detected := detectClaudeCodeStorageDir(); detected != "" {
+				cfg.Harvester.ClaudeCode.SessionDir = detected
+				logger.Info().Str("path", detected).Msg("auto-detected claude code projects dir")
+			}
+		}
+
 		var harvestSummarizer *summarize.HarvestSummarizer
 		if cfg.Summarization.Enabled {
 			harvestSummarizer = buildHarvestSummarizer(cfg, db, eq, logger)
@@ -601,18 +608,23 @@ func startServer(configPath string) {
 		}
 		srv.SetHarvestStatus(ocMode, cfg.Harvester.OpenCode.DBRoot, cfg.Harvester.OpenCode.DBPath, cfg.Harvester.OpenCode.SessionDir, len(ocHarvesters))
 
-		if ch, ccErr := initClaudeCodeHarvester(ctx, cfg.Harvester.ClaudeCode, db, logger); ccErr != nil {
+		if chs, ccErr := initClaudeCodeHarvesters(ctx, cfg.Harvester.ClaudeCode, db, logger); ccErr != nil {
 			logger.Error().Err(ccErr).Msg("claude code harvester init failed")
-		} else if ch != nil {
-			if hr == nil {
-				hr = harvest.NewRunner(ch, eq, interval, logger)
-			} else {
-				hr.AddHarvester(ch)
+		} else {
+			for _, ch := range chs {
+				if hr == nil {
+					hr = harvest.NewRunner(ch, eq, interval, logger)
+				} else {
+					hr.AddHarvester(ch)
+				}
 			}
-			logger.Info().
-				Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
-				Dur("interval", interval).
-				Msg("claude code session harvester started")
+			if len(chs) > 0 {
+				logger.Info().
+					Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+					Int("workspace_count", len(chs)).
+					Dur("interval", interval).
+					Msg("claude code session harvesters started")
+			}
 		}
 
 		if hr != nil {

@@ -39,6 +39,9 @@ type ClaudeCodeHarvester struct {
 	summarizer    SessionSummarizer
 }
 
+// WorkspaceHash returns the workspace hash this harvester was created for.
+func (h *ClaudeCodeHarvester) WorkspaceHash() string { return h.workspace }
+
 func (h *ClaudeCodeHarvester) setSummarizer(s SessionSummarizer) { h.summarizer = s }
 
 func (h *ClaudeCodeHarvester) WithSummarizer(s SessionSummarizer) *ClaudeCodeHarvester {
