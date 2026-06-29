@@ -11,7 +11,7 @@
 - [ ] **REQ-CI-02**: Fix import edge target resolution — resolve unresolved specifiers in import edges to improve memory_impact accuracy
 - [ ] **REQ-CI-03**: Ruby graph/flowchart/impact improvements — fix Ruby AST parsing gaps for graph, flowchart, impact, deep flow
 - [ ] **REQ-CI-04**: Auto-generate HyDE context hints from project files — improve search quality with project-specific context
-- [x] **REQ-CI-05**: Pluggable multi-source session harvest + cross-source/cross-repo ticket linking — unify OpenCode/Claude (and future agents) into one sessions collection, link by ticket/branch/parent
+- [ ] **REQ-CI-05**: Pluggable multi-source session harvest + cross-source/cross-repo ticket linking — unify OpenCode/Claude (and future agents) into one sessions collection, link by ticket/branch/parent (Phase 8: 1/3 plans done)
 
 ### Search Quality
 
