@@ -24,34 +24,138 @@ func writeLines(t *testing.T, path string, lines []string) {
 	}
 }
 
+// realUserLine returns a JSON line matching Claude Code's actual JSONL schema
+// for a user turn.
+func realUserLine(ts, text string) string {
+	msg, _ := json.Marshal(map[string]any{
+		"role":    "user",
+		"content": text,
+	})
+	line, _ := json.Marshal(map[string]any{
+		"type":      "user",
+		"timestamp": ts,
+		"message":   json.RawMessage(msg),
+	})
+	return string(line)
+}
+
+// realAssistantLine returns a JSON line matching Claude Code's actual JSONL
+// schema for an assistant turn with a text block and an optional tool_use block.
+func realAssistantLine(ts, text, toolName string, toolInput map[string]any) string {
+	blocks := []map[string]any{}
+	if text != "" {
+		blocks = append(blocks, map[string]any{"type": "text", "text": text})
+	}
+	if toolName != "" {
+		blocks = append(blocks, map[string]any{
+			"type":  "tool_use",
+			"name":  toolName,
+			"input": toolInput,
+		})
+	}
+	contentJSON, _ := json.Marshal(blocks)
+	msg, _ := json.Marshal(map[string]any{
+		"role":    "assistant",
+		"content": json.RawMessage(contentJSON),
+	})
+	line, _ := json.Marshal(map[string]any{
+		"type":      "assistant",
+		"timestamp": ts,
+		"message":   json.RawMessage(msg),
+	})
+	return string(line)
+}
+
+// modeLine returns the leading metadata record Claude Code writes before any
+// user/assistant turns. It has no timestamp.
+func modeLine(sessionID string) string {
+	line, _ := json.Marshal(map[string]any{
+		"type":      "mode",
+		"mode":      "auto",
+		"sessionId": sessionID,
+	})
+	return string(line)
+}
+
+// TestExtractText_UserContentArray covers the case where a user turn's
+// message.content is an ARRAY of tool_result blocks (how Claude Code records
+// tool output) rather than a plain string. extractText must fall through from
+// the string path to the typed-block path and surface the result text.
+func TestExtractText_UserContentArray(t *testing.T) {
+	t.Run("tool_result with string content", func(t *testing.T) {
+		content, _ := json.Marshal([]map[string]any{
+			{"type": "tool_result", "content": "exit status 0\nbuild ok"},
+		})
+		msg, _ := json.Marshal(map[string]any{"role": "user", "content": json.RawMessage(content)})
+		line, _ := json.Marshal(map[string]any{
+			"type": "user", "timestamp": "2026-01-01T10:00:00Z", "message": json.RawMessage(msg),
+		})
+		var m claudeCodeMessage
+		if err := json.Unmarshal(line, &m); err != nil {
+			t.Fatal(err)
+		}
+		if got := m.extractText(); !strings.Contains(got, "build ok") {
+			t.Errorf("extractText() = %q, want it to contain tool_result text 'build ok'", got)
+		}
+	})
+
+	t.Run("tool_result with nested block content", func(t *testing.T) {
+		inner, _ := json.Marshal([]map[string]any{{"type": "text", "text": "nested result"}})
+		content, _ := json.Marshal([]map[string]any{
+			{"type": "tool_result", "content": json.RawMessage(inner)},
+		})
+		msg, _ := json.Marshal(map[string]any{"role": "user", "content": json.RawMessage(content)})
+		line, _ := json.Marshal(map[string]any{
+			"type": "user", "timestamp": "2026-01-01T10:00:00Z", "message": json.RawMessage(msg),
+		})
+		var m claudeCodeMessage
+		if err := json.Unmarshal(line, &m); err != nil {
+			t.Fatal(err)
+		}
+		if got := m.extractText(); !strings.Contains(got, "nested result") {
+			t.Errorf("extractText() = %q, want it to contain 'nested result'", got)
+		}
+	})
+}
+
 func TestParseJSONLFile(t *testing.T) {
-	t.Run("valid messages", func(t *testing.T) {
+	t.Run("valid messages with real schema", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "ses_abc.jsonl")
 		writeLines(t, path, []string{
-			`{"type":"user","timestamp":"2026-01-01T10:00:00Z","content":"hello"}`,
-			`{"type":"tool_use","timestamp":"2026-01-01T10:00:01Z","tool_name":"bash","tool_input":{"command":"ls"}}`,
-			`{"type":"tool_result","timestamp":"2026-01-01T10:00:02Z","tool_name":"bash","tool_output":{"output":"file.txt"}}`,
+			modeLine("ses_abc"),
+			realUserLine("2026-01-01T10:00:00Z", "hello"),
+			realAssistantLine("2026-01-01T10:00:01Z", "world", "bash", map[string]any{"command": "ls"}),
 		})
 
 		msgs, err := parseJSONLFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}
+		// All three lines have a non-empty type so all are kept by parseJSONLFile.
 		if len(msgs) != 3 {
 			t.Fatalf("got %d messages, want 3", len(msgs))
 		}
-		if msgs[0].Type != "user" {
-			t.Errorf("first message type = %q, want user", msgs[0].Type)
+		if msgs[0].Type != "mode" {
+			t.Errorf("first message type = %q, want mode", msgs[0].Type)
 		}
-		if msgs[0].Content != "hello" {
-			t.Errorf("first message content = %q, want hello", msgs[0].Content)
+		if msgs[1].Type != "user" {
+			t.Errorf("second message type = %q, want user", msgs[1].Type)
 		}
-		if msgs[1].Type != "tool_use" {
-			t.Errorf("second message type = %q, want tool_use", msgs[1].Type)
+		// Content is in the nested message envelope, not a top-level field.
+		if got := msgs[1].extractText(); got != "hello" {
+			t.Errorf("user extractText() = %q, want hello", got)
 		}
-		if msgs[1].ToolName != "bash" {
-			t.Errorf("second message tool_name = %q, want bash", msgs[1].ToolName)
+		if msgs[2].Type != "assistant" {
+			t.Errorf("third message type = %q, want assistant", msgs[2].Type)
+		}
+		// Assistant text + tool_use block should both appear.
+		assistantText := msgs[2].extractText()
+		if !strings.Contains(assistantText, "world") {
+			t.Errorf("assistant extractText() missing text block: %q", assistantText)
+		}
+		if !strings.Contains(assistantText, "bash") {
+			t.Errorf("assistant extractText() missing tool name: %q", assistantText)
 		}
 	})
 
@@ -59,10 +163,10 @@ func TestParseJSONLFile(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "ses_bad.jsonl")
 		writeLines(t, path, []string{
-			`{"type":"user","timestamp":"2026-01-01T10:00:00Z","content":"valid"}`,
+			realUserLine("2026-01-01T10:00:00Z", "valid"),
 			`{not json at all`,
 			``,
-			`{"type":"user","timestamp":"2026-01-01T10:00:01Z","content":"also valid"}`,
+			realUserLine("2026-01-01T10:00:01Z", "also valid"),
 		})
 
 		msgs, err := parseJSONLFile(path)
@@ -99,8 +203,8 @@ func TestParseJSONLFile(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "ses_notype.jsonl")
 		writeLines(t, path, []string{
-			`{"timestamp":"2026-01-01T10:00:00Z","content":"no type field"}`,
-			`{"type":"user","timestamp":"2026-01-01T10:00:01Z","content":"has type"}`,
+			`{"timestamp":"2026-01-01T10:00:00Z","message":{"role":"user","content":"no type field"}}`,
+			realUserLine("2026-01-01T10:00:01Z", "has type"),
 		})
 
 		msgs, err := parseJSONLFile(path)
@@ -114,11 +218,34 @@ func TestParseJSONLFile(t *testing.T) {
 }
 
 func TestRenderClaudeCodeMarkdown(t *testing.T) {
-	t.Run("full session", func(t *testing.T) {
+	t.Run("full session with real schema", func(t *testing.T) {
+		// Build messages that match Claude Code's actual JSONL schema.
+		userMsgContent, _ := json.Marshal("What is Go?")
+		assistantBlocks, _ := json.Marshal([]map[string]any{
+			{"type": "text", "text": "Go is a language."},
+			{"type": "tool_use", "name": "bash", "input": map[string]any{"command": "go version"}},
+		})
 		msgs := []claudeCodeMessage{
-			{Type: "user", Timestamp: "2026-01-01T10:00:00Z", Content: "What is Go?"},
-			{Type: "tool_use", Timestamp: "2026-01-01T10:00:01Z", ToolName: "bash", ToolInput: []byte(`{"command":"go version"}`)},
-			{Type: "tool_result", Timestamp: "2026-01-01T10:00:02Z", ToolName: "bash", ToolOutput: []byte(`{"output":"go1.23"}`)},
+			{
+				Type:      "mode",
+				Timestamp: "", // no timestamp on leading metadata line
+			},
+			{
+				Type:      "user",
+				Timestamp: "2026-01-01T10:00:00Z",
+				Message: struct {
+					Role    string          `json:"role"`
+					Content json.RawMessage `json:"content"`
+				}{Role: "user", Content: userMsgContent},
+			},
+			{
+				Type:      "assistant",
+				Timestamp: "2026-01-01T10:00:01Z",
+				Message: struct {
+					Role    string          `json:"role"`
+					Content json.RawMessage `json:"content"`
+				}{Role: "assistant", Content: assistantBlocks},
+			},
 		}
 
 		md := renderClaudeCodeMarkdown("ses_test", msgs)
@@ -129,11 +256,14 @@ func TestRenderClaudeCodeMarkdown(t *testing.T) {
 		if !strings.Contains(md, "source: claude_code") {
 			t.Error("missing source in front-matter")
 		}
+		// message_count counts user+assistant turns (not the leading mode line).
 		if !strings.Contains(md, "message_count: 2") {
-			t.Error("message_count should be 2 (user + tool_use)")
+			t.Errorf("message_count should be 2 (user + assistant), got:\n%s", md)
 		}
+		// created_at must come from the first message that has a timestamp (the
+		// user turn, not the mode line which has none).
 		if !strings.Contains(md, "created_at: 2026-01-01T10:00:00Z") {
-			t.Error("missing created_at from first message")
+			t.Errorf("missing created_at from first timestamped message, got:\n%s", md)
 		}
 		if !strings.Contains(md, "## human (2026-01-01T10:00:00Z)") {
 			t.Error("missing human heading")
@@ -144,14 +274,11 @@ func TestRenderClaudeCodeMarkdown(t *testing.T) {
 		if !strings.Contains(md, "## assistant (2026-01-01T10:00:01Z)") {
 			t.Error("missing assistant heading")
 		}
-		if !strings.Contains(md, "Tool: bash") {
-			t.Error("missing tool name")
+		if !strings.Contains(md, "Go is a language.") {
+			t.Error("missing assistant text block")
 		}
-		if !strings.Contains(md, "## tool_result (2026-01-01T10:00:02Z)") {
-			t.Error("missing tool_result heading")
-		}
-		if !strings.Contains(md, "go1.23") {
-			t.Error("missing tool output")
+		if !strings.Contains(md, "bash") {
+			t.Error("missing tool name in assistant output")
 		}
 		if !strings.HasPrefix(md, "---\n") {
 			t.Error("front-matter should start with ---")
@@ -169,8 +296,16 @@ func TestRenderClaudeCodeMarkdown(t *testing.T) {
 	})
 
 	t.Run("user only session", func(t *testing.T) {
+		userContent, _ := json.Marshal("just a question")
 		msgs := []claudeCodeMessage{
-			{Type: "user", Timestamp: "2026-01-01T10:00:00Z", Content: "just a question"},
+			{
+				Type:      "user",
+				Timestamp: "2026-01-01T10:00:00Z",
+				Message: struct {
+					Role    string          `json:"role"`
+					Content json.RawMessage `json:"content"`
+				}{Role: "user", Content: userContent},
+			},
 		}
 		md := renderClaudeCodeMarkdown("ses_user", msgs)
 		if !strings.Contains(md, "message_count: 1") {
@@ -179,12 +314,44 @@ func TestRenderClaudeCodeMarkdown(t *testing.T) {
 		if !strings.Contains(md, "## human") {
 			t.Error("missing human heading")
 		}
+		if !strings.Contains(md, "just a question") {
+			t.Error("missing user content")
+		}
+	})
+
+	t.Run("mode-line-first timestamp sourcing", func(t *testing.T) {
+		// Reproduces the Date:0001-01-01 bug: mode line has no timestamp, the
+		// first real timestamp is on the user line.
+		userContent, _ := json.Marshal("hi")
+		msgs := []claudeCodeMessage{
+			{Type: "mode", Timestamp: ""},
+			{
+				Type:      "user",
+				Timestamp: "2026-06-01T09:00:00Z",
+				Message: struct {
+					Role    string          `json:"role"`
+					Content json.RawMessage `json:"content"`
+				}{Role: "user", Content: userContent},
+			},
+		}
+		md := renderClaudeCodeMarkdown("ses_ts", msgs)
+		if !strings.Contains(md, "created_at: 2026-06-01T09:00:00Z") {
+			t.Errorf("expected created_at from user line, got:\n%s", md)
+		}
 	})
 }
 
 func TestRenderClaudeCodeMarkdownHashStability(t *testing.T) {
+	userContent, _ := json.Marshal("hello")
 	msgs := []claudeCodeMessage{
-		{Type: "user", Timestamp: "2026-01-01T10:00:00Z", Content: "hello"},
+		{
+			Type:      "user",
+			Timestamp: "2026-01-01T10:00:00Z",
+			Message: struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			}{Role: "user", Content: userContent},
+		},
 	}
 
 	md1 := renderClaudeCodeMarkdown("ses_hash", msgs)
@@ -240,12 +407,22 @@ func TestClaudeCodeHarvestAllSkipsNonJSONL(t *testing.T) {
 }
 
 func TestRenderClaudeCodeMarkdownToolUseHashStability(t *testing.T) {
+	// Assistant message with a tool_use block — rendered output must be deterministic.
+	blocks, _ := json.Marshal([]map[string]any{
+		{"type": "tool_use", "name": "bash", "input": map[string]any{
+			"command": "ls -la",
+			"timeout": 30,
+			"cwd":     "/tmp",
+		}},
+	})
 	msgs := []claudeCodeMessage{
 		{
-			Type:      "tool_use",
+			Type:      "assistant",
 			Timestamp: "2026-01-01T10:00:00Z",
-			ToolName:  "bash",
-			ToolInput: json.RawMessage(`{"command":"ls -la","timeout":30,"cwd":"/tmp"}`),
+			Message: struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			}{Role: "assistant", Content: blocks},
 		},
 	}
 	first := renderClaudeCodeMarkdown("test-session", msgs)
@@ -258,17 +435,26 @@ func TestRenderClaudeCodeMarkdownToolUseHashStability(t *testing.T) {
 }
 
 func TestClaudeCodeHarvesterDedupHashDeterminism(t *testing.T) {
+	userContent, _ := json.Marshal("What is the capital of France?")
+	blocks, _ := json.Marshal([]map[string]any{
+		{"type": "tool_use", "name": "search", "input": map[string]any{"query": "capital of France"}},
+	})
 	msgs := []claudeCodeMessage{
 		{
 			Type:      "user",
 			Timestamp: "2026-01-01T10:00:00Z",
-			Content:   "What is the capital of France?",
+			Message: struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			}{Role: "user", Content: userContent},
 		},
 		{
-			Type:      "tool_use",
+			Type:      "assistant",
 			Timestamp: "2026-01-01T10:00:01Z",
-			ToolName:  "search",
-			ToolInput: json.RawMessage(`{"query":"capital of France"}`),
+			Message: struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			}{Role: "assistant", Content: blocks},
 		},
 	}
 
@@ -278,41 +464,33 @@ func TestClaudeCodeHarvesterDedupHashDeterminism(t *testing.T) {
 	h1 := sha256.Sum256([]byte(md1))
 	h2 := sha256.Sum256([]byte(md2))
 
-	hash1 := hex.EncodeToString(h1[:])
-	hash2 := hex.EncodeToString(h2[:])
-
-	if hash1 != hash2 {
+	if hex.EncodeToString(h1[:]) != hex.EncodeToString(h2[:]) {
 		t.Error("identical input must produce identical SHA-256 hash")
 	}
 }
 
 func TestClaudeCodeHarvesterDedupHashChange(t *testing.T) {
-	msgs1 := []claudeCodeMessage{
-		{
-			Type:      "user",
-			Timestamp: "2026-01-01T10:00:00Z",
-			Content:   "Original question",
-		},
+	makeMsg := func(text string) []claudeCodeMessage {
+		c, _ := json.Marshal(text)
+		return []claudeCodeMessage{
+			{
+				Type:      "user",
+				Timestamp: "2026-01-01T10:00:00Z",
+				Message: struct {
+					Role    string          `json:"role"`
+					Content json.RawMessage `json:"content"`
+				}{Role: "user", Content: c},
+			},
+		}
 	}
 
-	msgs2 := []claudeCodeMessage{
-		{
-			Type:      "user",
-			Timestamp: "2026-01-01T10:00:00Z",
-			Content:   "Modified question",
-		},
-	}
-
-	md1 := renderClaudeCodeMarkdown("ses_test", msgs1)
-	md2 := renderClaudeCodeMarkdown("ses_test", msgs2)
+	md1 := renderClaudeCodeMarkdown("ses_test", makeMsg("Original question"))
+	md2 := renderClaudeCodeMarkdown("ses_test", makeMsg("Modified question"))
 
 	h1 := sha256.Sum256([]byte(md1))
 	h2 := sha256.Sum256([]byte(md2))
 
-	hash1 := hex.EncodeToString(h1[:])
-	hash2 := hex.EncodeToString(h2[:])
-
-	if hash1 == hash2 {
+	if hex.EncodeToString(h1[:]) == hex.EncodeToString(h2[:]) {
 		t.Error("different content must produce different SHA-256 hash")
 	}
 }

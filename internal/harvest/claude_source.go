@@ -72,10 +72,16 @@ func (s *ClaudeSource) Read(_ context.Context, loc Location) ([]NormalizedSessio
 
 	sessionID := strings.TrimSuffix(filepath.Base(loc.SessionDir), ".jsonl")
 
+	// Find createdAt from the first message that actually carries a timestamp.
+	// Leading records (type=="mode", "file-history-snapshot", etc.) have no
+	// timestamp, so msgs[0].Timestamp is always "" and yielded a zero time.
 	var createdAt time.Time
-	if msgs[0].Timestamp != "" {
-		if t, err := time.Parse(time.RFC3339, msgs[0].Timestamp); err == nil {
-			createdAt = t
+	for _, m := range msgs {
+		if m.Timestamp != "" {
+			if t, err := time.Parse(time.RFC3339, m.Timestamp); err == nil {
+				createdAt = t
+				break
+			}
 		}
 	}
 
@@ -95,6 +101,11 @@ func (s *ClaudeSource) Read(_ context.Context, loc Location) ([]NormalizedSessio
 
 	normMsgs := make([]NormalizedMessage, 0, len(msgs))
 	for _, m := range msgs {
+		// Only emit user/assistant turns; skip metadata lines (mode,
+		// file-history-snapshot, system, attachment, etc.).
+		if m.Type != "user" && m.Type != "assistant" {
+			continue
+		}
 		var ts time.Time
 		if m.Timestamp != "" {
 			if t, err := time.Parse(time.RFC3339, m.Timestamp); err == nil {
@@ -107,9 +118,8 @@ func (s *ClaudeSource) Read(_ context.Context, loc Location) ([]NormalizedSessio
 		}
 		normMsgs = append(normMsgs, NormalizedMessage{
 			Role:        role,
-			Content:     m.Content,
+			Content:     m.extractText(),
 			Timestamp:   ts,
-			ToolName:    m.ToolName,
 			IsSidechain: m.IsSidechain,
 		})
 	}
