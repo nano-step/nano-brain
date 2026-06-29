@@ -88,6 +88,7 @@ func (s *OpenCodeSource) Read(ctx context.Context, loc Location) ([]NormalizedSe
 		out = append(out, NormalizedSession{
 			Source:        s.Name(),
 			SessionID:     sess.ID,
+			ParentID:      sess.ParentID,
 			WorkspaceHash: loc.WorkspaceHash,
 			Cwd:           loc.WorktreePath,
 			Title:         sess.Title,

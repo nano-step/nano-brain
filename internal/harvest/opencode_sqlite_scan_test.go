@@ -27,7 +27,7 @@ func createScanTestDB(t *testing.T, dir, subdir, worktree string) string {
 	defer db.Close()
 	if _, err := db.Exec(`
 		CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT NOT NULL);
-		CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, title TEXT, time_created INTEGER, time_updated INTEGER);
+		CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, title TEXT, time_created INTEGER, time_updated INTEGER, parent_id TEXT);
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestScanOpenCodeDBRoot_MissingProjectTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE session (id TEXT PRIMARY KEY)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, title TEXT, time_created INTEGER, time_updated INTEGER, parent_id TEXT)`); err != nil {
 		db.Close()
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func setupTestSQLiteForScan(t *testing.T) *sql.DB {
 	t.Cleanup(func() { db.Close() })
 	if _, err := db.Exec(`
 		CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT NOT NULL);
-		CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, title TEXT, time_created INTEGER, time_updated INTEGER);
+		CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, title TEXT, time_created INTEGER, time_updated INTEGER, parent_id TEXT);
 		CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT);
 		CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, time_created INTEGER, data TEXT);
 	`); err != nil {

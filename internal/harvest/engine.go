@@ -131,6 +131,8 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 					CreatedAt:     sess.CreatedAt,
 					WorkspaceHash: wsHash,
 					ParentID:      sess.ParentID,
+					Branch:        sess.Branch,
+					Cwd:           sess.Cwd,
 				}
 				if sumErr := e.summarizer.SummarizeAndPersist(ctx, md, smeta); sumErr != nil {
 					e.logger.Warn().Err(sumErr).Str("session", sess.SessionID).Msg("engine: summarization failed, falling back to raw")
