@@ -137,6 +137,32 @@ Key packages:
 - **Files modified:** `internal/server/handlers/ticket.go`
 - **Commit:** 0adb587
 
+## Post-Review Fixes (commit ffa5e49)
+
+Independent review APPROVED 08-03 (cross-workspace query + exact tag match confirmed, no blockers). Three findings raised; all fixed:
+
+**1. [Rule 1 - Bug, CORRECTNESS] Case mismatch between write path and query**
+- **Issue:** The write path (`internal/harvest/tickets.go`) stores ticket tags **uppercased** (`seen[strings.ToUpper(match)]` → `ticket:DEV-4706`). The query handlers passed the raw `ticket` arg into `ANY(tags)`, which is **case-sensitive** on a `TEXT[]` column — so a lowercase query (`dev-4706`) returned zero rows even when an uppercase tag existed.
+- **Fix:** `tagValue := "ticket:" + strings.ToUpper(ticket)` in BOTH handlers (`internal/server/handlers/ticket.go`, `internal/mcp/tools.go`). `#42`-style IDs have no letters so `ToUpper` is a no-op — exactly matching the write-path normalization in `tickets.go` (which also `ToUpper`s every match, including the `#NN` form which is unaffected).
+- **Test:** `TestTicketHandler_LowercaseQueryFindsUppercaseStored` — lowercase `dev-4706` query → asserts the querier receives `ticket:DEV-4706` and returns the uppercase-stored row.
+- **Files modified:** `internal/server/handlers/ticket.go`, `internal/mcp/tools.go`, `internal/server/handlers/ticket_test.go`
+
+**2. [Perf] GIN index on `documents.tags`**
+- **Issue:** `ListDocumentsByTag` filters `$1 = ANY(tags)` with no `workspace_hash` predicate → full sequential scan of `documents`.
+- **Fix:** New goose migration `migrations/00028_add_documents_tags_gin_index.sql` — `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_documents_tags ON documents USING GIN (tags);` with `+goose NO TRANSACTION`, matching the existing index-migration convention (00014/00015). Down migration drops it concurrently.
+- **Files created:** `migrations/00028_add_documents_tags_gin_index.sql`
+
+**3. [Quality] Consolidate source-derivation + add MCP cross-workspace test**
+- **Issue:** The MCP `memory_ticket` handler duplicated the source-derivation switch inline (also duplicated by `handlers/ticket.go`), and had no cross-workspace unit test.
+- **Fix:** Extracted the canonical scheme parser to a dependency-free shared helper `storage.SourceFromPath` (`internal/storage/sourcepath.go`) — both `handlers/ticket.go` and `mcp/tools.go` already import `internal/storage`, so this introduces no new dependency edge and no import cycle (`storage` imports neither consumer). Removed the local `sourceFromPath` in `ticket.go` and the inline switch in `tools.go`. Extracted `memory_ticket`'s markdown rendering into a pure `formatTicketSessions(ticket, rows)` function so it is unit-testable without a DB (the tool closure is a thin DB→formatter wire). Added `TestFormatTicketSessions_CrossWorkspace` (2 distinct workspace hashes + 2 sources → all appear) and `TestFormatTicketSessions_Unknown` (empty → "No sessions found") in `tools_internal_test.go`.
+- **Why not a DB-backed integration test:** The Adapter calls the concrete `*sqlc.Queries` (not an interface), so a `-short` DB-free test of the full tool path would require either `sqlmock` (no existing dep; task forbids new deps) or a real test DB (task forbids DB mutation). The pure-function extraction tests the cross-workspace formatting + source consolidation under `-short` without either.
+- **Files created:** `internal/storage/sourcepath.go`
+- **Files modified:** `internal/server/handlers/ticket.go`, `internal/mcp/tools.go`, `internal/mcp/tools_internal_test.go`
+
+**Out of scope (known pre-existing issue, left unchanged per review):** `sourceFromTags` in `internal/server/handlers/summarize.go` defaults to `"opencode"` when no source tag is present (rather than `"unknown"`). In `TicketHandler` this is only reached as a fallback when `storage.SourceFromPath` returns `"unknown"` (source_path scheme absent), so the default rarely surfaces. Not modified — pre-dates this plan and changing it risks the summarize/dedup paths that rely on the current default.
+
+**Verification:** `CGO_ENABLED=0 go build ./...` clean; `go test -race -short ./...` all packages PASS, 0 FAIL. No `.sql` query file changed (the migration is a schema file, not a sqlc query), so no `sqlc generate` was required. Harness `in-progress` gate: 4 PASS, 0 FAIL.
+
 ## Known Stubs
 
 None — all data paths are wired. Results are empty if no harvest cycle has run since 08-02 landed (ticket tags are applied during harvest, not retroactively).
@@ -154,6 +180,12 @@ Files created:
 Commits verified in git log:
 - `0adb587` — FOUND (Task 1)
 - `66765db` — FOUND (Task 2)
+- `ffa5e49` — FOUND (post-review fixes)
+
+Post-review files:
+- `internal/storage/sourcepath.go` — FOUND
+- `migrations/00028_add_documents_tags_gin_index.sql` — FOUND
 
 Build: `CGO_ENABLED=0 go build ./...` — clean.
 Tests: `go test -race -short ./...` — all packages PASS, 0 FAIL.
+New tests passing: `TestTicketHandler_LowercaseQueryFindsUppercaseStored`, `TestFormatTicketSessions_CrossWorkspace`, `TestFormatTicketSessions_Unknown`.
