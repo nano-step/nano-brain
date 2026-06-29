@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
@@ -32,23 +33,6 @@ const (
 	snippetMaxLen    = 300
 )
 
-// sourceFromPath derives the source from the source_path scheme when tags
-// do not carry it (e.g. "summary://claude/<id>" → "claude").
-func sourceFromPath(sourcePath string) string {
-	switch {
-	case strings.HasPrefix(sourcePath, "summary://claude/"):
-		return "claude"
-	case strings.HasPrefix(sourcePath, "summary://opencode/"):
-		return "opencode"
-	case strings.HasPrefix(sourcePath, "opencode://"):
-		return "opencode"
-	case strings.HasPrefix(sourcePath, "claude://"):
-		return "claude"
-	default:
-		return "unknown"
-	}
-}
-
 // snippet returns up to snippetMaxLen characters of content, trimmed of whitespace.
 func snippet(content string) string {
 	content = strings.TrimSpace(content)
@@ -71,7 +55,11 @@ func TicketHandler(q TicketQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusBadRequest, "ticket query parameter is required")
 		}
 
-		tagValue := "ticket:" + ticketParam
+		// The write path (harvest/tickets.go) stores ticket IDs uppercased
+		// (e.g. "ticket:DEV-4706"); ANY(tags) on a TEXT[] is case-sensitive, so
+		// the query input must be uppercased to match. "#42"-style IDs have no
+		// letters, so ToUpper is a no-op for them — consistent with the write path.
+		tagValue := "ticket:" + strings.ToUpper(ticketParam)
 
 		ctx := c.Request().Context()
 		rows, err := q.ListDocumentsByTag(ctx, sqlc.ListDocumentsByTagParams{
@@ -91,7 +79,7 @@ func TicketHandler(q TicketQuerier, logger zerolog.Logger) echo.HandlerFunc {
 				tags = []string{}
 			}
 			// Prefer source_path scheme (more precise); fall back to tag scan.
-			src := sourceFromPath(row.SourcePath)
+			src := storage.SourceFromPath(row.SourcePath)
 			if src == "unknown" {
 				src = sourceFromTags(tags)
 			}

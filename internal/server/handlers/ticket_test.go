@@ -149,6 +149,32 @@ func TestTicketHandler_QuerierError(t *testing.T) {
 	}
 }
 
+// TestTicketHandler_LowercaseQueryFindsUppercaseStored: the write path stores
+// ticket tags uppercased (ticket:DEV-4706); a lowercase query (dev-4706) must
+// be uppercased before matching, otherwise the case-sensitive ANY(tags) misses.
+func TestTicketHandler_LowercaseQueryFindsUppercaseStored(t *testing.T) {
+	row := makeRow("ws-aaa", "Session A", "summary://claude/sess-1",
+		[]string{"ticket:DEV-4706", "claude_code"}, "Content about DEV-4706")
+	mock := &mockTicketQuerier{rows: []sqlc.ListDocumentsByTagRow{row}}
+	c, rec := newEchoWithTicketParam("dev-4706") // lowercase query
+
+	err := handlers.TicketHandler(mock, zerolog.Nop())(c)
+	if err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	// Must uppercase to match the stored "ticket:DEV-4706".
+	if mock.capturedTag != "ticket:DEV-4706" {
+		t.Errorf("expected uppercased tag 'ticket:DEV-4706', got %q", mock.capturedTag)
+	}
+	results := decodeResults(t, rec)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for lowercase query of uppercase-stored ticket, got %d", len(results))
+	}
+}
+
 // TestTicketHandler_HashStyleTicket: ticket=#42 → tag "ticket:#42".
 func TestTicketHandler_HashStyleTicket(t *testing.T) {
 	row := makeRow("ws-aaa", "PR session", "summary://claude/sess-99",

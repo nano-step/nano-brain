@@ -2380,7 +2380,11 @@ func registerMemoryTicket(server *mcpsdk.Server, a *Adapter) {
 				return errResult("ticket is required"), nil
 			}
 
-			tagValue := "ticket:" + ticket
+			// The write path (harvest/tickets.go) stores ticket IDs uppercased
+			// (e.g. "ticket:DEV-4706"); ANY(tags) on a TEXT[] is case-sensitive,
+			// so the query input must be uppercased to match. "#42"-style IDs
+			// have no letters, so ToUpper is a no-op — consistent with write path.
+			tagValue := "ticket:" + strings.ToUpper(ticket)
 			rows, err := a.queries.ListDocumentsByTag(ctx, sqlc.ListDocumentsByTagParams{
 				Column1:    tagValue,
 				Collection: "sessions",
@@ -2390,45 +2394,37 @@ func registerMemoryTicket(server *mcpsdk.Server, a *Adapter) {
 				return errResult(fmt.Sprintf("ticket query failed: %v", err)), nil
 			}
 
-			if len(rows) == 0 {
-				return &mcpsdk.CallToolResult{
-					Content: []mcpsdk.Content{&mcpsdk.TextContent{
-						Text: fmt.Sprintf("No sessions found for ticket %s.", ticket),
-					}},
-				}, nil
-			}
-
-			var sb strings.Builder
-			fmt.Fprintf(&sb, "## Sessions for ticket %s\n\n", ticket)
-			for _, row := range rows {
-				wsShort := row.WorkspaceHash
-				if len(wsShort) > 8 {
-					wsShort = wsShort[:8]
-				}
-				// Derive source from source_path scheme.
-				src := "unknown"
-				switch {
-				case strings.HasPrefix(row.SourcePath, "summary://claude/"):
-					src = "claude"
-				case strings.HasPrefix(row.SourcePath, "summary://opencode/"):
-					src = "opencode"
-				case strings.HasPrefix(row.SourcePath, "opencode://"):
-					src = "opencode"
-				case strings.HasPrefix(row.SourcePath, "claude://"):
-					src = "claude"
-				}
-				snip := strings.TrimSpace(row.Content)
-				runes := []rune(snip)
-				if len(runes) > 300 {
-					snip = string(runes[:300])
-				}
-				fmt.Fprintf(&sb, "- **%s** (`%s`, workspace `%s`)\n  %s\n\n",
-					row.Title, src, wsShort, snip)
-			}
-
 			return &mcpsdk.CallToolResult{
-				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: sb.String()}},
+				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: formatTicketSessions(ticket, rows)}},
 			}, nil
 		},
 	)
+}
+
+// formatTicketSessions renders the memory_ticket result as a markdown list.
+// Returns a "no sessions" message for an empty result set. Source is derived
+// from each row's source_path scheme via the shared storage.SourceFromPath
+// helper; results span all workspaces (the underlying query is unscoped).
+func formatTicketSessions(ticket string, rows []sqlc.ListDocumentsByTagRow) string {
+	if len(rows) == 0 {
+		return fmt.Sprintf("No sessions found for ticket %s.", ticket)
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "## Sessions for ticket %s\n\n", ticket)
+	for _, row := range rows {
+		wsShort := row.WorkspaceHash
+		if len(wsShort) > 8 {
+			wsShort = wsShort[:8]
+		}
+		src := storage.SourceFromPath(row.SourcePath)
+		snip := strings.TrimSpace(row.Content)
+		runes := []rune(snip)
+		if len(runes) > 300 {
+			snip = string(runes[:300])
+		}
+		fmt.Fprintf(&sb, "- **%s** (`%s`, workspace `%s`)\n  %s\n\n",
+			row.Title, src, wsShort, snip)
+	}
+	return sb.String()
 }
