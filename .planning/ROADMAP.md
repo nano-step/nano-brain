@@ -135,10 +135,10 @@ Plans:
   5. A cross-workspace query returns all sessions for a ticket regardless of source or repo
   6. No regression: existing OpenCode/Claude harvest still works; `go test -race -short ./...` passes
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 
 - [x] 08-01-PLAN.md
-- [ ] 08-02-PLAN.md
+- [x] 08-02-PLAN.md
 - [ ] 08-03-PLAN.md
 
 ## Parallel Execution Opportunities

@@ -6,14 +6,14 @@ current_phase: 2
 current_phase_name: Import Edge Fix
 status: in-progress
 stopped_at: Phase 1 marked complete; `.planning/` cleaned and aligned to GSD canonical format
-last_updated: "2026-06-29T05:42:49.483Z"
+last_updated: "2026-06-29T06:13:43.446Z"
 last_activity: 2026-06-28
 last_activity_desc: Phase 1 (Vue SFC) verified complete (57/57 tests, -race)
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 13
 ---
 
@@ -54,6 +54,7 @@ Progress: [█░░░░░░░░░] 14%
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 08 P02 | 30 | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,7 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 - [Phase 1]: Defer Vue CFG / template-intelligence to v2 — agents use trace/impact more
 - [Phase 1]: Universal `.vue` extractor — runs for all .vue files, not framework-gated
 - [Setup]: Use GSD Core as the phase loop
+- [Phase ?]: Branch/Cwd/ParentID threaded through SummaryMeta→SessionMetadata→front-matter for both adapters
 
 ### Pending Todos
 
@@ -83,6 +85,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-06-29T05:42:49.473Z
+Last session: 2026-06-29T06:13:16.640Z
 Stopped at: Phase 1 marked complete; `.planning/` cleaned and aligned to GSD canonical format
 Resume file: None
