@@ -8,12 +8,55 @@ import (
 
 // defaultTicketPatterns are the built-in ticket ID patterns used when no
 // patterns are configured. The first pattern matches Linear/JIRA-style IDs
-// (e.g. DEV-1234, PROJ-42). The second matches GitHub issue references (#42).
-// Content is pre-screened to strip markdown headings before applying #\d+ so
-// lines like "# Introduction" do not produce false positives.
+// (e.g. DEV-1234, PROJ-42) with word boundaries so it does not match inside
+// larger tokens. The second matches GitHub issue references (#42). Content is
+// pre-screened to strip markdown headings before applying #\d+ so lines like
+// "# Introduction" do not produce false positives.
+//
+// The JIRA pattern uses \b boundaries (Go RE2 supports ASCII word boundaries)
+// so technical strings like "UTF-8" or "SHA-256" embedded in prose are not
+// matched as ticket IDs. A denylist (nonTicketPrefixes) provides a second line
+// of defense against well-known non-ticket prefixes that share the shape.
 var defaultTicketPatterns = []string{
-	`[A-Z][A-Z0-9]+-\d+`,
+	`\b[A-Z][A-Z0-9]+-\d+\b`,
 	`#\d+`,
+}
+
+// nonTicketPrefixes is a denylist of project-key prefixes that match the
+// JIRA-style ticket shape (PREFIX-NUMBER) but are well-known non-ticket
+// technical identifiers (encodings, hashes, RFCs, protocols, CVEs). Matches
+// whose prefix (the part before the first '-') is in this set are discarded.
+// Keys are uppercase; lookups uppercase the candidate first.
+var nonTicketPrefixes = map[string]struct{}{
+	"UTF":    {},
+	"UTF8":   {},
+	"UTF16":  {},
+	"SHA":    {},
+	"MD5":    {},
+	"ISO":    {},
+	"RFC":    {},
+	"TLS":    {},
+	"SSL":    {},
+	"HTTP":   {},
+	"HTTPS":  {},
+	"CVE":    {},
+	"BASE64": {},
+	"IPV4":   {},
+	"IPV6":   {},
+	"X86":    {},
+	"ARM64":  {},
+}
+
+// isNonTicket reports whether a JIRA-shaped match (e.g. "UTF-8", "DEV-4706")
+// should be discarded because its prefix is a known non-ticket identifier.
+// The GitHub "#NN" form has no prefix and is never filtered here.
+func isNonTicket(match string) bool {
+	prefix, _, found := strings.Cut(match, "-")
+	if !found {
+		return false
+	}
+	_, denied := nonTicketPrefixes[strings.ToUpper(prefix)]
+	return denied
 }
 
 // TicketExtractor extracts ticket IDs from content, branch names, and parent
@@ -52,31 +95,25 @@ func NewTicketExtractor(patterns []string) (*TicketExtractor, error) {
 func (e *TicketExtractor) Extract(content, branch string, parentTags []string) []string {
 	seen := make(map[string]struct{})
 
-	// Strip markdown heading lines from content before scanning for #\d+ so
-	// that "# My Heading" does not match as ticket "#".
-	strippedContent := stripMarkdownHeadings(content)
-
-	scanText := func(text string, stripHeadings bool) {
-		src := text
-		if stripHeadings {
-			src = strippedContent
-		}
+	// addMatches scans src with each pattern and records matches, discarding
+	// known non-ticket identifiers (UTF-8, SHA-256, etc.) via the denylist.
+	addMatches := func(src string) {
 		for _, re := range e.patterns {
 			for _, match := range re.FindAllString(src, -1) {
+				if isNonTicket(match) {
+					continue
+				}
 				seen[strings.ToUpper(match)] = struct{}{}
 			}
 		}
 	}
 
-	// Scan content (with heading stripping for # pattern protection).
-	scanText(strippedContent, false)
+	// Scan content with markdown headings stripped so "# My Heading" does not
+	// match the #\d+ pattern as a spurious ticket.
+	addMatches(stripMarkdownHeadings(content))
 
 	// Scan branch name directly — headings don't appear in branch names.
-	for _, re := range e.patterns {
-		for _, match := range re.FindAllString(branch, -1) {
-			seen[strings.ToUpper(match)] = struct{}{}
-		}
-	}
+	addMatches(branch)
 
 	// Inherit tickets from parent tags.
 	for _, tag := range parentTags {

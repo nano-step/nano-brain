@@ -108,3 +108,36 @@ func TestNewTicketExtractor_InvalidPattern(t *testing.T) {
 		t.Error("NewTicketExtractor with invalid pattern: expected error, got nil")
 	}
 }
+
+func TestExtract_NonTicketTechnicalStrings(t *testing.T) {
+	te := newExtractorOrFail(t, nil)
+	// These technical identifiers share the PREFIX-NUMBER shape but must NOT
+	// be extracted as tickets (denylist + word-boundary defense).
+	content := "We decode UTF-8, hash with SHA-1 and SHA-256, follow ISO-8601 dates, " +
+		"RFC-2616 semantics, TLS-1.3 handshakes, and patched CVE-2024-12345 today."
+	got := te.Extract(content, "", nil)
+	if got != nil {
+		t.Errorf("Extract non-ticket technical strings: got %v, want nil (none should match)", got)
+	}
+}
+
+func TestExtract_RealTicketAmongTechnicalStrings(t *testing.T) {
+	te := newExtractorOrFail(t, nil)
+	// Real tickets must still be extracted even when technical strings are present.
+	content := "Fixed UTF-8 decoding under SHA-256 verification as part of DEV-4706 and PROJ-42."
+	got := te.Extract(content, "", nil)
+	want := []string{"DEV-4706", "PROJ-42"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Extract real ticket among technical strings: got %v, want %v", got, want)
+	}
+}
+
+func TestExtract_WordBoundaryNoSubstringMatch(t *testing.T) {
+	te := newExtractorOrFail(t, nil)
+	// A ticket-shaped token embedded inside a larger identifier must not match.
+	// e.g. "XDEV-100Z" should not yield "DEV-100" (word boundary on both sides).
+	got := te.Extract("the var XDEV-100Z is internal", "", nil)
+	if got != nil {
+		t.Errorf("Extract word boundary: got %v, want nil (embedded token must not match)", got)
+	}
+}
