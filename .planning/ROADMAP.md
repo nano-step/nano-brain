@@ -15,7 +15,7 @@ Strengthen nano-brain's code intelligence and search across v1: add Vue SFC supp
 - [ ] **Phase 5: Flow Visualization** - Complete execution-flow pipeline and sequence diagrams
 - [ ] **Phase 6: Benchmarks & Infrastructure** - LLM quality benchmarks, OpenAI embeddings, dashboard split
 - [ ] **Phase 7: HyDE & Documentation** - Auto-generate HyDE hints, complete docs
-- [ ] **Phase 8: Session Harvest Unification & Ticket Linking** - Pluggable multi-source harvest, one sessions collection, cross-source/cross-repo ticket linking
+- [x] **Phase 8: Session Harvest Unification & Ticket Linking** - Pluggable multi-source harvest, one sessions collection, cross-source/cross-repo ticket linking (completed 2026-06-29)
 
 ## Phase Details
 
@@ -135,11 +135,11 @@ Plans:
   5. A cross-workspace query returns all sessions for a ticket regardless of source or repo
   6. No regression: existing OpenCode/Claude harvest still works; `go test -race -short ./...` passes
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 - [x] 08-01-PLAN.md
 - [x] 08-02-PLAN.md
-- [ ] 08-03-PLAN.md
+- [x] 08-03-PLAN.md
 
 ## Parallel Execution Opportunities
 
