@@ -121,8 +121,12 @@ type OpenCodeHarvesterConfig struct {
 
 // ClaudeCodeHarvesterConfig holds ClaudeCode harvester configuration.
 type ClaudeCodeHarvesterConfig struct {
-	Enabled    bool   `koanf:"enabled" json:"enabled"`
-	SessionDir string `koanf:"session_dir" json:"session_dir"`
+	Enabled        bool     `koanf:"enabled" json:"enabled"`
+	SessionDir     string   `koanf:"session_dir" json:"session_dir"`
+	// TicketPatterns is a slice of Go regex strings used by the ticket extractor
+	// to identify ticket IDs in session content and branch names. Zero value
+	// means the extractor uses its built-in defaults ([A-Z]+-\d+ and #\d+).
+	TicketPatterns []string `koanf:"ticket_patterns" json:"ticket_patterns"`
 }
 
 // GitHarvesterConfig holds Git history harvesting configuration.
