@@ -125,6 +125,32 @@ go test -race -short ./...    → 28 packages PASS, 0 FAIL
 - **Files modified:** `internal/summarize/pipeline.go`
 - **Commit:** f369a6c
 
+## Post-Review Fixes (commit 53c0e88)
+
+Independent review APPROVED 08-02 (subagent inheritance + branch extraction work and are tested). Three findings raised; two fixed, one is a no-op against current code state:
+
+**1. [Rule 1 - Bug] Ticket regex matched technical strings (UTF-8, SHA-256, etc.)**
+- **Issue:** Default JIRA pattern `[A-Z][A-Z0-9]+-\d+` had no word boundaries, so `UTF-8`, `SHA-1`, `SHA-256`, `ISO-8601`, `RFC-2616`, `CVE-2024-12345` all matched as tickets — polluting tags on nearly every technical session and degrading the 08-03 ticket query.
+- **Fix:** Pattern is now `\b[A-Z][A-Z0-9]+-\d+\b` (Go RE2 ASCII word boundaries). Added `nonTicketPrefixes` denylist (UTF, UTF8, UTF16, SHA, MD5, ISO, RFC, TLS, SSL, HTTP, HTTPS, CVE, BASE64, IPV4, IPV6, X86, ARM64) with `isNonTicket()` filter in `Extract` as a second line of defense. The `#NN` GitHub form has no prefix and is unaffected.
+- **Tests added:** `TestExtract_NonTicketTechnicalStrings` (asserts none of UTF-8/SHA-1/SHA-256/ISO-8601/RFC-2616/TLS-1.3/CVE-2024-12345 produce tickets), `TestExtract_RealTicketAmongTechnicalStrings` (DEV-4706/PROJ-42 still extracted when mixed with UTF-8/SHA-256), `TestExtract_WordBoundaryNoSubstringMatch` (embedded `XDEV-100Z` rejected).
+- **Files modified:** `internal/harvest/tickets.go`, `internal/harvest/tickets_test.go`
+- **Commit:** 53c0e88
+
+**2. [Rule 1 - Bug] Dead `stripHeadings bool` param in `scanText` closure**
+- **Issue:** `scanText` had a `stripHeadings bool` parameter that was always called with `false`, making the `if stripHeadings` branch unreachable and the param misleading.
+- **Fix:** Removed the dead closure; replaced with a plain `addMatches(src string)` helper that scans patterns and applies the denylist. Content is passed pre-stripped (`stripMarkdownHeadings(content)`); branch is passed raw. No behavior change for valid tickets.
+- **Files modified:** `internal/harvest/tickets.go`
+- **Commit:** 53c0e88
+
+**3. [Not applicable in current code state] Wire `TicketPatterns` via `NewEngineWithTicketPatterns`**
+- **Finding:** Reviewer asked to wire `main.go` builders from `NewEngine` (defaults) to `NewEngineWithTicketPatterns` so `ClaudeCodeHarvesterConfig.TicketPatterns` takes effect.
+- **Investigation:** Verified `harvest.NewEngine` has **zero** production call sites (`grep` across `cmd/` and `internal/`, excluding tests/engine.go, returns nothing). The Claude harvester is built via `initClaudeCodeHarvesters` → `harvest.NewClaudeCodeHarvester` (legacy path); OpenCode via `buildOpenCodeHarvesters`. The `Engine` (which owns `ticketExtractor`) is the deferred "engine flag path" from 08-01 (08-01 SUMMARY Known Stubs: "Engine is built and tested but not yet wired to Runner"). There is no `NewEngine` call to convert.
+- **Decision:** Not implemented. Wiring the Engine into the Runner is the explicitly-deferred Phase 8 follow-up, out of 08-02 scope and not a smallest-diff fix. The constructor side is already correct: `NewEngineWithTicketPatterns(source, db, summarizer, cfg.Harvester.ClaudeCode.TicketPatterns, logger)` is ready for whoever wires the Engine. Until then, `TicketPatterns` config is inert by design (consistent with the whole Engine path being inert). No code change.
+
+**Children deferral:** Left empty as the review confirmed (documented deferral — fine).
+
+**Verification:** `CGO_ENABLED=0 go build ./...` clean; `go test -race -short ./...` all packages PASS, 0 FAIL. The false-positive denylist/boundary tests pass.
+
 ## Known Stubs
 
 - **Children lookup deferred**: `DBRelationshipLookup` always returns empty `Children`. The metadata JSON stored by `Persister.Save` does not include `parent_id`, making a targeted child query impossible without a full-table scan. First iteration accepts this; `pipeline.go:252` handles nil Children gracefully. Tracked for future plan.
