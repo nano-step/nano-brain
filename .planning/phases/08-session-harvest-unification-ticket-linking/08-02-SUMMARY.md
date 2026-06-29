@@ -174,3 +174,57 @@ Commits verified in git log:
 
 Build: `CGO_ENABLED=0 go build ./...` — clean.
 Tests: `go test -race -short ./...` — all 28 packages PASS, 0 FAIL.
+
+---
+
+## Addendum: Idempotent Startup Backfill for Session Ticket Tags (commit dec9dfe)
+
+**Why:** Session docs harvested before phase 8 have no `ticket:` tags. The harvester
+dedup-skips them (content hash unchanged) so they are never re-processed by the
+normal harvest cycle. Fresh installs are unaffected — their first harvest already
+applies the extractor. This backfill reconciles only upgrade scenarios.
+
+### What was added
+
+**`internal/harvest/migration.go` — `BackfillSessionTicketTags`**
+
+- Selects `collection = 'sessions'` docs in batches of 500 (LIMIT/OFFSET keyset
+  on `id`); filters in Go for docs without any `ticket:` tag — so re-runs are a
+  true no-op (tagged=0).
+- Calls `extractBranchFromContent` to parse `Branch:` from the rendered
+  front-matter (best-effort; falls back to `""`).
+- Runs `extractor.Extract(content, branch, nil)` and appends `ticket:ID` tags via
+  `appendTicketTags` (deduplicates, preserves existing tag order).
+- Updates each affected row with `UPDATE documents SET tags = $1 WHERE id = $2`.
+- Logs `{"tagged": N}` on completion.
+
+**`internal/harvest/migration_test.go`** — four unit tests (in-process SQLite):
+
+| Test | Scenario |
+|------|----------|
+| `TagsUntaggedDoc` | content mentions DEV-1234 → tag added |
+| `Idempotent` | doc already has `ticket:DEV-1234` → tagged=0, tags unchanged |
+| `NonSessionSkipped` | `collection='memory'` doc untouched |
+| `ExistingTagsPreserved` | pre-existing `bug-fix,feature` tags kept; `ticket:PROJ-55` appended |
+
+**`cmd/nano-brain/main.go`** — wired immediately after `MigrateSessionSummaryToSessions`:
+
+```go
+if ticketExtractor, teErr := harvest.NewTicketExtractor(nil); teErr != nil {
+    logger.Warn().Err(teErr).Msg("ticket extractor init failed — skipping session ticket tag backfill")
+} else if backfillN, backfillErr := harvest.BackfillSessionTicketTags(ctx, db, ticketExtractor, logger); backfillErr != nil {
+    logger.Warn().Err(backfillErr).Msg("session ticket tag backfill failed — continuing without backfill")
+} else if backfillN > 0 {
+    logger.Info().Int("tagged", backfillN).Msg("session ticket tag backfill complete")
+}
+```
+
+Non-fatal in both error cases. Zero-tagged runs produce no log output.
+
+### Verification
+
+```
+CGO_ENABLED=0 go build ./...     → PASS
+go test -race -short ./...       → 28 packages PASS (4 new backfill tests in harvest)
+harness pre-commit gate          → 4/4 PASS
+```
