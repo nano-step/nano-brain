@@ -1542,7 +1542,7 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 			docs, err := a.queries.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
 				WorkspaceHash: ws,
 				MaxResults:    int32(limit),
-				Collections:   []string{"memory", "session-summary"},
+				Collections:   []string{"memory", "sessions"},
 			})
 			if err != nil {
 				return errResult(fmt.Sprintf("recent documents failed: %v", err)), nil

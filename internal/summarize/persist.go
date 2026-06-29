@@ -115,7 +115,7 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 		Title:         title,
 		Content:       summaryMarkdown,
 		SourcePath:    sourcePath,
-		Collection:    "session-summary",
+		Collection:    "sessions",
 		Tags:          []string{"summary", string(meta.Source)},
 		Metadata:      pqtype.NullRawMessage{RawMessage: metaJSON, Valid: true},
 	})
@@ -161,7 +161,7 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 			SourcePath: sourcePath,
 			Title:      title,
 			Content:    summaryMarkdown,
-			Collection: "session-summary",
+			Collection: "sessions",
 		}); err != nil {
 			p.logger.Warn().Err(err).Msg("link extractor failed; summary persisted")
 		}
@@ -208,11 +208,16 @@ func (p *Persister) persistToDisk(ctx context.Context, summaryMarkdown string, m
 }
 
 // buildSourcePath returns the canonical source path for summary documents.
+// Each known source has an explicit case. Unknown sources fall through to a
+// generic pattern ("summary://<source>/<sessionID>") rather than wrongly
+// defaulting to opencode.
 func buildSourcePath(meta SessionMetadata) string {
 	switch meta.Source {
 	case SourceClaude:
 		return "summary://claude/" + meta.SessionID
-	default:
+	case SourceOpenCode:
 		return "summary://opencode/" + meta.SessionID
+	default:
+		return "summary://" + string(meta.Source) + "/" + meta.SessionID
 	}
 }
