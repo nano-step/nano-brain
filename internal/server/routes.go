@@ -123,6 +123,8 @@ func registerRoutes(s *Server) {
 	api.GET("/wake-up", wakeUp)
 	data.POST("/wake-up", wakeUp)
 
+	api.GET("/sessions/by-ticket", handlers.TicketHandler(s.queries, s.logger))
+
 	s.echo.POST("/api/harvest", handlers.TriggerHarvest(s.getHarvestRunner))
 	s.echo.POST("/api/reload-config", handlers.ReloadConfig(s.configPath, s.currentConfig, s.applyReloadedConfig, s.logger))
 

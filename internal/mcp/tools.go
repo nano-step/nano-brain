@@ -43,6 +43,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryFlowchart(server, a)
 	registerMemoryWorkspacesResolve(server, a)
 	registerMemoryWorkspacesList(server, a)
+	registerMemoryTicket(server, a)
 }
 
 func toolSchema(props map[string]map[string]any, required []string) json.RawMessage {
@@ -2356,6 +2357,78 @@ func registerMemoryWorkspacesList(server *mcpsdk.Server, a *Adapter) {
 				"workspaces": workspaces,
 				"count":      len(workspaces),
 			})
+		},
+	)
+}
+
+func registerMemoryTicket(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_ticket",
+			Description: "Returns all sessions tagged with a ticket ID across ALL workspaces and sources. Use to answer 'what work has been done on DEV-4706?' Accepts Jira-style (DEV-1234, PROJ-42) or hash-style (#42) ticket IDs. Returns a formatted markdown list with title, source, workspace, and content snippet.",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"ticket": {"type": "string", "description": "Ticket ID to look up, e.g. DEV-4706 or #42"},
+			}, []string{"ticket"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ticket := strings.TrimSpace(argString(args, "ticket"))
+			if ticket == "" {
+				return errResult("ticket is required"), nil
+			}
+
+			tagValue := "ticket:" + ticket
+			rows, err := a.queries.ListDocumentsByTag(ctx, sqlc.ListDocumentsByTagParams{
+				Column1:    tagValue,
+				Collection: "sessions",
+				Limit:      50,
+			})
+			if err != nil {
+				return errResult(fmt.Sprintf("ticket query failed: %v", err)), nil
+			}
+
+			if len(rows) == 0 {
+				return &mcpsdk.CallToolResult{
+					Content: []mcpsdk.Content{&mcpsdk.TextContent{
+						Text: fmt.Sprintf("No sessions found for ticket %s.", ticket),
+					}},
+				}, nil
+			}
+
+			var sb strings.Builder
+			fmt.Fprintf(&sb, "## Sessions for ticket %s\n\n", ticket)
+			for _, row := range rows {
+				wsShort := row.WorkspaceHash
+				if len(wsShort) > 8 {
+					wsShort = wsShort[:8]
+				}
+				// Derive source from source_path scheme.
+				src := "unknown"
+				switch {
+				case strings.HasPrefix(row.SourcePath, "summary://claude/"):
+					src = "claude"
+				case strings.HasPrefix(row.SourcePath, "summary://opencode/"):
+					src = "opencode"
+				case strings.HasPrefix(row.SourcePath, "opencode://"):
+					src = "opencode"
+				case strings.HasPrefix(row.SourcePath, "claude://"):
+					src = "claude"
+				}
+				snip := strings.TrimSpace(row.Content)
+				runes := []rune(snip)
+				if len(runes) > 300 {
+					snip = string(runes[:300])
+				}
+				fmt.Fprintf(&sb, "- **%s** (`%s`, workspace `%s`)\n  %s\n\n",
+					row.Title, src, wsShort, snip)
+			}
+
+			return &mcpsdk.CallToolResult{
+				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: sb.String()}},
+			}, nil
 		},
 	)
 }
