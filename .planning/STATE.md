@@ -60,7 +60,7 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- Avoid full re-index on git checkout / worktree create (watcher perf) — `.planning/todos/pending/2026-06-29-avoid-full-re-index-on-git-checkout-or-worktree-create.md`
 
 ### Blockers/Concerns
 
