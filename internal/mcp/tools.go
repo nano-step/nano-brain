@@ -43,6 +43,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemoryFlowchart(server, a)
 	registerMemoryWorkspacesResolve(server, a)
 	registerMemoryWorkspacesList(server, a)
+	registerMemoryTicket(server, a)
 }
 
 func toolSchema(props map[string]map[string]any, required []string) json.RawMessage {
@@ -1542,7 +1543,7 @@ func registerMemoryWakeUp(server *mcpsdk.Server, a *Adapter) {
 			docs, err := a.queries.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
 				WorkspaceHash: ws,
 				MaxResults:    int32(limit),
-				Collections:   []string{"memory", "session-summary"},
+				Collections:   []string{"memory", "sessions"},
 			})
 			if err != nil {
 				return errResult(fmt.Sprintf("recent documents failed: %v", err)), nil
@@ -2358,4 +2359,72 @@ func registerMemoryWorkspacesList(server *mcpsdk.Server, a *Adapter) {
 			})
 		},
 	)
+}
+
+func registerMemoryTicket(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_ticket",
+			Description: "Returns all sessions tagged with a ticket ID across ALL workspaces and sources. Use to answer 'what work has been done on DEV-4706?' Accepts Jira-style (DEV-1234, PROJ-42) or hash-style (#42) ticket IDs. Returns a formatted markdown list with title, source, workspace, and content snippet.",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"ticket": {"type": "string", "description": "Ticket ID to look up, e.g. DEV-4706 or #42"},
+			}, []string{"ticket"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ticket := strings.TrimSpace(argString(args, "ticket"))
+			if ticket == "" {
+				return errResult("ticket is required"), nil
+			}
+
+			// The write path (harvest/tickets.go) stores ticket IDs uppercased
+			// (e.g. "ticket:DEV-4706"); ANY(tags) on a TEXT[] is case-sensitive,
+			// so the query input must be uppercased to match. "#42"-style IDs
+			// have no letters, so ToUpper is a no-op — consistent with write path.
+			tagValue := "ticket:" + strings.ToUpper(ticket)
+			rows, err := a.queries.ListDocumentsByTag(ctx, sqlc.ListDocumentsByTagParams{
+				Column1:    tagValue,
+				Collection: "sessions",
+				Limit:      50,
+			})
+			if err != nil {
+				return errResult(fmt.Sprintf("ticket query failed: %v", err)), nil
+			}
+
+			return &mcpsdk.CallToolResult{
+				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: formatTicketSessions(ticket, rows)}},
+			}, nil
+		},
+	)
+}
+
+// formatTicketSessions renders the memory_ticket result as a markdown list.
+// Returns a "no sessions" message for an empty result set. Source is derived
+// from each row's source_path scheme via the shared storage.SourceFromPath
+// helper; results span all workspaces (the underlying query is unscoped).
+func formatTicketSessions(ticket string, rows []sqlc.ListDocumentsByTagRow) string {
+	if len(rows) == 0 {
+		return fmt.Sprintf("No sessions found for ticket %s.", ticket)
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "## Sessions for ticket %s\n\n", ticket)
+	for _, row := range rows {
+		wsShort := row.WorkspaceHash
+		if len(wsShort) > 8 {
+			wsShort = wsShort[:8]
+		}
+		src := storage.SourceFromPath(row.SourcePath)
+		snip := strings.TrimSpace(row.Content)
+		runes := []rune(snip)
+		if len(runes) > 300 {
+			snip = string(runes[:300])
+		}
+		fmt.Fprintf(&sb, "- **%s** (`%s`, workspace `%s`)\n  %s\n\n",
+			row.Title, src, wsShort, snip)
+	}
+	return sb.String()
 }

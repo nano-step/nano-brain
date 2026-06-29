@@ -39,6 +39,9 @@ type ClaudeCodeHarvester struct {
 	summarizer    SessionSummarizer
 }
 
+// WorkspaceHash returns the workspace hash this harvester was created for.
+func (h *ClaudeCodeHarvester) WorkspaceHash() string { return h.workspace }
+
 func (h *ClaudeCodeHarvester) setSummarizer(s SessionSummarizer) { h.summarizer = s }
 
 func (h *ClaudeCodeHarvester) WithSummarizer(s SessionSummarizer) *ClaudeCodeHarvester {
@@ -252,12 +255,16 @@ func (h *ClaudeCodeHarvester) writeRawFallback(
 
 // claudeCodeMessage represents a single line from a Claude Code JSONL transcript.
 type claudeCodeMessage struct {
-	Type      string          `json:"type"`
-	Timestamp string          `json:"timestamp"`
-	Content   string          `json:"content"`
-	ToolName  string          `json:"tool_name"`
-	ToolInput json.RawMessage `json:"tool_input"`
+	Type       string          `json:"type"`
+	Timestamp  string          `json:"timestamp"`
+	Content    string          `json:"content"`
+	ToolName   string          `json:"tool_name"`
+	ToolInput  json.RawMessage `json:"tool_input"`
 	ToolOutput json.RawMessage `json:"tool_output"`
+	// Fields present in Claude Code JSONL but not previously parsed:
+	GitBranch   string `json:"gitBranch"`
+	Cwd         string `json:"cwd"`
+	IsSidechain bool   `json:"isSidechain"`
 }
 
 // parseJSONLFile reads a Claude Code JSONL session file and returns the messages.

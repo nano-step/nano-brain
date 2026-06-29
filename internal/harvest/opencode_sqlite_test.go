@@ -40,7 +40,8 @@ func setupTestSQLiteDB(t *testing.T) *sql.DB {
 			project_id TEXT,
 			title TEXT,
 			time_created INTEGER,
-			time_updated INTEGER
+			time_updated INTEGER,
+			parent_id TEXT
 		);
 		CREATE TABLE message (
 			id TEXT PRIMARY KEY,

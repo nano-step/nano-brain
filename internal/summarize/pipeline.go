@@ -38,6 +38,9 @@ type SessionMetadata struct {
 	CreatedAt     time.Time
 	Duration      time.Duration
 	ParentID      string
+	Branch        string
+	Cwd           string
+	Tags          []string // extra tags to merge at persist time (e.g. ticket:DEV-1234)
 	ParentTitle   string
 	Children      []RelatedSession
 	Siblings      []RelatedSession
@@ -227,10 +230,6 @@ func (p *Pipeline) formatHeader(meta SessionMetadata) string {
 	fmt.Fprintf(&b, "- Date: %s\n", meta.CreatedAt.Format("2006-01-02"))
 	fmt.Fprintf(&b, "- Source: %s\n", meta.Source)
 
-	if meta.Source == SourceClaude {
-		return b.String()
-	}
-
 	if meta.SessionID != "" {
 		fmt.Fprintf(&b, "- Session ID: %s\n", meta.SessionID)
 	}
@@ -239,6 +238,12 @@ func (p *Pipeline) formatHeader(meta SessionMetadata) string {
 	}
 	if meta.ProjectPath != "" {
 		fmt.Fprintf(&b, "- Project: %s\n", meta.ProjectPath)
+	}
+	if meta.Branch != "" {
+		fmt.Fprintf(&b, "- Branch: %s\n", meta.Branch)
+	}
+	if meta.Cwd != "" {
+		fmt.Fprintf(&b, "- Cwd: %s\n", meta.Cwd)
 	}
 	if meta.Duration > 0 {
 		fmt.Fprintf(&b, "- Duration: %s\n", meta.Duration)

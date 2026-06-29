@@ -95,10 +95,10 @@ func NewExtractor(queries ExtractorQueries, resolver *Resolver, pub Publisher) *
 
 // Extract parses doc.Content for wikilinks, resolves them, and atomically
 // replaces 'references' edges for the document. No-op if doc.Collection is
-// not "memory" or "session-summary". Idempotent. Returns nil on success
-// even when 0 wikilinks found (stale rows are deleted).
+// not "memory", "session-summary", or "sessions". Idempotent. Returns nil on
+// success even when 0 wikilinks found (stale rows are deleted).
 func (e *Extractor) Extract(ctx context.Context, doc Document) error {
-	if doc.Collection != "memory" && doc.Collection != "session-summary" {
+	if doc.Collection != "memory" && doc.Collection != "session-summary" && doc.Collection != "sessions" {
 		return nil
 	}
 

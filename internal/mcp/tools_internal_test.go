@@ -5,7 +5,60 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 )
+
+func ticketRow(workspaceHash, title, sourcePath, content string) sqlc.ListDocumentsByTagRow {
+	return sqlc.ListDocumentsByTagRow{
+		ID:            uuid.New(),
+		WorkspaceHash: workspaceHash,
+		Title:         title,
+		SourcePath:    sourcePath,
+		Collection:    "sessions",
+		Tags:          []string{"ticket:DEV-4706"},
+		Content:       content,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+}
+
+// TestFormatTicketSessions_CrossWorkspace: rows from two distinct workspaces
+// both appear in the rendered markdown, proving the result is not scoped to a
+// single workspace. Source is derived from the source_path scheme.
+func TestFormatTicketSessions_CrossWorkspace(t *testing.T) {
+	rows := []sqlc.ListDocumentsByTagRow{
+		ticketRow("ws-aaaaaaa1", "Session A", "summary://claude/sess-1", "Worked on DEV-4706 in A"),
+		ticketRow("ws-bbbbbbb2", "Session B", "summary://opencode/sess-2", "Worked on DEV-4706 in B"),
+	}
+
+	out := formatTicketSessions("DEV-4706", rows)
+
+	if !strings.Contains(out, "## Sessions for ticket DEV-4706") {
+		t.Errorf("missing header, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Session A") || !strings.Contains(out, "Session B") {
+		t.Errorf("expected both sessions, got:\n%s", out)
+	}
+	// Both workspaces present (truncated to 8 chars).
+	if !strings.Contains(out, "ws-aaaaa") || !strings.Contains(out, "ws-bbbbb") {
+		t.Errorf("expected both workspace hashes, got:\n%s", out)
+	}
+	// Source derived from path scheme.
+	if !strings.Contains(out, "`claude`") || !strings.Contains(out, "`opencode`") {
+		t.Errorf("expected both sources, got:\n%s", out)
+	}
+}
+
+// TestFormatTicketSessions_Unknown: empty result set returns the "no sessions"
+// message rather than an empty list or error.
+func TestFormatTicketSessions_Unknown(t *testing.T) {
+	out := formatTicketSessions("DEV-9999", nil)
+	if out != "No sessions found for ticket DEV-9999." {
+		t.Errorf("expected no-sessions message, got %q", out)
+	}
+}
 
 func TestOmitEmptyTags(t *testing.T) {
 	item := mcpSearchResultItem{ID: "test-id", Title: "test", Tags: nil}

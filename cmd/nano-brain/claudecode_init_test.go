@@ -82,72 +82,139 @@ func setupClaudeInitTestPG(t *testing.T) *sql.DB {
 	return pgDB
 }
 
-func TestInitClaudeCodeHarvester_Disabled(t *testing.T) {
+func TestInitClaudeCodeHarvesters_Disabled(t *testing.T) {
 	cfg := config.ClaudeCodeHarvesterConfig{Enabled: false}
-	ch, err := initClaudeCodeHarvester(context.Background(), cfg, nil, zerolog.Nop())
+	chs, err := initClaudeCodeHarvesters(context.Background(), cfg, nil, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
-	if ch != nil {
-		t.Error("expected nil harvester when disabled")
+	if len(chs) != 0 {
+		t.Error("expected no harvesters when disabled")
 	}
 }
 
-func TestInitClaudeCodeHarvester_SessionDirMissing(t *testing.T) {
+func TestInitClaudeCodeHarvesters_SessionDirMissing(t *testing.T) {
 	cfg := config.ClaudeCodeHarvesterConfig{
 		Enabled:    true,
 		SessionDir: "/tmp/nano-brain-cc-test-does-not-exist-" + t.Name(),
 	}
-	ch, err := initClaudeCodeHarvester(context.Background(), cfg, nil, zerolog.Nop())
+	chs, err := initClaudeCodeHarvesters(context.Background(), cfg, nil, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
-	if ch != nil {
-		t.Error("expected nil harvester when session_dir missing")
+	if len(chs) != 0 {
+		t.Error("expected no harvesters when session_dir missing")
 	}
 }
 
-func TestInitClaudeCodeHarvester_UnregisteredWorkspace(t *testing.T) {
+func TestInitClaudeCodeHarvesters_NoRegisteredWorkspaceMatch(t *testing.T) {
 	pgDB := setupClaudeInitTestPG(t)
-	sessionDir := filepath.Join(t.TempDir(), "claude-sessions-unregistered")
+	// projectsDir is the parent ~/.claude/projects/ equivalent.
+	// No workspace is registered whose encoded path exists under projectsDir.
+	projectsDir := filepath.Join(t.TempDir(), "claude-projects")
+	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.ClaudeCodeHarvesterConfig{Enabled: true, SessionDir: projectsDir}
+	chs, err := initClaudeCodeHarvesters(context.Background(), cfg, pgDB, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if len(chs) != 0 {
+		t.Error("expected no harvesters when no registered workspace has a matching Claude session dir")
+	}
+}
+
+func TestInitClaudeCodeHarvesters_RegisteredWorkspace(t *testing.T) {
+	pgDB := setupClaudeInitTestPG(t)
+
+	// projectsDir is the parent ~/.claude/projects/ equivalent.
+	projectsDir := filepath.Join(t.TempDir(), "claude-projects")
+	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// workspacePath is an absolute path that will be registered as a workspace.
+	// Its encoded form (replace / with -) must exist as a subdir under projectsDir.
+	workspacePath := "/fake/workspace/myproject"
+	encoded := encodeClaudeProjectsDir(workspacePath)
+	sessionDir := filepath.Join(projectsDir, encoded)
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg := config.ClaudeCodeHarvesterConfig{Enabled: true, SessionDir: sessionDir}
-	ch, err := initClaudeCodeHarvester(context.Background(), cfg, pgDB, zerolog.Nop())
-	if err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-	if ch != nil {
-		t.Error("expected nil harvester when workspace not registered — leak #2 still open")
-	}
-}
-
-func TestInitClaudeCodeHarvester_RegisteredWorkspace(t *testing.T) {
-	pgDB := setupClaudeInitTestPG(t)
-	sessionDir := filepath.Join(t.TempDir(), "claude-sessions-registered")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	h := sha256.Sum256([]byte(sessionDir))
+	h := sha256.Sum256([]byte(workspacePath))
 	wsHash := hex.EncodeToString(h[:])
 	q := sqlc.New(pgDB)
 	if _, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
 		Hash: wsHash,
 		Name: "test-cc",
-		Path: sessionDir,
+		Path: workspacePath,
 	}); err != nil {
 		t.Fatalf("seed workspace: %v", err)
 	}
 
-	cfg := config.ClaudeCodeHarvesterConfig{Enabled: true, SessionDir: sessionDir}
-	ch, err := initClaudeCodeHarvester(context.Background(), cfg, pgDB, zerolog.Nop())
+	cfg := config.ClaudeCodeHarvesterConfig{Enabled: true, SessionDir: projectsDir}
+	chs, err := initClaudeCodeHarvesters(context.Background(), cfg, pgDB, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
-	if ch == nil {
-		t.Error("expected non-nil harvester when workspace is registered")
+	if len(chs) != 1 {
+		t.Errorf("expected 1 harvester for registered workspace, got %d", len(chs))
+	}
+	if got := chs[0].WorkspaceHash(); got != wsHash {
+		t.Errorf("harvester workspace hash = %q, want %q", got, wsHash)
+	}
+}
+
+func TestInitClaudeCodeHarvesters_MultipleWorkspaces(t *testing.T) {
+	pgDB := setupClaudeInitTestPG(t)
+
+	projectsDir := filepath.Join(t.TempDir(), "claude-projects")
+	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Two workspaces with matching Claude session dirs.
+	workspacePaths := []string{
+		"/fake/workspace/alpha",
+		"/fake/workspace/beta",
+	}
+	q := sqlc.New(pgDB)
+	for _, wsPath := range workspacePaths {
+		encoded := encodeClaudeProjectsDir(wsPath)
+		sessionDir := filepath.Join(projectsDir, encoded)
+		if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		h := sha256.Sum256([]byte(wsPath))
+		wsHash := hex.EncodeToString(h[:])
+		if _, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
+			Hash: wsHash,
+			Name: filepath.Base(wsPath),
+			Path: wsPath,
+		}); err != nil {
+			t.Fatalf("seed workspace %s: %v", wsPath, err)
+		}
+	}
+
+	// Third workspace registered but no Claude session dir for it.
+	h := sha256.Sum256([]byte("/fake/workspace/gamma"))
+	if _, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
+		Hash: hex.EncodeToString(h[:]),
+		Name: "gamma",
+		Path: "/fake/workspace/gamma",
+	}); err != nil {
+		t.Fatalf("seed workspace gamma: %v", err)
+	}
+
+	cfg := config.ClaudeCodeHarvesterConfig{Enabled: true, SessionDir: projectsDir}
+	chs, err := initClaudeCodeHarvesters(context.Background(), cfg, pgDB, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if len(chs) != 2 {
+		t.Errorf("expected 2 harvesters (alpha + beta), got %d", len(chs))
 	}
 }

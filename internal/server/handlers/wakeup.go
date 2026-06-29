@@ -88,7 +88,7 @@ func WakeUpHandler(q WakeUpQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	docs, err := q.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
 		WorkspaceHash: workspace,
 		MaxResults:    int32(limit),
-		Collections:   []string{"memory", "session-summary"},
+		Collections:   []string{"memory", "sessions"},
 	})
 	if err != nil {
 			logger.Error().Err(err).Str("workspace", workspace).Msg("wake-up: recent documents failed")

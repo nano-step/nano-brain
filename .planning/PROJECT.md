@@ -36,10 +36,10 @@ The ONE thing that must work: **Impact analysis** — "What breaks if I change t
 - ✓ PostgreSQL + pgvector storage — existing
 - ✓ Embedding queue + providers — existing
 - ✓ File system watcher — existing
+- ✓ Vue SFC code intelligence support — Phase 1, shipped 2026-06-28 (PRs #506/#507)
 
 ### Active
 
-- [ ] Vue SFC code intelligence support (proposal ready, OpenSpec created)
 - [ ] Fix import edge target resolution (issue #501, high-risk bug-fix)
 - [ ] Ruby graph/flowchart/impact improvements (issue #486)
 - [ ] Auto-generate HyDE context hints (issue #481)

@@ -269,6 +269,7 @@ type SqSession struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Worktree  string
+	ParentID  string
 }
 
 func isActiveSession(sess SqSession) bool {
@@ -296,7 +297,8 @@ func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB
 		placeholders := strings.Repeat("?,", len(registeredPaths)-1) + "?"
 		query = `
 			SELECT s.id, COALESCE(s.title, ''), COALESCE(s.time_created, 0),
-			       COALESCE(s.time_updated, s.time_created, 0), COALESCE(p.worktree, '')
+			       COALESCE(s.time_updated, s.time_created, 0), COALESCE(p.worktree, ''),
+			       COALESCE(s.parent_id, '')
 			FROM session s
 			LEFT JOIN project p ON s.project_id = p.id
 			WHERE p.worktree IN (` + placeholders + `)
@@ -309,7 +311,8 @@ func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB
 	} else {
 		query = `
 			SELECT s.id, COALESCE(s.title, ''), COALESCE(s.time_created, 0),
-			       COALESCE(s.time_updated, s.time_created, 0), COALESCE(p.worktree, '')
+			       COALESCE(s.time_updated, s.time_created, 0), COALESCE(p.worktree, ''),
+			       COALESCE(s.parent_id, '')
 			FROM session s
 			LEFT JOIN project p ON s.project_id = p.id
 			ORDER BY s.time_created DESC
@@ -326,7 +329,7 @@ func (h *OpenCodeSQLiteHarvester) listSessions(ctx context.Context, sqdb *sql.DB
 	for rows.Next() {
 		var s SqSession
 		var createdMs, updatedMs int64
-		if err := rows.Scan(&s.ID, &s.Title, &createdMs, &updatedMs, &s.Worktree); err != nil {
+		if err := rows.Scan(&s.ID, &s.Title, &createdMs, &updatedMs, &s.Worktree, &s.ParentID); err != nil {
 			return nil, fmt.Errorf("scan session: %w", err)
 		}
 		if createdMs > 0 {

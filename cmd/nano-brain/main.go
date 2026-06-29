@@ -581,6 +581,13 @@ func startServer(configPath string) {
 			}
 		}
 
+		if cfg.Harvester.ClaudeCode.Enabled && cfg.Harvester.ClaudeCode.SessionDir == "" {
+			if detected := detectClaudeCodeStorageDir(); detected != "" {
+				cfg.Harvester.ClaudeCode.SessionDir = detected
+				logger.Info().Str("path", detected).Msg("auto-detected claude code projects dir")
+			}
+		}
+
 		var harvestSummarizer *summarize.HarvestSummarizer
 		if cfg.Summarization.Enabled {
 			harvestSummarizer = buildHarvestSummarizer(cfg, db, eq, logger)
@@ -589,6 +596,24 @@ func startServer(configPath string) {
 			} else {
 				logger.Info().Str("model", cfg.Summarization.Model).Msg("session summarization enabled")
 			}
+		}
+
+		// Migrate legacy "session-summary" docs to the canonical "sessions" collection.
+		// Runs once at startup before the harvest Runner starts; idempotent (second run
+		// returns 0 rows). Non-fatal: a failure is logged but does not abort startup.
+		if _, migErr := harvest.MigrateSessionSummaryToSessions(ctx, db, logger); migErr != nil {
+			logger.Warn().Err(migErr).Msg("session-summary migration failed — continuing without migration")
+		}
+
+		// Backfill ticket tags on pre-phase-8 session docs that have no ticket: tags.
+		// Idempotent: docs already carrying a ticket: tag are skipped on re-runs.
+		// Non-fatal: failure is logged and startup continues.
+		if ticketExtractor, teErr := harvest.NewTicketExtractor(nil); teErr != nil {
+			logger.Warn().Err(teErr).Msg("ticket extractor init failed — skipping session ticket tag backfill")
+		} else if backfillN, backfillErr := harvest.BackfillSessionTicketTags(ctx, db, ticketExtractor, logger); backfillErr != nil {
+			logger.Warn().Err(backfillErr).Msg("session ticket tag backfill failed — continuing without backfill")
+		} else if backfillN > 0 {
+			logger.Info().Int("tagged", backfillN).Msg("session ticket tag backfill complete")
 		}
 
 		ocHarvesters, ocMode := buildOpenCodeHarvesters(ctx, cfg, db, queries, logger)
@@ -601,18 +626,23 @@ func startServer(configPath string) {
 		}
 		srv.SetHarvestStatus(ocMode, cfg.Harvester.OpenCode.DBRoot, cfg.Harvester.OpenCode.DBPath, cfg.Harvester.OpenCode.SessionDir, len(ocHarvesters))
 
-		if ch, ccErr := initClaudeCodeHarvester(ctx, cfg.Harvester.ClaudeCode, db, logger); ccErr != nil {
+		if chs, ccErr := initClaudeCodeHarvesters(ctx, cfg.Harvester.ClaudeCode, db, logger); ccErr != nil {
 			logger.Error().Err(ccErr).Msg("claude code harvester init failed")
-		} else if ch != nil {
-			if hr == nil {
-				hr = harvest.NewRunner(ch, eq, interval, logger)
-			} else {
-				hr.AddHarvester(ch)
+		} else {
+			for _, ch := range chs {
+				if hr == nil {
+					hr = harvest.NewRunner(ch, eq, interval, logger)
+				} else {
+					hr.AddHarvester(ch)
+				}
 			}
-			logger.Info().
-				Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
-				Dur("interval", interval).
-				Msg("claude code session harvester started")
+			if len(chs) > 0 {
+				logger.Info().
+					Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+					Int("workspace_count", len(chs)).
+					Dur("interval", interval).
+					Msg("claude code session harvesters started")
+			}
 		}
 
 		if hr != nil {
@@ -781,7 +811,8 @@ func buildHarvestSummarizer(cfg *config.Config, db *sql.DB, eq *embed.Queue, log
 		logger.Warn().Msg("LLM client init returned nil, disabling summarization")
 		return nil
 	}
-	pipeline := summarize.NewPipeline(llmClient, nil, cfg.Summarization.Concurrency, logger)
+	relLookup := summarize.NewDBRelationshipLookup(db, logger)
+	pipeline := summarize.NewPipeline(llmClient, relLookup, cfg.Summarization.Concurrency, logger)
 	if pipeline == nil {
 		logger.Warn().Msg("pipeline init returned nil, disabling summarization")
 		return nil

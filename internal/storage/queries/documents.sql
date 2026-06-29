@@ -85,6 +85,9 @@ LIMIT @lim;
 DELETE FROM documents WHERE workspace_hash = $1;
 
 -- name: CountStaleRawOpenCodeDocs :one
+-- Post-unification (phase 8), raw and summary session docs both live in
+-- collection 'sessions' and are distinguished by source_path scheme:
+-- raw = 'opencode://session/%', summary = 'summary://%'.
 SELECT COUNT(*)::int AS n
 FROM documents d_raw
 WHERE d_raw.source_path LIKE 'opencode://session/%'
@@ -93,7 +96,7 @@ WHERE d_raw.source_path LIKE 'opencode://session/%'
     SELECT 1 FROM documents d_summary
     WHERE d_summary.source_path = 'summary://opencode/' || split_part(d_raw.source_path, '/', 4)
       AND d_summary.workspace_hash = d_raw.workspace_hash
-      AND d_summary.collection = 'session-summary'
+      AND d_summary.collection = 'sessions'
   );
 
 -- name: DeleteStaleRawOpenCodeDocs :execrows
@@ -104,13 +107,17 @@ WHERE d_raw.source_path LIKE 'opencode://session/%'
     SELECT 1 FROM documents d_summary
     WHERE d_summary.source_path = 'summary://opencode/' || split_part(d_raw.source_path, '/', 4)
       AND d_summary.workspace_hash = d_raw.workspace_hash
-      AND d_summary.collection = 'session-summary'
+      AND d_summary.collection = 'sessions'
   );
 
 -- name: ListSummaryDocumentsForBackfill :many
+-- Post-unification (phase 8), summary docs live in collection 'sessions' and
+-- are identified by the 'summary://%' source_path scheme (raw session docs in
+-- the same collection use 'opencode://%' / 'claude://%' schemes).
 SELECT id, workspace_hash, content_hash, title, content, source_path, tags, metadata, created_at
 FROM documents
-WHERE collection = 'session-summary'
+WHERE collection = 'sessions'
+  AND source_path LIKE 'summary://%'
   AND ($1::text = '' OR workspace_hash = $1)
   AND ($2::timestamptz IS NULL OR created_at >= $2)
 ORDER BY created_at ASC;
@@ -127,3 +134,13 @@ ORDER BY source_path;
 DELETE FROM documents
 WHERE workspace_hash = $1
   AND collection = 'flows';
+
+-- name: ListDocumentsByTag :many
+-- Cross-workspace tag query: returns documents matching a single tag value
+-- across ALL workspaces. No workspace_hash filter — intentionally global.
+SELECT id, workspace_hash, title, content, source_path, collection, tags, created_at, updated_at
+FROM documents
+WHERE $1::text = ANY(tags)
+  AND collection = $2
+ORDER BY updated_at DESC
+LIMIT $3;

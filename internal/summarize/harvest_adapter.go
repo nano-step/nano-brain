@@ -34,14 +34,17 @@ func (s *HarvestSummarizer) SummarizeAndPersist(ctx context.Context, content str
 		Msg("summarize: starting summarization")
 
 	sessionMeta := SessionMetadata{
-		Source:      Source(meta.Source),
-		SessionID:   meta.SessionID,
-		Title:       meta.Title,
-		Agent:       meta.Agent,
-		ProjectPath: meta.ProjectPath,
-		CreatedAt:   meta.CreatedAt,
-		Duration:    meta.Duration,
+		Source:        Source(meta.Source),
+		SessionID:     meta.SessionID,
+		Title:         meta.Title,
+		Agent:         meta.Agent,
+		ProjectPath:   meta.ProjectPath,
+		CreatedAt:     meta.CreatedAt,
+		Duration:      meta.Duration,
 		ParentID:      meta.ParentID,
+		Branch:        meta.Branch,
+		Cwd:           meta.Cwd,
+		Tags:          meta.Tags,
 		WorkspaceHash: meta.WorkspaceHash,
 	}
 	summary, err := s.pipeline.Summarize(ctx, content, sessionMeta)

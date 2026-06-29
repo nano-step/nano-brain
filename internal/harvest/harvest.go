@@ -16,6 +16,9 @@ type SummaryMeta struct {
 	CreatedAt     time.Time
 	Duration      time.Duration
 	ParentID      string
+	Branch        string
+	Cwd           string
+	Tags          []string // extra tags to merge (e.g. ticket:DEV-1234)
 	WorkspaceHash string
 }
 
