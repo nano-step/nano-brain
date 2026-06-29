@@ -104,6 +104,29 @@ All packages pass including `internal/harvest`, `internal/summarize`, `internal/
 - **Files modified:** `internal/mcp/tools.go`
 - **Commit:** 03fcddb
 
+## Post-Review Fixes (commit 6df45ac)
+
+Independent review APPROVED architecture, migration, and harvest/wake_up paths,
+but flagged non-harvest paths still referencing the now-unwritten `session-summary`
+collection. These were direct consequences of the Task 3 rename and are fixed:
+
+**3. [Rule 1 - Bug] Cleanup/backfill/dedup queries targeted the empty `session-summary` collection**
+- **Found during:** Post-execution independent review
+- **Issue:** Post-unification, both raw and summarized session docs live in collection `sessions` (distinguished by source_path scheme). These queries still filtered `collection = 'session-summary'` and silently matched nothing:
+  - `documents.sql:CountStaleRawOpenCodeDocs` / `DeleteStaleRawOpenCodeDocs` — summary EXISTS subquery filtered `d_summary.collection = 'session-summary'`
+  - `documents.sql:ListSummaryDocumentsForBackfill` — filtered `collection = 'session-summary'`
+  - `summarize.go:89` — dedup built `summaryPath := "session-summary://" + ...`, which never matched the harvester/persister scheme `summary://<source>/<id>`, so dedup always missed
+- **Fix:**
+  - Stale-raw queries: summary EXISTS subquery now checks `collection = 'sessions'`; raw vs summary distinguished by source_path (`opencode://session/%` vs `summary://%`)
+  - Backfill query: now `collection = 'sessions' AND source_path LIKE 'summary://%'`
+  - `summarize.go`: `summaryPath` now `"summary://" + sourceFromTags(tags) + "/" + sessionID` (matches `buildSourcePath`; `sourceFromTags` returns `claude`/`opencode`)
+  - Regenerated `documents.sql.go` via `sqlc generate` (query consts only; left version header at v1.30.0 to avoid unrelated churn from the local v1.31.1 binary)
+  - Updated `summarize_test.go` fixtures to the `summary://` scheme
+  - `cmd_cleanup_stale_raw.go`: help text updated to say collection `sessions`
+- **Files modified:** `internal/storage/queries/documents.sql`, `internal/storage/sqlc/documents.sql.go`, `internal/server/handlers/summarize.go`, `internal/server/handlers/summarize_test.go`, `cmd/nano-brain/cmd_cleanup_stale_raw.go`
+- **Commit:** 6df45ac
+- **Verification:** `sqlc generate` clean, `CGO_ENABLED=0 go build ./...` clean, `go test -race -short ./...` all pass.
+
 ## Known Stubs
 
 None — all data paths are wired. The `Engine` is built and tested but not yet wired to `Runner` in `main.go` (engine flag path intentionally deferred per plan, to be done in a Phase 8 follow-up once confidence is established).
@@ -114,6 +137,6 @@ None — no new network endpoints, auth paths, file access patterns, or schema c
 
 ## Self-Check: PASSED
 
-All 6 created files found on disk. All 4 task commits verified in git log.
+All 6 created files found on disk. All 4 task commits + post-review fix (6df45ac) verified in git log.
 Build: `CGO_ENABLED=0 go build ./...` — clean.
-Tests: `go test -race -short ./...` — 28 packages PASS, 0 FAIL.
+Tests: `go test -race -short ./...` — all packages PASS, 0 FAIL.
