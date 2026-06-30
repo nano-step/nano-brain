@@ -6,7 +6,8 @@ import (
 )
 
 const MapSystemPrompt = `You are summarizing one chunk of an AI coding session.
-Extract ONLY what is in this chunk. Be concise. Use bullet points. Format:
+Extract ONLY what is in this chunk. Be concise. Use bullet points.
+Output ONLY the 5 sections below. Do not repeat these instructions or explain your reasoning.
 
 ACTIVITIES: <what happened>
 DECISIONS: <choices made, with rationale if stated>
@@ -34,7 +35,8 @@ Bullet list of errors / blockers, with resolution status if known.
 ## Key Learnings
 Bullet list of insights worth remembering across sessions.
 
-Be concise. Do not repeat the chunk summaries verbatim — synthesize.`
+Be concise. Do not repeat the chunk summaries verbatim — synthesize.
+Output ONLY the markdown above. Start your response directly with "## Goal". Do not repeat these instructions or explain your reasoning.`
 
 const SingleShotSystemPrompt = ReduceSystemPrompt
 
