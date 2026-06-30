@@ -320,9 +320,9 @@ func (m *claudeCodeMessage) extractText() string {
 			}
 		case "tool_use":
 			fmt.Fprintf(&b, "\nTool: %s\n", blk.Name)
-			if len(blk.Input) > 0 && string(blk.Input) != "null" {
+			if len(blk.Input) > 0 {
 				var inputMap map[string]interface{}
-				if json.Unmarshal(blk.Input, &inputMap) == nil {
+				if json.Unmarshal(blk.Input, &inputMap) == nil && inputMap != nil {
 					keys := make([]string, 0, len(inputMap))
 					for k := range inputMap {
 						keys = append(keys, k)
@@ -335,7 +335,7 @@ func (m *claudeCodeMessage) extractText() string {
 			}
 		case "tool_result":
 			// tool_result content is string or []contentBlock.
-			if len(blk.Content) > 0 && string(blk.Content) != "null" {
+			if len(blk.Content) > 0 {
 				var rs string
 				if json.Unmarshal(blk.Content, &rs) == nil {
 					if rs != "" {
