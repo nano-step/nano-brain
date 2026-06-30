@@ -16,7 +16,10 @@ var (
 	reToolResultBlock = regexp.MustCompile(`(?m)^\*\*Tool result\*\*\s*\(([^)]*)\):\s*\n`)
 	reToolOutputLabel = regexp.MustCompile(`(?im)^(tool_output:|(\*\*output:\*\*))\s*\n`)
 
-	reClaudeToolUseCmd = regexp.MustCompile(`(?m)^\*\*tool_use\*\*\s+(\S+):\s*\n`)
+	// reClaudeToolUseCmd matches the "Tool: Name\n" header written by renderClaudeCodeMarkdown.
+	reClaudeToolUseCmd = regexp.MustCompile(`(?m)^Tool:\s+(\S+)\s*\n`)
+	// reClaudeResult matches the "Result: " prefix written by renderClaudeCodeMarkdown for tool_result blocks.
+	reClaudeResult = regexp.MustCompile(`(?m)^Result:\s`)
 )
 
 // StripOpenCode reduces rendered OpenCode session markdown by removing
@@ -284,6 +287,30 @@ func dedupErrors(content string) string {
 	return strings.Join(result, "\n")
 }
 
+// extractClaudeBody reads from `from` until the next Claude section boundary:
+// a "## " header, a "Tool: " line, or another "Result: " line. This correctly
+// handles tool bodies that contain blank lines (JSON, multi-line edits, etc.)
+// which extractUntilBreak would stop at prematurely.
+func extractClaudeBody(content string, from int) (string, int) {
+	if from >= len(content) {
+		return "", from
+	}
+	lines := strings.SplitAfter(content[from:], "\n")
+	var body strings.Builder
+	pos := from
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if body.Len() > 0 && (strings.HasPrefix(trimmed, "## ") ||
+			strings.HasPrefix(trimmed, "Tool: ") ||
+			strings.HasPrefix(trimmed, "Result: ")) {
+			break
+		}
+		body.WriteString(line)
+		pos += len(line)
+	}
+	return body.String(), pos
+}
+
 func replaceClaudeToolUseCommands(content string) string {
 	locs := reClaudeToolUseCmd.FindAllStringSubmatchIndex(content, -1)
 	if len(locs) == 0 {
@@ -298,58 +325,29 @@ func replaceClaudeToolUseCommands(content string) string {
 			name = strings.TrimSpace(content[nameStart:nameEnd])
 		}
 
-		body, bodyEnd := extractFencedOrIndentedBody(content, fullMatchEnd)
+		body, bodyEnd := extractClaudeBody(content, fullMatchEnd)
 		bodyLineCount := countLines(body)
 		if bodyLineCount <= 5 {
 			continue
 		}
-		firstLine := strings.SplitN(body, "\n", 2)[0]
-		if len(firstLine) > 80 {
-			firstLine = firstLine[:80]
-		}
-		replacement := fmt.Sprintf("**tool_use** %s:\n[command: %s...]\n", name, firstLine)
+		replacement := fmt.Sprintf("Tool: %s\n[tool input: %d lines]\n", name, bodyLineCount)
 		content = content[:locs[i][0]] + replacement + content[bodyEnd:]
 	}
 	return content
 }
 
 func replaceClaudeToolResults(content string) string {
-	lines := strings.Split(content, "\n")
-	var result []string
-	i := 0
-	for i < len(lines) {
-		line := lines[i]
-		if !strings.HasPrefix(line, "## tool_result") {
-			result = append(result, line)
-			i++
+	locs := reClaudeResult.FindAllStringIndex(content, -1)
+	if len(locs) == 0 {
+		return content
+	}
+	for i := len(locs) - 1; i >= 0; i-- {
+		body, bodyEnd := extractClaudeBody(content, locs[i][1])
+		if len(body) <= 200 {
 			continue
 		}
-
-		result = append(result, line)
-		i++
-
-		for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
-			result = append(result, lines[i])
-			i++
-		}
-
-		var body []string
-		bodyStart := i
-		for i < len(lines) {
-			if i > bodyStart && strings.HasPrefix(lines[i], "## ") {
-				break
-			}
-			body = append(body, lines[i])
-			i++
-		}
-
-		bodyText := strings.Join(body, "\n")
-		if len(bodyText) > 200 {
-			bodyLines := len(body)
-			result = append(result, fmt.Sprintf("[tool: tool_result, %d lines]", bodyLines))
-		} else {
-			result = append(result, body...)
-		}
+		bodyLines := countLines(body)
+		content = content[:locs[i][0]] + fmt.Sprintf("Result: [%d lines]\n", bodyLines) + content[bodyEnd:]
 	}
-	return strings.Join(result, "\n")
+	return content
 }

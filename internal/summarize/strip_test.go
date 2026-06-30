@@ -162,39 +162,64 @@ func TestStripOpenCode_PreservesFilePaths(t *testing.T) {
 }
 
 func TestStripClaude_LongCommand(t *testing.T) {
-	var cmdLines []string
+	// renderClaudeCodeMarkdown writes tool_use as "Tool: Name\nkey: value\n..."
+	var bodyLines []string
 	for i := 0; i < 8; i++ {
-		cmdLines = append(cmdLines, "  some long command argument line")
+		bodyLines = append(bodyLines, "content_key_"+string(rune('a'+i))+": some long input value here")
 	}
-	cmdBody := strings.Join(cmdLines, "\n") + "\n"
-	input := "## assistant (2026-05-26T10:00:00Z)\n\n**tool_use** Bash:\n```\n" + cmdBody + "```\n\n## human (2026-05-26T10:01:00Z)\n\nok\n"
+	input := "## assistant (2026-05-26T10:00:00Z)\n\nTool: Edit\n" + strings.Join(bodyLines, "\n") + "\n\n## human (2026-05-26T10:01:00Z)\n\nok\n"
 
 	got := StripClaude(input)
 
-	if strings.Contains(got, "some long command argument line") {
+	if strings.Contains(got, "some long input value here") {
 		t.Error("long tool_use command body should be replaced")
 	}
-	if !strings.Contains(got, "[command:") {
-		t.Errorf("should contain command placeholder, got:\n%s", got)
+	if !strings.Contains(got, "[tool input:") {
+		t.Errorf("should contain tool input placeholder, got:\n%s", got)
 	}
 }
 
 func TestStripClaude_LongToolResult(t *testing.T) {
-	longOutput := strings.Repeat("output line with various content data\n", 15)
-	input := "## tool_result (2026-05-26T10:00:00Z)\n\n" + longOutput + "\n## human (2026-05-26T10:01:00Z)\n\nthanks\n"
+	// renderClaudeCodeMarkdown writes tool_result as "Result: <content>\n"
+	// where content may have embedded newlines producing multiple output lines.
+	longOutput := strings.Repeat("output line with various content data\n", 8)
+	// Simulate multi-line Result block (embedded newlines from tool output).
+	input := "## assistant (2026-05-26T10:00:00Z)\n\nResult: " + longOutput + "\n## human (2026-05-26T10:01:00Z)\n\nthanks\n"
 
 	got := StripClaude(input)
 
 	if strings.Contains(got, "output line with various") {
 		t.Error("long tool_result body should be replaced")
 	}
-	if !strings.Contains(got, "[tool: tool_result,") {
-		t.Errorf("should contain tool_result placeholder, got:\n%s", got)
+	if !strings.Contains(got, "Result: [") {
+		t.Errorf("should contain result placeholder, got:\n%s", got)
+	}
+}
+
+func TestStripClaude_LongToolResultWithBlankLines(t *testing.T) {
+	// Tool results may contain blank lines (e.g. JSON, file content).
+	// extractClaudeBody must not stop at the blank line.
+	var lines []string
+	for i := 0; i < 6; i++ {
+		lines = append(lines, strings.Repeat("output line with various content data ", 2))
+		lines = append(lines, "") // blank line mid-body
+	}
+	longOutput := strings.Join(lines, "\n") + "\n"
+	input := "## assistant (2026-05-26T10:00:00Z)\n\nResult: " + longOutput + "\n## human (2026-05-26T10:01:00Z)\n\nthanks\n"
+
+	got := StripClaude(input)
+
+	if strings.Contains(got, "output line") {
+		t.Error("long tool_result with blank lines should be replaced")
+	}
+	if !strings.Contains(got, "Result: [") {
+		t.Errorf("should contain result placeholder, got:\n%s", got)
 	}
 }
 
 func TestStripClaude_ShortToolResult(t *testing.T) {
-	input := "## tool_result (2026-05-26T10:00:00Z)\n\nshort output\n\n## human (2026-05-26T10:01:00Z)\n\nthanks\n"
+	// renderClaudeCodeMarkdown writes tool_result as "Result: <content>\n"
+	input := "## assistant (2026-05-26T10:00:00Z)\n\nResult: short output\n\n## human (2026-05-26T10:01:00Z)\n\nthanks\n"
 
 	got := StripClaude(input)
 

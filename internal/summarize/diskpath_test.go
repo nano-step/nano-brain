@@ -86,7 +86,7 @@ func TestBuildDiskPath(t *testing.T) {
 			"7f443561795a6fea64b6e8d35a9b06ed4d216b8a27af5e10e7137b261ade061f",
 			"opencode",
 			"Watcher binary file filter root cause",
-			"/tmp/summaries/nano-brain/opencode_watcher-binary-file-filter-root-cause_2026-05-30.md",
+			"/tmp/summaries/nano-brain/2026-05-30--opencode-watcher-binary-file-filter-root-cause.md",
 		},
 		{
 			"empty workspace name fallback",
@@ -94,7 +94,7 @@ func TestBuildDiskPath(t *testing.T) {
 			"7f443561795a6fea64b6e8d35a9b06ed4d216b8a",
 			"claude",
 			"Foo",
-			"/tmp/summaries/ws-7f443561795a/claude_foo_2026-05-30.md",
+			"/tmp/summaries/ws-7f443561795a/2026-05-30--claude-foo.md",
 		},
 		{
 			"empty title fallback",
@@ -102,7 +102,7 @@ func TestBuildDiskPath(t *testing.T) {
 			"7f443561795a",
 			"opencode",
 			"",
-			"/tmp/summaries/nano-brain/opencode_untitled-session_2026-05-30.md",
+			"/tmp/summaries/nano-brain/2026-05-30--opencode-untitled-session.md",
 		},
 		{
 			"long title truncated",
@@ -110,7 +110,7 @@ func TestBuildDiskPath(t *testing.T) {
 			"7f443561795a",
 			"opencode",
 			strings.Repeat("verylongword", 30),
-			"/tmp/summaries/nano-brain/opencode_" + strings.Repeat("verylongword", 6) + "verylong_2026-05-30.md",
+			"/tmp/summaries/nano-brain/2026-05-30--opencode-" + strings.Repeat("verylongword", 6) + "verylong.md",
 		},
 	}
 
