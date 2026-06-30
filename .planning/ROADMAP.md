@@ -192,7 +192,7 @@ Phases 1–2 parallel. Phases 4 & 6 parallel. Phase 3 depends on 1–2. Phase 5 
 
 **Goal:** Eliminate the indexing lag on `serve` startup, new-worktree registration, and git checkout. Root cause (confirmed, D-02/D-05): the cheap mtime+size skip is in-memory only, so every file falls through to tree-sitter graph re-extraction on each process start. Fix = persist the fast-path fingerprint (Fix B, D-06b) so unchanged files are skipped after restart, and reorder the content-hash dedup before edge extraction (Fix A, D-06a) so byte-identical content never re-extracts edges (also covers checkout, whose mtime rewrite defeats Fix B). No re-embedding regression (chunk dedup already holds).
 **Requirements:** none (backlog perf bugfix; no mapped REQ IDs)
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Notes:
 
@@ -203,5 +203,5 @@ Notes:
 Plans:
 
 - [x] 999.1-01-PLAN.md — Fix A: reorder content-hash dedup before graph edge extraction (wave 1)
-- [ ] 999.1-02-PLAN.md — Fix B schema: add documents.mod_time+file_size, extend upsert, add preload query (wave 1)
+- [x] 999.1-02-PLAN.md — Fix B schema: add documents.mod_time+file_size, extend upsert, add preload query (wave 1)
 - [ ] 999.1-03-PLAN.md — Fix B wiring: persist fingerprint via os.Stat + warm fileCache from DB at startup (wave 2)
