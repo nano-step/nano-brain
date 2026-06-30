@@ -47,6 +47,7 @@ type WatcherQuerier interface {
 	InsertChunkEntity(ctx context.Context, arg sqlc.InsertChunkEntityParams) error
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 	PreloadFileStateByWorkspace(ctx context.Context, arg sqlc.PreloadFileStateByWorkspaceParams) ([]sqlc.PreloadFileStateByWorkspaceRow, error)
+	UpdateDocumentFileState(ctx context.Context, arg sqlc.UpdateDocumentFileStateParams) error
 }
 
 type watchedCollection struct {
@@ -64,6 +65,15 @@ type fileState struct {
 	ModTime time.Time
 	Size    int64
 	Hash    string
+}
+
+// sameMtime compares two mtimes at microsecond precision. The persisted
+// fingerprint (Postgres TIMESTAMPTZ) that warms the cache only has microsecond
+// resolution, while os.Stat returns nanoseconds — a raw .Equal() would always
+// miss after a DB warm and defeat the fast-path. Truncating both sides keeps the
+// fast-path effective across restarts (999.1 Fix B).
+func sameMtime(a, b time.Time) bool {
+	return a.Truncate(time.Microsecond).Equal(b.Truncate(time.Microsecond))
 }
 
 type Watcher struct {
@@ -769,7 +779,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	cached, exists := w.fileCache[filePath]
 	w.fileCacheMu.RUnlock()
 
-	if exists && cached.ModTime.Equal(info.ModTime()) && cached.Size == info.Size() {
+	if exists && cached.Size == info.Size() && sameMtime(cached.ModTime, info.ModTime()) {
 		return
 	}
 
@@ -801,6 +811,24 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		WorkspaceHash: col.workspaceHash,
 	})
 	if err == nil && existing.ContentHash == contentHash {
+		// Backfill the persisted mtime+size fingerprint when missing or stale so
+		// the DB-warmed fast-path (warmFileCacheFromDB) can skip this file on the
+		// next restart. Without this, unchanged files — and rows indexed before
+		// migration 00029 — keep NULL mod_time/file_size forever (warmed stays 0).
+		// Only mod_time/file_size are written; title/content/updated_at are left
+		// intact so the documents_title_propagate trigger does not re-rank chunks.
+		if !existing.ModTime.Valid || !existing.FileSize.Valid ||
+			existing.FileSize.Int64 != info.Size() ||
+			!sameMtime(existing.ModTime.Time, info.ModTime()) {
+			if upErr := w.queries.UpdateDocumentFileState(ctx, sqlc.UpdateDocumentFileStateParams{
+				SourcePath:    filePath,
+				WorkspaceHash: col.workspaceHash,
+				ModTime:       sql.NullTime{Time: info.ModTime(), Valid: true},
+				FileSize:      sql.NullInt64{Int64: info.Size(), Valid: true},
+			}); upErr != nil {
+				w.logger.Warn().Err(upErr).Str("file", filePath).Msg("backfill file fingerprint failed")
+			}
+		}
 		w.fileCacheMu.Lock()
 		w.fileCache[filePath] = fileState{ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash}
 		w.fileCacheMu.Unlock()

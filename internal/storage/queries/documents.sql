@@ -159,3 +159,14 @@ WHERE workspace_hash = $1
   AND source_path != ''
   AND mod_time IS NOT NULL
   AND file_size IS NOT NULL;
+
+-- name: UpdateDocumentFileState :exec
+-- Backfills the mtime+size fingerprint on the content-hash-match (dedup) path so
+-- the DB-warmed fast-path can skip this file on the next restart (999.1 Fix B
+-- gap: unchanged files — and rows indexed before migration 00029 — otherwise keep
+-- NULL mod_time/file_size forever and warmed stays 0). Touches only
+-- mod_time/file_size; title/content/updated_at are left intact so the
+-- documents_title_propagate trigger does not re-rank chunks.
+UPDATE documents
+SET mod_time = $3, file_size = $4
+WHERE source_path = $1 AND workspace_hash = $2;
