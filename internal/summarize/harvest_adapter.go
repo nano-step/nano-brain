@@ -31,6 +31,13 @@ func (s *HarvestSummarizer) SetLinkExtractor(resolver *links.Resolver, extractor
 // This is called on the harvester content-unchanged skip path to backfill
 // summaries created before write_to_disk was enabled.
 func (s *HarvestSummarizer) EnsureSummaryOnDisk(ctx context.Context, summaryMarkdown string, meta harvest.SummaryMeta) {
+	// Reached via a structural type assertion in the harvesters, which bypasses
+	// the interface-nil safety the rest of the call path relies on. A typed-nil
+	// *HarvestSummarizer would satisfy that assertion (ok=true) and panic here,
+	// so guard the nil receiver / nil persister explicitly.
+	if s == nil || s.persister == nil {
+		return
+	}
 	sessionMeta := SessionMetadata{
 		Source:        Source(meta.Source),
 		SessionID:     meta.SessionID,
