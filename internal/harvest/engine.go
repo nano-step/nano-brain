@@ -138,7 +138,7 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 			sum := sha256.Sum256([]byte(md))
 			contentHash := hex.EncodeToString(sum[:])
 
-			if lookupErr == nil && existing.ContentHash == contentHash {
+			if lookupErr == nil && existing.ContentHash != "" {
 				// Opportunistically backfill disk: if this summary was created
 				// before write_to_disk was enabled, the file may be absent.
 				// Type assertion keeps SessionSummarizer interface stable.
