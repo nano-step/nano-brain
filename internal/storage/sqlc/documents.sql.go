@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -112,7 +113,7 @@ func (q *Queries) DeleteSymbolDocumentsByCollection(ctx context.Context, arg Del
 }
 
 const getDocumentByHash = `-- name: GetDocumentByHash :one
-SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id FROM documents WHERE content_hash = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id, mod_time, file_size FROM documents WHERE content_hash = $1 AND workspace_hash = $2
 `
 
 type GetDocumentByHashParams struct {
@@ -136,12 +137,14 @@ func (q *Queries) GetDocumentByHash(ctx context.Context, arg GetDocumentByHashPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SupersedesID,
+		&i.ModTime,
+		&i.FileSize,
 	)
 	return i, err
 }
 
 const getDocumentByID = `-- name: GetDocumentByID :one
-SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id FROM documents WHERE id = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id, mod_time, file_size FROM documents WHERE id = $1 AND workspace_hash = $2
 `
 
 type GetDocumentByIDParams struct {
@@ -165,12 +168,14 @@ func (q *Queries) GetDocumentByID(ctx context.Context, arg GetDocumentByIDParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SupersedesID,
+		&i.ModTime,
+		&i.FileSize,
 	)
 	return i, err
 }
 
 const getDocumentBySourcePath = `-- name: GetDocumentBySourcePath :one
-SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id FROM documents WHERE source_path = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id, mod_time, file_size FROM documents WHERE source_path = $1 AND workspace_hash = $2
 `
 
 type GetDocumentBySourcePathParams struct {
@@ -194,6 +199,8 @@ func (q *Queries) GetDocumentBySourcePath(ctx context.Context, arg GetDocumentBy
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SupersedesID,
+		&i.ModTime,
+		&i.FileSize,
 	)
 	return i, err
 }
@@ -593,6 +600,60 @@ func (q *Queries) ListTagsByWorkspace(ctx context.Context, workspaceHash string)
 	return items, nil
 }
 
+const preloadFileStateByWorkspace = `-- name: PreloadFileStateByWorkspace :many
+SELECT source_path, mod_time, file_size, content_hash
+FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND source_path != ''
+  AND mod_time IS NOT NULL
+  AND file_size IS NOT NULL
+`
+
+type PreloadFileStateByWorkspaceParams struct {
+	WorkspaceHash string
+	Collection    string
+}
+
+type PreloadFileStateByWorkspaceRow struct {
+	SourcePath  string
+	ModTime     sql.NullTime
+	FileSize    sql.NullInt64
+	ContentHash string
+}
+
+// Returns the mtime+size fingerprint for all fully-fingerprinted documents in a
+// workspace+collection. Used at watcher startup to warm the in-memory fast-path
+// cache (plan 03). Rows with NULL mod_time or file_size are excluded — they were
+// indexed before migration 00029 and must fall through to normal processing.
+func (q *Queries) PreloadFileStateByWorkspace(ctx context.Context, arg PreloadFileStateByWorkspaceParams) ([]PreloadFileStateByWorkspaceRow, error) {
+	rows, err := q.db.QueryContext(ctx, preloadFileStateByWorkspace, arg.WorkspaceHash, arg.Collection)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PreloadFileStateByWorkspaceRow
+	for rows.Next() {
+		var i PreloadFileStateByWorkspaceRow
+		if err := rows.Scan(
+			&i.SourcePath,
+			&i.ModTime,
+			&i.FileSize,
+			&i.ContentHash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateDocumentsCollection = `-- name: UpdateDocumentsCollection :exec
 UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = $3
 `
@@ -665,8 +726,8 @@ func (q *Queries) UpsertDocument(ctx context.Context, arg UpsertDocumentParams) 
 }
 
 const upsertDocumentBySourcePath = `-- name: UpsertDocumentBySourcePath :one
-INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id, mod_time, file_size)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     content_hash = EXCLUDED.content_hash,
     title = EXCLUDED.title,
@@ -675,6 +736,8 @@ ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
     supersedes_id = COALESCE(EXCLUDED.supersedes_id, documents.supersedes_id),
+    mod_time = EXCLUDED.mod_time,
+    file_size = EXCLUDED.file_size,
     updated_at = now()
 RETURNING id, content_hash, collection, workspace_hash
 `
@@ -689,6 +752,8 @@ type UpsertDocumentBySourcePathParams struct {
 	Tags          []string
 	Metadata      pqtype.NullRawMessage
 	SupersedesID  uuid.NullUUID
+	ModTime       sql.NullTime
+	FileSize      sql.NullInt64
 }
 
 type UpsertDocumentBySourcePathRow struct {
@@ -709,6 +774,8 @@ func (q *Queries) UpsertDocumentBySourcePath(ctx context.Context, arg UpsertDocu
 		pq.Array(arg.Tags),
 		arg.Metadata,
 		arg.SupersedesID,
+		arg.ModTime,
+		arg.FileSize,
 	)
 	var i UpsertDocumentBySourcePathRow
 	err := row.Scan(

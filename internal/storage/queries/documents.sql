@@ -13,8 +13,8 @@ ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
 RETURNING id, content_hash, collection, workspace_hash;
 
 -- name: UpsertDocumentBySourcePath :one
-INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id, mod_time, file_size)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     content_hash = EXCLUDED.content_hash,
     title = EXCLUDED.title,
@@ -23,6 +23,8 @@ ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
     supersedes_id = COALESCE(EXCLUDED.supersedes_id, documents.supersedes_id),
+    mod_time = EXCLUDED.mod_time,
+    file_size = EXCLUDED.file_size,
     updated_at = now()
 RETURNING id, content_hash, collection, workspace_hash;
 
@@ -144,3 +146,16 @@ WHERE $1::text = ANY(tags)
   AND collection = $2
 ORDER BY updated_at DESC
 LIMIT $3;
+
+-- name: PreloadFileStateByWorkspace :many
+-- Returns the mtime+size fingerprint for all fully-fingerprinted documents in a
+-- workspace+collection. Used at watcher startup to warm the in-memory fast-path
+-- cache (plan 03). Rows with NULL mod_time or file_size are excluded — they were
+-- indexed before migration 00029 and must fall through to normal processing.
+SELECT source_path, mod_time, file_size, content_hash
+FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND source_path != ''
+  AND mod_time IS NOT NULL
+  AND file_size IS NOT NULL;
