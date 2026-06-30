@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -133,7 +134,19 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 		SourcePath:    sourcePath,
 		WorkspaceHash: h.workspace,
 	})
-	if err == nil && existing.ContentHash == contentHash {
+	// A non-"no rows" DB error (e.g. a connection blip) must NOT fall through to
+	// re-summarization — that would burn an LLM call on every session every cycle
+	// during an outage. Skip this session for now; the next cycle retries.
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return harvestSkipped, fmt.Errorf("lookup existing summary: %w", err)
+	}
+	// Presence-based dedup (mirrors OpenCodeSQLiteHarvester): once a session
+	// has been summarized, skip it — don't re-run the LLM every cycle. The old
+	// `existing.ContentHash == contentHash` compared the transcript hash against
+	// the stored SUMMARY hash, which never matched, so every session was
+	// re-summarized on every harvest cycle (burning tokens, never reaching the
+	// disk-backfill skip path).
+	if err == nil && existing.ContentHash != "" {
 		// Opportunistically backfill disk: if this summary was created before
 		// write_to_disk was enabled, the file may be absent. The type assertion
 		// keeps the SessionSummarizer interface stable — mocks and other

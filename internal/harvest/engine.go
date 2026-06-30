@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -134,11 +135,19 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 				WorkspaceHash: wsHash,
 			})
 
+			// A non-"no rows" DB error must NOT fall through to re-summarization
+			// (would burn an LLM call per session during a DB outage). Skip now.
+			if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+				e.logger.Warn().Err(lookupErr).Str("session_id", sess.SessionID).Msg("engine: lookup existing summary failed, skipping")
+				errCount++
+				continue
+			}
+
 			md := RenderMarkdown(sess)
 			sum := sha256.Sum256([]byte(md))
 			contentHash := hex.EncodeToString(sum[:])
 
-			if lookupErr == nil && existing.ContentHash == contentHash {
+			if lookupErr == nil && existing.ContentHash != "" {
 				// Opportunistically backfill disk: if this summary was created
 				// before write_to_disk was enabled, the file may be absent.
 				// Type assertion keeps SessionSummarizer interface stable.

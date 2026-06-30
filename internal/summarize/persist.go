@@ -87,6 +87,12 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 	})
 	if lookupErr == nil && existing.ContentHash == contentHash {
 		p.logger.Debug().Str("source_path", sourcePath).Msg("summary unchanged, skipping")
+		// Still ensure the summary exists on disk: an unchanged summary that was
+		// persisted before write_to_disk was enabled has no file yet. Idempotent
+		// (persistToDisk skips when the file already matches).
+		if p.writeToDisk && p.outputDir != "" {
+			p.persistToDisk(ctx, summaryMarkdown, meta, existing.ID, q)
+		}
 		return nil
 	}
 
