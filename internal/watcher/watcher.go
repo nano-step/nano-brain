@@ -46,6 +46,7 @@ type WatcherQuerier interface {
 	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
 	InsertChunkEntity(ctx context.Context, arg sqlc.InsertChunkEntityParams) error
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
+	PreloadFileStateByWorkspace(ctx context.Context, arg sqlc.PreloadFileStateByWorkspaceParams) ([]sqlc.PreloadFileStateByWorkspaceRow, error)
 }
 
 type watchedCollection struct {
@@ -774,6 +775,8 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		Collection:    col.name,
 		Tags:          []string{},
 		Metadata:      meta,
+		ModTime:       sql.NullTime{Time: info.ModTime(), Valid: true},
+		FileSize:      sql.NullInt64{Int64: info.Size(), Valid: true},
 	}
 
 	var chunkIDs []uuid.UUID

@@ -85,6 +85,10 @@ func (m *mockQuerier) ListChunksByDocumentID(_ context.Context, _ sqlc.ListChunk
 	return nil, nil
 }
 
+func (m *mockQuerier) PreloadFileStateByWorkspace(_ context.Context, _ sqlc.PreloadFileStateByWorkspaceParams) ([]sqlc.PreloadFileStateByWorkspaceRow, error) {
+	return nil, nil
+}
+
 func testConfig(debounceMs, pollSec int) config.Config {
 	return config.Config{
 		Watcher: config.WatcherConfig{
