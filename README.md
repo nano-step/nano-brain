@@ -11,20 +11,31 @@ Agent-oriented memory and code intelligence. AI agents don't read docs — they 
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/nano-step/nano-brain)
 [![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/nano-brain)
 
----
 
-## TL;DR
+### Install
 
 ```bash
-# Install
+# Via npm (recommended)
 npm install -g @nano-step/nano-brain
 
-# Start
-nano-brain serve -d
-
-# Your AI agent now has persistent memory, code intelligence, and impact analysis
+# Or build from source
+CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain
 ```
 
+### Start
+
+```bash
+# Start PostgreSQL
+docker run -d --name nanobrain-pg -p 5432:5432 \
+  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
+  pgvector/pgvector:pg17
+
+# Start nano-brain
+nano-brain serve -d
+
+# Register your project
+nano-brain init --root=/path/to/your/project
+```
 ---
 
 ## Why Star This Project?
@@ -219,31 +230,6 @@ Auto-ingest from OpenCode and Claude Code sessions. Map-reduce LLM summarization
 - **Go 1.23+** OR pre-built binary
 - **PostgreSQL 17** with **pgvector 0.8.2**
 - **Ollama** (for embeddings) or any OpenAI-compatible provider
-
-### Install
-
-```bash
-# Via npm (recommended)
-npm install -g @nano-step/nano-brain
-
-# Or build from source
-CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain
-```
-
-### Start
-
-```bash
-# Start PostgreSQL
-docker run -d --name nanobrain-pg -p 5432:5432 \
-  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
-  pgvector/pgvector:pg17
-
-# Start nano-brain
-nano-brain serve -d
-
-# Register your project
-nano-brain init --root=/path/to/your/project
-```
 
 ### Configure Your AI Agent
 
