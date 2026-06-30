@@ -49,8 +49,9 @@ func WorkspaceFolderName(name, hash string) string {
 // buildDiskPath returns the full filesystem path where a summary should
 // be persisted. The path layout is:
 //
-//	<outputDir>/<workspaceFolder>/<source>_<slug-title>_<YYYY-MM-DD>.md
+//	<outputDir>/<workspaceFolder>/<YYYY-MM-DD>--<source>-<slug-title>.md
 //
+// Date-first layout so directory listings sort chronologically.
 // outputDir MUST already be tilde-expanded (caller responsibility).
 // All path components are sanitized to be filesystem-safe.
 func BuildDiskPath(outputDir, workspaceName, workspaceHash, source, title string, date time.Time) string {
@@ -58,6 +59,6 @@ func BuildDiskPath(outputDir, workspaceName, workspaceHash, source, title string
 	titleSlug := Slugify(title)
 	dateStr := date.UTC().Format("2006-01-02")
 	srcSlug := Slugify(source)
-	filename := fmt.Sprintf("%s_%s_%s.md", srcSlug, titleSlug, dateStr)
+	filename := fmt.Sprintf("%s--%s-%s.md", dateStr, srcSlug, titleSlug)
 	return filepath.Join(outputDir, ws, filename)
 }
