@@ -139,6 +139,20 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 			contentHash := hex.EncodeToString(sum[:])
 
 			if lookupErr == nil && existing.ContentHash == contentHash {
+				// Opportunistically backfill disk: if this summary was created
+				// before write_to_disk was enabled, the file may be absent.
+				// Type assertion keeps SessionSummarizer interface stable.
+				if dw, ok := e.summarizer.(interface {
+					EnsureSummaryOnDisk(context.Context, string, SummaryMeta)
+				}); ok {
+					dw.EnsureSummaryOnDisk(ctx, existing.Content, SummaryMeta{
+						Source:        e.source.Name(),
+						SessionID:     sess.SessionID,
+						Title:         sess.Title,
+						CreatedAt:     existing.CreatedAt,
+						WorkspaceHash: wsHash,
+					})
+				}
 				skipped++
 				continue
 			}

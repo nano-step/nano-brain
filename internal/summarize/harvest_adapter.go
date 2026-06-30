@@ -25,6 +25,36 @@ func (s *HarvestSummarizer) SetLinkExtractor(resolver *links.Resolver, extractor
 	s.persister.SetLinkExtractor(resolver, extractor)
 }
 
+// EnsureSummaryOnDisk writes an already-stored summary markdown to disk if the
+// file is absent. It maps harvest.SummaryMeta → summarize.SessionMetadata using
+// the same mapping as SummarizeAndPersist, then delegates to the Persister.
+// This is called on the harvester content-unchanged skip path to backfill
+// summaries created before write_to_disk was enabled.
+func (s *HarvestSummarizer) EnsureSummaryOnDisk(ctx context.Context, summaryMarkdown string, meta harvest.SummaryMeta) {
+	// Reached via a structural type assertion in the harvesters, which bypasses
+	// the interface-nil safety the rest of the call path relies on. A typed-nil
+	// *HarvestSummarizer would satisfy that assertion (ok=true) and panic here,
+	// so guard the nil receiver / nil persister explicitly.
+	if s == nil || s.persister == nil {
+		return
+	}
+	sessionMeta := SessionMetadata{
+		Source:        Source(meta.Source),
+		SessionID:     meta.SessionID,
+		Title:         meta.Title,
+		Agent:         meta.Agent,
+		ProjectPath:   meta.ProjectPath,
+		CreatedAt:     meta.CreatedAt,
+		Duration:      meta.Duration,
+		ParentID:      meta.ParentID,
+		Branch:        meta.Branch,
+		Cwd:           meta.Cwd,
+		Tags:          meta.Tags,
+		WorkspaceHash: meta.WorkspaceHash,
+	}
+	s.persister.EnsureSummaryOnDisk(ctx, summaryMarkdown, sessionMeta)
+}
+
 func (s *HarvestSummarizer) SummarizeAndPersist(ctx context.Context, content string, meta harvest.SummaryMeta) error {
 	s.logger.Info().
 		Str("session_id", meta.SessionID).
