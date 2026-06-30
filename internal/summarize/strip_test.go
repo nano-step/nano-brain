@@ -196,6 +196,27 @@ func TestStripClaude_LongToolResult(t *testing.T) {
 	}
 }
 
+func TestStripClaude_LongToolResultWithBlankLines(t *testing.T) {
+	// Tool results may contain blank lines (e.g. JSON, file content).
+	// extractClaudeBody must not stop at the blank line.
+	var lines []string
+	for i := 0; i < 6; i++ {
+		lines = append(lines, strings.Repeat("output line with various content data ", 2))
+		lines = append(lines, "") // blank line mid-body
+	}
+	longOutput := strings.Join(lines, "\n") + "\n"
+	input := "## assistant (2026-05-26T10:00:00Z)\n\nResult: " + longOutput + "\n## human (2026-05-26T10:01:00Z)\n\nthanks\n"
+
+	got := StripClaude(input)
+
+	if strings.Contains(got, "output line") {
+		t.Error("long tool_result with blank lines should be replaced")
+	}
+	if !strings.Contains(got, "Result: [") {
+		t.Errorf("should contain result placeholder, got:\n%s", got)
+	}
+}
+
 func TestStripClaude_ShortToolResult(t *testing.T) {
 	// renderClaudeCodeMarkdown writes tool_result as "Result: <content>\n"
 	input := "## assistant (2026-05-26T10:00:00Z)\n\nResult: short output\n\n## human (2026-05-26T10:01:00Z)\n\nthanks\n"

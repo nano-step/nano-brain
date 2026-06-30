@@ -287,6 +287,30 @@ func dedupErrors(content string) string {
 	return strings.Join(result, "\n")
 }
 
+// extractClaudeBody reads from `from` until the next Claude section boundary:
+// a "## " header, a "Tool: " line, or another "Result: " line. This correctly
+// handles tool bodies that contain blank lines (JSON, multi-line edits, etc.)
+// which extractUntilBreak would stop at prematurely.
+func extractClaudeBody(content string, from int) (string, int) {
+	if from >= len(content) {
+		return "", from
+	}
+	lines := strings.SplitAfter(content[from:], "\n")
+	var body strings.Builder
+	pos := from
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if body.Len() > 0 && (strings.HasPrefix(trimmed, "## ") ||
+			strings.HasPrefix(trimmed, "Tool: ") ||
+			strings.HasPrefix(trimmed, "Result: ")) {
+			break
+		}
+		body.WriteString(line)
+		pos += len(line)
+	}
+	return body.String(), pos
+}
+
 func replaceClaudeToolUseCommands(content string) string {
 	locs := reClaudeToolUseCmd.FindAllStringSubmatchIndex(content, -1)
 	if len(locs) == 0 {
@@ -301,14 +325,10 @@ func replaceClaudeToolUseCommands(content string) string {
 			name = strings.TrimSpace(content[nameStart:nameEnd])
 		}
 
-		body, bodyEnd := extractFencedOrIndentedBody(content, fullMatchEnd)
+		body, bodyEnd := extractClaudeBody(content, fullMatchEnd)
 		bodyLineCount := countLines(body)
 		if bodyLineCount <= 5 {
 			continue
-		}
-		firstLine := strings.SplitN(body, "\n", 2)[0]
-		if len(firstLine) > 80 {
-			firstLine = firstLine[:80]
 		}
 		replacement := fmt.Sprintf("Tool: %s\n[tool input: %d lines]\n", name, bodyLineCount)
 		content = content[:locs[i][0]] + replacement + content[bodyEnd:]
@@ -322,7 +342,7 @@ func replaceClaudeToolResults(content string) string {
 		return content
 	}
 	for i := len(locs) - 1; i >= 0; i-- {
-		body, bodyEnd := extractUntilBreak(content, locs[i][1])
+		body, bodyEnd := extractClaudeBody(content, locs[i][1])
 		if len(body) <= 200 {
 			continue
 		}
