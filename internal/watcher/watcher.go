@@ -746,10 +746,6 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	sum := sha256.Sum256(content)
 	contentHash := hex.EncodeToString(sum[:])
 
-	if w.graphRegistry != nil {
-		w.extractAndUpsertEdges(ctx, col, filePath, content)
-	}
-
 	existing, err := w.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    filePath,
 		WorkspaceHash: col.workspaceHash,
@@ -759,6 +755,10 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		w.fileCache[filePath] = fileState{ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash}
 		w.fileCacheMu.Unlock()
 		return
+	}
+
+	if w.graphRegistry != nil {
+		w.extractAndUpsertEdges(ctx, col, filePath, content)
 	}
 
 	chunks := w.chunkContent(string(content), filePath)

@@ -823,6 +823,82 @@ func TestSubdirEdit_IndexedWithoutRootActivity(t *testing.T) {
 	}
 }
 
+// mockGraphQuerier implements GraphQuerier for tests, counting calls to each method.
+type mockGraphQuerier struct {
+	upsertEdgeCalls atomic.Int64
+	deleteEdgeCalls atomic.Int64
+}
+
+func (m *mockGraphQuerier) UpsertGraphEdge(_ context.Context, _ sqlc.UpsertGraphEdgeParams) error {
+	m.upsertEdgeCalls.Add(1)
+	return nil
+}
+
+func (m *mockGraphQuerier) DeleteGraphEdgesByFile(_ context.Context, _ sqlc.DeleteGraphEdgesByFileParams) error {
+	m.deleteEdgeCalls.Add(1)
+	return nil
+}
+
+// TestProcessFile_ContentHashSkipsEdgeExtraction verifies D-06a: when processFile
+// is called with byte-identical content already stored in the DB (mtime cache
+// cleared so the fast-path does not fire), the content-hash dedup check must
+// short-circuit BEFORE extractAndUpsertEdges is reached.
+//
+// Setup: pre-seed the mock querier with the file's hash (simulating a file that
+// was already fully indexed on a prior run). The mtime cache is intentionally
+// empty. With db==nil, reaching extractAndUpsertEdges would cause a nil-pointer
+// panic at w.db.BeginTx — so a panic is the RED signal; a clean return with
+// upsertDocCalls==0 (no re-index) is GREEN.
+func TestProcessFile_ContentHashSkipsEdgeExtraction(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "edge_skip.go")
+	content := []byte("package main\n\nfunc Foo() {}\n")
+	if err := os.WriteFile(fp, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sum := sha256.Sum256(content)
+	wantHash := hex.EncodeToString(sum[:])
+
+	mq := newMockQuerier()
+	// Pre-seed: file was already indexed in a prior run; hash is stored in DB.
+	mq.sourcePathHash[fp] = wantHash
+
+	w := newTestWatcher(mq, 2000, 300)
+
+	mgq := &mockGraphQuerier{}
+	w.WithGraphRegistry(graph.NewRegistry(), mgq)
+
+	col := watchedCollection{
+		name:          "testcol",
+		dirPath:       dir,
+		workspaceHash: "ws-edge-skip",
+		globPattern:   "*.go",
+	}
+
+	// mtime cache is empty (simulates a daemon restart where in-memory cache was lost).
+	// processFile will read+hash the file, find the hash matches the DB record, and
+	// must return WITHOUT calling extractAndUpsertEdges.
+	// GREEN: dedup fires first -> no panic, upsertDocCalls stays 0.
+	// RED (pre-reorder): extractAndUpsertEdges reached first -> w.db.BeginTx panics (db==nil).
+	w.processFile(context.Background(), col, fp)
+
+	if got := mq.upsertDocCalls.Load(); got != 0 {
+		t.Fatalf("expected upsertDocCalls=0 (hash already stored), got %d", got)
+	}
+
+	// Cache entry must be repopulated so the next scan hits the mtime fast-path.
+	w.fileCacheMu.RLock()
+	entry, ok := w.fileCache[fp]
+	w.fileCacheMu.RUnlock()
+	if !ok {
+		t.Fatal("expected fileCache entry to be repopulated after content-hash dedup hit")
+	}
+	if entry.Hash != wantHash {
+		t.Fatalf("expected cached hash %s, got %s", wantHash, entry.Hash)
+	}
+}
+
 // TestUnwatchTree_ClearsNestedAndAllowsRewatch covers the #497 review finding:
 // removing a directory must clear its nested watch entries (not just the exact
 // path), otherwise watchDir would skip re-watching a recreated subtree.
