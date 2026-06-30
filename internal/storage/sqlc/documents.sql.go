@@ -654,6 +654,35 @@ func (q *Queries) PreloadFileStateByWorkspace(ctx context.Context, arg PreloadFi
 	return items, nil
 }
 
+const updateDocumentFileState = `-- name: UpdateDocumentFileState :exec
+UPDATE documents
+SET mod_time = $3, file_size = $4
+WHERE source_path = $1 AND workspace_hash = $2
+`
+
+type UpdateDocumentFileStateParams struct {
+	SourcePath    string
+	WorkspaceHash string
+	ModTime       sql.NullTime
+	FileSize      sql.NullInt64
+}
+
+// Backfills the mtime+size fingerprint on the content-hash-match (dedup) path so
+// the DB-warmed fast-path can skip this file on the next restart (999.1 Fix B
+// gap: unchanged files — and rows indexed before migration 00029 — otherwise keep
+// NULL mod_time/file_size forever and warmed stays 0). Touches only
+// mod_time/file_size; title/content/updated_at are left intact so the
+// documents_title_propagate trigger does not re-rank chunks.
+func (q *Queries) UpdateDocumentFileState(ctx context.Context, arg UpdateDocumentFileStateParams) error {
+	_, err := q.db.ExecContext(ctx, updateDocumentFileState,
+		arg.SourcePath,
+		arg.WorkspaceHash,
+		arg.ModTime,
+		arg.FileSize,
+	)
+	return err
+}
+
 const updateDocumentsCollection = `-- name: UpdateDocumentsCollection :exec
 UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = $3
 `

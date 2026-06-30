@@ -27,6 +27,7 @@ type mockQuerier struct {
 	deleteChunkCalls      atomic.Int64
 	deleteDocCalls        atomic.Int64
 	getDocBySourcePathCalls atomic.Int64
+	updateFileStateCalls    atomic.Int64
 	sourcePathHash        map[string]string
 }
 
@@ -87,6 +88,11 @@ func (m *mockQuerier) ListChunksByDocumentID(_ context.Context, _ sqlc.ListChunk
 
 func (m *mockQuerier) PreloadFileStateByWorkspace(_ context.Context, _ sqlc.PreloadFileStateByWorkspaceParams) ([]sqlc.PreloadFileStateByWorkspaceRow, error) {
 	return nil, nil
+}
+
+func (m *mockQuerier) UpdateDocumentFileState(_ context.Context, _ sqlc.UpdateDocumentFileStateParams) error {
+	m.updateFileStateCalls.Add(1)
+	return nil
 }
 
 func testConfig(debounceMs, pollSec int) config.Config {
@@ -240,6 +246,64 @@ func TestProcessFile_SkipsSameHash(t *testing.T) {
 	w.processFile(context.Background(), col, fp)
 	if mq.upsertDocCalls.Load() != 1 {
 		t.Fatalf("expected hash skip on second call, got %d total upserts", mq.upsertDocCalls.Load())
+	}
+}
+
+// TestProcessFile_BackfillsFingerprintOnDedup covers the 999.1 Fix B gap: a file
+// already indexed (matching content hash) but with a NULL persisted fingerprint
+// — e.g. indexed before migration 00029 — must have its mod_time/file_size
+// backfilled on the dedup path, without re-indexing, so the DB-warmed fast-path
+// can skip it after a restart. A second scan must hit the in-memory fast-path.
+func TestProcessFile_BackfillsFingerprintOnDedup(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "doc.md")
+	content := []byte("# stable\nunchanged across restart")
+	if err := os.WriteFile(fp, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(content)
+	hash := hex.EncodeToString(sum[:])
+
+	mq := newMockQuerier()
+	// Simulate a document indexed by an older binary: hash present, fingerprint NULL.
+	mq.sourcePathHash[fp] = hash
+
+	w := newTestWatcher(mq, 2000, 300)
+	col := watchedCollection{name: "testcol", dirPath: dir, workspaceHash: "ws123", globPattern: "*.md"}
+
+	// Cold cache: content hash matches, fingerprint NULL → backfill once, no re-index.
+	w.processFile(context.Background(), col, fp)
+	if got := mq.updateFileStateCalls.Load(); got != 1 {
+		t.Fatalf("expected 1 fingerprint backfill on dedup match, got %d", got)
+	}
+	if got := mq.upsertDocCalls.Load(); got != 0 {
+		t.Fatalf("expected no re-index on dedup match, got %d upserts", got)
+	}
+
+	// Second scan: the dedup path warmed the in-memory cache, so the fast-path
+	// must skip before any DB lookup or further backfill.
+	getsBefore := mq.getDocBySourcePathCalls.Load()
+	w.processFile(context.Background(), col, fp)
+	if mq.getDocBySourcePathCalls.Load() != getsBefore {
+		t.Error("fast-path should skip without a DB lookup after the cache is warmed")
+	}
+	if got := mq.updateFileStateCalls.Load(); got != 1 {
+		t.Errorf("expected no second backfill, got %d", got)
+	}
+}
+
+// TestSameMtime_MicrosecondTolerance guards the precision fix: the persisted
+// fingerprint (Postgres TIMESTAMPTZ) is microsecond-resolution, while os.Stat
+// mtimes are nanosecond. The fast-path comparison must ignore sub-microsecond
+// differences (else a DB-warmed entry never matches) but still detect a real
+// >= 1µs change.
+func TestSameMtime_MicrosecondTolerance(t *testing.T) {
+	base := time.Unix(1700000000, 123456000) // .123456 s — microsecond-aligned
+	if !sameMtime(base, base.Add(789*time.Nanosecond)) {
+		t.Error("sameMtime must treat sub-microsecond (nanosecond) differences as equal")
+	}
+	if sameMtime(base, base.Add(2*time.Microsecond)) {
+		t.Error("sameMtime must detect a >= 1µs difference")
 	}
 }
 
