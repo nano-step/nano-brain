@@ -104,6 +104,8 @@ type Watcher struct {
 	fileCache    map[string]fileState
 	fileCacheMu  sync.RWMutex
 	hasNewEvents atomic.Bool
+
+	warmed map[string]bool
 }
 
 // SetGlobalIgnore configures the watcher to apply a global gitignore-style
@@ -136,6 +138,7 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 		watchedDirs:   make(map[string]bool),
 		hotRegisterCh: make(chan struct{}, 1),
 		fileCache:     make(map[string]fileState),
+		warmed:        make(map[string]bool),
 	}
 }
 
@@ -483,7 +486,53 @@ func (w *Watcher) unwatchTreeLocked(path string) {
 	}
 }
 
+// warmFileCacheFromDB pre-populates the in-memory fileCache for the given
+// collection by loading mtime+size fingerprints from the DB. Called once per
+// collection (idempotent via w.warmed) at the top of scanCollection, so an
+// unchanged file on process restart is skipped by the Stage-1 fast-path
+// without any read/hash/extraction (Fix B, plan 03).
+func (w *Watcher) warmFileCacheFromDB(ctx context.Context, col watchedCollection) {
+	w.mu.Lock()
+	if w.warmed[col.dirPath] {
+		w.mu.Unlock()
+		return
+	}
+	w.warmed[col.dirPath] = true
+	w.mu.Unlock()
+
+	rows, err := w.queries.PreloadFileStateByWorkspace(ctx, sqlc.PreloadFileStateByWorkspaceParams{
+		WorkspaceHash: col.workspaceHash,
+		Collection:    col.name,
+	})
+	if err != nil {
+		w.logger.Warn().Err(err).Str("collection", col.name).Msg("warmFileCacheFromDB: preload query failed, continuing with cold scan")
+		return
+	}
+
+	w.fileCacheMu.Lock()
+	count := 0
+	for _, row := range rows {
+		if !row.ModTime.Valid || !row.FileSize.Valid {
+			continue
+		}
+		if _, exists := w.fileCache[row.SourcePath]; exists {
+			continue
+		}
+		w.fileCache[row.SourcePath] = fileState{
+			ModTime: row.ModTime.Time,
+			Size:    row.FileSize.Int64,
+			Hash:    row.ContentHash,
+		}
+		count++
+	}
+	w.fileCacheMu.Unlock()
+
+	w.logger.Debug().Str("collection", col.name).Int("warmed", count).Msg("warmed file cache from DB")
+}
+
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
+	w.warmFileCacheFromDB(ctx, col)
+
 	stack := &GitignoreStack{}
 
 	err := filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
