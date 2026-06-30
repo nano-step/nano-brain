@@ -43,14 +43,14 @@
 
 ## 1. Product summary
 
-nano-brain is a **persistent memory and code intelligence server for AI coding agents**. It runs as a local daemon (Docker container, launchd service, or stdio MCP process) and gives any MCP-capable agent two things their host model cannot do alone:
+nano-brain is a **persistent memory and code intelligence server for AI coding agents**. It runs as a local daemon and gives any MCP-capable agent two things their host model cannot do alone:
 
-1. **Cross-session recall** — automatically harvested AI sessions, curated notes, and codebase symbols, indexed with a 6-signal hybrid search pipeline (BM25 + vector + RRF + PageRank + supersede demotion + neural reranking).
-2. **Code intelligence** — Tree-sitter symbol graph, call-flow detection, file dependency graph with PageRank centrality and Louvain clustering, and cross-repo infrastructure symbol tracking (Redis keys, MySQL tables, API endpoints, Bull queues).
+1. **Cross-session recall** — automatically harvested AI sessions, curated notes, and codebase symbols, indexed with a hybrid search pipeline (BM25 full-text + pgvector HNSW cosine similarity + RRF + recency decay).
+2. **Code intelligence** — symbol graph, call-flow detection, file dependency graph, and impact analysis.
 
-The product is exposed through three integration surfaces — **CLI** (29 commands), **MCP** (24 tools across stdio / HTTP / SSE transports), and a **REST + streaming HTTP API** (29 endpoints) — backed by a self-tuning learning loop (Thompson Sampling bandits, preference learning, importance scoring, query-sequence pattern detection).
+The product is exposed through two primary integration surfaces — **CLI** and **MCP** (16 tools over HTTP transport) — backed by a PostgreSQL + pgvector storage layer.
 
-It is **privacy-first by default** (100% local with Ollama + sqlite-vec) and **production-ready when scaled** (VoyageAI + Qdrant, per-workspace SQLite isolation, automatic corruption recovery).
+It is **privacy-first by default** (100% local with Ollama + self-hosted PostgreSQL). No external cloud services are required.
 
 ---
 
@@ -89,7 +89,7 @@ Modern AI coding agents (Claude Code, OpenCode, Cursor, etc.) have three structu
 - **G2.** Hybrid retrieval that beats BM25 alone and beats vector-only on code-heavy corpora (validated by `bench` suite).
 - **G3.** Code intelligence (symbol graph, call graph, dependency graph, flow detection) for TypeScript / JavaScript / Python.
 - **G4.** Self-learning loop that improves retrieval quality over time without manual tuning.
-- **G5.** Privacy-first deployment: 100% local option (Ollama + sqlite-vec), no required cloud calls.
+- **G5.** Privacy-first deployment: 100% local option (Ollama + self-hosted PostgreSQL), no required cloud calls.
 - **G6.** Multi-workspace isolation with cross-workspace queries (`scope=all`).
 - **G7.** First-class MCP support: stdio, HTTP, SSE transports.
 - **G8.** Operational reliability: automatic corruption recovery, retention enforcement, daemon lifecycle.
@@ -109,16 +109,12 @@ Modern AI coding agents (Claude Code, OpenCode, Cursor, etc.) have three structu
 
 | Capability | nano-brain | Mem0 | Zep / Graphiti | Letta | Claude native |
 |---|---|---|---|---|---|
-| 6-signal hybrid search | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Code intelligence (AST + call graph) | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Cross-repo infra symbol tracking | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Hybrid search (BM25 + pgvector + RRF) | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Code intelligence (symbol graph, impact) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Session auto-harvesting | ✓ | ✗ | ✗ | ✗ | partial |
-| Neural reranking | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Self-tuning (Thompson Sampling) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | 100% local option | ✓ | ✗ | partial | ✓ | ✓ |
-| MCP-native (stdio / HTTP / SSE) | ✓ | ✗ | ✗ | ✗ | partial |
-| Per-workspace isolation | ✓ | ✗ | partial | partial | ✗ |
-| 22 MCP tools / 29 HTTP endpoints | ✓ | 4–9 tools | 9–10 | 7 | 0 |
+| MCP-native (HTTP) | ✓ | ✗ | ✗ | ✗ | partial |
+| 16 MCP tools | ✓ | 4–9 tools | 9–10 | 7 | 0 |
 
 The combination — **code intelligence + AI-session harvesting + self-tuning hybrid retrieval + MCP** — is unique in the agent-memory category.
 
@@ -130,51 +126,49 @@ The combination — **code intelligence + AI-session harvesting + self-tuning hy
                         ┌──────────────────────────┐
                         │  AI agent (OpenCode etc) │
                         └──────────┬───────────────┘
-                                   │ MCP (stdio / HTTP / SSE)
+                                   │ MCP (HTTP)
                                    ▼
             ┌──────────────────────────────────────────┐
             │  nano-brain server                       │
             │  ┌────────────┐  ┌────────────────────┐ │
-            │  │ MCP server │  │ HTTP / SSE server  │ │
-            │  │ (24 tools) │  │ (29 endpoints)     │ │
+            │  │ MCP server │  │ HTTP server        │ │
+            │  │ (16 tools) │  │                    │ │
             │  └─────┬──────┘  └─────────┬──────────┘ │
             │        └──────────┬────────┘            │
             │                   ▼                     │
             │  ┌─────────────────────────────────┐    │
             │  │  Search pipeline                │    │
-            │  │  BM25 + vector + RRF + PageRank │    │
-            │  │  + supersede demote + rerank    │    │
+            │  │  BM25 + pgvector + RRF          │    │
+            │  │  + recency decay                │    │
             │  └────────┬───────┬────────┬───────┘    │
             │           ▼       ▼        ▼            │
-            │   ┌──────┐  ┌────────┐  ┌──────────┐    │
-            │   │ FTS5 │  │ vec DB │  │ Symbol   │    │
-            │   │      │  │ Qdrant │  │ graph    │    │
-            │   │      │  │ /sqlite│  │          │    │
-            │   └──────┘  └────────┘  └──────────┘    │
-            │           SQLite (per-workspace)        │
+            │   ┌────────────────────┐  ┌──────────┐  │
+            │   │ PostgreSQL         │  │ Symbol   │  │
+            │   │ tsvector + pgvector│  │ graph    │  │
+            │   │ (pg17, HNSW index) │  │          │  │
+            │   └────────────────────┘  └──────────┘  │
             │                                         │
             │  ┌──────────────────────────────────┐   │
             │  │ Background jobs                  │   │
-            │  │ harvest │ index │ embed │ learn  │   │
-            │  │ consolidate │ prune │ importance │   │
+            │  │ harvest │ index │ embed          │   │
             │  └──────────────────────────────────┘   │
             └──────────────────────────────────────────┘
-                       │              │
-                       ▼              ▼
-              ┌────────────┐  ┌─────────────────┐
-              │ Embedding  │  │ Reranker        │
-              │ (VoyageAI/ │  │ (VoyageAI       │
-              │  Ollama)   │  │  rerank-2.5)    │
-              └────────────┘  └─────────────────┘
+                                │
+                                ▼
+                       ┌────────────────┐
+                       │ Embedding      │
+                       │ (Ollama /      │
+                       │  OpenAI-compat)│
+                       └────────────────┘
 ```
 
 **Data flow (write path):**
-`source files / AI sessions` → harvester / file watcher → chunker (900 tokens, 15% overlap) → SQLite + FTS5 → async embedder → vector store → entity extractor → knowledge graph → categorizer (`auto:*` + `llm:*` tags).
+`source files / AI sessions` → harvester / file watcher → chunker → PostgreSQL (tsvector index + async pgvector embedding).
 
 **Data flow (read path):**
-agent query → MCP / HTTP → query expansion (optional) → parallel BM25 + vector + symbol search → RRF fusion (k=60) → PageRank boost (0.1×) → supersede demote (0.05×) → usage / length / recency / category boosts → top-K candidates → neural reranker → position-aware blending (75/25, 60/40, 40/60) → results.
+agent query → MCP / HTTP → parallel BM25 + pgvector search → RRF fusion (k=60) → recency decay → results.
 
-**Isolation:** Each workspace gets a dedicated SQLite file `~/.nano-brain/data/{name}-{12-char-hash}.sqlite`. Cross-workspace queries (`scope=all`) open multiple stores and RRF-fuse the results.
+**Storage:** PostgreSQL 17 + pgvector 0.8.2. Each workspace is partitioned by a workspace hash. Cross-workspace queries (`scope=all`) union results across workspaces.
 
 ---
 
@@ -215,38 +209,33 @@ Three parallel ingestion pipelines run in the background, all governed by `~/.na
 
 ### 6.2 Storage & reliability
 
-#### 6.2.1 SQLite schema (24 tables, 5 groups)
+#### 6.2.1 PostgreSQL schema
 
-**Core documents (3):** `documents`, `content` (SHA-256 keyed), `chunks` (virtual via triggers).
-**Search indexes (2):** `documents_fts` (FTS5, porter unicode61 stemming), `content_vectors` (sqlite-vec).
-**Code intelligence (5):** `code_symbols`, `symbol_edges`, `file_edges`, `execution_flows`, `flow_steps`.
-**Knowledge graph (2):** `entities`, `relationships`.
-**Learning & intelligence (9):** `search_telemetry`, `bandit_stats`, `config_versions`, `consolidations`, `importance_scores`, `workspace_profiles`, `global_learning`, `llm_cache`, `token_usage`.
-**Query pattern detection (2):** `query_chain_membership`, `query_clusters`.
+Storage backend is **PostgreSQL 17 + pgvector 0.8.2**. Schema is managed by goose migrations in `migrations/`.
 
-Triggers auto-maintain FTS5 index on insert / delete / hash-update.
+Key table groups:
+- **Documents** — content, metadata, tsvector index for BM25 full-text search
+- **Vectors** — pgvector HNSW index (cosine similarity) for semantic search
+- **Code intelligence** — symbols, call edges, file dependency edges, execution flows
+- **Session / workspace** — workspace registry, harvest state
+
+Run `nano-brain db:migrate` to apply pending migrations.
 
 #### 6.2.2 Per-workspace isolation
 
+Each workspace is identified by a hash of its root path. The `workspace_hash` column partitions data within PostgreSQL. Cross-workspace queries (`scope=all`) union across all workspace hashes.
+
+#### 6.2.3 PostgreSQL setup
+
+```bash
+docker run -d --name nanobrain-pg -p 5432:5432 \
+  -e POSTGRES_USER=nanobrain \
+  -e POSTGRES_PASSWORD=nanobrain \
+  -e POSTGRES_DB=nanobrain_dev \
+  pgvector/pgvector:pg17
 ```
-{dirName}-{first12CharsOfSha256(workspacePath)}.sqlite
-```
 
-Example: `nano-brain-a1b2c3d4e5f6.sqlite`.
-The `project_hash` column further partitions data within each DB. Cross-workspace queries open multiple stores.
-
-> **Known issue (2026-05-22):** `POST /api/query` and `POST /api/search` ignore the client's CWD and use the server-startup `currentProjectHash`. CLI does not send a workspace identifier. Tracked for OpenSpec proposal.
-
-#### 6.2.3 Content-addressed storage
-
-Every chunk: `hash = SHA-256(content)`, stored once in `content`, referenced by `documents.hash`. Identical content across documents shares a single row. `chunks` records `(hash, seq, pos, startLine, endLine)`.
-
-#### 6.2.4 Corruption detection & recovery
-
-- `PRAGMA quick_check` runs in `createStore()` before any DB ops (50–500 ms).
-- On corruption: rename file to `index.db.corrupted.{ISO-timestamp}` (last 5 retained), delete `-wal` / `-shm`, reapply schema with pragmas (`journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=15s`, `synchronous=NORMAL`), run migrations, verify, emit metric `database_corruption_detected`.
-- launchd (macOS) auto-restarts on fatal exit (10 s throttle).
-- Recovery is safe because the DB is a derivable cache: sessions re-harvest, codebase re-indexes, vectors regenerate.
+Connection configured via `database.url` in `~/.nano-brain/config.yml` (see §7).
 
 ### 6.3 Search pipeline
 
@@ -254,22 +243,12 @@ Hybrid retrieval over BM25 + vector + symbol-name match, fused and reranked.
 
 | Stage | Detail | Default |
 |---|---|---|
-| 1. Query expansion | 2–3 variants, weight 1.0× each, original 2.0× | provider stub, off |
-| 2. BM25 (FTS5) | porter stemmer, 5 s timeout | — |
-| 3. Vector search | sqlite-vec or Qdrant, cosine, 5 s timeout | — |
-| 4. Symbol search | exact-name match against `code_symbols` | — |
-| 5. RRF fusion | `Σ weight / (k + rank + 1)` | k = 60 |
-| 6. Centrality boost | `× (1 + w · centrality)` | w = 0.1 |
-| 7. Supersede demotion | `× supersede_demotion` if replaced | 0.05 |
-| 8. Usage boost | `log₂(1+access) · 1/(1 + days/30)` | weight 0.15 |
-| 9. Length normalization | `× 1/(1 + log₂(chars/anchor))` | anchor 2000 chars |
-| 10. Recency boost | exponential half-life | weight 0.3, half-life 180 d |
-| 11. Category weights | `auto:*` / `llm:*` tag multipliers | 0.5×–2.0× from preference learning |
-| 12. Importance boost | document importance score | optional |
-| 13. Top-K selection | candidate pool for reranker | top_k = 15 |
-| 14. Neural reranking | VoyageAI `rerank-2.5-lite`, cached | — |
-| 15. Position-aware blend | top 3: 75/25, ranks 4–10: 60/40, ranks 11+: 40/60 | RRF / rerank |
-| 16. Output | `limit=10`, snippets ≤ 700 chars | — |
+| 1. BM25 (tsvector/tsquery) | PostgreSQL full-text search, 5 s timeout | — |
+| 2. Vector search | pgvector HNSW cosine, 5 s timeout | — |
+| 3. Symbol search | exact-name match against symbol table | — |
+| 4. RRF fusion | `Σ weight / (k + rank + 1)` | k = 60 |
+| 5. Recency boost | exponential half-life | weight 0.3, half-life 180 d |
+| 6. Output | `limit=20` | — |
 
 Snippets are enriched with symbol info, cluster labels, and flow counts when applicable.
 
@@ -391,21 +370,16 @@ Maintenance mode (`POST /api/maintenance/prepare` / `/resume`) pauses watcher an
 
 | Provider | Config | Dim | Max chars | Notes |
 |---|---|---|---|---|
-| **VoyageAI** | `provider: openai`, `url: https://api.voyageai.com` | 1024 | 8000 | `voyage-code-3` recommended; needs `VOYAGE_API_KEY` |
-| **Ollama** | `provider: ollama`, `url: http://localhost:11434` | auto | auto | Local, free, no key |
-| **OpenAI-compatible** | `provider: openai`, custom `url` | model-dep. | model-dep. | Azure, LM Studio, etc. |
+| **Ollama** | `provider: ollama`, `url: http://localhost:11434` | auto | auto | Local, free, no key required |
+| **OpenAI-compatible** | `provider: openai`, custom `url` | model-dep. | model-dep. | VoyageAI, Azure, LM Studio, etc. |
 
 Default concurrency: **3** (override via `NANO_BRAIN_EMBEDDING_CONCURRENCY`).
 
-#### Reranker
-- **VoyageAI `rerank-2.5-lite`** — only supported reranker. Falls back to RRF-only blend if unavailable.
+#### Vector store
+- **pgvector** — HNSW index on PostgreSQL 17. Configured via `database.url` in `config.yml`. No separate vector service required.
 
-#### Vector stores
-- **Qdrant** (production) — bundled in `docker compose`, ports 6333 (gRPC) / 6334 (HTTP).
-- **sqlite-vec** (embedded) — default if Qdrant absent. Migration tool: `nano-brain qdrant migrate`.
-
-#### LLM providers (consolidation, extraction, categorization)
-- OpenAI-compatible (default `gpt-4o-mini`).
+#### LLM providers (optional — session summarization)
+- OpenAI-compatible endpoint (configure `url` + `apiKey`).
 - Ollama (set `provider: ollama`).
 
 ### 6.9 Chunking strategy
@@ -445,9 +419,8 @@ Code fences are tracked: cuts inside fences prefer the nearest fence boundary. E
 | **Memory** | `write [--tags --supersedes]`, `get`, `tags` |
 | **Index** | `update`, `reindex [--root]`, `embed [--force]` |
 | **Collections** | `collection {add\|remove\|list\|rename}` |
-| **Cleanup** | `reset [--databases --sessions --memory --logs --vectors --confirm --dry-run]`, `rm <ws> [--list --dry-run]`, `harvest` |
+| **Cleanup** | `reset [--databases --sessions --memory --logs --vectors --confirm --dry-run]`, `workspaces`, `harvest` |
 | **Docker** | `docker {start\|stop\|restart [svc]\|status}` |
-| **Qdrant** | `qdrant {up\|down\|status\|migrate\|verify\|activate\|cleanup\|recreate}` |
 | **Cache** | `cache {clear [--all --type]\|stats}` |
 | **Logs** | `logs [-f -n --date --clear \| path]` |
 | **Code intel** | `context <sym>`, `code-impact <sym> [--direction --max-depth --min-confidence --file]`, `detect-changes [--scope]`, `focus <file>`, `graph-stats`, `symbols [--type --pattern --repo --operation]`, `impact --type --pattern` |
@@ -566,11 +539,9 @@ Default command (no args) → `mcp` in stdio mode.
 
 | Mode | Command | Use case |
 |---|---|---|
-| **Docker compose** (recommended) | `npx nano-brain docker start` | One-command full stack: nano-brain (port 3100) + Qdrant (6333/6334), 2 GB memory limit, restart `unless-stopped`, 30 s health check. |
-| **Standalone HTTP daemon** | `npx nano-brain mcp --http --daemon --port=8282` | Single-process, PID at `~/.nano-brain/server.pid`. |
-| **launchd (macOS)** | `launchctl load ~/Library/LaunchAgents/com.tamlh.nano-brain.plist` | OS-managed, auto-restart on exit (10 s throttle), survives corruption recovery. |
-| **stdio MCP** | `npx nano-brain mcp` (default) | Direct integration with local agents (OpenCode, Claude Code). |
-| **MCP remote (HTTP/SSE)** | client connects to `host.docker.internal:3100/mcp` or `/sse` | Container deployments, remote agents. |
+| **Standalone HTTP daemon** (recommended) | `nano-brain serve -d` | Single Go binary + external PostgreSQL. PID managed by the process. |
+| **launchd (macOS)** | `launchctl load ~/Library/LaunchAgents/com.nano-brain.plist` | OS-managed, auto-restart on exit. |
+| **Foreground** | `nano-brain serve` | Development / debugging. |
 
 Container detection: `/proc/1/cgroup` for Docker, `KUBERNETES_SERVICE_HOST` for K8s, `LAUNCHD_PROCESS_PID` for launchd. Adjusts host resolution (`host.docker.internal` vs `localhost`) and stdio handling.
 
@@ -655,11 +626,9 @@ YAML at `~/.nano-brain/config.yml`, auto-generated from `config.default.yml`. Se
 | Section | Key fields | Default |
 |---|---|---|
 | `logging` | `enabled`, `level`, `file`, `maxSize`, `maxFiles` | enabled, `info`, 10 MB, 5 files |
-| `collections` | `{name: {path, pattern, update, excludeFolders}}` | `memory`, `sessions` (both `**/*.md`) |
-| `vector` | `provider`, `url`, `collection` | `qdrant`, `http://qdrant:6333`, `nano-brain` |
-| `embedding` | `provider`, `url`, `model`, `apiKey`, `dimensions`, `maxChars` | Ollama `nomic-embed-text` or VoyageAI `voyage-code-3` |
-| `reranker` | `model`, `apiKey`, `provider` | `rerank-2.5-lite` |
-| `codebase` | `enabled`, `languages`, `exclude`, `maxFileSize` | true, [ts/js/py], standard, 1 MB |
+| `database` | `url` | `postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev` |
+| `embedding` | `provider`, `url`, `model`, `apiKey`, `dimensions`, `maxChars` | Ollama `nomic-embed-text`; or OpenAI-compatible with custom `url` |
+| `codebase` | `enabled`, `languages`, `exclude`, `maxFileSize` | true, [go/ts/js/py/rb], standard, 1 MB |
 | `watcher` | `debounce`, `reindexInterval`, `chokidarIntervalMs` | 300 ms, 300 s, 5000 ms |
 | `intervals` | `sessionPoll`, `healthCheck` | 120 s, 60 s |
 | `storage` | `maxSize`, `retention.{sessions,logs}` | 10 GB, 90 d, 30 d |
@@ -719,10 +688,8 @@ YAML at `~/.nano-brain/config.yml`, auto-generated from `config.default.yml`. Se
 
 | Resource | Typical | Limit |
 |---|---|---|
-| Node heap | ~ 500 MB | 1.5 GB (`NODE_OPTIONS=--max-old-space-size=1536`) |
-| Container memory | ~ 800 MB | 2 GB (compose) |
-| SQLite DB size | ~ 100 MB / 10 K docs | `storage.maxSize` (10 GB default) |
-| Qdrant disk | ~ 50 MB / 10 K vectors | depends on Qdrant config |
+| Go binary RSS | ~ 100–200 MB | depends on index size |
+| PostgreSQL data | ~ 100 MB / 10 K docs | depends on pgvector index size |
 | Embedding queue | drains at ~ 3 / s (Ollama local) | adaptive backoff |
 
 ### 8.2 Reliability
@@ -734,8 +701,8 @@ YAML at `~/.nano-brain/config.yml`, auto-generated from `config.default.yml`. Se
 
 ### 8.3 Privacy
 
-- Default Docker stack: 100% local (Ollama + Qdrant). No outbound calls.
-- Cloud providers (VoyageAI, OpenAI) opt-in via config.
+- Default setup: 100% local (Ollama + self-hosted PostgreSQL). No outbound calls.
+- Cloud embedding providers (VoyageAI, OpenAI-compatible) opt-in via config.
 - No telemetry phoning home. All logs and telemetry stay on disk.
 
 ### 8.4 Multi-workspace behaviour
@@ -746,10 +713,10 @@ YAML at `~/.nano-brain/config.yml`, auto-generated from `config.default.yml`. Se
 
 ### 8.5 Compatibility
 
-- Node.js ≥ 22 (uses `node:22-slim` in compose).
+- Go 1.23+, compiled with `CGO_ENABLED=0` (single static binary).
+- PostgreSQL 17 + pgvector 0.8.2.
 - Tested on Linux + macOS. Windows not officially supported.
-- Tree-sitter languages: TypeScript, JavaScript, Python.
-- MCP SDK: `@modelcontextprotocol/sdk` (stdio + HTTP/SSE transports).
+- MCP transport: HTTP (connect via `http://localhost:3100/mcp`).
 
 ---
 
