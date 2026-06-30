@@ -628,7 +628,7 @@ YAML at `~/.nano-brain/config.yml`, auto-generated from `config.default.yml`. Se
 | `logging` | `enabled`, `level`, `file`, `maxSize`, `maxFiles` | enabled, `info`, 10 MB, 5 files |
 | `database` | `url` | `postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev` |
 | `embedding` | `provider`, `url`, `model`, `apiKey`, `dimensions`, `maxChars` | Ollama `nomic-embed-text`; or OpenAI-compatible with custom `url` |
-| `codebase` | `enabled`, `languages`, `exclude`, `maxFileSize` | true, [go/ts/js], standard, 1 MB |
+| `codebase` | `enabled`, `languages`, `exclude`, `maxFileSize` | true, [go/ts/js/py/rb], standard, 1 MB |
 | `watcher` | `debounce`, `reindexInterval`, `chokidarIntervalMs` | 300 ms, 300 s, 5000 ms |
 | `intervals` | `sessionPoll`, `healthCheck` | 120 s, 60 s |
 | `storage` | `maxSize`, `retention.{sessions,logs}` | 10 GB, 90 d, 30 d |

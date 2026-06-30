@@ -96,7 +96,7 @@ Claude Code JSONL  ──┤─→ Harvester → LLM Summarizer → Indexer → 
 
 **File watching** — Monitors workspace for changes and reindexes automatically
 
-**Codebase indexing** — Parses Go, TypeScript, JavaScript source files for symbols and call graphs
+**Codebase indexing** — Parses Go, TypeScript, JavaScript, Python, and Ruby source files for symbols and call graphs
 
 ## MCP Tools (16 Total)
 
