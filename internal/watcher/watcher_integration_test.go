@@ -127,10 +127,14 @@ func TestWarmFileCache(t *testing.T) {
 	}
 
 	// --- Mutation: modify the file so mtime+size change ---
-	// Sleep 1ms to ensure mtime differs (filesystem resolution).
-	time.Sleep(10 * time.Millisecond)
 	if err := os.WriteFile(filePath, []byte("modified content — different"), 0o644); err != nil {
 		t.Fatalf("write modified file: %v", err)
+	}
+	// Explicitly bump mtime so the change is detected regardless of filesystem
+	// timestamp resolution (avoids a flaky time.Sleep).
+	newMtime := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(filePath, newMtime, newMtime); err != nil {
+		t.Fatalf("chtimes: %v", err)
 	}
 
 	// Watcher B re-scans (same instance, warmed guard already true — but the
