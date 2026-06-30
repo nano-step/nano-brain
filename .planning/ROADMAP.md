@@ -185,3 +185,23 @@ Phases 1–2 parallel. Phases 4 & 6 parallel. Phase 3 depends on 1–2. Phase 5 
 | P@5 (Ruby) | 0.795 | ≥ 0.85 |
 | memory_impact accuracy | Unknown | ≥ 90% |
 | Latency (code intel) | ~42ms | < 50ms |
+
+## Backlog
+
+### Phase 999.1: Avoid full reindex on git worktree create / checkout (BACKLOG)
+
+**Goal:** Eliminate the indexing lag on `serve` startup, new-worktree registration, and git checkout. Root cause (confirmed, D-02/D-05): the cheap mtime+size skip is in-memory only, so every file falls through to tree-sitter graph re-extraction on each process start. Fix = persist the fast-path fingerprint (Fix B, D-06b) so unchanged files are skipped after restart, and reorder the content-hash dedup before edge extraction (Fix A, D-06a) so byte-identical content never re-extracts edges (also covers checkout, whose mtime rewrite defeats Fix B). No re-embedding regression (chunk dedup already holds).
+**Requirements:** none (backlog perf bugfix; no mapped REQ IDs)
+**Plans:** 2/3 plans executed
+
+Notes:
+
+- Reported by user; "feels like" all files get re-indexed on worktree create / checkout — needs verification of the actual trigger before fixing.
+- NOT for immediate fix — parked for investigation.
+- Investigate: fsnotify behavior on worktree dirs, how the indexer decides what changed, whether checkout bumps mtimes triggering full enqueue.
+
+Plans:
+
+- [x] 999.1-01-PLAN.md — Fix A: reorder content-hash dedup before graph edge extraction (wave 1)
+- [x] 999.1-02-PLAN.md — Fix B schema: add documents.mod_time+file_size, extend upsert, add preload query (wave 1)
+- [ ] 999.1-03-PLAN.md — Fix B wiring: persist fingerprint via os.Stat + warm fileCache from DB at startup (wave 2)

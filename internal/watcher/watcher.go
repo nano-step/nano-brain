@@ -46,6 +46,7 @@ type WatcherQuerier interface {
 	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
 	InsertChunkEntity(ctx context.Context, arg sqlc.InsertChunkEntityParams) error
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
+	PreloadFileStateByWorkspace(ctx context.Context, arg sqlc.PreloadFileStateByWorkspaceParams) ([]sqlc.PreloadFileStateByWorkspaceRow, error)
 }
 
 type watchedCollection struct {
@@ -103,6 +104,8 @@ type Watcher struct {
 	fileCache    map[string]fileState
 	fileCacheMu  sync.RWMutex
 	hasNewEvents atomic.Bool
+
+	warmed map[string]bool
 }
 
 // SetGlobalIgnore configures the watcher to apply a global gitignore-style
@@ -135,6 +138,7 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 		watchedDirs:   make(map[string]bool),
 		hotRegisterCh: make(chan struct{}, 1),
 		fileCache:     make(map[string]fileState),
+		warmed:        make(map[string]bool),
 	}
 }
 
@@ -482,7 +486,53 @@ func (w *Watcher) unwatchTreeLocked(path string) {
 	}
 }
 
+// warmFileCacheFromDB pre-populates the in-memory fileCache for the given
+// collection by loading mtime+size fingerprints from the DB. Called once per
+// collection (idempotent via w.warmed) at the top of scanCollection, so an
+// unchanged file on process restart is skipped by the Stage-1 fast-path
+// without any read/hash/extraction (Fix B, plan 03).
+func (w *Watcher) warmFileCacheFromDB(ctx context.Context, col watchedCollection) {
+	w.mu.Lock()
+	if w.warmed[col.dirPath] {
+		w.mu.Unlock()
+		return
+	}
+	w.warmed[col.dirPath] = true
+	w.mu.Unlock()
+
+	rows, err := w.queries.PreloadFileStateByWorkspace(ctx, sqlc.PreloadFileStateByWorkspaceParams{
+		WorkspaceHash: col.workspaceHash,
+		Collection:    col.name,
+	})
+	if err != nil {
+		w.logger.Warn().Err(err).Str("collection", col.name).Msg("warmFileCacheFromDB: preload query failed, continuing with cold scan")
+		return
+	}
+
+	w.fileCacheMu.Lock()
+	count := 0
+	for _, row := range rows {
+		if !row.ModTime.Valid || !row.FileSize.Valid {
+			continue
+		}
+		if _, exists := w.fileCache[row.SourcePath]; exists {
+			continue
+		}
+		w.fileCache[row.SourcePath] = fileState{
+			ModTime: row.ModTime.Time,
+			Size:    row.FileSize.Int64,
+			Hash:    row.ContentHash,
+		}
+		count++
+	}
+	w.fileCacheMu.Unlock()
+
+	w.logger.Debug().Str("collection", col.name).Int("warmed", count).Msg("warmed file cache from DB")
+}
+
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
+	w.warmFileCacheFromDB(ctx, col)
+
 	stack := &GitignoreStack{}
 
 	err := filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
@@ -746,10 +796,6 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	sum := sha256.Sum256(content)
 	contentHash := hex.EncodeToString(sum[:])
 
-	if w.graphRegistry != nil {
-		w.extractAndUpsertEdges(ctx, col, filePath, content)
-	}
-
 	existing, err := w.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    filePath,
 		WorkspaceHash: col.workspaceHash,
@@ -759,6 +805,10 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		w.fileCache[filePath] = fileState{ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash}
 		w.fileCacheMu.Unlock()
 		return
+	}
+
+	if w.graphRegistry != nil {
+		w.extractAndUpsertEdges(ctx, col, filePath, content)
 	}
 
 	chunks := w.chunkContent(string(content), filePath)
@@ -774,6 +824,8 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		Collection:    col.name,
 		Tags:          []string{},
 		Metadata:      meta,
+		ModTime:       sql.NullTime{Time: info.ModTime(), Valid: true},
+		FileSize:      sql.NullInt64{Int64: info.Size(), Valid: true},
 	}
 
 	var chunkIDs []uuid.UUID
