@@ -137,10 +137,16 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 		return harvestSkipped, nil
 	}
 
+	// Find createdAt from the first message that actually carries a timestamp.
+	// Leading records (type=="mode", "file-history-snapshot", etc.) have no
+	// timestamp, so msgs[0].Timestamp is always "" and yielded a zero time.
 	var createdAt time.Time
-	if len(msgs) > 0 && msgs[0].Timestamp != "" {
-		if t, parseErr := time.Parse(time.RFC3339, msgs[0].Timestamp); parseErr == nil {
-			createdAt = t
+	for _, m := range msgs {
+		if m.Timestamp != "" {
+			if t, parseErr := time.Parse(time.RFC3339, m.Timestamp); parseErr == nil {
+				createdAt = t
+				break
+			}
 		}
 	}
 
@@ -254,17 +260,101 @@ func (h *ClaudeCodeHarvester) writeRawFallback(
 }
 
 // claudeCodeMessage represents a single line from a Claude Code JSONL transcript.
+//
+// Claude Code's actual schema nests message content under a "message" envelope:
+//
+//	user line:      { "type":"user",      "timestamp":"...", "message": {"role":"user",      "content":"<text>"} }
+//	assistant line: { "type":"assistant", "timestamp":"...", "message": {"role":"assistant", "content":[{"type":"text","text":"..."},{"type":"tool_use","name":"...","input":{...}},...]} }
+//
+// The old top-level content/tool_name/tool_input/tool_output fields do not exist
+// in real transcripts and always unmarshal to zero values.
 type claudeCodeMessage struct {
-	Type       string          `json:"type"`
-	Timestamp  string          `json:"timestamp"`
-	Content    string          `json:"content"`
-	ToolName   string          `json:"tool_name"`
-	ToolInput  json.RawMessage `json:"tool_input"`
-	ToolOutput json.RawMessage `json:"tool_output"`
-	// Fields present in Claude Code JSONL but not previously parsed:
+	Type      string `json:"type"`
+	Timestamp string `json:"timestamp"`
+	// Message holds the nested envelope present on user/assistant lines.
+	Message struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"` // string (user) or []contentBlock (assistant)
+	} `json:"message"`
 	GitBranch   string `json:"gitBranch"`
 	Cwd         string `json:"cwd"`
 	IsSidechain bool   `json:"isSidechain"`
+}
+
+// contentBlock is one element of an assistant message's content array.
+type contentBlock struct {
+	Type  string          `json:"type"`  // "text", "tool_use", "tool_result"
+	Text  string          `json:"text"`  // set when Type=="text"
+	Name  string          `json:"name"`  // set when Type=="tool_use"
+	Input json.RawMessage `json:"input"` // set when Type=="tool_use"
+	// tool_result carries content as either a string or []contentBlock.
+	Content json.RawMessage `json:"content"` // set when Type=="tool_result"
+}
+
+// extractText returns the human-readable text from a claudeCodeMessage.
+// For user lines message.content is a plain string; for assistant lines it
+// is a JSON array of typed blocks.
+func (m *claudeCodeMessage) extractText() string {
+	if len(m.Message.Content) == 0 {
+		return ""
+	}
+	// Try plain string first (user messages).
+	var s string
+	if json.Unmarshal(m.Message.Content, &s) == nil {
+		return s
+	}
+	// Try typed-block array (assistant messages).
+	var blocks []contentBlock
+	if json.Unmarshal(m.Message.Content, &blocks) != nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, blk := range blocks {
+		switch blk.Type {
+		case "text":
+			if blk.Text != "" {
+				if b.Len() > 0 {
+					b.WriteString("\n")
+				}
+				b.WriteString(blk.Text)
+			}
+		case "tool_use":
+			fmt.Fprintf(&b, "\nTool: %s\n", blk.Name)
+			if len(blk.Input) > 0 {
+				var inputMap map[string]interface{}
+				if json.Unmarshal(blk.Input, &inputMap) == nil && inputMap != nil {
+					keys := make([]string, 0, len(inputMap))
+					for k := range inputMap {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					for _, k := range keys {
+						fmt.Fprintf(&b, "%s: %v\n", k, inputMap[k])
+					}
+				}
+			}
+		case "tool_result":
+			// tool_result content is string or []contentBlock.
+			if len(blk.Content) > 0 {
+				var rs string
+				if json.Unmarshal(blk.Content, &rs) == nil {
+					if rs != "" {
+						fmt.Fprintf(&b, "\nResult: %s\n", rs)
+					}
+				} else {
+					var rblocks []contentBlock
+					if json.Unmarshal(blk.Content, &rblocks) == nil {
+						for _, rb := range rblocks {
+							if rb.Type == "text" && rb.Text != "" {
+								fmt.Fprintf(&b, "\nResult: %s\n", rb.Text)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return b.String()
 }
 
 // parseJSONLFile reads a Claude Code JSONL session file and returns the messages.
@@ -306,16 +396,21 @@ func parseJSONLFile(path string) ([]claudeCodeMessage, error) {
 func renderClaudeCodeMarkdown(sessionID string, msgs []claudeCodeMessage) string {
 	var b strings.Builder
 
-	// Determine created_at from first message timestamp
+	// Determine created_at from the first message that carries a timestamp.
+	// The leading records (type=="mode", "file-history-snapshot", etc.) have no
+	// timestamp field, so reading msgs[0].Timestamp always yielded "".
 	var createdAt string
-	if len(msgs) > 0 && msgs[0].Timestamp != "" {
-		createdAt = msgs[0].Timestamp
+	for _, m := range msgs {
+		if m.Timestamp != "" {
+			createdAt = m.Timestamp
+			break
+		}
 	}
 
-	// Count user-visible messages (user + tool_use)
+	// Count user/assistant turns.
 	messageCount := 0
 	for _, m := range msgs {
-		if m.Type == "user" || m.Type == "tool_use" {
+		if m.Type == "user" || m.Type == "assistant" {
 			messageCount++
 		}
 	}
@@ -334,45 +429,13 @@ func renderClaudeCodeMarkdown(sessionID string, msgs []claudeCodeMessage) string
 		switch msg.Type {
 		case "user":
 			fmt.Fprintf(&b, "\n## human (%s)\n\n", ts)
-			b.WriteString(msg.Content)
+			b.WriteString(msg.extractText())
 			b.WriteString("\n")
 
-		case "tool_use":
+		case "assistant":
 			fmt.Fprintf(&b, "\n## assistant (%s)\n\n", ts)
-			fmt.Fprintf(&b, "Tool: %s\n", msg.ToolName)
-			if len(msg.ToolInput) > 0 && string(msg.ToolInput) != "null" {
-			var inputMap map[string]interface{}
-			if err := json.Unmarshal(msg.ToolInput, &inputMap); err == nil {
-				keys := make([]string, 0, len(inputMap))
-				for k := range inputMap {
-					keys = append(keys, k)
-				}
-				sort.Strings(keys)
-				for _, k := range keys {
-					fmt.Fprintf(&b, "%s: %v\n", k, inputMap[k])
-				}
-			}
-			}
+			b.WriteString(msg.extractText())
 			b.WriteString("\n")
-
-		case "tool_result":
-			// Include tool results inline for context
-			fmt.Fprintf(&b, "\n## tool_result (%s)\n\n", ts)
-			if len(msg.ToolOutput) > 0 && string(msg.ToolOutput) != "null" {
-				var outputMap map[string]interface{}
-				if err := json.Unmarshal(msg.ToolOutput, &outputMap); err == nil {
-					if out, ok := outputMap["output"]; ok {
-						fmt.Fprintf(&b, "%v\n", out)
-					} else {
-						// Fallback: output key missing (e.g. error or other metadata)
-						b.WriteString(string(msg.ToolOutput))
-						b.WriteString("\n")
-					}
-				} else {
-					b.WriteString(string(msg.ToolOutput))
-					b.WriteString("\n")
-				}
-			}
 		}
 	}
 
