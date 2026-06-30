@@ -30,7 +30,7 @@ func (s *HarvestSummarizer) SetLinkExtractor(resolver *links.Resolver, extractor
 // the same mapping as SummarizeAndPersist, then delegates to the Persister.
 // This is called on the harvester content-unchanged skip path to backfill
 // summaries created before write_to_disk was enabled.
-func (s *HarvestSummarizer) EnsureSummaryOnDisk(ctx context.Context, summaryMarkdown string, meta harvest.SummaryMeta) error {
+func (s *HarvestSummarizer) EnsureSummaryOnDisk(ctx context.Context, summaryMarkdown string, meta harvest.SummaryMeta) {
 	sessionMeta := SessionMetadata{
 		Source:        Source(meta.Source),
 		SessionID:     meta.SessionID,
@@ -46,7 +46,6 @@ func (s *HarvestSummarizer) EnsureSummaryOnDisk(ctx context.Context, summaryMark
 		WorkspaceHash: meta.WorkspaceHash,
 	}
 	s.persister.EnsureSummaryOnDisk(ctx, summaryMarkdown, sessionMeta)
-	return nil
 }
 
 func (s *HarvestSummarizer) SummarizeAndPersist(ctx context.Context, content string, meta harvest.SummaryMeta) error {

@@ -209,13 +209,16 @@ func (p *Persister) persistToDisk(ctx context.Context, summaryMarkdown string, m
 		p.logger.Warn().Err(err).Str("path", targetPath).Msg("disk persist: resolveCollision failed")
 		return
 	}
-	// Idempotent skip: if the file already exists with identical content, do
-	// not rewrite. ResolveCollision already returned the base path when content
-	// matches (see diskwrite.go), but we also guard here so WriteFileAtomic is
-	// never called unnecessarily (avoids spurious fsync + rename each cycle).
-	if existing, readErr := os.ReadFile(finalPath); readErr == nil && string(existing) == summaryMarkdown {
-		p.logger.Debug().Str("path", finalPath).Str("session_id", meta.SessionID).Msg("disk persist: file unchanged, skipping rewrite")
-		return
+	// Idempotent skip: ResolveCollision returns the base path (targetPath)
+	// when the file exists with matching content. If finalPath == targetPath
+	// and the file exists, the content already matches — skip the write.
+	// This avoids a second full file read; os.Stat is sufficient to confirm
+	// existence (ResolveCollision already did the byte comparison).
+	if finalPath == targetPath {
+		if _, statErr := os.Stat(finalPath); statErr == nil {
+			p.logger.Debug().Str("path", finalPath).Str("session_id", meta.SessionID).Msg("disk persist: file unchanged, skipping rewrite")
+			return
+		}
 	}
 	if err := WriteFileAtomic(finalPath, []byte(summaryMarkdown)); err != nil {
 		p.logger.Warn().Err(err).Str("path", finalPath).Msg("disk persist: writeFileAtomic failed")

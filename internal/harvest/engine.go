@@ -143,9 +143,9 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 				// before write_to_disk was enabled, the file may be absent.
 				// Type assertion keeps SessionSummarizer interface stable.
 				if dw, ok := e.summarizer.(interface {
-					EnsureSummaryOnDisk(context.Context, string, SummaryMeta) error
+					EnsureSummaryOnDisk(context.Context, string, SummaryMeta)
 				}); ok {
-					_ = dw.EnsureSummaryOnDisk(ctx, existing.Content, SummaryMeta{
+					dw.EnsureSummaryOnDisk(ctx, existing.Content, SummaryMeta{
 						Source:        e.source.Name(),
 						SessionID:     sess.SessionID,
 						Title:         sess.Title,

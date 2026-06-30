@@ -5,7 +5,6 @@ package summarize
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -52,10 +51,7 @@ func TestEnsureSummaryOnDisk_BackfillsAndIsIdempotent(t *testing.T) {
 	p := NewPersister(pgDB, nil, true, outputDir, zerolog.Nop())
 
 	// Confirm the file does NOT exist yet.
-	expectedPath := filepath.Join(outputDir, wsName,
-		BuildDiskPath("", wsName, wsHash, string(SourceClaude), meta.Title, createdAt)[len(""):])
-	// Build the expected path the same way BuildDiskPath does.
-	expectedPath = BuildDiskPath(outputDir, wsName, wsHash, string(SourceClaude), meta.Title, createdAt)
+	expectedPath := BuildDiskPath(outputDir, wsName, wsHash, string(SourceClaude), meta.Title, createdAt)
 
 	if _, err := os.Stat(expectedPath); err == nil {
 		t.Fatalf("precondition failed: file already exists at %s", expectedPath)
