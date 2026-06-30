@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
@@ -187,6 +188,11 @@ func (p *Persister) Save(ctx context.Context, summaryMarkdown string, meta Sessi
 // persistToDisk writes the summary markdown to a file under outputDir. Errors
 // are logged but never propagated — DB persist already succeeded; disk is a
 // derivative view. See issue #258.
+//
+// The write is idempotent: if the file already exists at the resolved path and
+// its content is byte-for-byte identical to summaryMarkdown, the function
+// returns without rewriting. This prevents per-cycle rewrites when the
+// harvester calls EnsureSummaryOnDisk on unchanged sessions.
 func (p *Persister) persistToDisk(ctx context.Context, summaryMarkdown string, meta SessionMetadata, _ uuid.UUID, q *sqlc.Queries) {
 	ws, err := q.GetWorkspaceByHash(ctx, meta.WorkspaceHash)
 	var wsName string
@@ -203,11 +209,33 @@ func (p *Persister) persistToDisk(ctx context.Context, summaryMarkdown string, m
 		p.logger.Warn().Err(err).Str("path", targetPath).Msg("disk persist: resolveCollision failed")
 		return
 	}
+	// Idempotent skip: if the file already exists with identical content, do
+	// not rewrite. ResolveCollision already returned the base path when content
+	// matches (see diskwrite.go), but we also guard here so WriteFileAtomic is
+	// never called unnecessarily (avoids spurious fsync + rename each cycle).
+	if existing, readErr := os.ReadFile(finalPath); readErr == nil && string(existing) == summaryMarkdown {
+		p.logger.Debug().Str("path", finalPath).Str("session_id", meta.SessionID).Msg("disk persist: file unchanged, skipping rewrite")
+		return
+	}
 	if err := WriteFileAtomic(finalPath, []byte(summaryMarkdown)); err != nil {
 		p.logger.Warn().Err(err).Str("path", finalPath).Msg("disk persist: writeFileAtomic failed")
 		return
 	}
 	p.logger.Info().Str("path", finalPath).Str("session_id", meta.SessionID).Msg("summary written to disk")
+}
+
+// EnsureSummaryOnDisk writes an already-stored summary to disk if the file is
+// absent. It is a no-op when writeToDisk is false, outputDir is empty, or the
+// file already exists with identical content (idempotent). Errors are logged
+// inside persistToDisk and never propagated.
+//
+// This is used by harvesters on the content-unchanged skip path to backfill
+// summaries that were created before write_to_disk was enabled.
+func (p *Persister) EnsureSummaryOnDisk(ctx context.Context, summaryMarkdown string, meta SessionMetadata) {
+	if !p.writeToDisk || p.outputDir == "" {
+		return
+	}
+	p.persistToDisk(ctx, summaryMarkdown, meta, uuid.Nil, sqlc.New(p.db))
 }
 
 // buildSourcePath returns the canonical source path for summary documents.

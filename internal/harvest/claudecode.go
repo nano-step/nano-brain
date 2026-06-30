@@ -134,6 +134,21 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 		WorkspaceHash: h.workspace,
 	})
 	if err == nil && existing.ContentHash == contentHash {
+		// Opportunistically backfill disk: if this summary was created before
+		// write_to_disk was enabled, the file may be absent. The type assertion
+		// keeps the SessionSummarizer interface stable — mocks and other
+		// implementations that do not support disk backfill are unaffected.
+		if dw, ok := h.summarizer.(interface {
+			EnsureSummaryOnDisk(context.Context, string, SummaryMeta) error
+		}); ok {
+			_ = dw.EnsureSummaryOnDisk(ctx, existing.Content, SummaryMeta{
+				Source:        "claude",
+				SessionID:     sessionID,
+				Title:         "Claude Code Session " + sessionID,
+				CreatedAt:     existing.CreatedAt,
+				WorkspaceHash: h.workspace,
+			})
+		}
 		return harvestSkipped, nil
 	}
 
