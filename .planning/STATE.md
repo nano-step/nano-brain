@@ -6,7 +6,7 @@ current_phase: 10
 current_phase_name: Interactive MCP client auto-configuration after workspace registration
 status: Phase 10 in progress — Plans 01 and 03 of 03 complete; 02 pending
 stopped_at: Completed 10-03-PLAN.md
-last_updated: "2026-07-01T14:25:26.931Z"
+last_updated: "2026-07-01T14:25:48.764Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 10
@@ -60,6 +60,7 @@ Progress: [█████████░] 90%
 | Phase 09 P02 | 12min | 3 tasks | 3 files |
 | Phase 09 P03 | ~25min | 3 tasks | 4 files |
 | Phase 10 P01 | 3min | 2 tasks | 3 files |
+| Phase 10 P03 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,7 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 - [Phase 09-03]: Pre-existing unrelated failure TestMemoryTrace_RelativeInputAndOutput (graph_paths_integration_test.go, predates this phase) logged to deferred-items.md, not fixed (out of scope)
 - [Phase 10-01]: Populate initResponse.Name from ws.Name (UpsertWorkspace RETURNING clause) instead of a new query or client-side filepath.Base recomputation
 - [Phase 10-01]: RED test and GREEN implementation committed together per task (not split test/feat commits) because repo pre-commit harness-check.sh blocks commits while tests are red
+- [Phase 10-03]: Added `"enabled": true` to the SETUP_AGENT.md OpenCode example so the doc mirrors the exact config shape Plan 02's writeOpenCodeMCPConfig generates, not just the type field
 
 ### Pending Todos
 
@@ -106,6 +108,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-01T14:21:51.871Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-07-01T14:25:48.757Z
+Stopped at: Completed 10-03-PLAN.md
 Resume file: None
