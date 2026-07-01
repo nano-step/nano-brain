@@ -211,10 +211,10 @@ Plans:
 **Goal:** Let a `.mcp.json` MCP server entry bind a single default workspace via a `?workspace=<name-or-hash>` URL query param, so tool calls from that connection can omit the `workspace` argument and still resolve correctly; explicit `workspace` args continue to win, and no-arg + no-default still errors exactly as today.
 **Requirements**: none (feature phase, no formal REQ IDs)
 **Depends on:** Phase 8
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 
 - [x] 09-01-PLAN.md — Core mechanism: WrapStreamableHandler middleware + context-key + requireWorkspace/requireRegisteredWorkspace fallback + routes.go wiring (wave 1)
-- [ ] 09-02-PLAN.md — Drop "workspace" from required-fields across 14 tool schemas + description updates + schema-assertion test (wave 2)
+- [x] 09-02-PLAN.md — Drop "workspace" from required-fields across 14 tool schemas + description updates + schema-assertion test (wave 2)
 - [ ] 09-03-PLAN.md — Full-HTTP integration test (Pitfall 1) + write-path fallback test + ?workspace= config docs (wave 2)

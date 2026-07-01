@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 2
 current_phase_name: Import Edge Fix
 status: in-progress
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-07-01T12:07:49.678Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-07-01T12:20:00.000Z"
 last_activity: 2026-06-28
 last_activity_desc: Phase 1 (Vue SFC) verified complete (57/57 tests, -race)
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 22
 ---
 
@@ -58,6 +58,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 999.1 P01 | 258 | 2 tasks | 2 files |
 | Phase 999.1 P03 | ~8m | 3 tasks | 3 files |
 | Phase 09 P01 | 4min | 3 tasks | 4 files |
+| Phase 09 P02 | 12min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,8 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 - [Phase 999.1-03]: warmFileCacheFromDB idempotency via warmed map[string]bool under w.mu; degrade-gracefully on DB error; do-not-clobber in-memory entries fresher than DB
 - [Phase 09-01]: Context key kept unexported; only WrapStreamableHandler exported to avoid mcp/server import cycle
 - [Phase 09-01]: requireRegisteredWorkspace delegates its empty-check entirely to requireWorkspace to avoid shadowing the context-fallback for write tools
+- [Phase 09-02]: All 14 edited workspace property descriptions append the identical D-06 optional-note verbatim
+- [Phase 09-02]: Schema-assertion test decodes InputSchema via marshal/unmarshal round-trip into a local struct, since the SDK exposes InputSchema as `any`
 
 ### Pending Todos
 
@@ -96,6 +99,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-01T12:07:49.671Z
-Stopped at: Completed 09-01-PLAN.md
+Last session: 2026-07-01T12:20:00.000Z
+Stopped at: Completed 09-02-PLAN.md
 Resume file: None
