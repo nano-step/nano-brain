@@ -44,9 +44,16 @@ type ctxKeyDefaultWorkspace struct{}
 // resolution stays lazy inside requireWorkspace, avoiding an extra DB
 // round-trip on every request, including ones that don't need a workspace
 // (e.g. memory_status). An empty `workspace=` value is treated as absent.
+//
+// The literal "all" is also treated as absent (never stored as a default):
+// per D-02, a connection-level default must never resolve calls to the
+// cross-workspace "all" scope — that stays an explicit per-call opt-in only.
+// Without this guard, requireWorkspace's own "all" special-case would apply
+// to the fallback value too, silently turning every omitted-arg tool call on
+// an `?workspace=all`-configured connection into a cross-workspace query.
 func WrapStreamableHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if v := r.URL.Query().Get("workspace"); v != "" {
+		if v := r.URL.Query().Get("workspace"); v != "" && v != "all" {
 			r = r.WithContext(context.WithValue(r.Context(), ctxKeyDefaultWorkspace{}, v))
 		}
 		next.ServeHTTP(w, r)

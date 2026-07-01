@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -273,6 +275,41 @@ func TestRequireWorkspace_NoArgNoDefaultErrors(t *testing.T) {
 	text := errRes.Content[0].(*mcpsdk.TextContent).Text
 	if !strings.Contains(text, "workspace is required") {
 		t.Errorf("expected \"workspace is required\" error text, got %q", text)
+	}
+}
+
+// TestWrapStreamableHandler_RejectsAllAsDefault proves D-02: a connection
+// configured with `?workspace=all` must never let that value become the
+// per-connection default, since requireWorkspace's own "all" special-case
+// would otherwise apply to the fallback too — silently turning every
+// omitted-arg tool call on such a connection into a cross-workspace query.
+// "all" must stay reachable only as an explicit per-call argument.
+func TestWrapStreamableHandler_RejectsAllAsDefault(t *testing.T) {
+	var gotDefault any
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotDefault = r.Context().Value(ctxKeyDefaultWorkspace{})
+	})
+
+	cases := []struct {
+		name      string
+		query     string
+		wantValue any
+	}{
+		{"all is rejected as a default", "?workspace=all", nil},
+		{"empty is treated as absent", "?workspace=", nil},
+		{"a real name is accepted as a default", "?workspace=nano-brain", "nano-brain"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotDefault = nil
+			req := httptest.NewRequest(http.MethodPost, "/mcp"+tc.query, nil)
+			rec := httptest.NewRecorder()
+			WrapStreamableHandler(inner).ServeHTTP(rec, req)
+			if gotDefault != tc.wantValue {
+				t.Errorf("expected context default %v, got %v", tc.wantValue, gotDefault)
+			}
+		})
 	}
 }
 
