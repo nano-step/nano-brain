@@ -162,7 +162,7 @@ nano-brain init --root=/path/to/project
 nano-brain workspaces list
 ```
 
-The output includes the workspace hash — this is used to scope all queries to this project.
+The output includes both the workspace **name** and **hash** — either can be used to scope queries to this project, including the `?workspace=` connection default in Step 9.
 
 ---
 
@@ -201,7 +201,7 @@ Use `url: http://localhost:3100/mcp` with transport type `http` (MCP 2025-03-26 
 
 ### Binding a default workspace (optional)
 
-Append `?workspace=<name-or-hash>` to the MCP URL to bind a default workspace to the connection, e.g.:
+Append `?workspace=<name-or-hash>` to the MCP URL to bind a default workspace to the connection. Run `nano-brain workspaces list` (Step 8) to see the registered name and hash for this project, e.g.:
 ```json
 {
   "url": "http://localhost:3100/mcp?workspace=nano-brain"
