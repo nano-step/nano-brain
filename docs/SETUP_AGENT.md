@@ -199,6 +199,16 @@ Add to OpenCode config:
 ### Other MCP clients
 Use `url: http://localhost:3100/mcp` with transport type `http` (MCP 2025-03-26 streamable HTTP).
 
+### Binding a default workspace (optional)
+
+Append `?workspace=<name-or-hash>` to the MCP URL to bind a default workspace to the connection, e.g.:
+```json
+{
+  "url": "http://localhost:3100/mcp?workspace=nano-brain"
+}
+```
+With this set, `memory_*` tool calls can omit the `workspace` argument — the connection default is used automatically. An explicit `workspace` argument on a tool call always overrides the connection default. The value must be a workspace name or full hash (not `"all"`) — a connection is meant to be pinned to one project. This is optional; the plain URL without a query string still works exactly as before.
+
 After adding the config, restart your AI client and verify the tools are available:
 ```
 memory_status → should return {"pg_status":"healthy", ...}

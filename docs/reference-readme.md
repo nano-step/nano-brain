@@ -172,6 +172,8 @@ Add to your AI agent's MCP config (Claude Code, OpenCode, Cursor, etc.):
 }
 ```
 
+Optionally bind a default workspace to the connection by appending `?workspace=<name-or-hash>` to the URL (e.g. `"url": "http://localhost:3100/mcp?workspace=nano-brain"`) — tool calls can then omit the `workspace` argument. An explicit `workspace` argument always overrides the connection default; the value must be a name or full hash, not `"all"`.
+
 ## Configuration
 
 Config file: `~/.nano-brain/config.yml` (see `config.default.yml` / README for the full reference).
