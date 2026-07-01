@@ -16,6 +16,7 @@ Strengthen nano-brain's code intelligence and search across v1: add Vue SFC supp
 - [ ] **Phase 6: Benchmarks & Infrastructure** - LLM quality benchmarks, OpenAI embeddings, dashboard split
 - [ ] **Phase 7: HyDE & Documentation** - Auto-generate HyDE hints, complete docs
 - [x] **Phase 8: Session Harvest Unification & Ticket Linking** - Pluggable multi-source harvest, one sessions collection, cross-source/cross-repo ticket linking (completed 2026-06-29)
+- [x] **Phase 9: MCP workspace config binding** - Bind a default workspace to the MCP connection via a `?workspace=` URL query param so agents skip manual workspace discovery (completed 2026-07-01, PR #524)
 
 ## Phase Details
 
