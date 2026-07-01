@@ -165,7 +165,7 @@ Add to your AI agent's MCP config (Claude Code, OpenCode, Cursor, etc.):
 {
   "mcp": {
     "nano-brain": {
-      "type": "http",
+      "type": "remote",
       "url": "http://localhost:3100/mcp"
     }
   }

@@ -189,15 +189,16 @@ Add to OpenCode config:
 {
   "mcp": {
     "nano-brain": {
-      "type": "http",
-      "url": "http://localhost:3100/mcp"
+      "type": "remote",
+      "url": "http://localhost:3100/mcp",
+      "enabled": true
     }
   }
 }
 ```
 
 ### Other MCP clients
-Use `url: http://localhost:3100/mcp` with transport type `http` (MCP 2025-03-26 streamable HTTP).
+Use `url: http://localhost:3100/mcp` with transport type `http` (MCP 2025-03-26 streamable HTTP) for Claude Code and generic streamable-HTTP clients. Note: OpenCode's own config schema names this transport `"type": "remote"` (not `"http"`).
 
 ### Binding a default workspace (optional)
 
