@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 9
 current_phase_name: MCP workspace config binding — bind a default workspace to the connection
 status: "Phase 9 shipped — PR #524"
-stopped_at: Completed 09-03-PLAN.md — Phase 9 implementation complete, ready for verification
-last_updated: "2026-07-01T12:42:52.426Z"
+stopped_at: Phase 10 context gathered
+last_updated: "2026-07-01T14:00:10.320Z"
 last_activity: 2026-07-01
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 3
   total_plans: 7
   completed_plans: 7
-  percent: 33
+  percent: 30
 ---
 
 # Project State
@@ -65,6 +65,7 @@ Progress: [██████████] 100%
 ### Roadmap Evolution
 
 - Phase 9 added: MCP workspace config binding — bind a default workspace to the MCP connection via a URL query param so agents skip manual workspace discovery
+- Phase 10 added: Interactive MCP client auto-configuration — after workspace registration, prompt which AI clients to auto-configure MCP for, writing each client's config with the ?workspace= URL from Phase 9
 
 ### Decisions
 
@@ -102,6 +103,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-01T19:26:00.000Z
-Stopped at: Completed 09-03-PLAN.md — Phase 9 implementation complete (3/3 plans executed), ready for verification
-Resume file: None
+Last session: 2026-07-01T14:00:10.312Z
+Stopped at: Phase 10 context gathered
+Resume file: .planning/phases/10-interactive-mcp-client-auto-configuration-after-workspace-re/10-CONTEXT.md
