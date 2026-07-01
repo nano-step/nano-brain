@@ -2,13 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 2
-current_phase_name: Import Edge Fix
-status: in-progress
+current_phase: 9
+current_phase_name: MCP workspace config binding — bind a default workspace to the connection
+status: "Phase 9 shipped — PR #524"
 stopped_at: Completed 09-03-PLAN.md — Phase 9 implementation complete, ready for verification
-last_updated: "2026-07-01T12:27:43.343Z"
-last_activity: 2026-06-28
-last_activity_desc: Phase 1 (Vue SFC) verified complete (57/57 tests, -race)
+last_updated: "2026-07-01T12:42:52.426Z"
+last_activity: 2026-07-01
 progress:
   total_phases: 9
   completed_phases: 3
@@ -30,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 
 Phase: 9 of 9 (MCP workspace config binding — bind a default workspace to the connection)
 Plan: 3 of 3 in current phase (complete)
-Status: Ready for verification
-Last activity: 2026-07-01 — Phase 9 Plan 3 executed: full-HTTP integration test (Pitfall 1), write-path connection-default test, and ?workspace= config docs
+Status: Phase 9 shipped — PR #524
+Last activity: 2026-07-01
 
 Progress: [██████████] 100%
 
