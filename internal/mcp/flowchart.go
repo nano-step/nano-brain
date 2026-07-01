@@ -19,9 +19,9 @@ func registerMemoryFlowchart(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_flowchart",
 			Description: "Function-level control-flow graph (CFG). Use when you need branches/conditionals inside one function, not cross-function calls. Identify the function by 'file::startLine-endLine' (e.g. 'src/routes/purchase.ts::15-48') or 'file.rb::ClassName#method' (e.g. 'app/controllers/users_controller.rb::UsersController#create'). For HTTP route execution flow use memory_flow; for downstream calls use memory_trace. Returns found:false when no flowchart is stored for that span or when flow indexing is disabled.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash"},
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash. Optional if the MCP connection was configured with a default workspace via the ?workspace= URL query param; otherwise required."},
 				"node":      {"type": "string", "description": "Single function span as 'file::startLine-endLine' or 'file.rb::ClassName#method'. Use memory_symbols first if you need to locate the function."},
-			}, []string{"workspace", "node"}),
+			}, []string{"node"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 			if !a.flowCfg.Enabled {
