@@ -5,16 +5,16 @@ milestone_name: milestone
 current_phase: 2
 current_phase_name: Import Edge Fix
 status: in-progress
-stopped_at: Phase 1 marked complete; `.planning/` cleaned and aligned to GSD canonical format
-last_updated: "2026-06-30T05:57:43.325Z"
+stopped_at: Phase 9 context gathered
+last_updated: "2026-07-01T11:40:04.790Z"
 last_activity: 2026-06-28
 last_activity_desc: Phase 1 (Vue SFC) verified complete (57/57 tests, -race)
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 2
   total_plans: 4
   completed_plans: 4
-  percent: 25
+  percent: 22
 ---
 
 # Project State
@@ -60,6 +60,10 @@ Progress: [█░░░░░░░░░] 14%
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 9 added: MCP workspace config binding — bind a default workspace to the MCP connection via a URL query param so agents skip manual workspace discovery
+
 ### Decisions
 
 Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
@@ -89,6 +93,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-06-30T13:04:00Z
-Stopped at: Completed 999.1-03-PLAN.md — Fix B watcher wiring (warmFileCacheFromDB + ModTime/FileSize persistence + integration test)
-Resume file: None
+Last session: 2026-07-01T11:40:04.782Z
+Stopped at: Phase 9 context gathered
+Resume file: .planning/phases/09-mcp-workspace-config-binding-bind-a-default-workspace-to-the/09-CONTEXT.md
