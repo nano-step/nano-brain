@@ -57,7 +57,10 @@ func main() {
 	// stdlib flag intercepts -h/--help (and flag-parse errors) before this
 	// function's command dispatch below ever runs; without this override
 	// the user would see only the global flags above, not the command list.
-	flag.Usage = printUsage
+	// Routed to stderr to match flag's own default Output() and to keep
+	// error-path usage text out of stdout (so e.g. a bad flag doesn't
+	// pollute stdout for a caller checking command output).
+	flag.Usage = func() { printUsage(os.Stderr) }
 	flag.Parse()
 
 	initCLILog(configPath)
@@ -171,11 +174,11 @@ func main() {
 			runVersionCmd(args[1:])
 			return
 		case "help":
-			printUsage()
+			printUsage(os.Stdout)
 			return
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", args[0])
-			printUsage()
+			printUsage(os.Stderr)
 			os.Exit(1)
 		}
 	}

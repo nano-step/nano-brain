@@ -1,8 +1,7 @@
 package main
 
 import (
-	"io"
-	"os"
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -20,30 +19,10 @@ var dispatchedCommands = []string{
 	"tags", "multi-get", "auth", "mcp-url", "version", "help",
 }
 
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	orig := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = orig }()
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(out)
-}
-
 func TestPrintUsage_ListsAllDispatchedCommands(t *testing.T) {
-	out := captureStdout(t, printUsage)
+	var buf bytes.Buffer
+	printUsage(&buf)
+	out := buf.String()
 
 	for _, cmd := range dispatchedCommands {
 		if !strings.Contains(out, cmd) {
@@ -53,8 +32,9 @@ func TestPrintUsage_ListsAllDispatchedCommands(t *testing.T) {
 }
 
 func TestPrintUsage_MentionsHelpCommand(t *testing.T) {
-	out := captureStdout(t, printUsage)
-	if !strings.Contains(out, "nano-brain help") && !strings.Contains(out, "help") {
+	var buf bytes.Buffer
+	printUsage(&buf)
+	if !strings.Contains(buf.String(), "help") {
 		t.Error("printUsage() should mention the help command")
 	}
 }

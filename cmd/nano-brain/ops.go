@@ -542,8 +542,14 @@ func runGooseMigrateCmd(jsonFlag bool) {
 	}
 }
 
-func printUsage() {
-	fmt.Printf(`nano-brain %s — persistent memory for AI coding agents
+// printUsage writes the full command list to w. Callers choose the stream:
+// the explicit `help` command writes to stdout (successful, informational
+// output), while -h/--help/flag-parse-errors and unknown-command errors
+// write to stderr (matching flag package's own default Output() and
+// keeping error-path text out of stdout for callers checking command
+// output).
+func printUsage(w io.Writer) {
+	fmt.Fprintf(w, `nano-brain %s — persistent memory for AI coding agents
 
 Usage: nano-brain [command] [flags]
 
