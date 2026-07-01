@@ -4,9 +4,9 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 10
 current_phase_name: Interactive MCP client auto-configuration after workspace registration
-status: "Phase 10 in progress — Plan 01 of 03 complete"
-stopped_at: Phase 10 Plan 01 complete
-last_updated: "2026-07-01T14:20:29.508Z"
+status: Phase 10 in progress — Plan 01 of 03 complete
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-07-01T14:21:51.878Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 10
@@ -59,6 +59,7 @@ Progress: [████████░░] 80%
 | Phase 09 P01 | 4min | 3 tasks | 4 files |
 | Phase 09 P02 | 12min | 3 tasks | 3 files |
 | Phase 09 P03 | ~25min | 3 tasks | 4 files |
+| Phase 10 P01 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,8 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 - [Phase 09-03]: TestRequireRegisteredWorkspace_UsesConnectionDefault placed in tools_internal_test.go (package mcp) not tools_security_test.go (package mcp_test) — needs the unexported ctxKeyDefaultWorkspace type plus real Postgres
 - [Phase 09-03]: memory_tags chosen as the read-tool probe for the full-HTTP integration test — requires only workspace, no registration-check side effect, isolating the test to the context-fallback-through-HTTP question
 - [Phase 09-03]: Pre-existing unrelated failure TestMemoryTrace_RelativeInputAndOutput (graph_paths_integration_test.go, predates this phase) logged to deferred-items.md, not fixed (out of scope)
+- [Phase 10-01]: Populate initResponse.Name from ws.Name (UpsertWorkspace RETURNING clause) instead of a new query or client-side filepath.Base recomputation
+- [Phase 10-01]: RED test and GREEN implementation committed together per task (not split test/feat commits) because repo pre-commit harness-check.sh blocks commits while tests are red
 
 ### Pending Todos
 
@@ -103,6 +106,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-01T14:00:10.312Z
-Stopped at: Phase 10 context gathered
-Resume file: .planning/phases/10-interactive-mcp-client-auto-configuration-after-workspace-re/10-CONTEXT.md
+Last session: 2026-07-01T14:21:51.871Z
+Stopped at: Completed 10-01-PLAN.md
+Resume file: None
