@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 10
 current_phase_name: Interactive MCP client auto-configuration after workspace registration
-status: Phase 10 in progress — Plans 01 and 03 of 03 complete; 02 pending
-stopped_at: Completed 10-03-PLAN.md
-last_updated: "2026-07-01T14:25:48.764Z"
+status: Phase 10 complete — 3/3 plans done, ready for review + PR
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-07-01T21:55:00.000Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 10
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** Impact analysis — "What breaks if I change this?" must return accurate, sub-50ms results.
-**Current focus:** Phase 10 — Interactive MCP client auto-configuration (Plans 01 and 03 of 03 complete; 02 pending)
+**Current focus:** Phase 10 complete (3/3 plans) — ready for independent review + PR (issue #525)
 
 ## Current Position
 
-Phase: 10 of 10 (Interactive MCP client auto-configuration after workspace registration)
-Plan: 03 complete out of order; 02 still pending (wave-independent plans)
-Status: Phase 10 in progress — Plans 01 and 03 of 03 complete; 02 pending
+Phase: 10 of 10 (Interactive MCP client auto-configuration after workspace registration) — complete
+Plan: 3/3 complete (01, 02, 03)
+Status: Phase 10 complete — 3/3 plans done, ready for review + PR
 Last activity: 2026-07-01
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [█████████░] 90%
 | Phase 09 P03 | ~25min | 3 tasks | 4 files |
 | Phase 10 P01 | 3min | 2 tasks | 3 files |
 | Phase 10 P03 | 3min | 2 tasks | 3 files |
+| Phase 10 P02 | n/a | 4 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 - [Phase 10-01]: Populate initResponse.Name from ws.Name (UpsertWorkspace RETURNING clause) instead of a new query or client-side filepath.Base recomputation
 - [Phase 10-01]: RED test and GREEN implementation committed together per task (not split test/feat commits) because repo pre-commit harness-check.sh blocks commits while tests are red
 - [Phase 10-03]: Added `"enabled": true` to the SETUP_AGENT.md OpenCode example so the doc mirrors the exact config shape Plan 02's writeOpenCodeMCPConfig generates, not just the type field
+- [Phase 10-02]: Codex CLI targets the GLOBAL ~/.codex/config.toml (CODEX_HOME-overridable), not project-local, to avoid Codex's trusted-project gate silently voiding the write
+- [Phase 10-02]: All config merges use a whole-file map[string]any model (never typed structs) so unrelated/unknown keys survive read-modify-write untouched
+- [Phase 10-02]: Human-verify checkpoint (Task 4) closed via a fully isolated live run — scratch project root, scratch CODEX_HOME, test server on nanobrain_test/:3199, expect-driven pseudo-TTY — confirming all 3 client configs, idempotent re-run, and --json skip
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-01T14:25:48.757Z
-Stopped at: Completed 10-03-PLAN.md
+Last session: 2026-07-01T21:55:00.000Z
+Stopped at: Completed 10-02-PLAN.md — Phase 10 complete (3/3), ready for review + PR
 Resume file: None
