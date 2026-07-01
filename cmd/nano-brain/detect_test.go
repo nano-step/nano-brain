@@ -236,3 +236,84 @@ func TestPlatformOpenCodeDBRootPaths_Windows(t *testing.T) {
 		t.Errorf("platformOpenCodeDBRootPaths() on windows = %v, want nil (no default)", got)
 	}
 }
+
+func TestDetectClaudeCodeConfigPath(t *testing.T) {
+	root := t.TempDir()
+	want := filepath.Join(root, ".mcp.json")
+	got := detectClaudeCodeConfigPath(root)
+	if got != want {
+		t.Errorf("detectClaudeCodeConfigPath(%q) = %q, want %q", root, got, want)
+	}
+}
+
+func TestDetectOpenCodeConfigPath_ProjectLocalDefault(t *testing.T) {
+	t.Setenv("OPENCODE_CONFIG", "")
+	root := t.TempDir()
+	want := filepath.Join(root, "opencode.json")
+	got := detectOpenCodeConfigPath(root)
+	if got != want {
+		t.Errorf("detectOpenCodeConfigPath(%q) = %q, want %q", root, got, want)
+	}
+}
+
+func TestDetectOpenCodeConfigPath_EnvOverride(t *testing.T) {
+	root := t.TempDir()
+	envFile := filepath.Join(t.TempDir(), "custom-opencode.json")
+	if err := os.WriteFile(envFile, []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+	t.Setenv("OPENCODE_CONFIG", envFile)
+
+	got := detectOpenCodeConfigPath(root)
+	if got != envFile {
+		t.Errorf("detectOpenCodeConfigPath(%q) = %q, want %q (env override)", root, got, envFile)
+	}
+}
+
+func TestDetectOpenCodeConfigPath_EnvOverrideMissingFallsBack(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "does-not-exist.json")
+	t.Setenv("OPENCODE_CONFIG", missing)
+
+	want := filepath.Join(root, "opencode.json")
+	got := detectOpenCodeConfigPath(root)
+	if got != want {
+		t.Errorf("detectOpenCodeConfigPath(%q) = %q, want %q (env points at nonexistent file, should fall back)", root, got, want)
+	}
+}
+
+func TestDetectCodexConfigPath_Default(t *testing.T) {
+	t.Setenv("CODEX_HOME", "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	want := filepath.Join(home, ".codex", "config.toml")
+	got := detectCodexConfigPath()
+	if got != want {
+		t.Errorf("detectCodexConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestDetectCodexConfigPath_CodexHomeOverride(t *testing.T) {
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("HOME", t.TempDir())
+
+	want := filepath.Join(codexHome, "config.toml")
+	got := detectCodexConfigPath()
+	if got != want {
+		t.Errorf("detectCodexConfigPath() = %q, want %q (CODEX_HOME override)", got, want)
+	}
+}
+
+func TestDetectCodexConfigPath_CodexHomeMissingFallsBackToHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", filepath.Join(t.TempDir(), "does-not-exist"))
+
+	want := filepath.Join(home, ".codex", "config.toml")
+	got := detectCodexConfigPath()
+	if got != want {
+		t.Errorf("detectCodexConfigPath() = %q, want %q (nonexistent CODEX_HOME should fall back)", got, want)
+	}
+}

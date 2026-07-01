@@ -86,6 +86,48 @@ func platformOpenCodePaths() []string {
 	return nil
 }
 
+// detectClaudeCodeConfigPath returns the project-local Claude Code MCP
+// config path (.mcp.json in the project root). Claude Code has no env-var
+// override or platform candidate list for this file — it is always
+// project-root-relative (RESEARCH Code Examples). The candidate path is
+// returned even when it does not yet exist; absence does not mean the
+// client isn't installed.
+func detectClaudeCodeConfigPath(projectRoot string) string {
+	return filepath.Join(projectRoot, ".mcp.json")
+}
+
+// detectOpenCodeConfigPath returns the project-local OpenCode MCP config
+// path (opencode.json in the project root), honoring an OPENCODE_CONFIG
+// env override when it points at a file that exists. Project-local config
+// has the highest precedence per OpenCode docs. The candidate path is
+// returned even when it does not yet exist.
+func detectOpenCodeConfigPath(projectRoot string) string {
+	if v := os.Getenv("OPENCODE_CONFIG"); v != "" {
+		if _, err := os.Stat(v); err == nil {
+			return v
+		}
+	}
+	return filepath.Join(projectRoot, "opencode.json")
+}
+
+// detectCodexConfigPath returns the global Codex CLI config path
+// (~/.codex/config.toml), honoring a CODEX_HOME env override when it
+// points at a directory that exists. Global config is used deliberately
+// (not project-scoped .codex/config.toml) to avoid Codex's trusted-project
+// gate silently voiding an auto-written config (RESEARCH Pitfall 2).
+func detectCodexConfigPath() string {
+	if v := os.Getenv("CODEX_HOME"); v != "" {
+		if info, err := os.Stat(v); err == nil && info.IsDir() {
+			return filepath.Join(v, "config.toml")
+		}
+	}
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = os.Getenv("USERPROFILE") // windows fallback
+	}
+	return filepath.Join(home, ".codex", "config.toml")
+}
+
 func detectOpenCodeDBPath() string {
 	if v := os.Getenv("OPENCODE_DB_PATH"); v != "" {
 		if _, err := os.Stat(v); err == nil {
