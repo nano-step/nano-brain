@@ -54,6 +54,13 @@ func main() {
 	flag.BoolVar(&serveOnlyFlag, "serve-only", false, "disable background workers (embed queue, watcher, harvester) — issue #282")
 	flag.IntVar(&verbose, "v", 0, "verbosity: 0=info, 1=debug, 2=trace")
 	flag.IntVar(&verbose, "verbose", 0, "")
+	// stdlib flag intercepts -h/--help (and flag-parse errors) before this
+	// function's command dispatch below ever runs; without this override
+	// the user would see only the global flags above, not the command list.
+	// Routed to stderr to match flag's own default Output() and to keep
+	// error-path usage text out of stdout (so e.g. a bad flag doesn't
+	// pollute stdout for a caller checking command output).
+	flag.Usage = func() { printUsage(os.Stderr) }
 	flag.Parse()
 
 	initCLILog(configPath)
@@ -167,16 +174,19 @@ func main() {
 			runVersionCmd(args[1:])
 			return
 		case "help":
-			printUsage()
+			printUsage(os.Stdout)
 			return
 		default:
 			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", args[0])
-			printUsage()
+			printUsage(os.Stderr)
 			os.Exit(1)
 		}
 	}
 
-	// No args: start server foreground (backward compat)
+	// No args: start server foreground (backward compat). Hint at `help`
+	// first since this is an easy accidental trigger for anyone exploring
+	// the CLI (e.g. running `nano-brain` alone expecting usage output).
+	fmt.Fprintln(os.Stderr, "No command given — starting server in foreground. Run 'nano-brain help' to see available commands.")
 	startServer(configPath)
 }
 

@@ -542,8 +542,14 @@ func runGooseMigrateCmd(jsonFlag bool) {
 	}
 }
 
-func printUsage() {
-	fmt.Printf(`nano-brain %s — persistent memory for AI coding agents
+// printUsage writes the full command list to w. Callers choose the stream:
+// the explicit `help` command writes to stdout (successful, informational
+// output), while -h/--help/flag-parse-errors and unknown-command errors
+// write to stderr (matching flag package's own default Output() and
+// keeping error-path text out of stdout for callers checking command
+// output).
+func printUsage(w io.Writer) {
+	fmt.Fprintf(w, `nano-brain %s — persistent memory for AI coding agents
 
 Usage: nano-brain [command] [flags]
 
@@ -576,6 +582,14 @@ Commands:
   docker             Manage Docker Compose (start/stop/status)
   db:migrate         Run database migrations
   bench              Benchmarking suite (generate/run/compare/stress)
+  context            Show symbol definition + call sites     [--workspace <hash>]
+  code-impact        Show blast radius of a symbol change    [--workspace <hash>] [--depth N]
+  detect-changes     List changed symbols since last commit  [--workspace <hash>] [--staged|--all]
+  auth               Manage auth credentials (hash/token)
+  reset-embeddings   Clear embeddings to force re-embedding  [--workspace=<hash>] [--dry-run]
+  backfill-summaries Export DB summaries to disk as .md      [--dry-run]
+  cleanup-stale-raw  Delete superseded raw session docs      [--dry-run]
+  cleanup-orphan-workspaces  Delete docs/chunks with no matching workspace [--dry-run]
   help               Show this help
 
 Global flags:
