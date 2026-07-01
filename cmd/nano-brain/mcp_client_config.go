@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -190,4 +191,165 @@ func writeCodexMCPConfig(baseMCPURL, workspaceName string) (changed bool, oldURL
 	}
 	changed, oldURL, err = mergeCodexTOMLEntry(configPath, entry)
 	return changed, oldURL, configPath, err
+}
+
+// shouldPromptMCPConfig reports whether promptMCPClientConfig should run at
+// all: only when --json was NOT passed AND stdin/stderr are both a TTY
+// (D-02). Non-interactive callers (scripts/CI) get no behavior change.
+func shouldPromptMCPConfig(jsonFlag, tty bool) bool {
+	return !jsonFlag && tty
+}
+
+// isAffirmative reports whether a promptWithDefault-style answer means
+// "yes", mirroring the existing "n"/"N" == no convention used throughout
+// init.go (any other non-empty, non-"n" answer, or the "Y" default itself,
+// means yes).
+func isAffirmative(answer string) bool {
+	return answer != "n" && answer != "N"
+}
+
+// promptMCPClientConfig is the D-01/D-07 orchestrator: for each of the
+// three supported clients (Claude Code, OpenCode, Codex CLI) it asks a Y/N
+// prompt via the injected scanner, and on "yes" reads-modifies-writes that
+// client's config bound to workspaceName. Before overwriting an existing
+// nano-brain entry whose url differs from the one about to be written, it
+// peeks the existing config, shows the old vs new url, and asks a second
+// Y/N confirmation (D-06) BEFORE calling the write func — a decline never
+// touches the file.
+//
+// The scanner is injectable so tests can feed canned answers against a
+// temp projectRoot; production callers pass bufio.NewScanner(os.Stdin).
+func promptMCPClientConfig(scanner *bufio.Scanner, projectRoot, workspaceName string) {
+	baseURL := resolveMCPURL("/.dockerenv")
+
+	fmt.Println()
+	fmt.Println("── MCP client configuration ──")
+
+	claudeURL := buildWorkspaceURL(baseURL, workspaceName)
+	promptAndWrite(scanner, "Claude Code", claudeURL, func() (string, string) {
+		return peekExistingJSONURL(detectClaudeCodeConfigPath(projectRoot), "mcpServers"), ""
+	}, func() (bool, string, string, error) {
+		return writeClaudeCodeMCPConfig(projectRoot, baseURL, workspaceName)
+	})
+
+	openCodeURL := buildWorkspaceURL(baseURL, workspaceName)
+	promptAndWrite(scanner, "OpenCode", openCodeURL, func() (string, string) {
+		return peekExistingJSONURL(detectOpenCodeConfigPath(projectRoot), "mcp"), ""
+	}, func() (bool, string, string, error) {
+		return writeOpenCodeMCPConfig(projectRoot, baseURL, workspaceName)
+	})
+
+	codexPath := detectCodexConfigPath()
+	codexURL := buildWorkspaceURL(baseURL, workspaceName)
+	codexChanged := promptAndWrite(scanner, "Codex CLI", codexURL, func() (string, string) {
+		oldURL, nonEmpty := peekExistingCodexURL(codexPath)
+		caveat := ""
+		if nonEmpty {
+			caveat = "rewriting this file may drop any hand-written comments (data keys/values are preserved)"
+		}
+		return oldURL, caveat
+	}, func() (bool, string, string, error) {
+		return writeCodexMCPConfig(baseURL, workspaceName)
+	})
+	if codexChanged {
+		fmt.Printf("  Note: %s is a GLOBAL config — it can only carry one nano-brain ?workspace= binding at a time across all your projects.\n", codexPath)
+	}
+}
+
+// writeFunc performs one client's config write, returning whether the
+// nano-brain entry changed, the previous url (if any, for the D-06
+// confirm), the config path written, and any error.
+type writeFunc func() (changed bool, oldURL string, configPath string, err error)
+
+// peekFunc peeks a client's existing config (without modifying it) and
+// returns the prior nano-brain "url" (empty if none) plus an optional
+// extra caveat line to print alongside the D-06 confirm (e.g. Codex's
+// comment-loss warning). Used so promptAndWrite can ask its overwrite
+// confirmation BEFORE any write happens.
+type peekFunc func() (oldURL, caveat string)
+
+// peekExistingJSONURL reads configPath (without modifying it) and returns
+// the "url" field of any existing raw[sectionKey]["nano-brain"] entry, or
+// "" if the file/section/entry doesn't exist. Used to drive the D-06
+// overwrite confirmation BEFORE any write happens.
+func peekExistingJSONURL(configPath, sectionKey string) string {
+	data, err := os.ReadFile(configPath)
+	if err != nil || len(data) == 0 {
+		return ""
+	}
+	raw := map[string]any{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return ""
+	}
+	section, ok := raw[sectionKey].(map[string]any)
+	if !ok {
+		return ""
+	}
+	nb, ok := section["nano-brain"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	u, _ := nb["url"].(string)
+	return u
+}
+
+// peekExistingCodexURL is peekExistingJSONURL's TOML equivalent for the
+// Codex CLI config, plus a report of whether the file is non-empty (used
+// to surface the comment-loss caveat, T-10-07).
+func peekExistingCodexURL(configPath string) (oldURL string, nonEmpty bool) {
+	data, err := os.ReadFile(configPath)
+	if err != nil || len(data) == 0 {
+		return "", false
+	}
+	raw := map[string]any{}
+	if _, err := toml.Decode(string(data), &raw); err != nil {
+		return "", true
+	}
+	servers, ok := raw["mcp_servers"].(map[string]any)
+	if !ok {
+		return "", true
+	}
+	nb, ok := servers["nano-brain"].(map[string]any)
+	if !ok {
+		return "", true
+	}
+	u, _ := nb["url"].(string)
+	return u, true
+}
+
+// promptAndWrite asks the per-client Y/N prompt via the injected scanner.
+// On "yes", it calls peek to check for an existing nano-brain entry with a
+// different url; if found, it shows old vs new (plus peek's optional
+// caveat line) and asks the D-06 overwrite confirmation BEFORE calling
+// write at all — declining never touches the file. Returns whether the
+// client's config was actually written.
+func promptAndWrite(scanner *bufio.Scanner, clientLabel, newURL string, peek peekFunc, write writeFunc) bool {
+	answer := promptWithDefault(scanner, fmt.Sprintf("Configure %s for this workspace?", clientLabel), "Y")
+	if !isAffirmative(answer) {
+		return false
+	}
+
+	if oldURL, caveat := peek(); oldURL != "" && oldURL != newURL {
+		fmt.Printf("  %s already has a nano-brain entry:\n    current: %s\n    new:     %s\n", clientLabel, oldURL, newURL)
+		if caveat != "" {
+			fmt.Printf("  Note: %s.\n", caveat)
+		}
+		confirm := promptWithDefault(scanner, "Overwrite existing nano-brain entry?", "Y")
+		if !isAffirmative(confirm) {
+			fmt.Printf("  Skipped %s (kept existing entry).\n", clientLabel)
+			return false
+		}
+	}
+
+	changed, _, writtenPath, err := write()
+	if err != nil {
+		fmt.Printf("  Error configuring %s: %v\n", clientLabel, err)
+		return false
+	}
+	if !changed {
+		fmt.Printf("  %s already configured for this workspace (no change).\n", clientLabel)
+		return false
+	}
+	fmt.Printf("  %s configured: %s\n", clientLabel, writtenPath)
+	return true
 }

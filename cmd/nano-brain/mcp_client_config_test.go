@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -406,5 +408,116 @@ func TestWriteCodexMCPConfig_Shape(t *testing.T) {
 	}
 	if _, hasType := nb["type"]; hasType {
 		t.Error("Codex entry should not have an explicit type key (transport inferred from url presence)")
+	}
+}
+
+func TestShouldPromptMCPConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		jsonFlag bool
+		tty      bool
+		want     bool
+	}{
+		{"tty and not json", false, true, true},
+		{"json flag suppresses even on tty", true, true, false},
+		{"non-tty suppresses even without json", false, false, false},
+		{"json and non-tty both suppress", true, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldPromptMCPConfig(tt.jsonFlag, tt.tty)
+			if got != tt.want {
+				t.Errorf("shouldPromptMCPConfig(%v, %v) = %v, want %v", tt.jsonFlag, tt.tty, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPromptMCPClientConfig_DeclineAllWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OPENCODE_CONFIG", "")
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	scanner := bufio.NewScanner(strings.NewReader("n\nn\nn\n"))
+	promptMCPClientConfig(scanner, dir, "my-workspace")
+
+	if _, err := os.Stat(filepath.Join(dir, ".mcp.json")); !os.IsNotExist(err) {
+		t.Errorf(".mcp.json should not exist after declining all, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "opencode.json")); !os.IsNotExist(err) {
+		t.Errorf("opencode.json should not exist after declining all, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(codexHome, "config.toml")); !os.IsNotExist(err) {
+		t.Errorf("config.toml should not exist after declining all, stat err = %v", err)
+	}
+}
+
+func TestPromptMCPClientConfig_SelectiveYesWritesOnlyThatClient(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OPENCODE_CONFIG", "")
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	// y for Claude Code, n for OpenCode, n for Codex.
+	scanner := bufio.NewScanner(strings.NewReader("y\nn\nn\n"))
+	promptMCPClientConfig(scanner, dir, "my-workspace")
+
+	if _, err := os.Stat(filepath.Join(dir, ".mcp.json")); err != nil {
+		t.Errorf(".mcp.json should exist after accepting Claude Code, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "opencode.json")); !os.IsNotExist(err) {
+		t.Errorf("opencode.json should not exist after declining OpenCode, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(codexHome, "config.toml")); !os.IsNotExist(err) {
+		t.Errorf("config.toml should not exist after declining Codex, stat err = %v", err)
+	}
+}
+
+func TestPromptMCPClientConfig_OverwriteConfirm_Declined(t *testing.T) {
+	dir := t.TempDir()
+	// Pre-seed .mcp.json with a nano-brain entry bound to a different workspace.
+	if _, _, _, err := writeClaudeCodeMCPConfig(dir, "http://localhost:3100/mcp", "old-workspace"); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	before, err := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	if err != nil {
+		t.Fatalf("read seeded config: %v", err)
+	}
+
+	// y to configure Claude Code, then n to decline the overwrite confirm; n, n for the other two clients.
+	scanner := bufio.NewScanner(strings.NewReader("y\nn\nn\nn\n"))
+	promptMCPClientConfig(scanner, dir, "new-workspace")
+
+	after, err := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	if err != nil {
+		t.Fatalf("read config after decline: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("file changed after declining overwrite confirm:\nbefore: %s\nafter:  %s", before, after)
+	}
+}
+
+func TestPromptMCPClientConfig_OverwriteConfirm_Accepted(t *testing.T) {
+	dir := t.TempDir()
+	if _, _, _, err := writeClaudeCodeMCPConfig(dir, "http://localhost:3100/mcp", "old-workspace"); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	// y to configure Claude Code, y to confirm overwrite; n, n for the other two clients.
+	scanner := bufio.NewScanner(strings.NewReader("y\ny\nn\nn\n"))
+	promptMCPClientConfig(scanner, dir, "new-workspace")
+
+	data, err := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	if err != nil {
+		t.Fatalf("read config after accept: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	nb := raw["mcpServers"].(map[string]any)["nano-brain"].(map[string]any)
+	if nb["url"] != "http://localhost:3100/mcp?workspace=new-workspace" {
+		t.Errorf("nano-brain.url = %v, want the new workspace url after confirmed overwrite", nb["url"])
 	}
 }

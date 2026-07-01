@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -112,6 +113,10 @@ func runInitCmd(args []string, configPath string) {
 	fmt.Printf("Root path: %s\n", result.RootPath)
 	fmt.Println()
 	fmt.Println(result.AgentsSnippet)
+
+	if shouldPromptMCPConfig(jsonFlag, isTTY()) {
+		promptMCPClientConfig(bufio.NewScanner(os.Stdin), result.RootPath, result.Name)
+	}
 
 	triggerInitBackground(result.WorkspaceHash, root)
 
