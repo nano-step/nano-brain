@@ -1,0 +1,13 @@
+# Codex CLI global config — realistic multi-server fixture for round-trip
+# fidelity testing (RESEARCH Pitfall 4 / A3). This comment is expected to be
+# LOST after a decode->encode round trip through mergeCodexTOMLEntry; the
+# data keys/values below must all survive.
+model = "o3"
+
+[mcp_servers.foo]
+command = "npx"
+args = ["-y", "@some/mcp-server"]
+
+[mcp_servers.bar]
+url = "https://example.com/mcp"
+bearer_token_env_var = "BAR_TOKEN"

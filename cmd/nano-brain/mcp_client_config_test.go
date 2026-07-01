@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestBuildWorkspaceURL(t *testing.T) {
@@ -222,5 +224,187 @@ func TestWriteOpenCodeMCPConfig_Shape(t *testing.T) {
 	}
 	if nb["url"] != "http://localhost:3100/mcp?workspace=my-workspace" {
 		t.Errorf("OpenCode url = %v, want the workspace-bound url", nb["url"])
+	}
+}
+
+func TestMergeCodexTOMLEntry_CreatesNewFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	entry := map[string]any{"url": "http://localhost:3100/mcp?workspace=foo"}
+
+	changed, oldURL, err := mergeCodexTOMLEntry(configPath, entry)
+	if err != nil {
+		t.Fatalf("mergeCodexTOMLEntry() error = %v", err)
+	}
+	if !changed {
+		t.Error("mergeCodexTOMLEntry() changed = false, want true (new file)")
+	}
+	if oldURL != "" {
+		t.Errorf("mergeCodexTOMLEntry() oldURL = %q, want \"\"", oldURL)
+	}
+
+	raw := map[string]any{}
+	if _, err := toml.DecodeFile(configPath, &raw); err != nil {
+		t.Fatalf("decode written config: %v", err)
+	}
+	servers, ok := raw["mcp_servers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcp_servers table missing: %#v", raw)
+	}
+	nb, ok := servers["nano-brain"].(map[string]any)
+	if !ok {
+		t.Fatalf("nano-brain table missing: %#v", servers)
+	}
+	if nb["url"] != "http://localhost:3100/mcp?workspace=foo" {
+		t.Errorf("nano-brain.url = %v, want the workspace url", nb["url"])
+	}
+}
+
+func TestMergeCodexTOMLEntry_RealisticRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	fixture, err := os.ReadFile(filepath.Join("testdata", "codex_config_multi_server.toml"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	if err := os.WriteFile(configPath, fixture, 0o644); err != nil {
+		t.Fatalf("write fixture copy: %v", err)
+	}
+
+	entry := map[string]any{"url": "http://localhost:3100/mcp?workspace=my-workspace"}
+	changed, oldURL, err := mergeCodexTOMLEntry(configPath, entry)
+	if err != nil {
+		t.Fatalf("mergeCodexTOMLEntry() error = %v", err)
+	}
+	if !changed {
+		t.Error("mergeCodexTOMLEntry() changed = false, want true")
+	}
+	if oldURL != "" {
+		t.Errorf("oldURL = %q, want \"\" (no prior nano-brain entry)", oldURL)
+	}
+
+	raw := map[string]any{}
+	if _, err := toml.DecodeFile(configPath, &raw); err != nil {
+		t.Fatalf("decode written config: %v", err)
+	}
+
+	if raw["model"] != "o3" {
+		t.Errorf("top-level model key dropped: got %v, want o3", raw["model"])
+	}
+
+	servers, ok := raw["mcp_servers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcp_servers table missing after merge: %#v", raw)
+	}
+
+	foo, ok := servers["foo"].(map[string]any)
+	if !ok {
+		t.Fatalf("pre-existing [mcp_servers.foo] dropped: %#v", servers)
+	}
+	if foo["command"] != "npx" {
+		t.Errorf("foo.command = %v, want npx", foo["command"])
+	}
+	fooArgs, ok := foo["args"].([]any)
+	if !ok || len(fooArgs) != 2 || fooArgs[0] != "-y" || fooArgs[1] != "@some/mcp-server" {
+		t.Errorf("foo.args = %#v, want [-y @some/mcp-server]", foo["args"])
+	}
+
+	bar, ok := servers["bar"].(map[string]any)
+	if !ok {
+		t.Fatalf("pre-existing [mcp_servers.bar] dropped: %#v", servers)
+	}
+	if bar["url"] != "https://example.com/mcp" {
+		t.Errorf("bar.url = %v, want https://example.com/mcp", bar["url"])
+	}
+	if bar["bearer_token_env_var"] != "BAR_TOKEN" {
+		t.Errorf("bar.bearer_token_env_var = %v, want BAR_TOKEN", bar["bearer_token_env_var"])
+	}
+
+	nb, ok := servers["nano-brain"].(map[string]any)
+	if !ok {
+		t.Fatalf("nano-brain table not added: %#v", servers)
+	}
+	if nb["url"] != "http://localhost:3100/mcp?workspace=my-workspace" {
+		t.Errorf("nano-brain.url = %v, want the workspace url", nb["url"])
+	}
+}
+
+func TestMergeCodexTOMLEntry_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	entry := map[string]any{"url": "http://localhost:3100/mcp?workspace=foo"}
+
+	if _, _, err := mergeCodexTOMLEntry(configPath, entry); err != nil {
+		t.Fatalf("first merge error = %v", err)
+	}
+	firstBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read after first merge: %v", err)
+	}
+
+	changed, _, err := mergeCodexTOMLEntry(configPath, entry)
+	if err != nil {
+		t.Fatalf("second merge error = %v", err)
+	}
+	if changed {
+		t.Error("second mergeCodexTOMLEntry() changed = true, want false (idempotent)")
+	}
+	secondBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read after second merge: %v", err)
+	}
+	if string(firstBytes) != string(secondBytes) {
+		t.Errorf("file bytes differ after idempotent re-run:\nfirst:  %s\nsecond: %s", firstBytes, secondBytes)
+	}
+}
+
+func TestMergeCodexTOMLEntry_DetectsURLChange(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	original := map[string]any{"url": "http://localhost:3100/mcp?workspace=old-name"}
+	if _, _, err := mergeCodexTOMLEntry(configPath, original); err != nil {
+		t.Fatalf("initial merge error = %v", err)
+	}
+
+	updated := map[string]any{"url": "http://localhost:3100/mcp?workspace=new-name"}
+	changed, oldURL, err := mergeCodexTOMLEntry(configPath, updated)
+	if err != nil {
+		t.Fatalf("update merge error = %v", err)
+	}
+	if !changed {
+		t.Error("mergeCodexTOMLEntry() changed = false, want true (url differs)")
+	}
+	if oldURL != "http://localhost:3100/mcp?workspace=old-name" {
+		t.Errorf("oldURL = %q, want the prior url", oldURL)
+	}
+}
+
+func TestWriteCodexMCPConfig_Shape(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	t.Setenv("CODEX_HOME", dir)
+
+	changed, _, gotPath, err := writeCodexMCPConfig("http://localhost:3100/mcp", "my-workspace")
+	if err != nil {
+		t.Fatalf("writeCodexMCPConfig() error = %v", err)
+	}
+	if !changed {
+		t.Error("writeCodexMCPConfig() changed = false, want true")
+	}
+	if gotPath != configPath {
+		t.Errorf("configPath = %q, want %q", gotPath, configPath)
+	}
+
+	raw := map[string]any{}
+	if _, err := toml.DecodeFile(configPath, &raw); err != nil {
+		t.Fatalf("decode written config: %v", err)
+	}
+	servers := raw["mcp_servers"].(map[string]any)
+	nb := servers["nano-brain"].(map[string]any)
+	if nb["url"] != "http://localhost:3100/mcp?workspace=my-workspace" {
+		t.Errorf("Codex url = %v, want the workspace-bound url", nb["url"])
+	}
+	if _, hasType := nb["type"]; hasType {
+		t.Error("Codex entry should not have an explicit type key (transport inferred from url presence)")
 	}
 }
