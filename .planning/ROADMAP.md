@@ -219,3 +219,16 @@ Plans:
 - [x] 09-01-PLAN.md — Core mechanism: WrapStreamableHandler middleware + context-key + requireWorkspace/requireRegisteredWorkspace fallback + routes.go wiring (wave 1)
 - [x] 09-02-PLAN.md — Drop "workspace" from required-fields across 14 tool schemas + description updates + schema-assertion test (wave 2)
 - [x] 09-03-PLAN.md — Full-HTTP integration test (Pitfall 1) + write-path fallback test + ?workspace= config docs (wave 2)
+
+### Phase 10: Interactive MCP client auto-configuration — after workspace registration, prompt which AI clients (Claude Code, OpenCode, Codex, other) to auto-configure MCP for, writing each client's config with the workspace-bound ?workspace= URL from Phase 9
+
+**Goal:** After `nano-brain init --root=<path>` registers a workspace on a TTY, interactively prompt which AI clients (Claude Code, OpenCode, Codex CLI) to auto-configure, writing each selected client's MCP config bound to `?workspace=<name>` — idempotent, merge-safe, and skipped under `--json`/non-TTY.
+**Requirements**: none mapped (feature phase, tracked via issue #525; scoped by CONTEXT.md D-01..D-08)
+**Depends on:** Phase 9
+**Plans:** 3 plans
+
+Plans:
+
+- [ ] 10-01-PLAN.md — Add workspace `name` to the /api/v1/init response + CLI decode (prerequisite for name-bound URL) (wave 1)
+- [ ] 10-02-PLAN.md — Config detection + JSON/TOML merge core + 3 client writers + prompt orchestration wired into runInitCmd (wave 2)
+- [ ] 10-03-PLAN.md — Fix stale OpenCode `type:http` → `type:remote` in docs (SETUP_AGENT.md, README.md, reference-readme.md) (wave 1)
