@@ -126,6 +126,9 @@ func TestInitWorkspaceHandler(t *testing.T) {
 	if _, ok := resp["agents_snippet"]; !ok {
 		t.Error("missing agents_snippet in response")
 	}
+	if resp["name"] != "test-project" {
+		t.Errorf("expected name %q, got %v", "test-project", resp["name"])
+	}
 }
 
 func TestInitWorkspaceHandlerMissingRootPath(t *testing.T) {

@@ -330,16 +330,23 @@ Each test gets an **isolated schema** (`test_<hash>`) created and dropped automa
 
 ## Development Workflow
 
-### OpenSpec-First (MANDATORY)
+### GSD Core Phase Loop (MANDATORY)
 
-Features, fixes, and refactors touching multiple files go through OpenSpec before coding.
+Features, fixes, and refactors touching multiple files go through GSD Core's phase loop before coding.
 
-1. **Propose** → `openspec new change "<name>"` → proposal.md, design.md, specs, tasks.md
-2. **Validate** → `openspec validate "<name>" --strict --no-interactive`
-3. **Implement** → `/opsx-apply` or work through tasks.md
-4. **Archive** → `openspec archive "<name>"` after merge
+1. **Discuss** → `/gsd-discuss-phase` — capture implementation decisions
+2. **Plan** → `/gsd-plan-phase` — research, decompose, verify plans
+3. **Execute** → `/gsd-execute-phase` — run plans in parallel waves
+4. **Verify** → `/gsd-verify-work` — check execution matches plans
+5. **Ship** → `/gsd-ship` — create PR, archive phase
 
-Skip only for: typo fixes, dependency bumps, single-line config changes.
+Skip only for: typo fixes, dependency bumps, single-line config changes (use `/gsd-quick` or `/gsd-fast`).
+
+## Harness Enforcement Default
+
+Every code change follows the Engineering Harness below by default — issue first, lane classification, validate:quick minimum, feature branch, PR. This applies even to fixes discovered mid-task; finding a bug does not exempt it from intake.
+
+**Bypass:** only when Tâm explicitly says to skip it (e.g. "do this without harness", "skip the issue"). Absent that instruction, assume strict harness applies.
 
 <!-- HARNESS:START -->
 <!-- Managed block - do not edit manually. Updated by: harness-init skill -->
@@ -392,10 +399,11 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 
 1. Create GitHub issue (`gh issue create --repo nano-step/nano-brain`) **before** classification
 2. Read `docs/FEATURE_INTAKE.md` → classify lane + change type → label issue
-3. Tiny → patch direct. Normal/high-risk → `/opsx-propose` for OpenSpec proposal
-4. Run deep-design gap analysis (Metis + Oracle) → revise until clean pass
-5. Implement → run validation ladder → user-flow test (if required)
-6. Review gate → PR → bot review loop → merge → `openspec archive`
+3. Tiny → patch direct. Normal/high-risk → `/gsd-discuss-phase` to capture decisions
+4. Run `/gsd-plan-phase` → research, decompose, verify plans
+5. Run `/gsd-execute-phase` → execute plans in parallel waves
+6. Run `/gsd-verify-work` → verify execution matches plans
+7. Run `/gsd-ship` → create PR, archive phase
 
 ### Gate lifecycle
 

@@ -239,7 +239,7 @@ Add to your MCP client config (Claude Code, OpenCode, Cursor, etc.):
 {
   "mcp": {
     "nano-brain": {
-      "type": "http",
+      "type": "remote",
       "url": "http://localhost:3100/mcp"
     }
   }

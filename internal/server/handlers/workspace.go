@@ -30,6 +30,7 @@ type initRequest struct {
 type initResponse struct {
 	WorkspaceHash string `json:"workspace_hash"`
 	RootPath      string `json:"root_path"`
+	Name          string `json:"name"`
 	AgentsSnippet string `json:"agents_snippet"`
 }
 
@@ -185,6 +186,7 @@ func InitWorkspace(q WorkspaceQuerier, db *sql.DB, fw *watcher.Watcher, watcherC
 		return c.JSON(http.StatusOK, initResponse{
 			WorkspaceHash: ws.Hash,
 			RootPath:      ws.Path,
+			Name:          ws.Name,
 			AgentsSnippet: snippet,
 		})
 	}

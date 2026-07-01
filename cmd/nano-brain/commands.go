@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -100,6 +101,7 @@ func runInitCmd(args []string, configPath string) {
 	var result struct {
 		WorkspaceHash string `json:"workspace_hash"`
 		RootPath      string `json:"root_path"`
+		Name          string `json:"name"`
 		AgentsSnippet string `json:"agents_snippet"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
@@ -111,6 +113,18 @@ func runInitCmd(args []string, configPath string) {
 	fmt.Printf("Root path: %s\n", result.RootPath)
 	fmt.Println()
 	fmt.Println(result.AgentsSnippet)
+
+	if shouldPromptMCPConfig(jsonFlag, isTTY()) {
+		if result.Name == "" {
+			// A server started before this CLI version was upgraded won't
+			// have returned a name (field didn't exist yet) — writing a
+			// ?workspace= URL with an empty name would silently produce a
+			// broken binding in every accepted client's config.
+			fmt.Println("Warning: server did not return a workspace name (server may need restarting) — skipping MCP client auto-configuration.")
+		} else {
+			promptMCPClientConfig(bufio.NewScanner(os.Stdin), result.RootPath, result.Name)
+		}
+	}
 
 	triggerInitBackground(result.WorkspaceHash, root)
 
