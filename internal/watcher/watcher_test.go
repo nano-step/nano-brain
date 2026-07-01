@@ -18,17 +18,18 @@ import (
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/rs/zerolog"
 )
 
 type mockQuerier struct {
-	upsertDocCalls        atomic.Int64
-	upsertChunkCalls      atomic.Int64
-	deleteChunkCalls      atomic.Int64
-	deleteDocCalls        atomic.Int64
+	upsertDocCalls          atomic.Int64
+	upsertChunkCalls        atomic.Int64
+	deleteChunkCalls        atomic.Int64
+	deleteDocCalls          atomic.Int64
 	getDocBySourcePathCalls atomic.Int64
 	updateFileStateCalls    atomic.Int64
-	sourcePathHash        map[string]string
+	sourcePathHash          map[string]string
 }
 
 func newMockQuerier() *mockQuerier {
@@ -246,6 +247,51 @@ func TestProcessFile_SkipsSameHash(t *testing.T) {
 	w.processFile(context.Background(), col, fp)
 	if mq.upsertDocCalls.Load() != 1 {
 		t.Fatalf("expected hash skip on second call, got %d total upserts", mq.upsertDocCalls.Load())
+	}
+}
+
+// fakeExtractor only recognizes one extension, mimicking how real language
+// extractors report zero symbols for files they don't parse (e.g. JSON).
+type fakeExtractor struct{ ext string }
+
+func (f fakeExtractor) Supports(ext string) bool { return ext == f.ext }
+
+func (f fakeExtractor) Extract(filePath string, _ []byte) ([]symbol.Symbol, error) {
+	return []symbol.Symbol{{Name: "Foo", Kind: symbol.KindFunction, File: filePath, Signature: "func Foo()", Language: "go"}}, nil
+}
+
+func TestProcessFile_SummarizeNotifyOnlyWhenSymbolsFound(t *testing.T) {
+	dir := t.TempDir()
+	mq := newMockQuerier()
+	w := newTestWatcher(mq, 2000, 300)
+	w.WithSymbolRegistry(symbol.NewRegistry(fakeExtractor{ext: ".go"}))
+
+	var notified atomic.Int64
+	w.WithSummarizeNotify(func() { notified.Add(1) })
+
+	col := watchedCollection{
+		name:          "code",
+		dirPath:       dir,
+		workspaceHash: "ws123",
+		globPattern:   "*",
+	}
+
+	jsonFile := filepath.Join(dir, "cache.json")
+	if err := os.WriteFile(jsonFile, []byte(`{"a":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w.processFile(context.Background(), col, jsonFile)
+	if notified.Load() != 0 {
+		t.Fatalf("expected no summarize notify for a file with zero extracted symbols, got %d", notified.Load())
+	}
+
+	goFile := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(goFile, []byte("package main\nfunc Foo() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w.processFile(context.Background(), col, goFile)
+	if notified.Load() != 1 {
+		t.Fatalf("expected summarize notify once a file yields symbols, got %d", notified.Load())
 	}
 }
 
