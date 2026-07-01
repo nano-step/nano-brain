@@ -100,6 +100,7 @@ func runInitCmd(args []string, configPath string) {
 	var result struct {
 		WorkspaceHash string `json:"workspace_hash"`
 		RootPath      string `json:"root_path"`
+		Name          string `json:"name"`
 		AgentsSnippet string `json:"agents_snippet"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
