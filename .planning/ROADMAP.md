@@ -225,10 +225,10 @@ Plans:
 **Goal:** After `nano-brain init --root=<path>` registers a workspace on a TTY, interactively prompt which AI clients (Claude Code, OpenCode, Codex CLI) to auto-configure, writing each selected client's MCP config bound to `?workspace=<name>` — idempotent, merge-safe, and skipped under `--json`/non-TTY.
 **Requirements**: none mapped (feature phase, tracked via issue #525; scoped by CONTEXT.md D-01..D-08)
 **Depends on:** Phase 9
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 
-- [ ] 10-01-PLAN.md — Add workspace `name` to the /api/v1/init response + CLI decode (prerequisite for name-bound URL) (wave 1)
+- [x] 10-01-PLAN.md — Add workspace `name` to the /api/v1/init response + CLI decode (prerequisite for name-bound URL) (wave 1)
 - [ ] 10-02-PLAN.md — Config detection + JSON/TOML merge core + 3 client writers + prompt orchestration wired into runInitCmd (wave 2)
 - [ ] 10-03-PLAN.md — Fix stale OpenCode `type:http` → `type:remote` in docs (SETUP_AGENT.md, README.md, reference-readme.md) (wave 1)
