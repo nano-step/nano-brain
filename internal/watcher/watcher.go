@@ -894,8 +894,8 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	w.extractAndInsertEntities(ctx, col.workspaceHash, chunks, chunkIDs)
 
 	if w.symbolRegistry != nil {
-		w.extractAndUpsertSymbols(ctx, col, filePath, content)
-		if w.summarizeNotify != nil {
+		numSyms := w.extractAndUpsertSymbols(ctx, col, filePath, content)
+		if numSyms > 0 && w.summarizeNotify != nil {
 			w.summarizeNotify()
 		}
 	}
@@ -909,14 +909,17 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	}
 }
 
-func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollection, filePath string, content []byte) {
+// extractAndUpsertSymbols parses filePath for language symbols and upserts them
+// as summary-eligible chunks. Returns the number of symbols found so callers can
+// avoid waking the code-summarization worker for files with none (e.g. JSON/text).
+func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollection, filePath string, content []byte) int {
 	syms, err := w.symbolRegistry.Extract(filePath, content)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("symbol extraction failed")
-		return
+		return 0
 	}
 	if len(syms) == 0 {
-		return
+		return 0
 	}
 
 	for _, s := range syms {
@@ -965,6 +968,8 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 		Str("file", filePath).
 		Int("symbols", len(syms)).
 		Msg("symbols extracted")
+
+	return len(syms)
 }
 
 // buildEdgeMetadata merges e.Metadata (if non-nil) with {"line", "language"},
