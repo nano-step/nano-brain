@@ -2,15 +2,91 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/migrations"
+	"github.com/pressly/goose/v3"
 )
+
+// mcpInternalTestDSN mirrors tools_security_test.go's mcpSecTestDSN — kept
+// as a private duplicate here since that helper lives in package mcp_test
+// and this file needs Postgres access from within package mcp (to reach the
+// unexported ctxKeyDefaultWorkspace type).
+func mcpInternalTestDSN() string {
+	if v := os.Getenv("NANO_BRAIN_TEST_DATABASE_URL"); v != "" {
+		return v
+	}
+	return "postgres://nanobrain:nanobrain@host.docker.internal:5432/nanobrain_test?sslmode=disable"
+}
+
+// setupInternalTestPG mirrors tools_security_test.go's setupMCPSecTestPG —
+// an isolated schema per test against the nanobrain_test Postgres instance.
+func setupInternalTestPG(t *testing.T) *sql.DB {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping postgres-dependent test in -short mode")
+	}
+
+	ctx := context.Background()
+	poolCfg, err := pgxpool.ParseConfig(mcpInternalTestDSN())
+	if err != nil {
+		t.Skip("postgres not available: " + err.Error())
+	}
+
+	schema := fmt.Sprintf("test_mcpi_%x", sha256.Sum256([]byte(t.Name())))[:19]
+	poolCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, fmt.Sprintf("SET search_path TO %s, public", schema))
+		return err
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		t.Skip("postgres not available: " + err.Error())
+	}
+
+	_, _ = pool.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE")
+	if _, err := pool.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
+		pool.Close()
+		t.Skip("postgres not available: " + err.Error())
+	}
+
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		pool.Close()
+		t.Fatal(err)
+	}
+	goose.SetTableName(schema + "_goose_version")
+	migrateDB := stdlib.OpenDBFromPool(pool)
+	if err := goose.UpContext(ctx, migrateDB, "."); err != nil {
+		migrateDB.Close()
+		pool.Close()
+		t.Fatal(err)
+	}
+	migrateDB.Close()
+	goose.SetTableName("goose_db_version")
+
+	pgDB := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() {
+		pgDB.Close()
+		_, _ = pool.Exec(context.Background(), "DROP SCHEMA IF EXISTS "+schema+" CASCADE")
+		pool.Close()
+	})
+	return pgDB
+}
 
 func ticketRow(workspaceHash, title, sourcePath, content string) sqlc.ListDocumentsByTagRow {
 	return sqlc.ListDocumentsByTagRow{
@@ -198,6 +274,53 @@ func TestRequireWorkspace_NoArgNoDefaultErrors(t *testing.T) {
 	if !strings.Contains(text, "workspace is required") {
 		t.Errorf("expected \"workspace is required\" error text, got %q", text)
 	}
+}
+
+// TestRequireRegisteredWorkspace_UsesConnectionDefault proves D-05 write-path
+// parity: requireRegisteredWorkspace (used by memory_write/memory_update)
+// honors the connection-default context value the same way requireWorkspace
+// does, and still enforces the registration check (GetWorkspaceByHash)
+// against the resolved workspace — a connection default cannot write to an
+// unregistered workspace. Also proves D-04 write-path: no default + no arg
+// still returns "workspace is required".
+func TestRequireRegisteredWorkspace_UsesConnectionDefault(t *testing.T) {
+	pgDB := setupInternalTestPG(t)
+	q := sqlc.New(pgDB)
+	a := &Adapter{queries: q}
+
+	wsName := "require-registered-ctx-default"
+	wsHash := hex.EncodeToString(sha256.New().Sum([]byte(wsName)))
+	if _, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
+		Hash: wsHash,
+		Name: wsName,
+		Path: "/tmp/" + wsName,
+	}); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+
+	t.Run("context default resolves to registered workspace", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), ctxKeyDefaultWorkspace{}, wsName)
+		ws, errRes := requireRegisteredWorkspace(ctx, a, map[string]any{})
+		if errRes != nil {
+			text := errRes.Content[0].(*mcpsdk.TextContent).Text
+			t.Fatalf("expected success via connection default, got error: %s", text)
+		}
+		if ws != wsHash {
+			t.Errorf("expected resolved hash %q, got %q", wsHash, ws)
+		}
+	})
+
+	t.Run("no default and no arg still requires workspace", func(t *testing.T) {
+		ctx := context.Background()
+		ws, errRes := requireRegisteredWorkspace(ctx, a, map[string]any{})
+		if errRes == nil {
+			t.Fatalf("expected error, got success with workspace %q", ws)
+		}
+		text := errRes.Content[0].(*mcpsdk.TextContent).Text
+		if !strings.Contains(text, "workspace is required") {
+			t.Errorf("expected \"workspace is required\", got: %s", text)
+		}
+	})
 }
 
 func TestPaginatedResponseOmitsTotal(t *testing.T) {
