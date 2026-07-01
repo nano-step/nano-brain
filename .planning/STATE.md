@@ -6,15 +6,15 @@ current_phase: 2
 current_phase_name: Import Edge Fix
 status: in-progress
 stopped_at: Completed 09-03-PLAN.md — Phase 9 implementation complete, ready for verification
-last_updated: "2026-07-01T12:26:29.000Z"
-last_activity: 2026-07-01
-last_activity_desc: Phase 9 (MCP workspace config binding) — all 3 plans executed, go build/test green including integration tests
+last_updated: "2026-07-01T12:27:43.343Z"
+last_activity: 2026-06-28
+last_activity_desc: Phase 1 (Vue SFC) verified complete (57/57 tests, -race)
 progress:
   total_phases: 9
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
   completed_plans: 7
-  percent: 22
+  percent: 33
 ---
 
 # Project State
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** Impact analysis — "What breaks if I change this?" must return accurate, sub-50ms results.
-**Current focus:** Phase 2 — Import Edge Fix
+**Current focus:** Phase 9 — MCP workspace config binding (complete, ready for verification)
 
 ## Current Position
 
-Phase: 2 of 7 (Import Edge Fix)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-06-28 — Phase 1 (Vue SFC) verified complete (57/57 tests, -race)
+Phase: 9 of 9 (MCP workspace config binding — bind a default workspace to the connection)
+Plan: 3 of 3 in current phase (complete)
+Status: Ready for verification
+Last activity: 2026-07-01 — Phase 9 Plan 3 executed: full-HTTP integration test (Pitfall 1), write-path connection-default test, and ?workspace= config docs
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -81,6 +81,9 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 - [Phase 09-01]: requireRegisteredWorkspace delegates its empty-check entirely to requireWorkspace to avoid shadowing the context-fallback for write tools
 - [Phase 09-02]: All 14 edited workspace property descriptions append the identical D-06 optional-note verbatim
 - [Phase 09-02]: Schema-assertion test decodes InputSchema via marshal/unmarshal round-trip into a local struct, since the SDK exposes InputSchema as `any`
+- [Phase 09-03]: TestRequireRegisteredWorkspace_UsesConnectionDefault placed in tools_internal_test.go (package mcp) not tools_security_test.go (package mcp_test) — needs the unexported ctxKeyDefaultWorkspace type plus real Postgres
+- [Phase 09-03]: memory_tags chosen as the read-tool probe for the full-HTTP integration test — requires only workspace, no registration-check side effect, isolating the test to the context-fallback-through-HTTP question
+- [Phase 09-03]: Pre-existing unrelated failure TestMemoryTrace_RelativeInputAndOutput (graph_paths_integration_test.go, predates this phase) logged to deferred-items.md, not fixed (out of scope)
 
 ### Pending Todos
 
@@ -100,6 +103,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-01T12:26:29.000Z
-Stopped at: Completed 09-03-PLAN.md — Phase 9 implementation complete, ready for verification
+Last session: 2026-07-01T19:26:00.000Z
+Stopped at: Completed 09-03-PLAN.md — Phase 9 implementation complete (3/3 plans executed), ready for verification
 Resume file: None
