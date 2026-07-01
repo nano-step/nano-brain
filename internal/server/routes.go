@@ -134,9 +134,13 @@ func registerRoutes(s *Server) {
 	s.echo.GET("/sse", echo.WrapHandler(sseHandler))
 	s.echo.POST("/sse", echo.WrapHandler(sseHandler))
 
-	s.echo.GET("/mcp", echo.WrapHandler(streamableHandler))
-	s.echo.POST("/mcp", echo.WrapHandler(streamableHandler))
-	s.echo.DELETE("/mcp", echo.WrapHandler(streamableHandler))
+	// Wrap streamableHandler with the default-workspace middleware BEFORE
+	// echo.WrapHandler, not as an echo.MiddlewareFunc — the SDK reads
+	// req.Context() directly, and Echo's c.Set values never reach it.
+	wrappedStreamable := mcp.WrapStreamableHandler(streamableHandler)
+	s.echo.GET("/mcp", echo.WrapHandler(wrappedStreamable))
+	s.echo.POST("/mcp", echo.WrapHandler(wrappedStreamable))
+	s.echo.DELETE("/mcp", echo.WrapHandler(wrappedStreamable))
 
 	s.echo.GET("/ui", func(c echo.Context) error {
 		return c.HTML(200, `<!DOCTYPE html>

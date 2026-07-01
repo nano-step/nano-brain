@@ -16,6 +16,7 @@ Strengthen nano-brain's code intelligence and search across v1: add Vue SFC supp
 - [ ] **Phase 6: Benchmarks & Infrastructure** - LLM quality benchmarks, OpenAI embeddings, dashboard split
 - [ ] **Phase 7: HyDE & Documentation** - Auto-generate HyDE hints, complete docs
 - [x] **Phase 8: Session Harvest Unification & Ticket Linking** - Pluggable multi-source harvest, one sessions collection, cross-source/cross-repo ticket linking (completed 2026-06-29)
+- [x] **Phase 9: MCP workspace config binding** - Bind a default workspace to the MCP connection via a `?workspace=` URL query param so agents skip manual workspace discovery (completed 2026-07-01, PR #524)
 
 ## Phase Details
 
@@ -204,4 +205,17 @@ Plans:
 
 - [x] 999.1-01-PLAN.md — Fix A: reorder content-hash dedup before graph edge extraction (wave 1)
 - [x] 999.1-02-PLAN.md — Fix B schema: add documents.mod_time+file_size, extend upsert, add preload query (wave 1)
-- [ ] 999.1-03-PLAN.md — Fix B wiring: persist fingerprint via os.Stat + warm fileCache from DB at startup (wave 2)
+- [x] 999.1-03-PLAN.md — Fix B wiring: persist fingerprint via os.Stat + warm fileCache from DB at startup (wave 2)
+
+### Phase 9: MCP workspace config binding — bind a default workspace to the MCP connection via a URL query param so agents skip manual workspace discovery
+
+**Goal:** Let a `.mcp.json` MCP server entry bind a single default workspace via a `?workspace=<name-or-hash>` URL query param, so tool calls from that connection can omit the `workspace` argument and still resolve correctly; explicit `workspace` args continue to win, and no-arg + no-default still errors exactly as today.
+**Requirements**: none (feature phase, no formal REQ IDs)
+**Depends on:** Phase 8
+**Plans:** 3/3 plans complete
+
+Plans:
+
+- [x] 09-01-PLAN.md — Core mechanism: WrapStreamableHandler middleware + context-key + requireWorkspace/requireRegisteredWorkspace fallback + routes.go wiring (wave 1)
+- [x] 09-02-PLAN.md — Drop "workspace" from required-fields across 14 tool schemas + description updates + schema-assertion test (wave 2)
+- [x] 09-03-PLAN.md — Full-HTTP integration test (Pitfall 1) + write-path fallback test + ?workspace= config docs (wave 2)
