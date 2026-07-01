@@ -1,12 +1,14 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 )
 
@@ -137,6 +139,64 @@ func TestFilterFields(t *testing.T) {
 	}
 	if _, exists := filtered["collection"]; exists {
 		t.Error("collection not requested but present")
+	}
+}
+
+// TestRequireWorkspace_ExplicitArgWins: an explicit "workspace" arg always
+// wins over a context-injected default (D-03). Both values resolve via the
+// "all" special-case (no DB round-trip needed), so this stays -short-safe;
+// the explicit arg "all" must be what's returned, not the context default.
+func TestRequireWorkspace_ExplicitArgWins(t *testing.T) {
+	a := &Adapter{}
+	ctx := context.WithValue(context.Background(), ctxKeyDefaultWorkspace{}, "ws-ctx-default")
+	args := map[string]any{"workspace": "all"}
+
+	ws, errRes := a.requireWorkspace(ctx, args)
+	if errRes != nil {
+		t.Fatalf("expected no error, got %v", errRes)
+	}
+	if ws != "all" {
+		t.Errorf("expected explicit arg %q to win over context default, got %q", "all", ws)
+	}
+}
+
+// TestRequireWorkspace_ContextFallback: when the "workspace" arg is omitted,
+// requireWorkspace falls back to the context-injected default (D-01). The
+// context default is "all" here purely so resolution short-circuits without
+// a DB round-trip; the assertion only cares that the "workspace is required"
+// error is NOT returned, proving the context value was picked up as input.
+func TestRequireWorkspace_ContextFallback(t *testing.T) {
+	a := &Adapter{}
+	ctx := context.WithValue(context.Background(), ctxKeyDefaultWorkspace{}, "all")
+	args := map[string]any{}
+
+	ws, errRes := a.requireWorkspace(ctx, args)
+	if errRes != nil {
+		t.Fatalf("expected context fallback to be used, got error: %v", errRes)
+	}
+	if ws != "all" {
+		t.Errorf("expected context default to be resolved, got %q", ws)
+	}
+}
+
+// TestRequireWorkspace_NoArgNoDefaultErrors: when neither the explicit arg
+// nor a context default is present, requireWorkspace returns the exact same
+// "workspace is required" error as before the fallback was added (D-04).
+func TestRequireWorkspace_NoArgNoDefaultErrors(t *testing.T) {
+	a := &Adapter{}
+	ctx := context.Background()
+	args := map[string]any{}
+
+	ws, errRes := a.requireWorkspace(ctx, args)
+	if errRes == nil {
+		t.Fatalf("expected error, got success with workspace %q", ws)
+	}
+	if len(errRes.Content) == 0 {
+		t.Fatal("expected error content")
+	}
+	text := errRes.Content[0].(*mcpsdk.TextContent).Text
+	if !strings.Contains(text, "workspace is required") {
+		t.Errorf("expected \"workspace is required\" error text, got %q", text)
 	}
 }
 

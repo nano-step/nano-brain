@@ -146,8 +146,19 @@ func parseArgs(raw json.RawMessage) (map[string]any, error) {
 	return args, nil
 }
 
+// requireWorkspace resolves the workspace to use for a tool call. It reads
+// the explicit "workspace" argument first (always wins when present); when
+// omitted, it falls back to the per-connection default injected into ctx by
+// WrapStreamableHandler (see streamable.go). When neither is present, it
+// returns the same "workspace is required" error as before this fallback was
+// added.
 func (a *Adapter) requireWorkspace(ctx context.Context, args map[string]any) (string, *mcpsdk.CallToolResult) {
 	input := argString(args, "workspace")
+	if input == "" {
+		if v, ok := ctx.Value(ctxKeyDefaultWorkspace{}).(string); ok && v != "" {
+			input = v
+		}
+	}
 	if input == "" {
 		return "", errResult("workspace is required")
 	}
@@ -166,12 +177,15 @@ func (a *Adapter) requireWorkspace(ctx context.Context, args map[string]any) (st
 // memory_update) — MCP transport bypasses HTTP middleware so registration
 // enforcement must happen inside each write tool (issue #238). Rejects the
 // literal "all" since cross-workspace writes are not supported.
+//
+// The "all" check runs against the raw argument (not the resolved value)
+// before delegating to requireWorkspace, since a connection-level default is
+// never "all" (D-02) — this keeps that rejection unaffected by the fallback.
+// The empty-arg check itself is NOT duplicated here: it is owned solely by
+// requireWorkspace, so the context-fallback (D-05) is not shadowed for write
+// tools (see RESEARCH.md Pitfall 2).
 func requireRegisteredWorkspace(ctx context.Context, a *Adapter, args map[string]any) (string, *mcpsdk.CallToolResult) {
-	input := argString(args, "workspace")
-	if input == "" {
-		return "", errResult("workspace is required")
-	}
-	if input == "all" {
+	if argString(args, "workspace") == "all" {
 		return "", errResult("workspace_all_not_supported: this tool does not accept the 'all' workspace scope; provide a specific registered workspace name or hash")
 	}
 	ws, errRes := a.requireWorkspace(ctx, args)
@@ -182,7 +196,7 @@ func requireRegisteredWorkspace(ctx context.Context, a *Adapter, args map[string
 	// Verify registration here to enforce the write-path constraint (issue #238).
 	if _, err := a.queries.GetWorkspaceByHash(ctx, ws); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", errResult(fmt.Sprintf("workspace_not_registered: workspace %q is not registered; use POST /api/v1/init to register it first", input))
+			return "", errResult(fmt.Sprintf("workspace_not_registered: workspace %q is not registered; use POST /api/v1/init to register it first", ws))
 		}
 		return "", errResult(fmt.Sprintf("workspace_lookup_failed: %v", err))
 	}
