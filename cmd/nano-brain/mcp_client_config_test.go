@@ -32,6 +32,26 @@ func TestBuildWorkspaceURL_EscapesSpecialChars(t *testing.T) {
 	}
 }
 
+// Bot-review regression: a base URL that already carries a query string
+// (e.g. a custom NANO_BRAIN_MCP_URL=".../mcp?token=abc" in a VPS/team
+// setup) must get an &-joined workspace param, not a malformed double-"?".
+func TestBuildWorkspaceURL_PreservesExistingQueryString(t *testing.T) {
+	got := buildWorkspaceURL("http://localhost:3100/mcp?token=abc", "nano-brain")
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("buildWorkspaceURL produced an unparseable URL: %q (err=%v)", got, err)
+	}
+	if strings.Count(got, "?") != 1 {
+		t.Errorf("buildWorkspaceURL() = %q, want exactly one '?' (existing query preserved, not double-appended)", got)
+	}
+	if parsed.Query().Get("token") != "abc" {
+		t.Errorf("buildWorkspaceURL() = %q, lost the existing token= query param", got)
+	}
+	if parsed.Query().Get("workspace") != "nano-brain" {
+		t.Errorf("buildWorkspaceURL() = %q, missing workspace= query param", got)
+	}
+}
+
 func TestMergeJSONMCPEntry_CreatesNewFile(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, ".mcp.json")

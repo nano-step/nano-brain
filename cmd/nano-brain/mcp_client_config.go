@@ -13,12 +13,22 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// buildWorkspaceURL appends a ?workspace=<name> query parameter to base,
-// URL-escaping name so workspace names containing spaces or other special
-// characters cannot inject invalid or unexpected URL structure into the
-// generated client config (V5 input-validation mitigation, T-10-06).
+// buildWorkspaceURL sets a workspace=<name> query parameter on base via
+// net/url rather than raw string concatenation, so a base URL that already
+// carries a query string (e.g. a custom NANO_BRAIN_MCP_URL with its own
+// ?token=... in a VPS/team setup) gets an additional &-joined parameter
+// instead of a malformed double-"?" URL. Falls back to simple
+// concatenation only if base fails to parse at all (V5 input-validation
+// mitigation, T-10-06).
 func buildWorkspaceURL(base, name string) string {
-	return base + "?workspace=" + url.QueryEscape(name)
+	u, err := url.Parse(base)
+	if err != nil {
+		return base + "?workspace=" + url.QueryEscape(name)
+	}
+	q := u.Query()
+	q.Set("workspace", name)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // mergeJSONMCPEntry reads configPath (if it exists), decodes it into a
