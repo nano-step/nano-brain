@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -71,6 +72,12 @@ func mergeJSONMCPEntry(configPath, sectionKey string, entry map[string]any) (cha
 	}
 	if writeErr := os.WriteFile(configPath, out, 0600); writeErr != nil {
 		return false, "", fmt.Errorf("write config %s: %w", configPath, writeErr)
+	}
+	// os.WriteFile's mode is only applied when creating a new file, so a
+	// pre-existing file written with looser permissions (e.g. 0644) must be
+	// explicitly tightened here to actually get 0600 (T-10-05).
+	if chmodErr := os.Chmod(configPath, 0600); chmodErr != nil {
+		return false, "", fmt.Errorf("chmod config %s: %w", configPath, chmodErr)
 	}
 
 	return changed, oldURL, nil
@@ -174,6 +181,11 @@ func mergeCodexTOMLEntry(configPath string, entry map[string]any) (changed bool,
 	}
 	if writeErr := os.WriteFile(configPath, buf.Bytes(), 0600); writeErr != nil {
 		return false, "", fmt.Errorf("write config %s: %w", configPath, writeErr)
+	}
+	// See mergeJSONMCPEntry's identical comment: WriteFile's mode is ignored
+	// for pre-existing files, so tighten permissions explicitly (T-10-05).
+	if chmodErr := os.Chmod(configPath, 0600); chmodErr != nil {
+		return false, "", fmt.Errorf("chmod config %s: %w", configPath, chmodErr)
 	}
 
 	return changed, oldURL, nil
@@ -317,6 +329,25 @@ func peekExistingCodexURL(configPath string) (oldURL string, nonEmpty bool) {
 	return u, true
 }
 
+// promptConsequential reads one line like promptWithDefault, but — unlike
+// that helper — distinguishes "user pressed Enter" (ok=true, defaultVal)
+// from "stdin closed" (ok=false). This file's two prompts gate file writes,
+// including an overwrite of an existing nano-brain entry (D-06); silently
+// treating EOF as an accept (promptWithDefault's normal contract) would let
+// a dropped session or closed stdin stream cause unconsented writes/
+// overwrites to disk (CR-01). Callers must treat ok=false as a decline.
+func promptConsequential(scanner *bufio.Scanner, prompt, defaultVal string) (answer string, ok bool) {
+	fmt.Printf("  %s [%s]: ", prompt, defaultVal)
+	if !scanner.Scan() {
+		return "", false
+	}
+	input := strings.TrimSpace(scanner.Text())
+	if input == "" {
+		return defaultVal, true
+	}
+	return input, true
+}
+
 // promptAndWrite asks the per-client Y/N prompt via the injected scanner.
 // On "yes", it calls peek to check for an existing nano-brain entry with a
 // different url; if found, it shows old vs new (plus peek's optional
@@ -324,8 +355,8 @@ func peekExistingCodexURL(configPath string) (oldURL string, nonEmpty bool) {
 // write at all — declining never touches the file. Returns whether the
 // client's config was actually written.
 func promptAndWrite(scanner *bufio.Scanner, clientLabel, newURL string, peek peekFunc, write writeFunc) bool {
-	answer := promptWithDefault(scanner, fmt.Sprintf("Configure %s for this workspace?", clientLabel), "Y")
-	if !isAffirmative(answer) {
+	answer, ok := promptConsequential(scanner, fmt.Sprintf("Configure %s for this workspace?", clientLabel), "Y")
+	if !ok || !isAffirmative(answer) {
 		return false
 	}
 
@@ -334,8 +365,8 @@ func promptAndWrite(scanner *bufio.Scanner, clientLabel, newURL string, peek pee
 		if caveat != "" {
 			fmt.Printf("  Note: %s.\n", caveat)
 		}
-		confirm := promptWithDefault(scanner, "Overwrite existing nano-brain entry?", "Y")
-		if !isAffirmative(confirm) {
+		confirm, ok := promptConsequential(scanner, "Overwrite existing nano-brain entry?", "Y")
+		if !ok || !isAffirmative(confirm) {
 			fmt.Printf("  Skipped %s (kept existing entry).\n", clientLabel)
 			return false
 		}

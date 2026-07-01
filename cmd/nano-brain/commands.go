@@ -115,7 +115,15 @@ func runInitCmd(args []string, configPath string) {
 	fmt.Println(result.AgentsSnippet)
 
 	if shouldPromptMCPConfig(jsonFlag, isTTY()) {
-		promptMCPClientConfig(bufio.NewScanner(os.Stdin), result.RootPath, result.Name)
+		if result.Name == "" {
+			// A server started before this CLI version was upgraded won't
+			// have returned a name (field didn't exist yet) — writing a
+			// ?workspace= URL with an empty name would silently produce a
+			// broken binding in every accepted client's config.
+			fmt.Println("Warning: server did not return a workspace name (server may need restarting) — skipping MCP client auto-configuration.")
+		} else {
+			promptMCPClientConfig(bufio.NewScanner(os.Stdin), result.RootPath, result.Name)
+		}
 	}
 
 	triggerInitBackground(result.WorkspaceHash, root)

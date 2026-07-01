@@ -338,7 +338,7 @@ Features, fixes, and refactors touching multiple files go through GSD Core's pha
 2. **Plan** → `/gsd-plan-phase` — research, decompose, verify plans
 3. **Execute** → `/gsd-execute-phase` — run plans in parallel waves
 4. **Verify** → `/gsd-verify-work` — check execution matches plans
-5. **Ship** → `/gsd-ship-phase` — create PR, archive phase
+5. **Ship** → `/gsd-ship` — create PR, archive phase
 
 Skip only for: typo fixes, dependency bumps, single-line config changes (use `/gsd-quick` or `/gsd-fast`).
 
@@ -403,7 +403,7 @@ This project uses an engineering harness for risk-classified, spec-driven develo
 4. Run `/gsd-plan-phase` → research, decompose, verify plans
 5. Run `/gsd-execute-phase` → execute plans in parallel waves
 6. Run `/gsd-verify-work` → verify execution matches plans
-7. Run `/gsd-ship-phase` → create PR, archive phase
+7. Run `/gsd-ship` → create PR, archive phase
 
 ### Gate lifecycle
 

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -139,6 +140,32 @@ func TestMergeJSONMCPEntry_Idempotent(t *testing.T) {
 	}
 	if string(firstBytes) != string(secondBytes) {
 		t.Errorf("file bytes differ after idempotent re-run:\nfirst:  %s\nsecond: %s", firstBytes, secondBytes)
+	}
+}
+
+// WR-01 regression: writing into a pre-existing, loosely-permissioned
+// config file must tighten it to 0600, not leave it at its prior mode —
+// os.WriteFile's mode argument is ignored when the target already exists.
+func TestMergeJSONMCPEntry_TightensPermissionsOnExistingFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix file permission bits don't apply on windows")
+	}
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, ".mcp.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0644); err != nil {
+		t.Fatalf("seed loosely-permissioned file: %v", err)
+	}
+
+	if _, _, err := mergeJSONMCPEntry(configPath, "mcpServers", map[string]any{"type": "http", "url": "x"}); err != nil {
+		t.Fatalf("mergeJSONMCPEntry: %v", err)
+	}
+
+	info, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Errorf("file mode = %o, want 0600 (pre-existing file permissions must be tightened)", info.Mode().Perm())
 	}
 }
 
@@ -360,6 +387,31 @@ func TestMergeCodexTOMLEntry_Idempotent(t *testing.T) {
 	}
 }
 
+// WR-01 regression: same permission-tightening requirement as the JSON
+// merge, for the TOML merge path.
+func TestMergeCodexTOMLEntry_TightensPermissionsOnExistingFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix file permission bits don't apply on windows")
+	}
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(""), 0644); err != nil {
+		t.Fatalf("seed loosely-permissioned file: %v", err)
+	}
+
+	if _, _, err := mergeCodexTOMLEntry(configPath, map[string]any{"url": "x"}); err != nil {
+		t.Fatalf("mergeCodexTOMLEntry: %v", err)
+	}
+
+	info, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Errorf("file mode = %o, want 0600 (pre-existing file permissions must be tightened)", info.Mode().Perm())
+	}
+}
+
 func TestMergeCodexTOMLEntry_DetectsURLChange(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.toml")
@@ -519,5 +571,80 @@ func TestPromptMCPClientConfig_OverwriteConfirm_Accepted(t *testing.T) {
 	nb := raw["mcpServers"].(map[string]any)["nano-brain"].(map[string]any)
 	if nb["url"] != "http://localhost:3100/mcp?workspace=new-workspace" {
 		t.Errorf("nano-brain.url = %v, want the new workspace url after confirmed overwrite", nb["url"])
+	}
+}
+
+// CR-01 regression: a dropped/closed stdin mid-sequence must never be
+// treated as an implicit "yes" — neither for the initial per-client prompt
+// nor for the D-06 overwrite confirmation.
+func TestPromptMCPClientConfig_StdinEOFDoesNotWriteAnything(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OPENCODE_CONFIG", "")
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	// No answers at all: scanner.Scan() returns false immediately, as if
+	// stdin closed before the user typed anything.
+	scanner := bufio.NewScanner(strings.NewReader(""))
+	promptMCPClientConfig(scanner, dir, "my-workspace")
+
+	if _, err := os.Stat(filepath.Join(dir, ".mcp.json")); !os.IsNotExist(err) {
+		t.Errorf(".mcp.json should not exist after stdin EOF, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "opencode.json")); !os.IsNotExist(err) {
+		t.Errorf("opencode.json should not exist after stdin EOF, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(codexHome, "config.toml")); !os.IsNotExist(err) {
+		t.Errorf("config.toml should not exist after stdin EOF, stat err = %v", err)
+	}
+}
+
+// CR-01 regression: EOF arriving after the first "yes" (simulating a
+// dropped session mid-sequence) must not cascade into an implicit "yes"
+// for the remaining clients.
+func TestPromptMCPClientConfig_StdinEOFAfterFirstAnswerStopsAtDecline(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OPENCODE_CONFIG", "")
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	// One real "y" for Claude Code, then EOF — OpenCode and Codex CLI must
+	// NOT be configured just because stdin ran out.
+	scanner := bufio.NewScanner(strings.NewReader("y\n"))
+	promptMCPClientConfig(scanner, dir, "my-workspace")
+
+	if _, err := os.Stat(filepath.Join(dir, ".mcp.json")); err != nil {
+		t.Errorf(".mcp.json should exist after explicit y, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "opencode.json")); !os.IsNotExist(err) {
+		t.Errorf("opencode.json should NOT exist after stdin EOF (was implicitly accepted), stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(codexHome, "config.toml")); !os.IsNotExist(err) {
+		t.Errorf("config.toml should NOT exist after stdin EOF (was implicitly accepted), stat err = %v", err)
+	}
+}
+
+// CR-01 regression: EOF at the D-06 overwrite-confirmation prompt must
+// decline the overwrite, not accept it.
+func TestPromptMCPClientConfig_StdinEOFAtOverwriteConfirmDeclines(t *testing.T) {
+	dir := t.TempDir()
+	if _, _, _, err := writeClaudeCodeMCPConfig(dir, "http://localhost:3100/mcp", "old-workspace"); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	before, err := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	if err != nil {
+		t.Fatalf("read seeded config: %v", err)
+	}
+
+	// y to configure Claude Code, then EOF right at the overwrite confirm.
+	scanner := bufio.NewScanner(strings.NewReader("y\n"))
+	promptMCPClientConfig(scanner, dir, "new-workspace")
+
+	after, err := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	if err != nil {
+		t.Fatalf("read config after EOF at overwrite confirm: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("file changed after stdin EOF at overwrite confirm (should decline, not accept):\nbefore: %s\nafter:  %s", before, after)
 	}
 }
