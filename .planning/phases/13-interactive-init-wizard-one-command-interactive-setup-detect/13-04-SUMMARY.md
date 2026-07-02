@@ -137,3 +137,11 @@ The plan's RED/GREEN task split could not produce two separate commits: the repo
 ---
 *Phase: 13-interactive-init-wizard-one-command-interactive-setup-detect*
 *Completed: 2026-07-02*
+
+## Self-Check: PASSED
+
+- FOUND: cmd/nano-brain/init_embedding.go
+- FOUND: cmd/nano-brain/init_embedding_test.go
+- FOUND: .planning/phases/13-interactive-init-wizard-one-command-interactive-setup-detect/13-04-SUMMARY.md
+- FOUND: cf673b2 (feat commit)
+- FOUND: 851b6b7 (docs commit, prior revision of this SUMMARY)
