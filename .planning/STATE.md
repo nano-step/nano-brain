@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 12
 current_phase_name: "Add OpenAPI 3.0 spec for the REST API"
-status: executing
-stopped_at: Completed 12-03-PLAN.md
-last_updated: "2026-07-02T13:30:00.000Z"
+status: Phase 12 complete — 4/4 plans done, ready for independent review + PR (issue #530)
+stopped_at: Completed 12-04-PLAN.md
+last_updated: "2026-07-02T13:48:00.000Z"
 last_activity: 2026-07-02
-last_activity_desc: "Phase 12 Wave 2 complete (Plans 02+03 merged) — Wave 3 (Plan 04) next"
+last_activity_desc: "Phase 12 complete — all 4 plans executed, issue #530 acceptance criteria closed"
 progress:
   total_phases: 12
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 14
-  completed_plans: 13
-  percent: 93
+  completed_plans: 14
+  percent: 100
 ---
 
 # Project State
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** Impact analysis — "What breaks if I change this?" must return accurate, sub-50ms results.
-**Current focus:** Phase 12 — OpenAPI 3.0 spec, 3/4 plans complete, Wave 3 (final convergence) next
+**Current focus:** Phase 12 complete (4/4 plans) — ready for independent review + PR (issue #530)
 
 ## Current Position
 
-Phase: 12 (Add OpenAPI 3.0 spec for the REST API) — EXECUTING
-Plan: 3 of 4 complete (01 foundation+spike, 02 core handler group, 03 graph/search handler group — both Wave 2 plans merged conflict-free after regenerating docs/openapi.json fresh); 04 (Wave 3, final convergence) remains
-Status: Executing Phase 12 — Wave 2 done, Wave 3 next
-Last activity: 2026-07-02 — Phase 12 Wave 2 complete (Plans 02+03 merged)
+Phase: 12 (Add OpenAPI 3.0 spec for the REST API) — complete
+Plan: 4/4 complete (01 foundation+spike, 02 core handler group, 03 graph/search handler group, 04 serve+drift-test+docs)
+Status: Phase 12 complete — 4/4 plans done, ready for independent review + PR (issue #530)
+Last activity: 2026-07-02 — Phase 12 complete, all 4 issue #530 acceptance criteria closed
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -97,6 +97,9 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 - [Phase 12-01]: Assumption A1 CONFIRMED PASS — swag's AST parser resolves unexported same-package struct types with complete schemas (health.go's healthResponse produced all 6 real fields); annotation-only approach proceeds for all ~60 routes, no struct-exporting needed
 - [Phase 12-01]: swag emits Swagger 2.0 natively; internal/openapigen.Generate() converts via kin-openapi's openapi2conv.ToV3() in the same call before anything is committed — docs/openapi.json root is always "openapi":"3.0.x", never "swagger"
 - [Phase 12-02/03]: Parallel worktree plans that each independently spot-checked `make generate-openapi` produced a real merge conflict in the generated docs/openapi.json (a data conflict, not a code conflict) even though the handler files themselves were confirmed disjoint — resolved by taking either side to complete the merge, then immediately regenerating fresh from the fully-merged annotations rather than hand-resolving JSON diff hunks. Worth remembering for any future phase with multiple parallel plans that touch a shared generated artifact.
+- [Phase 12-04]: `//go:embed` can't reach outside its own package directory, so the served spec needed a colocated copy (`internal/server/handlers/openapi.json`) mirroring the canonical `docs/openapi.json` — `make generate-openapi` writes both from the same Generate() call so they can never drift from each other
+- [Phase 12-04]: Route-reconciliation test compares actual registered routes.go paths (string-level) against the generated spec's paths, closing D-05/AC-3 for real — a route added without a swag annotation now fails `go test`, not just "in principle"
+- [Phase 12]: Both Plan 01 and Plan 04's human-verify checkpoints hit the same executor-instance message-queue desync (agent reports "still waiting"/"no new input" despite a detailed approval message being sent and queued, with git history showing the work already progressed) — resolved both times by independently re-verifying all checkpoint evidence directly rather than trusting the executor's stale self-report, then completing SUMMARY.md/STATE.md bookkeeping directly when the executor instance stopped responding further
 
 ### Pending Todos
 
@@ -116,6 +119,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-01T21:55:00.000Z
-Stopped at: Completed 10-02-PLAN.md — Phase 10 complete (3/3), ready for review + PR
+Last session: 2026-07-02T13:48:00.000Z
+Stopped at: Completed 12-04-PLAN.md — Phase 12 complete (4/4), ready for independent review + PR (issue #530)
 Resume file: None

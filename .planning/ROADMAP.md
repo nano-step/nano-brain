@@ -238,7 +238,7 @@ Plans:
 **Goal:** nano-brain's REST API is self-describing — a generated, drift-checked OpenAPI 3.0 document covering all ~60 routes in internal/server/routes.go is served at GET /api/openapi.json, kept in sync with the route table by an automated test so it can never silently go stale (issue #530).
 **Requirements**: D-01..D-06 (CONTEXT.md); issue #530 AC-1..AC-4
 **Depends on:** none (independent of Phase 11 — that work lives on a separate unmerged branch)
-**Plans:** 4 plans
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -252,7 +252,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 12-04-PLAN.md — Regenerate complete spec, serve at GET /api/openapi.json (public via BypassPaths), route-reconciliation drift test (single source of truth), handler test, docs pointer (README/SETUP_AGENT/CLAUDE.md) [Wave 3]
+- [x] 12-04-PLAN.md — Regenerate complete spec, serve at GET /api/openapi.json (public via BypassPaths), route-reconciliation drift test (single source of truth), handler test, docs pointer (README/SETUP_AGENT/CLAUDE.md) [Wave 3] — 53 paths, all 4 issue #530 acceptance criteria closed
 
 **Cross-cutting constraints:**
 
