@@ -30,12 +30,11 @@ func detectOllama(url string) bool {
 // override them to drive runInteractiveInit through canned outcomes without
 // touching Docker, a real DB, the daemon, or the network.
 var (
-	stepDatabaseFn          = stepDatabase
-	stepEmbeddingFn         = stepEmbedding
-	runDoctorChecksFn       = defaultRunDoctorChecks
-	stepServeFn             = stepServe
-	registerWorkspaceFn     = registerWorkspace
-	promptMCPClientConfigFn = promptMCPClientConfig
+	stepDatabaseFn      = stepDatabase
+	stepEmbeddingFn     = stepEmbedding
+	runDoctorChecksFn   = defaultRunDoctorChecks
+	stepServeFn         = stepServe
+	registerWorkspaceFn = registerWorkspace
 )
 
 // defaultRunDoctorChecks loads config and runs doctor.RunAll, printing the
@@ -187,8 +186,8 @@ database:
 	registered := false
 	if outcome == serveStarted || outcome == serveAlreadyRunning {
 		cwd, _ := os.Getwd()
-		wsDir, ok := promptConsequential(scanner, "Register this directory as a workspace?", cwd)
-		if ok && wsDir != "" {
+		wsDir, ok := promptConsequential(scanner, "Register this directory as a workspace? (path, or n to skip)", cwd)
+		if ok && wsDir != "" && !strings.EqualFold(wsDir, "n") && !strings.EqualFold(wsDir, "no") && !strings.EqualFold(wsDir, "skip") {
 			var err error
 			res, err = registerWorkspaceFn(wsDir, "", false)
 			if err != nil {

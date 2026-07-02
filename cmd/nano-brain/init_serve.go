@@ -73,7 +73,10 @@ func stepServe(scanner *bufio.Scanner, checks []doctor.Check, configPath string)
 		return serveSkipped
 	}
 
-	if !promptStartServer(promptReader, promptWriter) {
+	// Read through the wizard's shared scanner — a second bufio.Scanner over
+	// the same os.Stdin fd would race it for buffered bytes (review CR-01).
+	answer := promptWithDefault(scanner, "Start the nano-brain server now? (Y/n)", "Y")
+	if !isAffirmative(answer) {
 		fmt.Printf("  Skipped. Start it later with: %s\n", suggestStartCommand())
 		return serveSkipped
 	}

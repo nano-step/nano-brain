@@ -173,15 +173,16 @@ func TestProvisionPostgres(t *testing.T) {
 		if (*calls)[2].args[0] != "run" {
 			t.Errorf("call 2 = %q, want run (retry)", (*calls)[2].args[0])
 		}
-		// Assert the retry targets port 5433, not 5432.
+		// Assert the retry maps host 5433 to container 5432 (postgres always
+		// listens on 5432 inside the image — review CR-03).
 		found5433 := false
 		for _, a := range (*calls)[2].args {
-			if a == "5433:5433" {
+			if a == "5433:5432" {
 				found5433 = true
 			}
 		}
 		if !found5433 {
-			t.Errorf("retry run args %v do not contain -p 5433:5433", (*calls)[2].args)
+			t.Errorf("retry run args %v do not contain -p 5433:5432", (*calls)[2].args)
 		}
 	})
 

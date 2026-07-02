@@ -9,17 +9,15 @@ import (
 )
 
 // withServeHooks saves/overrides/restores the stepServe test seams
-// (launchServeDaemonFn, serverHealthyFn, isTTYFn, promptReader, promptWriter)
-// so tests never spawn a real daemon process or contact a real health
-// endpoint. Mirrors withRecoveryHooks in commands_test.go. accept controls
-// the promptReader content the internal promptStartServer call will read.
-func withServeHooks(t *testing.T, isTTYReturn bool, healthy bool, accept bool, launchCount *int) {
+// (launchServeDaemonFn, serverHealthyFn, isTTYFn) so tests never spawn a
+// real daemon process or contact a real health endpoint. The Y/n answer to
+// the start prompt is fed through the scanner each test passes to stepServe
+// (the wizard's single shared scanner — review CR-01).
+func withServeHooks(t *testing.T, isTTYReturn bool, healthy bool, launchCount *int) {
 	t.Helper()
 	origLaunch := launchServeDaemonFn
 	origHealthy := serverHealthyFn
 	origIsTTY := isTTYFn
-	origReader := promptReader
-	origWriter := promptWriter
 
 	launchServeDaemonFn = func(string) {
 		if launchCount != nil {
@@ -28,25 +26,17 @@ func withServeHooks(t *testing.T, isTTYReturn bool, healthy bool, accept bool, l
 	}
 	serverHealthyFn = func() bool { return healthy }
 	isTTYFn = func() bool { return isTTYReturn }
-	if accept {
-		promptReader = bytes.NewBufferString("Y\n")
-	} else {
-		promptReader = bytes.NewBufferString("n\n")
-	}
-	promptWriter = &bytes.Buffer{}
 
 	t.Cleanup(func() {
 		launchServeDaemonFn = origLaunch
 		serverHealthyFn = origHealthy
 		isTTYFn = origIsTTY
-		promptReader = origReader
-		promptWriter = origWriter
 	})
 }
 
 func TestStepServe_AbortsOnPostgreSQLFail(t *testing.T) {
 	launchCount := 0
-	withServeHooks(t, true, false, true, &launchCount)
+	withServeHooks(t, true, false, &launchCount)
 
 	checks := []doctor.Check{
 		{Name: "PostgreSQL", Status: "fail", Detail: "no URL configured"},
@@ -65,7 +55,7 @@ func TestStepServe_AbortsOnPostgreSQLFail(t *testing.T) {
 
 func TestStepServe_AlreadyRunningSkipsLaunch(t *testing.T) {
 	launchCount := 0
-	withServeHooks(t, true, true, true, &launchCount)
+	withServeHooks(t, true, true, &launchCount)
 
 	checks := []doctor.Check{
 		{Name: "PostgreSQL", Status: "ok", Detail: "localhost:5432"},
@@ -84,7 +74,7 @@ func TestStepServe_AlreadyRunningSkipsLaunch(t *testing.T) {
 
 func TestStepServe_AcceptAndStart(t *testing.T) {
 	launchCount := 0
-	withServeHooks(t, true, false, true, &launchCount)
+	withServeHooks(t, true, false, &launchCount)
 	// Override serverHealthyFn again so the already-running precheck (called
 	// before launch) reports unhealthy, but the post-launch wait reports
 	// healthy once the daemon has been launched.
@@ -95,7 +85,7 @@ func TestStepServe_AcceptAndStart(t *testing.T) {
 	checks := []doctor.Check{
 		{Name: "PostgreSQL", Status: "ok", Detail: "localhost:5432"},
 	}
-	scanner := bufio.NewScanner(bytes.NewBufferString(""))
+	scanner := bufio.NewScanner(bytes.NewBufferString("Y\n"))
 
 	got := stepServe(scanner, checks, "/tmp/config.yaml")
 
@@ -109,12 +99,12 @@ func TestStepServe_AcceptAndStart(t *testing.T) {
 
 func TestStepServe_DeclineSkipsLaunch(t *testing.T) {
 	launchCount := 0
-	withServeHooks(t, true, false, false, &launchCount)
+	withServeHooks(t, true, false, &launchCount)
 
 	checks := []doctor.Check{
 		{Name: "PostgreSQL", Status: "ok", Detail: "localhost:5432"},
 	}
-	scanner := bufio.NewScanner(bytes.NewBufferString(""))
+	scanner := bufio.NewScanner(bytes.NewBufferString("n\n"))
 
 	got := stepServe(scanner, checks, "")
 
@@ -128,7 +118,7 @@ func TestStepServe_DeclineSkipsLaunch(t *testing.T) {
 
 func TestStepServe_NonTTYSkipsLaunch(t *testing.T) {
 	launchCount := 0
-	withServeHooks(t, false, false, true, &launchCount)
+	withServeHooks(t, false, false, &launchCount)
 
 	checks := []doctor.Check{
 		{Name: "PostgreSQL", Status: "ok", Detail: "localhost:5432"},

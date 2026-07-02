@@ -23,7 +23,6 @@ type orchestratorHooks struct {
 	doctorCalls        int
 	stepServeCalls     int
 	registerCalls      int
-	mcpConfigCalls     int
 }
 
 func withOrchestratorHooks(t *testing.T, h *orchestratorHooks) {
@@ -35,7 +34,6 @@ func withOrchestratorHooks(t *testing.T, h *orchestratorHooks) {
 	origRunDoctor := runDoctorChecksFn
 	origStepServe := stepServeFn
 	origRegister := registerWorkspaceFn
-	origMCPConfig := promptMCPClientConfigFn
 
 	isTTYFn = func() bool { return true }
 
@@ -61,9 +59,6 @@ func withOrchestratorHooks(t *testing.T, h *orchestratorHooks) {
 		h.registerCalls++
 		return initResult{Name: "proj", WorkspaceHash: "abc123", RootPath: root}, nil
 	}
-	promptMCPClientConfigFn = func(scanner *bufio.Scanner, projectRoot, workspaceName string) {
-		h.mcpConfigCalls++
-	}
 
 	t.Cleanup(func() {
 		isTTYFn = origTTY
@@ -72,7 +67,6 @@ func withOrchestratorHooks(t *testing.T, h *orchestratorHooks) {
 		runDoctorChecksFn = origRunDoctor
 		stepServeFn = origStepServe
 		registerWorkspaceFn = origRegister
-		promptMCPClientConfigFn = origMCPConfig
 	})
 }
 
@@ -150,8 +144,9 @@ func TestRunInteractiveInit_KeepExisting(t *testing.T) {
 		t.Fatalf("stat sentinel config: %v", err)
 	}
 
-	// Answer "k" to the keep/overwrite gate, then Enter for anything else
-	// that might be read on the keep path (there should be none consumed).
+	// Answer "k" to the keep/overwrite gate, then Enter (= default cwd) at
+	// the register prompt so the D-03 keep→serve→register chaining is
+	// observable via the stubbed seams below.
 	origStdin := os.Stdin
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -160,7 +155,7 @@ func TestRunInteractiveInit_KeepExisting(t *testing.T) {
 	os.Stdin = r
 	t.Cleanup(func() { os.Stdin = origStdin })
 	go func() {
-		_, _ = w.WriteString("k\n")
+		_, _ = w.WriteString("k\n\n")
 		_ = w.Close()
 	}()
 
@@ -190,6 +185,50 @@ func TestRunInteractiveInit_KeepExisting(t *testing.T) {
 	}
 	if h.doctorCalls == 0 {
 		t.Error("keep path should still proceed to the doctor step, but runDoctorChecksFn was never called")
+	}
+	// D-03: keep must chain into the service steps, not return after doctor.
+	if h.stepServeCalls != 1 {
+		t.Errorf("keep path invoked stepServeFn %d times, want 1", h.stepServeCalls)
+	}
+	if h.registerCalls != 1 {
+		t.Errorf("keep path invoked registerWorkspaceFn %d times, want 1 (Enter = default cwd)", h.registerCalls)
+	}
+}
+
+func TestRunInteractiveInit_RegisterSkipOnN(t *testing.T) {
+	// D-15 / review CR-02: typing "n" at the register prompt skips
+	// registration — it must NOT be treated as a literal directory path.
+	h := &orchestratorHooks{}
+	withOrchestratorHooks(t, h)
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configPath, []byte("server:\n  host: localhost\n  port: 3100\n"), 0600); err != nil {
+		t.Fatalf("write sentinel config: %v", err)
+	}
+
+	origStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = origStdin })
+	go func() {
+		// "k" keeps the existing config; "n" declines registration.
+		_, _ = w.WriteString("k\nn\n")
+		_ = w.Close()
+	}()
+
+	out := captureStdout(t, func() {
+		runInteractiveInit(configPath)
+	})
+
+	if h.registerCalls != 0 {
+		t.Errorf("registerWorkspaceFn called %d times after answering n, want 0", h.registerCalls)
+	}
+	if !strings.Contains(out, "Skipped registration") {
+		t.Errorf("output %q does not contain the skip-registration notice", out)
 	}
 }
 

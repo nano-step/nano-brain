@@ -121,15 +121,20 @@ func provisionPostgres(ctx context.Context) (string, error) {
 	// exit 125 with a port conflict — docker leaves a stray Created-state
 	// container behind (Pitfall 1). Remove it, then retry on port 5433.
 	if strings.Contains(stderr, "port is already allocated") {
-		// Ignore any error from rm (e.g. "no such container") — best-effort
-		// cleanup of the stray container.
-		_, _, _, _ = runDocker(ctx, "rm", dockerPGContainerName)
+		// Best-effort cleanup of the stray container; "no such container" is
+		// expected, anything else is surfaced so a confusing name-conflict on
+		// the retry has its real cause visible (review MN-02).
+		if _, rmStderr, rmExit, rmErr := runDocker(ctx, "rm", dockerPGContainerName); rmErr != nil || (rmExit != 0 && !strings.Contains(rmStderr, "No such container")) {
+			fmt.Printf("  Warning: could not remove stray %s container before retry: %s\n", dockerPGContainerName, rmStderr)
+		}
 
 		runArgs5433 := []string{
 			"run", "-d",
 			"--name", dockerPGContainerName,
 			"--restart", "unless-stopped",
-			"-p", "5433:5433",
+			// Host 5433 → container 5432: postgres inside the image always
+			// listens on 5432 (review CR-03).
+			"-p", "5433:5432",
 			"-e", "POSTGRES_USER=nanobrain",
 			"-e", "POSTGRES_PASSWORD=nanobrain",
 			"-e", "POSTGRES_DB=nanobrain_dev",
