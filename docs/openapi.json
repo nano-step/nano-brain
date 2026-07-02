@@ -149,6 +149,154 @@
         },
         "type": "object"
       },
+      "handlers.backlinkItem": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.backlinksResponse": {
+        "properties": {
+          "doc_id": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.backlinkItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowGraphEdge": {
+        "properties": {
+          "condition_label": {
+            "type": "string"
+          },
+          "conditional": {
+            "type": "boolean"
+          },
+          "from": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowNode": {
+        "properties": {
+          "ambiguous": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowRequest": {
+        "properties": {
+          "entry": {
+            "type": "string"
+          },
+          "format": {
+            "description": "\"mermaid\" (default) | \"json\"",
+            "type": "string"
+          },
+          "max_depth": {
+            "type": "integer"
+          },
+          "stitch_workspaces": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowResponse": {
+        "properties": {
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.flowNode"
+            },
+            "type": "array"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.flowGraphEdge"
+            },
+            "type": "array"
+          },
+          "entry": {
+            "type": "string"
+          },
+          "externals": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.flowNode"
+            },
+            "type": "array"
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "mermaid": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.flowNode"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.flowchartRequest": {
         "properties": {
           "entry": {
@@ -369,6 +517,32 @@
         },
         "type": "object"
       },
+      "handlers.neighborhoodRequest": {
+        "properties": {
+          "depth": {
+            "type": "integer"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "edge_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "focus": {
+            "type": "string"
+          },
+          "node_kind": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.neighborhoodResponse": {
         "properties": {
           "edges": {
@@ -413,6 +587,31 @@
             "type": "string"
           },
           "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resolveResponse": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.resolveResult"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resolveResult": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "match": {
             "type": "string"
           }
         },
@@ -563,6 +762,140 @@
         ]
       }
     },
+    "/api/v1/flow/materialize": {
+      "post": {
+        "description": "Queues asynchronous flow-graph materialization for the workspace; returns immediately",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Trigger flow materialization for a workspace",
+        "tags": [
+          "flow"
+        ]
+      }
+    },
+    "/api/v1/graph/flow": {
+      "post": {
+        "description": "Loads all workspace edges, builds a flow starting from entry, and returns the node chain plus an optional Mermaid diagram",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.flowRequest"
+              }
+            }
+          },
+          "description": "Flow query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.flowResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Build a call-chain flow diagram from an entry point",
+        "tags": [
+          "flow"
+        ]
+      }
+    },
+    "/api/v1/graph/flow/endpoints": {
+      "get": {
+        "description": "Returns the HTTP-route entry edges available for flow tracing in a workspace",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List HTTP flow endpoints",
+        "tags": [
+          "flow"
+        ]
+      }
+    },
     "/api/v1/graph/flowchart": {
       "post": {
         "description": "Resolves an HTTP route entry or handler symbol to its stored control-flow graph",
@@ -665,6 +998,73 @@
         ]
       }
     },
+    "/api/v1/graph/neighborhood": {
+      "post": {
+        "description": "Breadth-first traverses the graph around a focus node up to a given depth",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.neighborhoodRequest"
+              }
+            }
+          },
+          "description": "Neighborhood query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.neighborhoodResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "BFS graph neighborhood around a focus node",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
     "/api/v1/graph/overview": {
       "post": {
         "description": "Returns the top-N most-connected nodes for the workspace and all edges between them",
@@ -711,6 +1111,49 @@
           }
         ],
         "summary": "Top-N most-connected graph nodes overview",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/pagerank/compute": {
+      "post": {
+        "description": "Recomputes and persists PageRank centrality scores over the workspace's call-edge graph",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Recompute PageRank scores for the call graph",
         "tags": [
           "graph"
         ]
@@ -815,6 +1258,122 @@
         "summary": "Trace a call chain from an entry node",
         "tags": [
           "graph"
+        ]
+      }
+    },
+    "/api/v1/links/resolve": {
+      "get": {
+        "description": "Resolves a query string as either a document UUID or a title match",
+        "parameters": [
+          {
+            "description": "Document ID or title to resolve",
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.resolveResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Resolve a link query to document IDs",
+        "tags": [
+          "links"
+        ]
+      }
+    },
+    "/api/v1/links/{doc_id}/backlinks": {
+      "get": {
+        "description": "Returns documents that link to the given doc_id, paginated",
+        "parameters": [
+          {
+            "description": "Target document ID",
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Max results (default 20, max 100)",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Result offset",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.backlinksResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List documents that link to a document",
+        "tags": [
+          "links"
         ]
       }
     },
