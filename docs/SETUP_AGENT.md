@@ -231,6 +231,8 @@ nano-brain query --workspace=<hash> "setup complete"
 
 If results come back, setup is successful.
 
+The full REST API surface is discoverable at `GET /api/openapi.json` (OpenAPI 3.0 spec, regenerated via `make generate-openapi`) — useful if you're building non-MCP tooling against nano-brain.
+
 ---
 
 ## Troubleshooting
