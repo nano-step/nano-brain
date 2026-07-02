@@ -235,11 +235,14 @@ Plans:
 
 ### Phase 12: Add OpenAPI 3.0 spec for the REST API (issue #530) — cover all ~60 existing routes in internal/server/routes.go, served at runtime (GET /api/openapi.json), single source of truth with the route table so drift is caught, not a hand-maintained doc
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** nano-brain's REST API is self-describing — a generated, drift-checked OpenAPI 3.0 document covering all ~60 routes in internal/server/routes.go is served at GET /api/openapi.json, kept in sync with the route table by an automated test so it can never silently go stale (issue #530).
+**Requirements**: D-01..D-06 (CONTEXT.md); issue #530 AC-1..AC-4
 **Depends on:** none (independent of Phase 11 — that work lives on a separate unmerged branch)
-**Plans:** 0 plans
+**Plans:** 4 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 12 to break down)
+- [ ] 12-01-PLAN.md — Foundation + Assumption A1 spike (blocking gate): add swaggo/swag + kin-openapi deps, doc.go @securityDefinitions, internal/openapigen generation pipeline (swag → openapi2conv.ToV3), Makefile target, initial committed spec, drift + schema-validation tests [Wave 1]
+- [ ] 12-02-PLAN.md — Annotate core handler group (workspace/config/doctor/collections/documents/symbols/tags/wakeup/ticket/harvest/reload/events) + protocol-tunnel (/mcp,/sse) presence [Wave 2, parallel with 03]
+- [ ] 12-03-PLAN.md — Annotate graph/search handler group (query/search/graph/flow/impact/trace/links/embed/reindex/summarize/code-summarize/stats) with per-tier @Security [Wave 2, parallel with 02]
+- [ ] 12-04-PLAN.md — Regenerate complete spec, serve at GET /api/openapi.json (public via BypassPaths), route-reconciliation drift test (single source of truth), handler test, docs pointer (README/SETUP_AGENT/CLAUDE.md) [Wave 3]
