@@ -1,6 +1,32 @@
 {
   "components": {
     "schemas": {
+      "config.PatchRequest": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "value": {}
+        },
+        "type": "object"
+      },
+      "handlers.WorkspaceResolveResponse": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "registered": {
+            "type": "boolean"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.harvesterStatusResponse": {
         "properties": {
           "claude_code": {
@@ -66,6 +92,75 @@
         },
         "type": "object"
       },
+      "handlers.initRequest": {
+        "properties": {
+          "root_path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.initResponse": {
+        "properties": {
+          "agents_snippet": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.listWorkspacesResponse": {
+        "properties": {
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.workspaceItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.removeWorkspaceResponse": {
+        "properties": {
+          "deleted_docs": {
+            "type": "integer"
+          },
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_removed": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resetWorkspaceRequest": {
+        "properties": {
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resetWorkspaceResponse": {
+        "properties": {
+          "deleted_documents": {
+            "type": "integer"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.statusResponse": {
         "properties": {
           "active_provider": {
@@ -120,6 +215,43 @@
           }
         },
         "type": "object"
+      },
+      "handlers.workspaceItem": {
+        "properties": {
+          "chunk_count": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "doc_count": {
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "last_document_updated": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.workspaceResolveRequest": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -169,6 +301,392 @@
         "summary": "Detailed server status",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "description": "Returns the current resolved config with secrets redacted. Pass ?include_source=true to also return the config file path.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get the current resolved config",
+        "tags": [
+          "config"
+        ]
+      },
+      "post": {
+        "description": "Applies a single-field patch to the config YAML and triggers a config reload. Secret fields cannot be patched via this endpoint.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/config.PatchRequest"
+              }
+            }
+          },
+          "description": "Field path and new value",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Patch a single config field",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/v1/doctor": {
+      "get": {
+        "description": "Runs config and binary prerequisite checks and reports pass/fail status for each",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Run environment/prerequisite checks",
+        "tags": [
+          "doctor"
+        ]
+      }
+    },
+    "/api/v1/init": {
+      "post": {
+        "description": "Registers a root path as a workspace and creates its default collections (memory, sessions, code). When db is non-nil, all three DB operations are wrapped in a single transaction.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.initRequest"
+              }
+            }
+          },
+          "description": "Workspace root path",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.initResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Register a workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/reset-workspace": {
+      "post": {
+        "description": "Deletes all documents (and related code-summarization data) for a workspace without removing the workspace registration itself",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.resetWorkspaceRequest"
+              }
+            }
+          },
+          "description": "Workspace to reset",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.resetWorkspaceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete all documents in a workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces": {
+      "get": {
+        "description": "Returns all registered workspaces with document/chunk counts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.listWorkspacesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List registered workspaces",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/resolve": {
+      "post": {
+        "description": "Computes the workspace hash for a path and reports whether it is already registered",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.workspaceResolveRequest"
+              }
+            }
+          },
+          "description": "Path to resolve",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.WorkspaceResolveResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Resolve a filesystem path to a workspace hash",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{hash}": {
+      "delete": {
+        "description": "Deletes a workspace and all its documents. When db is non-nil, deletion runs inside a transaction.",
+        "parameters": [
+          {
+            "description": "Workspace hash",
+            "in": "path",
+            "name": "hash",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.removeWorkspaceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Remove a workspace",
+        "tags": [
+          "workspaces"
         ]
       }
     },

@@ -30,6 +30,17 @@ type resetWorkspaceResponse struct {
 	Workspace        string `json:"workspace"`
 }
 
+// ResetWorkspace godoc
+// @Summary      Delete all documents in a workspace
+// @Description  Deletes all documents (and related code-summarization data) for a workspace without removing the workspace registration itself
+// @Tags         workspaces
+// @Accept       json
+// @Produce      json
+// @Param        request body resetWorkspaceRequest true "Workspace to reset"
+// @Success      200 {object} resetWorkspaceResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Router       /api/v1/reset-workspace [post]
 func ResetWorkspace(q ResetWorkspaceQuerier, db resetWorkspaceTxBeginner, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req resetWorkspaceRequest
