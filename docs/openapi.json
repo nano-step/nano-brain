@@ -30,6 +30,88 @@
         },
         "type": "object"
       },
+      "handlers.CodeSummarizeRequest": {
+        "properties": {
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.CodeSummarizeResponse": {
+        "properties": {
+          "errors": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "processed": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.CodeSummarizeStatusResponse": {
+        "properties": {
+          "failed": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer"
+          },
+          "summarized": {
+            "type": "integer"
+          },
+          "total_symbols": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.EmbedResponse": {
+        "properties": {
+          "embedded": {
+            "type": "integer"
+          },
+          "remaining": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.FailureResponse": {
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "error_reason": {
+            "type": "string"
+          },
+          "error_type": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_attempt_at": {
+            "type": "string"
+          },
+          "source_file": {
+            "type": "string"
+          },
+          "symbol_kind": {
+            "type": "string"
+          },
+          "symbol_name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.QueryRequest": {
         "properties": {
           "chunk_type": {
@@ -58,6 +140,37 @@
           },
           "updated_before": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.RetryRequest": {
+        "properties": {
+          "failure_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.RetryResponse": {
+        "properties": {
+          "failed": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retried": {
+            "type": "integer"
+          },
+          "succeeded": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -116,6 +229,37 @@
           },
           "workspace_hash": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.SummarizeRequest": {
+        "properties": {
+          "force": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.SummarizeResponse": {
+        "properties": {
+          "errors": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "summarized": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -188,6 +332,53 @@
           },
           "total": {
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.chunksByEmbedStatusObj": {
+        "properties": {
+          "embed_failed": {
+            "type": "integer"
+          },
+          "embedded": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.collectionItem": {
+        "properties": {
+          "doc_count": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.embedRequest": {
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.embeddingInfo": {
+        "properties": {
+          "dim": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -369,6 +560,20 @@
           },
           "node": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.harvestInfo": {
+        "properties": {
+          "last_at": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "sessions_seen": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -592,6 +797,106 @@
         },
         "type": "object"
       },
+      "handlers.recentDocItem": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reindexCFGRequest": {
+        "properties": {
+          "full": {
+            "type": "boolean"
+          },
+          "wipe": {
+            "type": "boolean"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reindexCFGResponse": {
+        "properties": {
+          "cfgs_extracted": {
+            "type": "integer"
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "files_processed": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reindexRequest": {
+        "properties": {
+          "force_wipe": {
+            "type": "boolean"
+          },
+          "root": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reindexResponse": {
+        "properties": {
+          "chunks_enqueued": {
+            "type": "integer"
+          },
+          "deleted": {
+            "type": "integer"
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "embedded": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "scanned": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "watcher_triggered": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "handlers.resolveResponse": {
         "properties": {
           "query": {
@@ -613,6 +918,66 @@
           },
           "match": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.statsResponse": {
+        "properties": {
+          "chunks_by_embed_status": {
+            "$ref": "#/components/schemas/handlers.chunksByEmbedStatusObj"
+          },
+          "chunks_total": {
+            "type": "integer"
+          },
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.collectionItem"
+            },
+            "type": "array"
+          },
+          "docs_total": {
+            "type": "integer"
+          },
+          "embedding": {
+            "$ref": "#/components/schemas/handlers.embeddingInfo"
+          },
+          "embeddings_total": {
+            "type": "integer"
+          },
+          "graph_edges_by_type": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "harvest": {
+            "$ref": "#/components/schemas/handlers.harvestInfo"
+          },
+          "migration_version": {
+            "type": "integer"
+          },
+          "recent_docs": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.recentDocItem"
+            },
+            "type": "array"
+          },
+          "server_version": {
+            "type": "string"
+          },
+          "tags_top_20": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.tagCountItem"
+            },
+            "type": "array"
+          },
+          "uptime_sec": {
+            "type": "integer"
+          },
+          "watcher": {
+            "$ref": "#/components/schemas/handlers.watcherInfo"
           }
         },
         "type": "object"
@@ -651,6 +1016,17 @@
           },
           "workspace_count": {
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.tagCountItem": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "tag": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -710,6 +1086,23 @@
           }
         },
         "type": "object"
+      },
+      "handlers.watcherInfo": {
+        "properties": {
+          "collections_watched": {
+            "type": "integer"
+          },
+          "debounce_ms": {
+            "type": "integer"
+          },
+          "dirty": {
+            "type": "integer"
+          },
+          "poll_interval_sec": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -759,6 +1152,309 @@
         "summary": "Detailed server status",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/v1/code/summarize": {
+      "post": {
+        "description": "Runs one batch of code-symbol summarization for the workspace, subject to daily budget limits",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.CodeSummarizeRequest"
+              }
+            }
+          },
+          "description": "Code summarize options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.CodeSummarizeResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Summarize pending code symbols for a workspace",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/code/summarize/failures": {
+      "get": {
+        "description": "Returns unresolved code-symbol summarization failures for the workspace",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/handlers.FailureResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "List unresolved code summarization failures",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/code/summarize/retry": {
+      "post": {
+        "description": "Retries code summarization for the given failure_ids",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.RetryRequest"
+              }
+            }
+          },
+          "description": "Retry options (failure_ids required)",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.RetryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Retry specific failed code summarizations",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/code/summarize/retry-all": {
+      "post": {
+        "description": "Retries code summarization for every unresolved failure in the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.RetryRequest"
+              }
+            }
+          },
+          "description": "Retry options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.RetryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Retry all failed code summarizations",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/code/summarize/status": {
+      "get": {
+        "description": "Reports total/summarized/pending/failed code symbol counts for the workspace",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.CodeSummarizeStatusResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Get code summarization status for a workspace",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/embed": {
+      "post": {
+        "description": "Embeds a batch of pending chunks (up to an internal limit) for the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.embedRequest"
+              }
+            }
+          },
+          "description": "Embed options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.EmbedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Embed pending chunks for a workspace",
+        "tags": [
+          "embed"
         ]
       }
     },
@@ -1428,6 +2124,124 @@
         ]
       }
     },
+    "/api/v1/reindex": {
+      "post": {
+        "description": "Rescans collections for a workspace, enqueueing changed/new files for embedding; force_wipe clears and re-embeds everything",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.reindexRequest"
+              }
+            }
+          },
+          "description": "Reindex options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reindexResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reindexResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Trigger a reindex (incremental or force-wipe) for a workspace",
+        "tags": [
+          "reindex"
+        ]
+      }
+    },
+    "/api/v1/reindex-cfg": {
+      "post": {
+        "description": "Extracts and persists function control-flow graphs (CFGs) for JS/TS/Ruby files, incrementally or via full filesystem walk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.reindexCFGRequest"
+              }
+            }
+          },
+          "description": "Reindex-CFG options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reindexCFGResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Reindex control-flow graphs for a workspace's code collection",
+        "tags": [
+          "reindex"
+        ]
+      }
+    },
     "/api/v1/search": {
       "post": {
         "description": "Runs a BM25 full-text search scoped to a workspace",
@@ -1476,6 +2290,141 @@
         "summary": "BM25 full-text search",
         "tags": [
           "search"
+        ]
+      }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "description": "Reports document/chunk/embedding/graph-edge counts, top tags, harvester and watcher status, and recent documents for a workspace",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.statsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Workspace statistics dashboard",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/summarize": {
+      "post": {
+        "description": "Summarizes up to `limit` session documents for a workspace via the configured summarizer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.SummarizeRequest"
+              }
+            }
+          },
+          "description": "Summarize options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.SummarizeResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Summarize pending session documents for a workspace",
+        "tags": [
+          "summarize"
+        ]
+      }
+    },
+    "/api/v1/update": {
+      "post": {
+        "description": "Asynchronously re-extracts graph edges and symbols for all collections in the workspace",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reindexResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Re-extract graph edges and symbols for a workspace",
+        "tags": [
+          "reindex"
         ]
       }
     },

@@ -50,6 +50,19 @@ type reindexResponse struct {
 	Message          string `json:"message"`
 }
 
+// TriggerReindex godoc
+// @Summary      Trigger a reindex (incremental or force-wipe) for a workspace
+// @Description  Rescans collections for a workspace, enqueueing changed/new files for embedding; force_wipe clears and re-embeds everything
+// @Tags         reindex
+// @Accept       json
+// @Produce      json
+// @Param        request body reindexRequest true "Reindex options"
+// @Success      200 {object} reindexResponse
+// @Success      202 {object} reindexResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/reindex [post]
 func TriggerReindex(queries ReindexQuerier, w *watcher.Watcher, eq *embed.Queue, pub eventbus.Publisher, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		start := time.Now()
@@ -364,6 +377,16 @@ func publishReindex(pub eventbus.Publisher, workspace, state string, enqueued, e
 	})
 }
 
+// TriggerUpdate godoc
+// @Summary      Re-extract graph edges and symbols for a workspace
+// @Description  Asynchronously re-extracts graph edges and symbols for all collections in the workspace
+// @Tags         reindex
+// @Produce      json
+// @Success      202 {object} reindexResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/update [post]
 func TriggerUpdate(w *watcher.Watcher, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

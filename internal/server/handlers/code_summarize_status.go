@@ -20,6 +20,16 @@ type CodeSummarizeStatusResponse struct {
 	Failed       int `json:"failed"`
 }
 
+// GetCodeSummarizeStatus godoc
+// @Summary      Get code summarization status for a workspace
+// @Description  Reports total/summarized/pending/failed code symbol counts for the workspace
+// @Tags         code-summarize
+// @Produce      json
+// @Success      200 {object} CodeSummarizeStatusResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/code/summarize/status [get]
 func GetCodeSummarizeStatus(
 	queries CodeSummarizationStatusQuerier,
 	logger zerolog.Logger,
