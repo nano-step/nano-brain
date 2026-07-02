@@ -2053,6 +2053,70 @@
           "meta"
         ]
       }
+    },
+    "/mcp": {
+      "delete": {
+        "description": "Bidirectional MCP protocol transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "MCP streamable HTTP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "get": {
+        "description": "Bidirectional MCP protocol transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "MCP streamable HTTP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "post": {
+        "description": "Bidirectional MCP protocol transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "MCP streamable HTTP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/sse": {
+      "get": {
+        "description": "MCP SSE transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "Server-Sent Events MCP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "post": {
+        "description": "MCP SSE transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "Server-Sent Events MCP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      }
     }
   }
 }
