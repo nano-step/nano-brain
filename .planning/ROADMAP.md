@@ -17,6 +17,10 @@ Strengthen nano-brain's code intelligence and search across v1: add Vue SFC supp
 - [ ] **Phase 7: HyDE & Documentation** - Auto-generate HyDE hints, complete docs
 - [x] **Phase 8: Session Harvest Unification & Ticket Linking** - Pluggable multi-source harvest, one sessions collection, cross-source/cross-repo ticket linking (completed 2026-06-29)
 - [x] **Phase 9: MCP workspace config binding** - Bind a default workspace to the MCP connection via a `?workspace=` URL query param so agents skip manual workspace discovery (completed 2026-07-01, PR #524)
+- [x] **Phase 10: Interactive MCP client auto-configuration** - Prompt which AI clients to auto-configure MCP for after workspace registration (completed 2026-07-01, PR #526)
+- [ ] **Phase 11: Benchmark token cost** - nano-brain vs baseline context-gathering token cost benchmark
+- [x] **Phase 12: OpenAPI 3.0 spec** - REST API spec served at GET /api/openapi.json (completed 2026-07-02, PR #531)
+- [x] **Phase 13: Interactive Init Wizard** - One-command `nano-brain init`: detect/provision PostgreSQL via Docker or remote URL, optional embeddings with BM25 degrade, serve + register + MCP client picker, docs rewrite (completed 2026-07-02)
 
 ## Phase Details
 
