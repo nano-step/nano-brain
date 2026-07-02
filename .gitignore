@@ -48,3 +48,8 @@ nano-brain-test
 benchmarks/rails/capability/results_current.json
 benchmarks/rails/capability/baseline_v1.json
 benchmarks/vue/capability/dataset.json
+
+# swag CLI scratch output (if run manually via `swag init`) — only
+# docs/openapi.json (OpenAPI 3.0, converted) is committed
+docs/swagger.json
+docs/docs.go
