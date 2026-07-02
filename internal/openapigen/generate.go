@@ -20,6 +20,13 @@ import (
 	"github.com/swaggo/swag/gen"
 )
 
+// nopDebugger discards swag's progress/debug log lines. swag's default
+// Debugger implementation writes to stdout via log.Println, which would
+// otherwise corrupt the JSON that cmd/generate-openapi streams to stdout.
+type nopDebugger struct{}
+
+func (nopDebugger) Printf(string, ...interface{}) {}
+
 // Generate runs swag's AST parser over searchDir (using mainAPIFile as the
 // swag "general API info" anchor), converts the resulting Swagger 2.0
 // document to OpenAPI 3.0, and returns the deterministically-marshaled
@@ -38,12 +45,22 @@ func Generate(searchDir, mainAPIFile string) ([]byte, error) {
 
 	g := gen.New()
 	if err := g.Build(&gen.Config{
-		SearchDir:       searchDir,
-		MainAPIFile:     mainAPIFile,
-		OutputDir:       tmpDir,
-		OutputTypes:     []string{"json"},
-		ParseDependency: 1, // parse dependencies for models (unexported same-package structs, per Assumption A1)
-		ParseInternal:   true,
+		Debugger:    nopDebugger{}, // swag's default logger writes to stdout; silence it so stdout carries only the JSON (see cmd/generate-openapi)
+		SearchDir:   searchDir,
+		MainAPIFile: mainAPIFile,
+		OutputDir:   tmpDir,
+		OutputTypes: []string{"json"},
+		// ParseDependency stays at its zero value (0 == none). All annotated
+		// Request/Response structs (including unexported ones, per
+		// Assumption A1) live in the SAME package as the handler that
+		// references them, so no cross-package dependency walk is needed.
+		// A non-zero value makes swag resolve the full transitive module
+		// dependency tree via depth.Tree.Resolve() (AST-parsing every
+		// imported package, including large third-party deps like pgx and
+		// echo) — empirically confirmed during Plan 12-01 to take minutes
+		// and multiple GB of RSS under `go test -race`, without being
+		// needed for this repo's same-package annotation pattern.
+		ParseInternal: true,
 	}); err != nil {
 		return nil, fmt.Errorf("openapigen: swag generation failed: %w", err)
 	}

@@ -1,0 +1,218 @@
+{
+  "components": {
+    "schemas": {
+      "handlers.harvesterStatusResponse": {
+        "properties": {
+          "claude_code": {
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "session_dir": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "opencode": {
+            "properties": {
+              "db_count": {
+                "type": "integer"
+              },
+              "db_path": {
+                "type": "string"
+              },
+              "db_root": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "mode": {
+                "type": "string"
+              },
+              "session_dir": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "poll_interval_seconds": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.healthResponse": {
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "uptime_s": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          },
+          "workspace_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.statusResponse": {
+        "properties": {
+          "active_provider": {
+            "type": "string"
+          },
+          "embedding_queue_depth": {
+            "type": "integer"
+          },
+          "harvester_status": {
+            "$ref": "#/components/schemas/handlers.harvesterStatusResponse"
+          },
+          "migration_version": {
+            "type": "integer"
+          },
+          "pg_status": {
+            "type": "string"
+          },
+          "queue_capacity": {
+            "type": "integer"
+          },
+          "queue_depth": {
+            "type": "integer"
+          },
+          "queue_pending": {
+            "type": "integer"
+          },
+          "queue_status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "workspace_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.versionResponse": {
+        "properties": {
+          "api_max": {
+            "type": "integer"
+          },
+          "api_min": {
+            "type": "integer"
+          },
+          "migration_version": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "CSRFToken": {
+        "description": "Required on write endpoints; enforced by middleware.CSRF.",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "type": "apiKey"
+      },
+      "WorkspaceAuth": {
+        "description": "Workspace hash via query param or JSON body; resolved by workspaceMiddleware.",
+        "in": "query",
+        "name": "workspace",
+        "type": "apiKey"
+      },
+      "WorkspaceRegisteredAuth": {
+        "description": "Workspace must be already-registered (write-path gate); enforced by workspaceRegisteredMiddleware.",
+        "in": "query",
+        "name": "workspace",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "contact": {},
+    "description": "Self-describing OpenAPI 3.0 spec for nano-brain's non-MCP REST API",
+    "title": "nano-brain REST API",
+    "version": "1.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/api/status": {
+      "get": {
+        "description": "Reports DB status, migration version, embedding queue depth, and harvester status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.statusResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Detailed server status",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/version": {
+      "get": {
+        "description": "Reports the running server version, migration version, and supported API range",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.versionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Server and migration version",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Reports DB connectivity, uptime, and workspace count. Always returns 200 (degraded state is reflected in the body, not the status code).",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.healthResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Liveness/readiness probe",
+        "tags": [
+          "meta"
+        ]
+      }
+    }
+  }
+}

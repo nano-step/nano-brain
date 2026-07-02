@@ -122,6 +122,13 @@ type statusResponse struct {
 	Version              string                    `json:"version,omitempty"`
 }
 
+// Health godoc
+// @Summary      Liveness/readiness probe
+// @Description  Reports DB connectivity, uptime, and workspace count. Always returns 200 (degraded state is reflected in the body, not the status code).
+// @Tags         meta
+// @Produce      json
+// @Success      200 {object} healthResponse
+// @Router       /health [get]
 func (h *Health) Health(c echo.Context) error {
 	if err := h.pool.Ping(c.Request().Context()); err != nil {
 		return c.JSON(http.StatusOK, healthResponse{
@@ -140,6 +147,13 @@ func (h *Health) Health(c echo.Context) error {
 	})
 }
 
+// Status godoc
+// @Summary      Detailed server status
+// @Description  Reports DB status, migration version, embedding queue depth, and harvester status
+// @Tags         meta
+// @Produce      json
+// @Success      200 {object} statusResponse
+// @Router       /api/status [get]
 func (h *Health) Status(c echo.Context) error {
 	pgStatus := "healthy"
 	if err := h.pool.Ping(c.Request().Context()); err != nil {
@@ -201,6 +215,13 @@ type versionResponse struct {
 	APIMax            int    `json:"api_max"`
 }
 
+// Version godoc
+// @Summary      Server and migration version
+// @Description  Reports the running server version, migration version, and supported API range
+// @Tags         meta
+// @Produce      json
+// @Success      200 {object} versionResponse
+// @Router       /api/version [get]
 func (h *Health) Version(c echo.Context) error {
 	return c.JSON(http.StatusOK, versionResponse{
 		Version:           h.version,
