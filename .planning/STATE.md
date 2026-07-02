@@ -70,6 +70,7 @@ Progress: [██████████] 100%
 
 - Phase 9 added: MCP workspace config binding — bind a default workspace to the MCP connection via a URL query param so agents skip manual workspace discovery
 - Phase 10 added: Interactive MCP client auto-configuration — after workspace registration, prompt which AI clients to auto-configure MCP for, writing each client's config with the ?workspace= URL from Phase 9
+- Phase 13 added: Interactive Init Wizard — one-command `nano-brain init`: detect/provision PostgreSQL (Docker auto-provision with confirmation, or remote URL), optional embeddings (any Ollama/OpenAI-compatible URL, degrade to BM25 when disabled), start server, register workspace, MCP client picker (reuses Phase 10)
 
 ### Decisions
 

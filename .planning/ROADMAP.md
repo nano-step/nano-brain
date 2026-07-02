@@ -257,3 +257,14 @@ Plans:
 **Cross-cutting constraints:**
 
 - The whole project still builds and the existing test suite stays green — annotations are pure comments, zero behavior change
+
+### Phase 13: Interactive Init Wizard — one-command interactive setup: detect/provision PostgreSQL (Docker auto-provision with confirmation, or remote Postgres URL), optional embeddings (any Ollama/OpenAI-compatible URL, degrade to BM25 when disabled), start server, register workspace, show supported MCP clients for user to pick and auto-configure
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 12
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 13 to break down)
