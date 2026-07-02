@@ -232,3 +232,14 @@ Plans:
 - [x] 10-01-PLAN.md — Add workspace `name` to the /api/v1/init response + CLI decode (prerequisite for name-bound URL) (wave 1)
 - [x] 10-02-PLAN.md — Config detection + JSON/TOML merge core + 3 client writers + prompt orchestration wired into runInitCmd (wave 2)
 - [x] 10-03-PLAN.md — Fix stale OpenCode `type:http` → `type:remote` in docs (SETUP_AGENT.md, README.md, reference-readme.md) (wave 1)
+
+### Phase 12: Add OpenAPI 3.0 spec for the REST API (issue #530) — cover all ~60 existing routes in internal/server/routes.go, served at runtime (GET /api/openapi.json), single source of truth with the route table so drift is caught, not a hand-maintained doc
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** none (independent of Phase 11 — that work lives on a separate unmerged branch)
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 12 to break down)
