@@ -48,6 +48,16 @@ func snippet(content string) string {
 //
 // GET /api/v1/sessions/by-ticket?ticket=DEV-4706
 // GET /api/v1/sessions/by-ticket?ticket=%2342   (URL-encoded #42)
+//
+// TicketHandler godoc
+// @Summary      Find sessions by ticket ID across all workspaces
+// @Description  Queries sessions tagged "ticket:<id>" across all workspaces (not scoped to a single workspace)
+// @Tags         tickets
+// @Produce      json
+// @Success      200 {array} TicketSessionResult
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Router       /api/v1/sessions/by-ticket [get]
 func TicketHandler(q TicketQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ticketParam := strings.TrimSpace(c.QueryParam("ticket"))

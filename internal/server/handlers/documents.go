@@ -37,6 +37,16 @@ type listDocumentsResponse struct {
 	Documents []documentListItem `json:"documents"`
 }
 
+// ListDocuments godoc
+// @Summary      List documents in a workspace
+// @Description  Returns documents for the workspace, optionally filtered by text/collection/tags query params
+// @Tags         documents
+// @Produce      json
+// @Success      200 {object} listDocumentsResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/documents [get]
 func ListDocuments(q DocumentsQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace, _ := c.Get("workspace").(string)
@@ -80,6 +90,18 @@ func ListDocuments(q DocumentsQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	}
 }
 
+// DeleteDocument godoc
+// @Summary      Delete a document
+// @Description  Deletes a document by ID within the workspace
+// @Tags         documents
+// @Produce      json
+// @Param        id path string true "Document ID"
+// @Success      200 {object} map[string]string
+// @Failure      400 {object} map[string]string
+// @Failure      404 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/documents/{id} [delete]
 func DeleteDocument(q DocumentsQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace, _ := c.Get("workspace").(string)

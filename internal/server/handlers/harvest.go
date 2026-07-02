@@ -17,6 +17,14 @@ type HarvestResponse struct {
 	Errors    int `json:"errors"`
 }
 
+// TriggerHarvest godoc
+// @Summary      Trigger a session harvest run
+// @Description  Runs a single harvest pass (OpenCode/Claude Code session ingestion) synchronously
+// @Tags         harvest
+// @Produce      json
+// @Success      200 {object} HarvestResponse
+// @Failure      503 {object} map[string]string
+// @Router       /api/harvest [post]
 func TriggerHarvest(getRunner func() HarvestRunner) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		runner := getRunner()

@@ -30,7 +30,15 @@ func SetSSEIdleTimeout(d time.Duration) { sseIdleTimeout = d }
 // SetSSEMaxConnPerIP overrides the per-IP connection cap (for testing).
 func SetSSEMaxConnPerIP(n int) { sseMaxConnPerIP = n }
 
-// EventsHandler returns an Echo handler that streams events from the bus as SSE.
+// EventsHandler godoc
+// @Summary      Stream workspace events via Server-Sent Events
+// @Description  Streams document/collection/workspace change events for the given workspace as an SSE stream. Not a JSON request/response endpoint — no response body schema.
+// @Tags         events
+// @Produce      text/event-stream
+// @Success      200 "text/event-stream of events"
+// @Failure      429 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/events [get]
 func EventsHandler(bus *eventbus.Bus, logger zerolog.Logger) echo.HandlerFunc {
 	var (
 		mu    sync.Mutex

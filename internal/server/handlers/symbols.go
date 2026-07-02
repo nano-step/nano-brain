@@ -23,6 +23,15 @@ type symbolItem struct {
 	SourcePath string `json:"source_path"`
 }
 
+// ListSymbols godoc
+// @Summary      List code symbols in a workspace
+// @Description  Returns indexed symbols (functions, types, etc.) optionally filtered by name query or kind
+// @Tags         symbols
+// @Produce      json
+// @Success      200 {object} map[string]interface{}
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/symbols [get]
 func ListSymbols(q SymbolQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

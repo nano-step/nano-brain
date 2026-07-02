@@ -85,6 +85,19 @@ type LinkResolver interface {
 	FlushWorkspace(workspace string)
 }
 
+// WriteDocument godoc
+// @Summary      Write a document
+// @Description  Creates or updates a document (upsert by content hash), chunks it, and enqueues chunks for embedding
+// @Tags         documents
+// @Accept       json
+// @Produce      json
+// @Param        request body WriteRequest true "Document content and metadata"
+// @Success      201 {object} WriteResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/write [post]
 func WriteDocument(q DocumentQuerier, db *sql.DB, enqueuer ChunkEnqueuer, logger zerolog.Logger, maxFileSize int64, linkResolver LinkResolver, linkExtractor LinkExtractor) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req WriteRequest
