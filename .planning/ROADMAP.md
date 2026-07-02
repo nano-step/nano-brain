@@ -243,7 +243,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 12-01-PLAN.md — Foundation + Assumption A1 spike (blocking gate): add swaggo/swag + kin-openapi deps, doc.go @securityDefinitions, internal/openapigen generation pipeline (swag → openapi2conv.ToV3), Makefile target, initial committed spec, drift + schema-validation tests [Wave 1]
+- [x] 12-01-PLAN.md — Foundation + Assumption A1 spike (blocking gate): add swaggo/swag + kin-openapi deps, doc.go @securityDefinitions, internal/openapigen generation pipeline (swag → openapi2conv.ToV3), Makefile target, initial committed spec, drift + schema-validation tests [Wave 1] — Assumption A1 PASSED
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

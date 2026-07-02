@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 12
 current_phase_name: "Add OpenAPI 3.0 spec for the REST API"
-status: Phase 12 plans committed (4/4), plan-checker passed — next is /gsd-execute-phase 12
-stopped_at: Completed 12-04-PLAN.md
-last_updated: "2026-07-02T05:17:00.000Z"
+status: executing
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-07-02T13:05:00.000Z"
 last_activity: 2026-07-02
-last_activity_desc: Phase 12 planning complete — plan-checker VERIFICATION PASSED
+last_activity_desc: "Phase 12 Plan 01 complete — Assumption A1 spike PASSED, Wave 2 next"
 progress:
   total_phases: 12
   completed_phases: 4
   total_plans: 14
-  completed_plans: 10
-  percent: 71
+  completed_plans: 11
+  percent: 79
 ---
 
 # Project State
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** Impact analysis — "What breaks if I change this?" must return accurate, sub-50ms results.
-**Current focus:** Phase 12 — OpenAPI 3.0 spec, planned (4/4 plans across 3 waves), ready to execute
+**Current focus:** Phase 12 — OpenAPI 3.0 spec, Plan 01/4 complete (Assumption A1 spike PASSED), Wave 2 next
 
 ## Current Position
 
-Phase: 12 (Add OpenAPI 3.0 spec for the REST API) — Phase 11 lives on a separate unmerged branch (feat/token-cost-benchmark), not reflected here
-Plan: 4/4 planned (01 spike+pipeline, 02+03 parallel handler annotation, 04 serving+drift-test+docs) — none executed yet
-Status: Phase 12 plans committed (4/4), plan-checker passed — next is /gsd-execute-phase 12
-Last activity: 2026-07-02 — Phase 12 planning complete, plan-checker VERIFICATION PASSED
+Phase: 12 (Add OpenAPI 3.0 spec for the REST API) — EXECUTING
+Plan: 1 of 4 complete (01 foundation+spike); 02+03 (Wave 2, parallel) and 04 (Wave 3) remain
+Status: Executing Phase 12 — Wave 1 done, Wave 2 next
+Last activity: 2026-07-02 — Phase 12 Plan 01 complete, Assumption A1 spike PASSED
 
-Progress: [███████░░░] 71%
+Progress: [████████░░] 79%
 
 ## Performance Metrics
 
@@ -94,6 +94,8 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 - [Phase 10-02]: Codex CLI targets the GLOBAL ~/.codex/config.toml (CODEX_HOME-overridable), not project-local, to avoid Codex's trusted-project gate silently voiding the write
 - [Phase 10-02]: All config merges use a whole-file map[string]any model (never typed structs) so unrelated/unknown keys survive read-modify-write untouched
 - [Phase 10-02]: Human-verify checkpoint (Task 4) closed via a fully isolated live run — scratch project root, scratch CODEX_HOME, test server on nanobrain_test/:3199, expect-driven pseudo-TTY — confirming all 3 client configs, idempotent re-run, and --json skip
+- [Phase 12-01]: Assumption A1 CONFIRMED PASS — swag's AST parser resolves unexported same-package struct types with complete schemas (health.go's healthResponse produced all 6 real fields); annotation-only approach proceeds for all ~60 routes, no struct-exporting needed
+- [Phase 12-01]: swag emits Swagger 2.0 natively; internal/openapigen.Generate() converts via kin-openapi's openapi2conv.ToV3() in the same call before anything is committed — docs/openapi.json root is always "openapi":"3.0.x", never "swagger"
 
 ### Pending Todos
 
