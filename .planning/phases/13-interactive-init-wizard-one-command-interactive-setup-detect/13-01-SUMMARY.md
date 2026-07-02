@@ -128,3 +128,11 @@ None - no external service configuration required.
 ---
 *Phase: 13-interactive-init-wizard-one-command-interactive-setup-detect*
 *Completed: 2026-07-02*
+
+## Self-Check: PASSED
+
+- FOUND: cmd/nano-brain/docker_provision.go
+- FOUND: cmd/nano-brain/docker_provision_test.go
+- FOUND: .planning/phases/13-interactive-init-wizard-one-command-interactive-setup-detect/13-01-SUMMARY.md
+- FOUND: a01a48f (feat commit)
+- FOUND: 259aece (docs commit, pre-self-check)
