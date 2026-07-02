@@ -150,3 +150,11 @@ None - no external service configuration required.
 ---
 *Phase: 13-interactive-init-wizard-one-command-interactive-setup-detect*
 *Completed: 2026-07-02*
+
+## Self-Check: PASSED
+
+- FOUND: cmd/nano-brain/init_register.go
+- FOUND: cmd/nano-brain/init_register_test.go
+- FOUND: .planning/phases/13-interactive-init-wizard-one-command-interactive-setup-detect/13-05-SUMMARY.md
+- FOUND commit: ef18622 (feat(13-05): extract registerWorkspace helper)
+- FOUND commit: af825e1 (docs(13-05): add plan 13-05 execution summary)
