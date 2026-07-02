@@ -2,18 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 10
-current_phase_name: Interactive MCP client auto-configuration after workspace registration
-status: Phase 10 complete — 3/3 plans done, ready for review + PR
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-07-01T21:55:00.000Z"
-last_activity: 2026-07-01
+current_phase: 12
+current_phase_name: "Add OpenAPI 3.0 spec for the REST API"
+status: Phase 12 plans committed (4/4), plan-checker passed — next is /gsd-execute-phase 12
+stopped_at: Completed 12-04-PLAN.md
+last_updated: "2026-07-02T05:17:00.000Z"
+last_activity: 2026-07-02
+last_activity_desc: Phase 12 planning complete — plan-checker VERIFICATION PASSED
 progress:
-  total_phases: 10
+  total_phases: 12
   completed_phases: 4
-  total_plans: 10
+  total_plans: 14
   completed_plans: 10
-  percent: 100
+  percent: 71
 ---
 
 # Project State
@@ -23,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** Impact analysis — "What breaks if I change this?" must return accurate, sub-50ms results.
-**Current focus:** Phase 10 complete (3/3 plans) — ready for independent review + PR (issue #525)
+**Current focus:** Phase 12 — OpenAPI 3.0 spec, planned (4/4 plans across 3 waves), ready to execute
 
 ## Current Position
 
-Phase: 10 of 10 (Interactive MCP client auto-configuration after workspace registration) — complete
-Plan: 3/3 complete (01, 02, 03)
-Status: Phase 10 complete — 3/3 plans done, ready for review + PR
-Last activity: 2026-07-01
+Phase: 12 (Add OpenAPI 3.0 spec for the REST API) — Phase 11 lives on a separate unmerged branch (feat/token-cost-benchmark), not reflected here
+Plan: 4/4 planned (01 spike+pipeline, 02+03 parallel handler annotation, 04 serving+drift-test+docs) — none executed yet
+Status: Phase 12 plans committed (4/4), plan-checker passed — next is /gsd-execute-phase 12
+Last activity: 2026-07-02 — Phase 12 planning complete, plan-checker VERIFICATION PASSED
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 

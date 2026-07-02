@@ -241,8 +241,19 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 12-01-PLAN.md — Foundation + Assumption A1 spike (blocking gate): add swaggo/swag + kin-openapi deps, doc.go @securityDefinitions, internal/openapigen generation pipeline (swag → openapi2conv.ToV3), Makefile target, initial committed spec, drift + schema-validation tests [Wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 12-02-PLAN.md — Annotate core handler group (workspace/config/doctor/collections/documents/symbols/tags/wakeup/ticket/harvest/reload/events) + protocol-tunnel (/mcp,/sse) presence [Wave 2, parallel with 03]
 - [ ] 12-03-PLAN.md — Annotate graph/search handler group (query/search/graph/flow/impact/trace/links/embed/reindex/summarize/code-summarize/stats) with per-tier @Security [Wave 2, parallel with 02]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 12-04-PLAN.md — Regenerate complete spec, serve at GET /api/openapi.json (public via BypassPaths), route-reconciliation drift test (single source of truth), handler test, docs pointer (README/SETUP_AGENT/CLAUDE.md) [Wave 3]
+
+**Cross-cutting constraints:**
+
+- The whole project still builds and the existing test suite stays green — annotations are pure comments, zero behavior change
