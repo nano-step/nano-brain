@@ -25,17 +25,13 @@ CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain
 ### Start
 
 ```bash
-# Start PostgreSQL
-docker run -d --name nanobrain-pg -p 5432:5432 \
-  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
-  pgvector/pgvector:pg17
-
-# Start nano-brain
-nano-brain serve -d
-
-# Register your project
-nano-brain init --root=/path/to/your/project
+npm install -g @nano-step/nano-brain && nano-brain init
 ```
+
+`nano-brain init` is an interactive wizard that provisions PostgreSQL (via Docker or a remote URL), optionally enables embeddings, starts the server, registers your project, and configures your MCP client — then tells you to restart your AI client.
+
+For a manual, per-step setup (VPS / team, no Docker, or Windows), see [docs/SETUP_AGENT.md](docs/SETUP_AGENT.md).
+
 ---
 
 ## Why Star This Project?
