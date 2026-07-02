@@ -247,8 +247,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 12-02-PLAN.md — Annotate core handler group (workspace/config/doctor/collections/documents/symbols/tags/wakeup/ticket/harvest/reload/events) + protocol-tunnel (/mcp,/sse) presence [Wave 2, parallel with 03]
-- [ ] 12-03-PLAN.md — Annotate graph/search handler group (query/search/graph/flow/impact/trace/links/embed/reindex/summarize/code-summarize/stats) with per-tier @Security [Wave 2, parallel with 02]
+- [x] 12-02-PLAN.md — Annotate core handler group (workspace/config/doctor/collections/documents/symbols/tags/wakeup/ticket/harvest/reload/events) + protocol-tunnel (/mcp,/sse) presence [Wave 2, parallel with 03]
+- [x] 12-03-PLAN.md — Annotate graph/search handler group (query/search/graph/flow/impact/trace/links/embed/reindex/summarize/code-summarize/stats) with per-tier @Security [Wave 2, parallel with 02]
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
