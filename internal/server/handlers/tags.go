@@ -19,6 +19,15 @@ type tagItem struct {
 	Count int64  `json:"count"`
 }
 
+// ListTags godoc
+// @Summary      List tags in a workspace
+// @Description  Returns all tags used in the workspace with document counts per tag
+// @Tags         tags
+// @Produce      json
+// @Success      200 {array} tagItem
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/tags [get]
 func ListTags(q TagQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

@@ -30,6 +30,17 @@ type removeWorkspaceResponse struct {
 	WorkspaceRemoved bool   `json:"workspace_removed"`
 }
 
+// RemoveWorkspace godoc
+// @Summary      Remove a workspace
+// @Description  Deletes a workspace and all its documents. When db is non-nil, deletion runs inside a transaction.
+// @Tags         workspaces
+// @Produce      json
+// @Param        hash path string true "Workspace hash"
+// @Success      200 {object} removeWorkspaceResponse
+// @Failure      400 {object} map[string]string
+// @Failure      404 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Router       /api/v1/workspaces/{hash} [delete]
 func RemoveWorkspace(q RemoveWorkspaceQuerier, db removeWorkspaceTxBeginner, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		hash := c.Param("hash")

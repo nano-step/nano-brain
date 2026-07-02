@@ -28,6 +28,17 @@ type WorkspaceResolveResponse struct {
 	Registered    bool   `json:"registered"`
 }
 
+// ResolveWorkspace godoc
+// @Summary      Resolve a filesystem path to a workspace hash
+// @Description  Computes the workspace hash for a path and reports whether it is already registered
+// @Tags         workspaces
+// @Accept       json
+// @Produce      json
+// @Param        request body workspaceResolveRequest true "Path to resolve"
+// @Success      200 {object} WorkspaceResolveResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Router       /api/v1/workspaces/resolve [post]
 func ResolveWorkspace(q WorkspaceResolver, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req workspaceResolveRequest

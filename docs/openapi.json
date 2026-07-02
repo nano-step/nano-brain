@@ -1,6 +1,340 @@
 {
   "components": {
     "schemas": {
+      "config.PatchRequest": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "value": {}
+        },
+        "type": "object"
+      },
+      "handlers.ActiveCollection": {
+        "properties": {
+          "document_count": {
+            "type": "integer"
+          },
+          "last_updated": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.AddCollectionRequest": {
+        "properties": {
+          "allowed_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "exclude_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "glob_pattern": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.CollectionResponse": {
+        "properties": {
+          "allowed_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "document_count": {
+            "type": "integer"
+          },
+          "exclude_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "glob_pattern": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "update_mode": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.HarvestResponse": {
+        "properties": {
+          "errors": {
+            "type": "integer"
+          },
+          "harvested": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.RecentMemory": {
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.RenameCollectionRequest": {
+        "properties": {
+          "new_name": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.TicketSessionResult": {
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.WakeUpResponse": {
+        "properties": {
+          "active_collections": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.ActiveCollection"
+            },
+            "type": "array"
+          },
+          "recent_memories": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.RecentMemory"
+            },
+            "type": "array"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/handlers.WakeUpStats"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.WakeUpStats": {
+        "properties": {
+          "last_activity": {
+            "type": "string"
+          },
+          "total_chunks": {
+            "type": "integer"
+          },
+          "total_documents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.WorkspaceResolveResponse": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "registered": {
+            "type": "boolean"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.WriteRequest": {
+        "type": "object"
+      },
+      "handlers.WriteResponse": {
+        "properties": {
+          "chunk_count": {
+            "type": "integer"
+          },
+          "collection": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.documentListItem": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "superseded_by_id": {
+            "type": "string"
+          },
+          "supersedes_id": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.getDocumentRequest": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.getDocumentResponse": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "supersedes_id": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.harvesterStatusResponse": {
         "properties": {
           "claude_code": {
@@ -66,6 +400,143 @@
         },
         "type": "object"
       },
+      "handlers.initRequest": {
+        "properties": {
+          "root_path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.initResponse": {
+        "properties": {
+          "agents_snippet": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.listDocumentsResponse": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.documentListItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.listWorkspacesResponse": {
+        "properties": {
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.workspaceItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.multiGetRequest": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.multiGetResponse": {
+        "properties": {
+          "not_found": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.getDocumentResponse"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reloadResponse": {
+        "properties": {
+          "reloaded": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requires_restart": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unchanged": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.removeWorkspaceResponse": {
+        "properties": {
+          "deleted_docs": {
+            "type": "integer"
+          },
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_removed": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resetWorkspaceRequest": {
+        "properties": {
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resetWorkspaceResponse": {
+        "properties": {
+          "deleted_documents": {
+            "type": "integer"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.statusResponse": {
         "properties": {
           "active_provider": {
@@ -104,6 +575,17 @@
         },
         "type": "object"
       },
+      "handlers.tagItem": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.versionResponse": {
         "properties": {
           "api_max": {
@@ -116,6 +598,43 @@
             "type": "integer"
           },
           "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.workspaceItem": {
+        "properties": {
+          "chunk_count": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "doc_count": {
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "last_document_updated": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.workspaceResolveRequest": {
+        "properties": {
+          "path": {
             "type": "string"
           }
         },
@@ -151,6 +670,74 @@
   },
   "openapi": "3.0.3",
   "paths": {
+    "/api/harvest": {
+      "post": {
+        "description": "Runs a single harvest pass (OpenCode/Claude Code session ingestion) synchronously",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.HarvestResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Trigger a session harvest run",
+        "tags": [
+          "harvest"
+        ]
+      }
+    },
+    "/api/reload-config": {
+      "post": {
+        "description": "Re-reads the YAML config file and applies any reloadable settings without restarting the server",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reloadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Reload server configuration",
+        "tags": [
+          "config"
+        ]
+      }
+    },
     "/api/status": {
       "get": {
         "description": "Reports DB status, migration version, embedding queue depth, and harvester status",
@@ -169,6 +756,1259 @@
         "summary": "Detailed server status",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/v1/collections": {
+      "get": {
+        "description": "Returns all collections for the workspace with document counts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/handlers.CollectionResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List collections in a workspace",
+        "tags": [
+          "collections"
+        ]
+      },
+      "post": {
+        "description": "Registers a new file-watched collection under the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.AddCollectionRequest"
+              }
+            }
+          },
+          "description": "Collection to add",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.CollectionResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Add a collection to a workspace",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/collections/{name}": {
+      "delete": {
+        "description": "Deletes a collection and detaches its file watcher",
+        "parameters": [
+          {
+            "description": "Collection name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Remove a collection",
+        "tags": [
+          "collections"
+        ]
+      },
+      "put": {
+        "description": "Renames a collection and re-points its documents to the new name",
+        "parameters": [
+          {
+            "description": "Current collection name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.RenameCollectionRequest"
+              }
+            }
+          },
+          "description": "New collection name",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.CollectionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Rename a collection",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "description": "Returns the current resolved config with secrets redacted. Pass ?include_source=true to also return the config file path.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get the current resolved config",
+        "tags": [
+          "config"
+        ]
+      },
+      "post": {
+        "description": "Applies a single-field patch to the config YAML and triggers a config reload. Secret fields cannot be patched via this endpoint.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/config.PatchRequest"
+              }
+            }
+          },
+          "description": "Field path and new value",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Patch a single config field",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/v1/doctor": {
+      "get": {
+        "description": "Runs config and binary prerequisite checks and reports pass/fail status for each",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Run environment/prerequisite checks",
+        "tags": [
+          "doctor"
+        ]
+      }
+    },
+    "/api/v1/documents": {
+      "get": {
+        "description": "Returns documents for the workspace, optionally filtered by text/collection/tags query params",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.listDocumentsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List documents in a workspace",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{id}": {
+      "delete": {
+        "description": "Deletes a document by ID within the workspace",
+        "parameters": [
+          {
+            "description": "Document ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Delete a document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "description": "Streams document/collection/workspace change events for the given workspace as an SSE stream. Not a JSON request/response endpoint — no response body schema.",
+        "responses": {
+          "200": {
+            "description": "text/event-stream of events"
+          },
+          "429": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Stream workspace events via Server-Sent Events",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/v1/get": {
+      "post": {
+        "description": "Fetches a document by source path or ID within the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.getDocumentRequest"
+              }
+            }
+          },
+          "description": "Path or ID to look up",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.getDocumentResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Get a single document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/init": {
+      "post": {
+        "description": "Registers a root path as a workspace and creates its default collections (memory, sessions, code). When db is non-nil, all three DB operations are wrapped in a single transaction.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.initRequest"
+              }
+            }
+          },
+          "description": "Workspace root path",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.initResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Register a workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/multi-get": {
+      "post": {
+        "description": "Fetches multiple documents by source paths and/or IDs within the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.multiGetRequest"
+              }
+            }
+          },
+          "description": "Paths and/or IDs to look up",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.multiGetResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Get multiple documents in one call",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/reset-workspace": {
+      "post": {
+        "description": "Deletes all documents (and related code-summarization data) for a workspace without removing the workspace registration itself",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.resetWorkspaceRequest"
+              }
+            }
+          },
+          "description": "Workspace to reset",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.resetWorkspaceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete all documents in a workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/sessions/by-ticket": {
+      "get": {
+        "description": "Queries sessions tagged \"ticket:\u003cid\u003e\" across all workspaces (not scoped to a single workspace)",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/handlers.TicketSessionResult"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Find sessions by ticket ID across all workspaces",
+        "tags": [
+          "tickets"
+        ]
+      }
+    },
+    "/api/v1/symbols": {
+      "get": {
+        "description": "Returns indexed symbols (functions, types, etc.) optionally filtered by name query or kind",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List code symbols in a workspace",
+        "tags": [
+          "symbols"
+        ]
+      }
+    },
+    "/api/v1/tags": {
+      "get": {
+        "description": "Returns all tags used in the workspace with document counts per tag",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/handlers.tagItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List tags in a workspace",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/wake-up": {
+      "get": {
+        "description": "Returns recent memories, active collections, and workspace stats. Mounted at both GET /api/v1/wake-up (unauthenticated, api group) and POST /api/v1/wake-up (workspace-scoped, data group — requires @Security WorkspaceAuth on the POST path).",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.WakeUpResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get a session-start context summary",
+        "tags": [
+          "wakeup"
+        ]
+      },
+      "post": {
+        "description": "Returns recent memories, active collections, and workspace stats. Mounted at both GET /api/v1/wake-up (unauthenticated, api group) and POST /api/v1/wake-up (workspace-scoped, data group — requires @Security WorkspaceAuth on the POST path).",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.WakeUpResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get a session-start context summary",
+        "tags": [
+          "wakeup"
+        ]
+      }
+    },
+    "/api/v1/workspaces": {
+      "get": {
+        "description": "Returns all registered workspaces with document/chunk counts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.listWorkspacesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List registered workspaces",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/resolve": {
+      "post": {
+        "description": "Computes the workspace hash for a path and reports whether it is already registered",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.workspaceResolveRequest"
+              }
+            }
+          },
+          "description": "Path to resolve",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.WorkspaceResolveResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Resolve a filesystem path to a workspace hash",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{hash}": {
+      "delete": {
+        "description": "Deletes a workspace and all its documents. When db is non-nil, deletion runs inside a transaction.",
+        "parameters": [
+          {
+            "description": "Workspace hash",
+            "in": "path",
+            "name": "hash",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.removeWorkspaceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Remove a workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/write": {
+      "post": {
+        "description": "Creates or updates a document (upsert by content hash), chunks it, and enqueues chunks for embedding",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.WriteRequest"
+              }
+            }
+          },
+          "description": "Document content and metadata",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.WriteResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Write a document",
+        "tags": [
+          "documents"
         ]
       }
     },
@@ -211,6 +2051,70 @@
         "summary": "Liveness/readiness probe",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/mcp": {
+      "delete": {
+        "description": "Bidirectional MCP protocol transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "MCP streamable HTTP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "get": {
+        "description": "Bidirectional MCP protocol transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "MCP streamable HTTP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "post": {
+        "description": "Bidirectional MCP protocol transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "MCP streamable HTTP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/sse": {
+      "get": {
+        "description": "MCP SSE transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "Server-Sent Events MCP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "post": {
+        "description": "MCP SSE transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "Server-Sent Events MCP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
         ]
       }
     }

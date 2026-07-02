@@ -105,9 +105,17 @@ func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath 
 	return ws, nil
 }
 
-// InitWorkspace handles POST /api/v1/init. When db is non-nil, all three DB
-// operations are wrapped in a single transaction. Pass nil db in tests that
-// use a mock querier.
+// InitWorkspace godoc
+// @Summary      Register a workspace
+// @Description  Registers a root path as a workspace and creates its default collections (memory, sessions, code). When db is non-nil, all three DB operations are wrapped in a single transaction.
+// @Tags         workspaces
+// @Accept       json
+// @Produce      json
+// @Param        request body initRequest true "Workspace root path"
+// @Success      200 {object} initResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Router       /api/v1/init [post]
 func InitWorkspace(q WorkspaceQuerier, db *sql.DB, fw *watcher.Watcher, watcherCfg config.WatcherConfig, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req initRequest
@@ -192,6 +200,14 @@ func InitWorkspace(q WorkspaceQuerier, db *sql.DB, fw *watcher.Watcher, watcherC
 	}
 }
 
+// ListWorkspaces godoc
+// @Summary      List registered workspaces
+// @Description  Returns all registered workspaces with document/chunk counts
+// @Tags         workspaces
+// @Produce      json
+// @Success      200 {object} listWorkspacesResponse
+// @Failure      500 {object} map[string]string
+// @Router       /api/v1/workspaces [get]
 func ListWorkspaces(q WorkspaceQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		rows, err := q.ListWorkspacesWithStats(c.Request().Context())

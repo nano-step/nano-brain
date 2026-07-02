@@ -25,6 +25,18 @@ type multiGetResponse struct {
 	NotFound []string              `json:"not_found"`
 }
 
+// MultiGet godoc
+// @Summary      Get multiple documents in one call
+// @Description  Fetches multiple documents by source paths and/or IDs within the workspace
+// @Tags         documents
+// @Accept       json
+// @Produce      json
+// @Param        request body multiGetRequest true "Paths and/or IDs to look up"
+// @Success      200 {object} multiGetResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/multi-get [post]
 func MultiGet(q MultiGetQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

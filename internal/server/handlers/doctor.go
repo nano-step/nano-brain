@@ -16,7 +16,13 @@ type DoctorDeps struct {
 	LoadConfig func() (*config.Config, error)
 }
 
-// Doctor returns the prerequisite checks as JSON.
+// Doctor godoc
+// @Summary      Run environment/prerequisite checks
+// @Description  Runs config and binary prerequisite checks and reports pass/fail status for each
+// @Tags         doctor
+// @Produce      json
+// @Success      200 {object} map[string]interface{}
+// @Router       /api/v1/doctor [get]
 func Doctor(deps DoctorDeps, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		cfg, cfgErr := deps.LoadConfig()

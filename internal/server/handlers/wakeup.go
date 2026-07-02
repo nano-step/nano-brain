@@ -53,6 +53,16 @@ type WakeUpStats struct {
 
 const defaultWakeUpLimit = 10
 
+// WakeUpHandler godoc
+// @Summary      Get a session-start context summary
+// @Description  Returns recent memories, active collections, and workspace stats. Mounted at both GET /api/v1/wake-up (unauthenticated, api group) and POST /api/v1/wake-up (workspace-scoped, data group — requires @Security WorkspaceAuth on the POST path).
+// @Tags         wakeup
+// @Produce      json
+// @Success      200 {object} WakeUpResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Router       /api/v1/wake-up [get]
+// @Router       /api/v1/wake-up [post]
 func WakeUpHandler(q WakeUpQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req WakeUpRequest
