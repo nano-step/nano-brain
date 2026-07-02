@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 12
-current_phase_name: Add OpenAPI 3.0 spec for the REST API
-status: "Phase 12 complete — 4/4 plans done, ready for independent review + PR (issue #530)"
+current_phase: 13
+current_phase_name: interactive-init-wizard-one-command-interactive-setup-detect
+status: verifying
 stopped_at: Completed 12-04-PLAN.md
-last_updated: "2026-07-02T06:47:11.013Z"
+last_updated: "2026-07-02T16:23:29.016Z"
 last_activity: 2026-07-02
-last_activity_desc: "Phase 12 complete, all 4 issue #530 acceptance criteria closed"
+last_activity_desc: Phase 13 complete — verification passed 35/35
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 5
-  total_plans: 14
+  total_plans: 22
   completed_plans: 14
-  percent: 100
+  percent: 42
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** Impact analysis — "What breaks if I change this?" must return accurate, sub-50ms results.
-**Current focus:** Phase 12 complete (4/4 plans) — ready for independent review + PR (issue #530)
+**Current focus:** Phase 13 — interactive-init-wizard-one-command-interactive-setup-detect
 
 ## Current Position
 
-Phase: 12 (Add OpenAPI 3.0 spec for the REST API) — complete
-Plan: 4/4 complete (01 foundation+spike, 02 core handler group, 03 graph/search handler group, 04 serve+drift-test+docs)
-Status: Phase 12 complete — 4/4 plans done, ready for independent review + PR (issue #530)
-Last activity: 2026-07-02 — Phase 12 complete, all 4 issue #530 acceptance criteria closed
+Phase: 13 (interactive-init-wizard-one-command-interactive-setup-detect) — COMPLETE
+Plan: 1 of 8
+Status: Phase 13 complete — verification passed
+Last activity: 2026-07-02 — Phase 13 execution started
 
 Progress: [██████████] 100%
 
@@ -70,6 +70,7 @@ Progress: [██████████] 100%
 
 - Phase 9 added: MCP workspace config binding — bind a default workspace to the MCP connection via a URL query param so agents skip manual workspace discovery
 - Phase 10 added: Interactive MCP client auto-configuration — after workspace registration, prompt which AI clients to auto-configure MCP for, writing each client's config with the ?workspace= URL from Phase 9
+- Phase 13 added: Interactive Init Wizard — one-command `nano-brain init`: detect/provision PostgreSQL (Docker auto-provision with confirmation, or remote URL), optional embeddings (any Ollama/OpenAI-compatible URL, degrade to BM25 when disabled), start server, register workspace, MCP client picker (reuses Phase 10)
 
 ### Decisions
 

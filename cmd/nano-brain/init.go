@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/health/doctor"
 )
 
 func detectOllama(url string) bool {
@@ -23,13 +25,73 @@ func detectOllama(url string) bool {
 	return resp.StatusCode == 200
 }
 
+// Orchestrator seams (D-01..D-04, D-16, D-17): each defaults to the real
+// Wave-1/2 step function so production behavior is unchanged, but tests can
+// override them to drive runInteractiveInit through canned outcomes without
+// touching Docker, a real DB, the daemon, or the network.
+var (
+	stepDatabaseFn      = stepDatabase
+	stepEmbeddingFn     = stepEmbedding
+	runDoctorChecksFn   = defaultRunDoctorChecks
+	stepServeFn         = stepServe
+	registerWorkspaceFn = registerWorkspace
+)
+
+// defaultRunDoctorChecks loads config and runs doctor.RunAll, printing the
+// same per-check table runDoctorCmd prints — but, unlike runDoctorCmd, it
+// never os.Exit(1)s on a failing check. The wizard needs the checks (in
+// particular whether PostgreSQL is healthy) without being killed before it
+// can reach the serve gate (stepServe), which already knows how to react to
+// a PostgreSQL failure (serveAborted).
+func defaultRunDoctorChecks(configPath string) []doctor.Check {
+	cfg, cfgErr := config.Load(configPath)
+	results := doctor.RunAll(configPath, cfg, cfgErr, resolveBinaryPath())
+
+	fmt.Print("\nnano-brain doctor\n\n")
+	for _, r := range results {
+		label := padRight(r.Name, 22)
+		detail := padRight(r.Detail, 28)
+		status := "OK"
+		if r.Status == "fail" {
+			status = "FAIL"
+		} else if r.Status == "skip" {
+			status = "SKIP"
+		} else if r.Status == "warn" {
+			status = "WARN"
+		}
+		fmt.Printf("  %s %s %s\n", label, detail, status)
+		if (r.Status == "fail" || r.Status == "warn") && r.Hint != "" {
+			for _, line := range strings.Split(r.Hint, "\n") {
+				fmt.Printf("    → %s\n", line)
+			}
+		}
+	}
+	fmt.Println()
+
+	return results
+}
+
+// runInteractiveInit is the "one command" wizard orchestrator (RESEARCH
+// System Architecture Diagram): TTY gate (D-04) → config-exists [k]eep/
+// [o]verwrite gate (D-03) → database step → embedding step → advanced gate
+// (D-02) → assemble+write → doctor → serve step → register step → MCP
+// config (D-16, once) → summary (D-17). It composes the Wave-1/2 step
+// functions via the seams above; it does not re-implement their logic.
 func runInteractiveInit(configPath string) {
 	if configPath == "" {
 		configPath = config.ResolveConfigPath("")
 	}
 
+	// D-04: interactive init requires a TTY. Non-interactive callers (CI,
+	// scripts, piped stdin) get pointed at the flag-driven path instead of
+	// silently hanging on a prompt read or writing a config with no consent.
+	if !isTTYFn() {
+		fmt.Println("nano-brain init needs an interactive terminal (TTY).")
+		fmt.Println("For non-interactive setup, use: nano-brain init --root <path> --json")
+		return
+	}
+
 	dbURL := "postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev"
-	provider := "ollama"
 	embURL := "http://localhost:11434"
 	model := "nomic-embed-text"
 	port := 3100
@@ -38,61 +100,152 @@ func runInteractiveInit(configPath string) {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
+	// D-03: config-exists gate defaults to KEEP (not overwrite). Keep skips
+	// straight to the service steps (doctor → serve → register → MCP) with
+	// zero config questions.
+	keep := false
 	if _, err := os.Stat(configPath); err == nil {
 		fmt.Printf("  Config exists at %s\n", configPath)
-		answer := promptWithDefault(scanner, "Overwrite?", "Y")
-		if answer == "n" || answer == "N" {
-			fmt.Println("Aborted.")
-			return
+		answer, ok := promptConsequential(scanner, "[k]eep/[o]verwrite", "keep")
+		if !ok || (!strings.EqualFold(answer, "o") && !strings.EqualFold(answer, "overwrite")) {
+			keep = true
+			fmt.Println("  Keeping existing config.")
 		}
 		fmt.Println()
 	}
 
-	// ── Database ──────────────────────────────────────────────────────────
-	fmt.Print("── Database ──\n")
-	fmt.Println("  PostgreSQL connection string. Format: postgres://user:pass@host:port/db")
-	dbURL = promptWithDefault(scanner, "PostgreSQL URL", dbURL)
+	if !keep {
+		// ── Database ──────────────────────────────────────────────────────
+		var dbOK bool
+		dbURL, dbOK = stepDatabaseFn(scanner, dbURL)
+		if !dbOK {
+			fmt.Println("Aborted.")
+			return
+		}
 
-	// ── Server ────────────────────────────────────────────────────────────
-	fmt.Print("\n── Server ──\n")
-	portStr := promptWithDefault(scanner, "Server port", strconv.Itoa(port))
-	p, err := strconv.Atoi(portStr)
-	if err != nil || p < 1 || p > 65535 {
-		fmt.Fprintf(os.Stderr, "Invalid port: %s\n", portStr)
+		// ── Embedding ─────────────────────────────────────────────────────
+		var notes bytes.Buffer
+		embBlock := stepEmbeddingFn(scanner, &notes, embURL, model)
+		if notes.Len() > 0 {
+			fmt.Print(notes.String())
+		}
+
+		// ── Advanced gate (D-02) ────────────────────────────────────────
+		var harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock string
+		advAnswer, advOK := promptConsequential(scanner, "Advanced settings?", "N")
+		if advOK && isAffirmative(advAnswer) {
+			harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock = stepAdvanced(scanner, embURL)
+		} else {
+			harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock = defaultAdvancedBlocks()
+		}
+
+		// ── Assemble + preview + write ────────────────────────────────────
+		yaml := fmt.Sprintf(`server:
+  host: localhost
+  port: %d
+
+database:
+  url: %s
+
+%s%s%s%s%s%s`, port, dbURL, embBlock, harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock)
+
+		fmt.Println("\n── Config preview ──────────────")
+		fmt.Print(yaml)
+		fmt.Println("────────────────────────────────")
+
+		answer, ok := promptConsequential(scanner, "Save this config?", "Y")
+		if !ok || !isAffirmative(answer) {
+			fmt.Println("Aborted.")
+			return
+		}
+
+		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to create config directory: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := os.WriteFile(configPath, []byte(yaml), 0600); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to write config: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("\nConfig written to %s\n\n", configPath)
+	}
+
+	// ── Doctor ──────────────────────────────────────────────────────────
+	checks := runDoctorChecksFn(configPath)
+
+	// ── Serve (D-14) ──────────────────────────────────────────────────────
+	outcome := stepServeFn(scanner, checks, configPath)
+	if outcome == serveAborted {
 		os.Exit(1)
 	}
-	port = p
 
-	// ── Embedding ─────────────────────────────────────────────────────────
-	fmt.Print("\n── Embedding ──\n")
-	fmt.Println("  Converts text chunks into vectors for semantic search.")
-	fmt.Println("  Providers: ollama (local, free) | voyage (cloud, higher quality)")
-	provider = promptWithDefault(scanner, "Embedding provider (ollama/voyage)", provider)
-
-	var embBlock string
-	if provider == "voyage" {
-		model = promptWithDefault(scanner, "Embedding model", "voyage-3")
-		envKey := os.Getenv("VOYAGE_API_KEY")
-		def := ""
-		if envKey != "" {
-			def = "(from env)"
-		}
-		_ = promptWithDefault(scanner, "Voyage API key (or set VOYAGE_API_KEY env)", def)
-		embConcurrency := promptWithDefault(scanner, "Embedding concurrency (parallel requests)", "3")
-		embBlock = fmt.Sprintf("embedding:\n  provider: voyage\n  model: %s\n  concurrency: %s\n", model, embConcurrency)
-	} else {
-		if detectOllama(embURL) {
-			fmt.Printf("  ✓ Ollama detected at %s\n", embURL)
+	// ── Register (D-15) ───────────────────────────────────────────────────
+	var res initResult
+	registered := false
+	if outcome == serveStarted || outcome == serveAlreadyRunning {
+		cwd, _ := os.Getwd()
+		wsDir, ok := promptConsequential(scanner, "Register this directory as a workspace? (path, or n to skip)", cwd)
+		if ok && wsDir != "" && !strings.EqualFold(wsDir, "n") && !strings.EqualFold(wsDir, "no") && !strings.EqualFold(wsDir, "skip") {
+			var err error
+			res, err = registerWorkspaceFn(wsDir, "", false)
+			if err != nil {
+				fmt.Printf("  Registration failed: %v\n", err)
+			} else {
+				registered = true
+			}
 		} else {
-			fmt.Println("  Ollama not found at default URL. Make sure Ollama is running.")
-			embURL = promptWithDefault(scanner, "Ollama URL", embURL)
+			fmt.Println("  Skipped registration — MCP client config needs a registered workspace.")
 		}
-		fmt.Println("  Recommended embed models: nomic-embed-text (fast), mxbai-embed-large (better quality)")
-		model = promptWithDefault(scanner, "Embedding model", model)
-		embConcurrency := promptWithDefault(scanner, "Embedding concurrency (parallel Ollama requests)", "3")
-		embBlock = fmt.Sprintf("embedding:\n  provider: %s\n  url: %s\n  model: %s\n  concurrency: %s\n", provider, embURL, model, embConcurrency)
 	}
 
+	// ── Summary (D-17) ────────────────────────────────────────────────────
+	// Never echo the DB password or any API key here — only the host/port
+	// via getBaseURL() and the workspace name/hash are printed.
+	fmt.Println("\n── Summary ──────────────────────")
+	fmt.Printf("  Server: %s\n", getBaseURL())
+	if registered {
+		fmt.Printf("  Workspace: %s (%s)\n", res.Name, res.WorkspaceHash)
+		fmt.Println("  MCP clients you selected above are now configured for this workspace.")
+	} else {
+		fmt.Println("  No workspace registered — MCP client config was skipped.")
+	}
+	fmt.Println("  Next: restart your AI client to pick up the new MCP configuration.")
+	fmt.Println("──────────────────────────────────")
+}
+
+// defaultAdvancedBlocks returns the silent-default YAML blocks used when the
+// D-02 advanced gate is declined: harvester auto-detects storage dirs with
+// no prompt, summarization is disabled, and search/watcher/logging fall
+// back to the same defaults the detailed prompts otherwise offer.
+func defaultAdvancedBlocks() (harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock string) {
+	detectedOC := detectOpenCodeStorageDir()
+	detectedCC := detectClaudeCodeStorageDir()
+
+	ocLine := "\"\""
+	if detectedOC != "" {
+		ocLine = detectedOC
+	}
+	ccEnabled := detectedCC != ""
+	ccLine := "\"\""
+	if detectedCC != "" {
+		ccLine = detectedCC
+	}
+
+	harvesterBlock = fmt.Sprintf("\nharvester:\n  opencode:\n    session_dir: %s\n  claudecode:\n    enabled: %v\n    session_dir: %s\n\nintervals:\n  session_poll: %d\n", ocLine, ccEnabled, ccLine, 120)
+	summaryBlock = "\nsummarization:\n  enabled: false\n"
+	searchBlock = fmt.Sprintf("\nsearch:\n  rrf_k: %s\n  recency_weight: %s\n  recency_half_life_days: %s\n  limit: %s\n", "60", "0.3", "180", "20")
+	watcherBlock = fmt.Sprintf("\nwatcher:\n  debounce_ms: %s\n  reindex_interval: %s\n", "2000", "300")
+	loggingBlock = fmt.Sprintf("\nlogging:\n  level: %s\n  file: %s\n", "info", defaultLogPath())
+	return harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock
+}
+
+// stepAdvanced runs the detailed harvester/summarization/search/watcher/
+// logging prompt sequence, preserved verbatim (byte-for-byte behavior) from
+// the pre-restructure runInteractiveInit, now gated behind the D-02
+// "Advanced settings?" confirmation instead of always running.
+func stepAdvanced(scanner *bufio.Scanner, embURL string) (harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock string) {
 	// ── Harvester ─────────────────────────────────────────────────────────
 	fmt.Print("\n── Harvester (session indexing) ──\n")
 	fmt.Println("  Harvests AI coding sessions (OpenCode / Claude Code) into the memory index.")
@@ -129,7 +282,7 @@ func runInteractiveInit(configPath string) {
 	if err2 != nil || sessionPoll < 10 {
 		sessionPoll = 120
 	}
-	harvesterBlock := fmt.Sprintf("\nharvester:\n  opencode:\n    session_dir: %s\n  claudecode:\n    enabled: %v\n    session_dir: %s\n\nintervals:\n  session_poll: %d\n", ocLine, ccEnabled, ccLine, sessionPoll)
+	harvesterBlock = fmt.Sprintf("\nharvester:\n  opencode:\n    session_dir: %s\n  claudecode:\n    enabled: %v\n    session_dir: %s\n\nintervals:\n  session_poll: %d\n", ocLine, ccEnabled, ccLine, sessionPoll)
 
 	// ── Summarization ─────────────────────────────────────────────────────
 	fmt.Print("\n── Summarization (LLM session summaries) ──\n")
@@ -139,7 +292,6 @@ func runInteractiveInit(configPath string) {
 	sumEnabled := promptWithDefault(scanner, "Enable session summarization? (y/n)", "n")
 	sumEnabledBool := sumEnabled == "y" || sumEnabled == "Y"
 
-	var summaryBlock string
 	if sumEnabledBool {
 		// Auto-detect Ollama as default summarization provider
 		defaultSumURL := ""
@@ -192,7 +344,7 @@ func runInteractiveInit(configPath string) {
 	recencyHalfLife := promptWithDefault(scanner, "Recency half-life (days)", "180")
 	fmt.Println("  limit: default max results returned per query.")
 	searchLimit := promptWithDefault(scanner, "Default result limit", "20")
-	searchBlock := fmt.Sprintf("\nsearch:\n  rrf_k: %s\n  recency_weight: %s\n  recency_half_life_days: %s\n  limit: %s\n", rrfK, recencyWeight, recencyHalfLife, searchLimit)
+	searchBlock = fmt.Sprintf("\nsearch:\n  rrf_k: %s\n  recency_weight: %s\n  recency_half_life_days: %s\n  limit: %s\n", rrfK, recencyWeight, recencyHalfLife, searchLimit)
 
 	// ── Watcher ───────────────────────────────────────────────────────────
 	fmt.Print("\n── Watcher (file indexing) ──\n")
@@ -201,7 +353,7 @@ func runInteractiveInit(configPath string) {
 	debounceMs := promptWithDefault(scanner, "Debounce delay (ms)", "2000")
 	fmt.Println("  reindex_interval: full re-scan interval in seconds (default 300 = 5 min).")
 	reindexInterval := promptWithDefault(scanner, "Full reindex interval (seconds)", "300")
-	watcherBlock := fmt.Sprintf("\nwatcher:\n  debounce_ms: %s\n  reindex_interval: %s\n", debounceMs, reindexInterval)
+	watcherBlock = fmt.Sprintf("\nwatcher:\n  debounce_ms: %s\n  reindex_interval: %s\n", debounceMs, reindexInterval)
 
 	// ── Logging ───────────────────────────────────────────────────────────
 	fmt.Print("\n── Logging ──\n")
@@ -209,47 +361,9 @@ func runInteractiveInit(configPath string) {
 	logLevel := promptWithDefault(scanner, "Log level", "info")
 	fmt.Println("  file: path to log file. Uses default path if left blank.")
 	logFile := promptWithDefault(scanner, "Log file path", defaultLogPath())
-	loggingBlock := fmt.Sprintf("\nlogging:\n  level: %s\n  file: %s\n", logLevel, logFile)
+	loggingBlock = fmt.Sprintf("\nlogging:\n  level: %s\n  file: %s\n", logLevel, logFile)
 
-	// ── Assemble YAML ─────────────────────────────────────────────────────
-	yaml := fmt.Sprintf(`server:
-  host: localhost
-  port: %d
-
-database:
-  url: %s
-
-%s%s%s%s%s%s`, port, dbURL, embBlock, harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock)
-
-	fmt.Println("\n── Config preview ──────────────")
-	fmt.Print(yaml)
-	fmt.Println("────────────────────────────────")
-
-	answer := promptWithDefault(scanner, "Save this config?", "Y")
-	if answer == "n" || answer == "N" {
-		fmt.Println("Aborted.")
-		return
-	}
-
-	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create config directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := os.WriteFile(configPath, []byte(yaml), 0600); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to write config: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("\nConfig written to %s\n\n", configPath)
-
-	runDoctorCmd([]string{}, configPath)
-
-	wsDir := promptWithDefault(scanner, "Register workspace directory?", "")
-	if wsDir != "" {
-		fmt.Printf("\nTo register this workspace, start the server and run:\n")
-		fmt.Printf("  nano-brain init --root %s\n\n", wsDir)
-	}
+	return harvesterBlock, summaryBlock, searchBlock, watcherBlock, loggingBlock
 }
 
 func promptWithDefault(scanner *bufio.Scanner, prompt, defaultVal string) string {
