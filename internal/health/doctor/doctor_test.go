@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/health/doctor"
 )
 
@@ -102,5 +103,35 @@ func TestCheckMCPReachable_404(t *testing.T) {
 	c := doctor.CheckMCPReachable(srv.URL + "/mcp")
 	if c.Status != "fail" {
 		t.Errorf("status = %q, want fail", c.Status)
+	}
+}
+
+func TestCheckEmbeddingProvider_Disabled(t *testing.T) {
+	c, body := doctor.CheckEmbeddingProvider(config.EmbeddingConfig{Provider: ""})
+	if c.Status != "skip" {
+		t.Errorf("status = %q, want skip", c.Status)
+	}
+	if c.Detail != "disabled — BM25-only" {
+		t.Errorf("detail = %q, want %q", c.Detail, "disabled — BM25-only")
+	}
+	if body != nil {
+		t.Errorf("ollamaBody = %v, want nil", body)
+	}
+}
+
+func TestCheckEmbeddingModel_Disabled(t *testing.T) {
+	c := doctor.CheckEmbeddingModel(config.EmbeddingConfig{Provider: ""}, nil)
+	if c.Status != "skip" {
+		t.Errorf("status = %q, want skip", c.Status)
+	}
+	if c.Detail != "disabled — BM25-only" {
+		t.Errorf("detail = %q, want %q", c.Detail, "disabled — BM25-only")
+	}
+}
+
+func TestCheckEmbeddingProvider_VoyageConfigured(t *testing.T) {
+	c, _ := doctor.CheckEmbeddingProvider(config.EmbeddingConfig{Provider: "voyage", VoyageAPIKey: "k"})
+	if c.Status != "ok" {
+		t.Errorf("status = %q, want ok", c.Status)
 	}
 }
