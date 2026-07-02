@@ -1,6 +1,230 @@
 {
   "components": {
     "schemas": {
+      "handlers.BM25SearchRequest": {
+        "properties": {
+          "created_after": {
+            "type": "string"
+          },
+          "created_before": {
+            "type": "string"
+          },
+          "max_results": {
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_after": {
+            "type": "string"
+          },
+          "updated_before": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.QueryRequest": {
+        "properties": {
+          "chunk_type": {
+            "type": "string"
+          },
+          "created_after": {
+            "type": "string"
+          },
+          "created_before": {
+            "type": "string"
+          },
+          "max_results": {
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_after": {
+            "type": "string"
+          },
+          "updated_before": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.SearchResponse": {
+        "properties": {
+          "query_ms": {
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.SearchResult"
+            },
+            "type": "array"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.SearchResult": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.VSearchRequest": {
+        "properties": {
+          "created_after": {
+            "type": "string"
+          },
+          "created_before": {
+            "type": "string"
+          },
+          "max_results": {
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_after": {
+            "type": "string"
+          },
+          "updated_before": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowchartRequest": {
+        "properties": {
+          "entry": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowchartResponse": {
+        "properties": {
+          "cfg": {
+            "type": "object"
+          },
+          "entry": {
+            "type": "string"
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.graphEdgeItem": {
+        "properties": {
+          "edge_type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.graphQueryRequest": {
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "edge_type": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.graphQueryResponse": {
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.graphEdgeItem"
+            },
+            "type": "array"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.harvesterStatusResponse": {
         "properties": {
           "claude_code": {
@@ -66,6 +290,134 @@
         },
         "type": "object"
       },
+      "handlers.impactNode": {
+        "properties": {
+          "depth": {
+            "type": "integer"
+          },
+          "edge_type": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.impactRequest": {
+        "properties": {
+          "edge_type": {
+            "type": "string"
+          },
+          "max_depth": {
+            "type": "integer"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.impactResponse": {
+        "properties": {
+          "impacted": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.impactNode"
+            },
+            "type": "array"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.neighborhoodEdge": {
+        "properties": {
+          "edge_type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.neighborhoodNode": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.neighborhoodResponse": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.neighborhoodEdge"
+            },
+            "type": "array"
+          },
+          "frontier_nodes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "node_kind": {
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.neighborhoodNode"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.overviewRequest": {
+        "properties": {
+          "edge_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "handlers.statusResponse": {
         "properties": {
           "active_provider": {
@@ -100,6 +452,45 @@
           },
           "workspace_count": {
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.traceRequest": {
+        "properties": {
+          "max_depth": {
+            "type": "integer"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.traceResponse": {
+        "properties": {
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.traceStep"
+            },
+            "type": "array"
+          },
+          "entry": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.traceStep": {
+        "properties": {
+          "depth": {
+            "type": "integer"
+          },
+          "node": {
+            "type": "string"
+          },
+          "via": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -169,6 +560,414 @@
         "summary": "Detailed server status",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/v1/graph/flowchart": {
+      "post": {
+        "description": "Resolves an HTTP route entry or handler symbol to its stored control-flow graph",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.flowchartRequest"
+              }
+            }
+          },
+          "description": "Flowchart query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.flowchartResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Get a function's control-flow graph",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/impact": {
+      "post": {
+        "description": "Returns nodes that would be impacted (transitively depend on) a given node, up to max_depth",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.impactRequest"
+              }
+            }
+          },
+          "description": "Impact query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.impactResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Impact analysis for a graph node",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/overview": {
+      "post": {
+        "description": "Returns the top-N most-connected nodes for the workspace and all edges between them",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.overviewRequest"
+              }
+            }
+          },
+          "description": "Overview query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.neighborhoodResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Top-N most-connected graph nodes overview",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/query": {
+      "post": {
+        "description": "Returns outgoing, incoming, or both-direction edges for a given graph node, scoped to a workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.graphQueryRequest"
+              }
+            }
+          },
+          "description": "Graph query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.graphQueryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Query graph edges for a node",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/trace": {
+      "post": {
+        "description": "Breadth-first traces the outgoing call chain from an entry node, up to max_depth",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.traceRequest"
+              }
+            }
+          },
+          "description": "Trace query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.traceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Trace a call chain from an entry node",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/query": {
+      "post": {
+        "description": "Runs the hybrid search pipeline (BM25 + vector + RRF fusion) scoped to a workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.QueryRequest"
+              }
+            }
+          },
+          "description": "Search query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.SearchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Hybrid BM25 + vector search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search": {
+      "post": {
+        "description": "Runs a BM25 full-text search scoped to a workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.BM25SearchRequest"
+              }
+            }
+          },
+          "description": "Search query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.SearchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "BM25 full-text search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/vsearch": {
+      "post": {
+        "description": "Embeds the query and returns the nearest documents by vector similarity, scoped to a workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.VSearchRequest"
+              }
+            }
+          },
+          "description": "Search query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.SearchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Vector similarity search",
+        "tags": [
+          "search"
         ]
       }
     },
