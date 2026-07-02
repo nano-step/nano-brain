@@ -263,15 +263,15 @@ Plans:
 **Goal:** `nano-brain init` (no args, TTY) takes a user from binary-installed to MCP-tools-working in one interactive command: detect/provision PostgreSQL → optional embeddings → write config → doctor → start server → register workspace → auto-configure chosen MCP clients → summary — in ≤6 core questions, safely re-runnable.
 **Requirements**: D-01..D-18 (CONTEXT-scoped; no REQUIREMENTS.md IDs)
 **Depends on:** Phase 12
-**Plans:** 8 plans
+**Plans:** 4/8 plans executed
 
 Plans:
 
-- [ ] 13-01-PLAN.md — Docker CLI wrapper (os/exec): detect + provision pgvector container with name/port-conflict recovery (D-06, D-07)
-- [ ] 13-02-PLAN.md — doctor: skip (not fail) embedding checks when provider is disabled (D-13)
+- [x] 13-01-PLAN.md — Docker CLI wrapper (os/exec): detect + provision pgvector container with name/port-conflict recovery (D-06, D-07)
+- [x] 13-02-PLAN.md — doctor: skip (not fail) embedding checks when provider is disabled (D-13)
 - [ ] 13-03-PLAN.md — database wizard step: detect → Docker-provision → remote-URL fallback with readiness poll + validate (D-05, D-08, D-09)
-- [ ] 13-04-PLAN.md — embedding wizard step: enable gate + Ollama auto-detect / any-URL / voyage, BM25 degrade (D-11, D-12)
-- [ ] 13-05-PLAN.md — extract registerWorkspace helper shared by init --root and the wizard (D-15)
+- [x] 13-04-PLAN.md — embedding wizard step: enable gate + Ollama auto-detect / any-URL / voyage, BM25 degrade (D-11, D-12)
+- [x] 13-05-PLAN.md — extract registerWorkspace helper shared by init --root and the wizard (D-15)
 - [ ] 13-06-PLAN.md — serve wizard step: gated daemon start with Windows guard and abort-on-PG-fail (D-14)
 - [ ] 13-07-PLAN.md — orchestrator: restructure runInteractiveInit into the step sequence, ≤6-question budget, advanced gate, TTY contract, summary (D-01, D-02, D-03, D-04, D-16, D-17)
 - [ ] 13-08-PLAN.md — docs: rewrite SETUP_AGENT.md around the one-command flow + move manual steps to appendix, update README Start (D-18)
