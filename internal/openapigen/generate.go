@@ -32,6 +32,11 @@ func (nopDebugger) Printf(string, ...interface{}) {}
 // document to OpenAPI 3.0, and returns the deterministically-marshaled
 // (indented, stable key order via encoding/json) JSON bytes.
 //
+// mainAPIFile is resolved relative to searchDir, matching swag's
+// gen.Config.MainAPIFile semantics — callers running from different working
+// directories (e.g. the test package vs. cmd/generate-openapi) must keep
+// both arguments consistent with each other, not just individually valid.
+//
 // This is a build-time-only operation — nano-brain does not regenerate the
 // spec at request time. Callers are expected to write the returned bytes to
 // docs/openapi.json (see internal/openapigen/cmd/generate-openapi) or compare

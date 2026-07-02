@@ -152,3 +152,144 @@ func TestOpenAPISpec_RouteReconciliation(t *testing.T) {
 		t.Errorf("%s unexpectedly contains \"/ui\" — it is a static HTML redirect page, not a JSON REST endpoint, and should stay excluded", specPath)
 	}
 }
+
+// expectedSecurity maps "METHOD path" to the exact set of security scheme
+// names that route's routes.go middleware group requires, hand-derived
+// directly from internal/server/routes.go (api group -> none; data group,
+// gated by workspaceMiddleware -> WorkspaceAuth; write group, gated by
+// workspaceRegisteredMiddleware+csrfMW -> WorkspaceRegisteredAuth AND
+// CSRFToken). Top-level routes registered directly on s.echo (outside any
+// group) also require none. Keyed per-method since a single handler (e.g.
+// WakeUpHandler) can be mounted twice at the same path with different
+// middleware tiers per method (see CR-01 in 12-REVIEW.md: this exact case
+// shipped with a missing @Security tag on the authenticated mount before
+// this test existed). Protocol tunnels (/mcp, /sse) and /ui are
+// deliberately absent — they're presence-only or excluded, not security-
+// tiered JSON endpoints.
+var expectedSecurity = map[string][]string{
+	// top-level (s.echo directly, no group) — no security
+	"GET /health":             nil,
+	"GET /api/status":         nil,
+	"GET /api/version":        nil,
+	"GET /api/openapi.json":   nil,
+	"POST /api/harvest":       nil,
+	"POST /api/reload-config": nil,
+
+	// api group (contentTypeMiddleware only) — no security
+	"POST /api/v1/init":                nil,
+	"GET /api/v1/workspaces":           nil,
+	"POST /api/v1/workspaces/resolve":  nil,
+	"DELETE /api/v1/workspaces/{hash}": nil,
+	"POST /api/v1/reset-workspace":     nil,
+	"GET /api/v1/config":               nil,
+	"POST /api/v1/config":              nil,
+	"GET /api/v1/doctor":               nil,
+	"GET /api/v1/wake-up":              nil, // api.GET mount — unauthenticated
+	"GET /api/v1/sessions/by-ticket":   nil,
+
+	// data group (workspaceMiddleware) — WorkspaceAuth
+	"GET /api/v1/events":                   {"WorkspaceAuth"},
+	"POST /api/v1/collections":             {"WorkspaceAuth"},
+	"GET /api/v1/collections":              {"WorkspaceAuth"},
+	"PUT /api/v1/collections/{name}":       {"WorkspaceAuth"},
+	"DELETE /api/v1/collections/{name}":    {"WorkspaceAuth"},
+	"GET /api/v1/tags":                     {"WorkspaceAuth"},
+	"GET /api/v1/documents":                {"WorkspaceAuth"},
+	"DELETE /api/v1/documents/{id}":        {"WorkspaceAuth"},
+	"POST /api/v1/get":                     {"WorkspaceAuth"},
+	"POST /api/v1/multi-get":               {"WorkspaceAuth"},
+	"GET /api/v1/symbols":                  {"WorkspaceAuth"},
+	"POST /api/v1/graph/query":             {"WorkspaceAuth"},
+	"POST /api/v1/graph/overview":          {"WorkspaceAuth"},
+	"POST /api/v1/graph/impact":            {"WorkspaceAuth"},
+	"POST /api/v1/graph/trace":             {"WorkspaceAuth"},
+	"POST /api/v1/graph/flow":              {"WorkspaceAuth"},
+	"POST /api/v1/graph/flowchart":         {"WorkspaceAuth"},
+	"GET /api/v1/graph/flow/endpoints":     {"WorkspaceAuth"},
+	"POST /api/v1/vsearch":                 {"WorkspaceAuth"},
+	"POST /api/v1/search":                  {"WorkspaceAuth"},
+	"POST /api/v1/query":                   {"WorkspaceAuth"},
+	"GET /api/v1/stats":                    {"WorkspaceAuth"},
+	"GET /api/v1/links/{doc_id}/backlinks": {"WorkspaceAuth"},
+	"GET /api/v1/links/resolve":            {"WorkspaceAuth"},
+	"POST /api/v1/wake-up":                 {"WorkspaceAuth"}, // data.POST mount — workspace-scoped
+
+	// write group (workspaceRegisteredMiddleware + csrfMW) — both schemes required
+	"POST /api/v1/write":                    {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/embed":                    {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/reindex":                  {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/reindex-cfg":              {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/update":                   {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/summarize":                {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/code/summarize":           {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"GET /api/v1/code/summarize/status":     {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"GET /api/v1/code/summarize/failures":   {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/code/summarize/retry":     {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/code/summarize/retry-all": {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/flow/materialize":         {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/graph/pagerank/compute":   {"WorkspaceRegisteredAuth", "CSRFToken"},
+	"POST /api/v1/graph/neighborhood":       {"WorkspaceRegisteredAuth", "CSRFToken"},
+}
+
+// TestOpenAPISpec_SecurityMatchesMiddleware guards against the CR-01 class
+// of bug (12-REVIEW.md): a route's swag @Security annotation silently
+// diverging from the real middleware group it's registered under in
+// routes.go. Without this test, TestOpenAPISpec_NoDrift and
+// TestOpenAPISpec_RouteReconciliation both pass even when a route's
+// documented security requirements are wrong, since neither cross-
+// references routes.go's middleware groups — only this test does.
+func TestOpenAPISpec_SecurityMatchesMiddleware(t *testing.T) {
+	const specPath = "../../docs/openapi.json"
+
+	raw, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatalf("reading %s: %v", specPath, err)
+	}
+
+	var doc struct {
+		Paths map[string]map[string]struct {
+			Security []map[string][]string `json:"security"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal %s: %v", specPath, err)
+	}
+
+	for key, want := range expectedSecurity {
+		parts := bytes.SplitN([]byte(key), []byte(" "), 2)
+		method, path := string(bytes.ToLower(parts[0])), string(parts[1])
+
+		op, ok := doc.Paths[path][method]
+		if !ok {
+			t.Errorf("%s: no such operation in %s (check expectedSecurity/expectedRoutePaths are in sync)", key, specPath)
+			continue
+		}
+
+		var got []string
+		for _, scheme := range op.Security {
+			for name := range scheme {
+				got = append(got, name)
+			}
+		}
+
+		if len(want) == 0 {
+			if len(got) != 0 {
+				t.Errorf("%s: expected no @Security, got %v — this route is unauthenticated per routes.go's group membership", key, got)
+			}
+			continue
+		}
+
+		for _, w := range want {
+			found := false
+			for _, g := range got {
+				if g == w {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("%s: missing @Security %s (got %v) — routes.go registers this route in a middleware group requiring it", key, w, got)
+			}
+		}
+	}
+}

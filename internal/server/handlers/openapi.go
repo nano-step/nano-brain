@@ -27,8 +27,11 @@ var openapiSpecFS embed.FS
 // @Success      200 {object} map[string]interface{}
 // @Router       /api/openapi.json [get]
 func OpenAPISpec() echo.HandlerFunc {
-	specJSON, _ := openapiSpecFS.ReadFile("openapi.json")
+	specJSON, err := openapiSpecFS.ReadFile("openapi.json")
 	return func(c echo.Context) error {
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "openapi spec unavailable")
+		}
 		return c.Blob(http.StatusOK, "application/json", specJSON)
 	}
 }

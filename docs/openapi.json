@@ -4020,7 +4020,7 @@
     },
     "/api/v1/wake-up": {
       "get": {
-        "description": "Returns recent memories, active collections, and workspace stats. Mounted at both GET /api/v1/wake-up (unauthenticated, api group) and POST /api/v1/wake-up (workspace-scoped, data group — requires @Security WorkspaceAuth on the POST path).",
+        "description": "Returns recent memories, active collections, and workspace stats. No workspace middleware on this GET mount.",
         "responses": {
           "200": {
             "content": {
@@ -4059,13 +4059,13 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "Get a session-start context summary",
+        "summary": "Get a session-start context summary (unauthenticated)",
         "tags": [
           "wakeup"
         ]
       },
       "post": {
-        "description": "Returns recent memories, active collections, and workspace stats. Mounted at both GET /api/v1/wake-up (unauthenticated, api group) and POST /api/v1/wake-up (workspace-scoped, data group — requires @Security WorkspaceAuth on the POST path).",
+        "description": "Returns recent memories, active collections, and workspace stats. This POST mount is in the data group, gated by workspaceMiddleware.",
         "responses": {
           "200": {
             "content": {
@@ -4104,7 +4104,12 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "Get a session-start context summary",
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Get a session-start context summary (workspace-scoped)",
         "tags": [
           "wakeup"
         ]
