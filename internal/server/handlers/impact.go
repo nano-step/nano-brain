@@ -27,10 +27,21 @@ type impactNode struct {
 }
 
 type impactResponse struct {
-	Node    string       `json:"node"`
+	Node     string       `json:"node"`
 	Impacted []impactNode `json:"impacted"`
 }
 
+// GraphImpact godoc
+// @Summary      Impact analysis for a graph node
+// @Description  Returns nodes that would be impacted (transitively depend on) a given node, up to max_depth
+// @Tags         graph
+// @Accept       json
+// @Produce      json
+// @Param        request body impactRequest true "Impact query"
+// @Success      200 {object} impactResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/graph/impact [post]
 func GraphImpact(q ImpactQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)
@@ -54,7 +65,7 @@ func GraphImpact(q ImpactQuerier, logger zerolog.Logger) echo.HandlerFunc {
 		}
 
 		return c.JSON(http.StatusOK, impactResponse{
-			Node:    req.Node,
+			Node:     req.Node,
 			Impacted: impacted,
 		})
 	}

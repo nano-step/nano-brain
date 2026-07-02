@@ -129,6 +129,15 @@ func (h *StatsHandler) SetHarvestStatus(s HarvestStatusSnapshot) {
 	h.harvestStatus = s
 }
 
+// Handle godoc
+// @Summary      Workspace statistics dashboard
+// @Description  Reports document/chunk/embedding/graph-edge counts, top tags, harvester and watcher status, and recent documents for a workspace
+// @Tags         stats
+// @Produce      json
+// @Success      200 {object} statsResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/stats [get]
 func (h *StatsHandler) Handle(c echo.Context) error {
 	workspace, _ := c.Get("workspace").(string)
 	if workspace == "" {

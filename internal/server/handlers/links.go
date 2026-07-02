@@ -29,12 +29,24 @@ type backlinkItem struct {
 }
 
 type backlinksResponse struct {
-	Total    int64          `json:"total"`
-	Items    []backlinkItem `json:"items"`
-	DocID    string         `json:"doc_id"`
+	Total int64          `json:"total"`
+	Items []backlinkItem `json:"items"`
+	DocID string         `json:"doc_id"`
 }
 
 // Backlinks returns documents that link to the given doc_id.
+//
+// @Summary      List documents that link to a document
+// @Description  Returns documents that link to the given doc_id, paginated
+// @Tags         links
+// @Produce      json
+// @Param        doc_id path string true "Target document ID"
+// @Param        limit query int false "Max results (default 20, max 100)"
+// @Param        offset query int false "Result offset"
+// @Success      200 {object} backlinksResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/links/{doc_id}/backlinks [get]
 func Backlinks(q BacklinksQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		docID := c.Param("doc_id")
@@ -160,6 +172,16 @@ type resolveResult struct {
 }
 
 // ResolveLink wraps a LinkResolver to resolve titles or IDs via HTTP.
+//
+// @Summary      Resolve a link query to document IDs
+// @Description  Resolves a query string as either a document UUID or a title match
+// @Tags         links
+// @Produce      json
+// @Param        query query string true "Document ID or title to resolve"
+// @Success      200 {object} resolveResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/links/resolve [get]
 func ResolveLink(resolver LinkQueryResolver, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

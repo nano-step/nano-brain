@@ -32,6 +32,18 @@ type RetryResponse struct {
 }
 
 // RetryCodeSummarize retries specific failed code summarizations.
+//
+// @Summary      Retry specific failed code summarizations
+// @Description  Retries code summarization for the given failure_ids
+// @Tags         code-summarize
+// @Accept       json
+// @Produce      json
+// @Param        request body RetryRequest true "Retry options (failure_ids required)"
+// @Success      200 {object} RetryResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/code/summarize/retry [post]
 func RetryCodeSummarize(
 	getSummarizer func() CodeSummarizer,
 	queries CodeSummarizeRetryQuerier,
@@ -141,6 +153,18 @@ func RetryCodeSummarize(
 }
 
 // RetryAllCodeSummarize retries all failed code summarizations for a workspace.
+//
+// @Summary      Retry all failed code summarizations
+// @Description  Retries code summarization for every unresolved failure in the workspace
+// @Tags         code-summarize
+// @Accept       json
+// @Produce      json
+// @Param        request body RetryRequest true "Retry options"
+// @Success      200 {object} RetryResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/code/summarize/retry-all [post]
 func RetryAllCodeSummarize(
 	getSummarizer func() CodeSummarizer,
 	queries CodeSummarizeRetryQuerier,

@@ -31,6 +31,17 @@ type traceResponse struct {
 	Chain []traceStep `json:"chain"`
 }
 
+// GraphTrace godoc
+// @Summary      Trace a call chain from an entry node
+// @Description  Breadth-first traces the outgoing call chain from an entry node, up to max_depth
+// @Tags         graph
+// @Accept       json
+// @Produce      json
+// @Param        request body traceRequest true "Trace query"
+// @Success      200 {object} traceResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/graph/trace [post]
 func GraphTrace(q TraceQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

@@ -25,6 +25,16 @@ type FailureResponse struct {
 	LastAttemptAt time.Time `json:"last_attempt_at"`
 }
 
+// GetCodeSummarizeFailures godoc
+// @Summary      List unresolved code summarization failures
+// @Description  Returns unresolved code-symbol summarization failures for the workspace
+// @Tags         code-summarize
+// @Produce      json
+// @Success      200 {array} FailureResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/code/summarize/failures [get]
 func GetCodeSummarizeFailures(
 	queries CodeSummarizationFailuresQuerier,
 	logger zerolog.Logger,

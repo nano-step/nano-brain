@@ -40,6 +40,18 @@ type SummarizeQuerier interface {
 	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
 }
 
+// TriggerSummarize godoc
+// @Summary      Summarize pending session documents for a workspace
+// @Description  Summarizes up to `limit` session documents for a workspace via the configured summarizer
+// @Tags         summarize
+// @Accept       json
+// @Produce      json
+// @Param        request body SummarizeRequest true "Summarize options"
+// @Success      200 {object} SummarizeResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/summarize [post]
 func TriggerSummarize(
 	getSummarizer func() SummarizeSummarizer,
 	queries SummarizeQuerier,

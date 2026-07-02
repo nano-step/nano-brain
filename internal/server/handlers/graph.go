@@ -32,6 +32,17 @@ type graphQueryResponse struct {
 	Edges     []graphEdgeItem `json:"edges"`
 }
 
+// GraphQuery godoc
+// @Summary      Query graph edges for a node
+// @Description  Returns outgoing, incoming, or both-direction edges for a given graph node, scoped to a workspace
+// @Tags         graph
+// @Accept       json
+// @Produce      json
+// @Param        request body graphQueryRequest true "Graph query"
+// @Success      200 {object} graphQueryResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/graph/query [post]
 func GraphQuery(q GraphQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

@@ -34,6 +34,17 @@ type overviewRequest struct {
 // connected nodes for the workspace and all edges between them. Used by
 // /ui/graph to auto-display a default subgraph without manual focus input.
 // See openspec/specs/graph-overview-endpoint for the canonical contract.
+//
+// @Summary      Top-N most-connected graph nodes overview
+// @Description  Returns the top-N most-connected nodes for the workspace and all edges between them
+// @Tags         graph
+// @Accept       json
+// @Produce      json
+// @Param        request body overviewRequest true "Overview query"
+// @Success      200 {object} neighborhoodResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/graph/overview [post]
 func GraphOverview(q OverviewQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req overviewRequest

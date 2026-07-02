@@ -31,11 +31,11 @@ type neighborhoodRequest struct {
 }
 
 type neighborhoodNode struct {
-	ID         string    `json:"id"`
-	Title      string    `json:"title,omitempty"`
-	Collection string    `json:"collection,omitempty"`
+	ID         string     `json:"id"`
+	Title      string     `json:"title,omitempty"`
+	Collection string     `json:"collection,omitempty"`
 	UpdatedAt  *time.Time `json:"updated_at,omitempty"`
-	Tags       []string  `json:"tags,omitempty"`
+	Tags       []string   `json:"tags,omitempty"`
 }
 
 type neighborhoodEdge struct {
@@ -53,6 +53,19 @@ type neighborhoodResponse struct {
 }
 
 // GraphNeighborhood handles POST /api/v1/graph/neighborhood with BFS traversal.
+//
+// @Summary      BFS graph neighborhood around a focus node
+// @Description  Breadth-first traverses the graph around a focus node up to a given depth
+// @Tags         graph
+// @Accept       json
+// @Produce      json
+// @Param        request body neighborhoodRequest true "Neighborhood query"
+// @Success      200 {object} neighborhoodResponse
+// @Failure      400 {object} map[string]string
+// @Failure      422 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/graph/neighborhood [post]
 func GraphNeighborhood(q NeighborhoodQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req neighborhoodRequest

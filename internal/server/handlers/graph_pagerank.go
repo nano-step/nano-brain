@@ -16,6 +16,16 @@ type PageRankQuerier interface {
 	DeletePageRankScores(ctx context.Context, workspaceHash string) error
 }
 
+// GraphPageRankCompute godoc
+// @Summary      Recompute PageRank scores for the call graph
+// @Description  Recomputes and persists PageRank centrality scores over the workspace's call-edge graph
+// @Tags         graph
+// @Produce      json
+// @Success      200 {object} map[string]interface{}
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/graph/pagerank/compute [post]
 func GraphPageRankCompute(q PageRankQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

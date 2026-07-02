@@ -20,15 +20,26 @@ type BM25SearchQuerier interface {
 }
 
 type BM25SearchRequest struct {
-	Query           string   `json:"query"`
-	MaxResults      int      `json:"max_results,omitempty"`
-	Tags            []string `json:"tags,omitempty"`
-	CreatedAfter    string   `json:"created_after,omitempty"`
-	CreatedBefore   string   `json:"created_before,omitempty"`
-	UpdatedAfter    string   `json:"updated_after,omitempty"`
-	UpdatedBefore   string   `json:"updated_before,omitempty"`
+	Query         string   `json:"query"`
+	MaxResults    int      `json:"max_results,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	CreatedAfter  string   `json:"created_after,omitempty"`
+	CreatedBefore string   `json:"created_before,omitempty"`
+	UpdatedAfter  string   `json:"updated_after,omitempty"`
+	UpdatedBefore string   `json:"updated_before,omitempty"`
 }
 
+// BM25Search godoc
+// @Summary      BM25 full-text search
+// @Description  Runs a BM25 full-text search scoped to a workspace
+// @Tags         search
+// @Accept       json
+// @Produce      json
+// @Param        request body BM25SearchRequest true "Search query"
+// @Success      200 {object} SearchResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/search [post]
 func BM25Search(q BM25SearchQuerier, logger zerolog.Logger, rec ...*telemetry.Recorder) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req BM25SearchRequest
@@ -97,7 +108,7 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger, rec ...*telemetry.Re
 				WorkspaceHash: workspace,
 				Tags:          req.Tags,
 				MaxResults:    limit,
-				CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
+				CreatedAfter:  ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 			})
 			if err != nil {
 				logger.Error().Err(err).Str("workspace", workspace).Msg("bm25 search failed")
@@ -118,7 +129,7 @@ func BM25Search(q BM25SearchQuerier, logger zerolog.Logger, rec ...*telemetry.Re
 				Query:         req.Query,
 				WorkspaceHash: workspace,
 				MaxResults:    limit,
-				CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
+				CreatedAfter:  ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 			})
 			if err != nil {
 				logger.Error().Err(err).Str("workspace", workspace).Msg("bm25 search failed")
