@@ -29,4 +29,5 @@ CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain   # Build
 go test -race -short ./...                                 # Unit tests
 go test -race -tags=integration ./...                      # Integration tests
 sqlc generate                                              # SQL codegen
+make generate-openapi                                      # OpenAPI spec regeneration
 ```

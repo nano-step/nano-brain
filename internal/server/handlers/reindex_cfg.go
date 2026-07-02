@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	gitignore "github.com/sabhiram/go-gitignore"
 	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
+	gitignore "github.com/sabhiram/go-gitignore"
 )
 
 type ReindexCFGQuerier interface {
@@ -29,15 +29,15 @@ type ReindexCFGQuerier interface {
 
 type reindexCFGRequest struct {
 	Workspace string `json:"workspace"`
-	Full     bool   `json:"full"`
-	Wipe     bool   `json:"wipe"`
+	Full      bool   `json:"full"`
+	Wipe      bool   `json:"wipe"`
 }
 
 type reindexCFGResponse struct {
-	Status        string `json:"status"`
-	FilesProcessed int   `json:"files_processed"`
-	CFGsExtracted int   `json:"cfgs_extracted"`
-	DurationMs    int64  `json:"duration_ms"`
+	Status         string `json:"status"`
+	FilesProcessed int    `json:"files_processed"`
+	CFGsExtracted  int    `json:"cfgs_extracted"`
+	DurationMs     int64  `json:"duration_ms"`
 }
 
 var cfgExts = map[string]bool{
@@ -48,6 +48,18 @@ var cfgExts = map[string]bool{
 	".rb":  true,
 }
 
+// ReindexCFG godoc
+// @Summary      Reindex control-flow graphs for a workspace's code collection
+// @Description  Extracts and persists function control-flow graphs (CFGs) for JS/TS/Ruby files, incrementally or via full filesystem walk
+// @Tags         reindex
+// @Accept       json
+// @Produce      json
+// @Param        request body reindexCFGRequest true "Reindex-CFG options"
+// @Success      200 {object} reindexCFGResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/reindex-cfg [post]
 func ReindexCFG(queries ReindexCFGQuerier, graphReg *graph.Registry, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		start := time.Now()
@@ -114,10 +126,10 @@ func ReindexCFG(queries ReindexCFGQuerier, graphReg *graph.Registry, logger zero
 			Msg("reindex-cfg completed")
 
 		return c.JSON(http.StatusOK, reindexCFGResponse{
-			Status:        "completed",
+			Status:         "completed",
 			FilesProcessed: filesProcessed,
-			CFGsExtracted: cfgsExtracted,
-			DurationMs:    time.Since(start).Milliseconds(),
+			CFGsExtracted:  cfgsExtracted,
+			DurationMs:     time.Since(start).Milliseconds(),
 		})
 	}
 }

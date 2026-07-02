@@ -232,3 +232,28 @@ Plans:
 - [x] 10-01-PLAN.md — Add workspace `name` to the /api/v1/init response + CLI decode (prerequisite for name-bound URL) (wave 1)
 - [x] 10-02-PLAN.md — Config detection + JSON/TOML merge core + 3 client writers + prompt orchestration wired into runInitCmd (wave 2)
 - [x] 10-03-PLAN.md — Fix stale OpenCode `type:http` → `type:remote` in docs (SETUP_AGENT.md, README.md, reference-readme.md) (wave 1)
+
+### Phase 12: Add OpenAPI 3.0 spec for the REST API (issue #530) — cover all ~60 existing routes in internal/server/routes.go, served at runtime (GET /api/openapi.json), single source of truth with the route table so drift is caught, not a hand-maintained doc
+
+**Goal:** nano-brain's REST API is self-describing — a generated, drift-checked OpenAPI 3.0 document covering all ~60 routes in internal/server/routes.go is served at GET /api/openapi.json, kept in sync with the route table by an automated test so it can never silently go stale (issue #530).
+**Requirements**: D-01..D-06 (CONTEXT.md); issue #530 AC-1..AC-4
+**Depends on:** none (independent of Phase 11 — that work lives on a separate unmerged branch)
+**Plans:** 4/4 plans complete
+
+Plans:
+**Wave 1**
+
+- [x] 12-01-PLAN.md — Foundation + Assumption A1 spike (blocking gate): add swaggo/swag + kin-openapi deps, doc.go @securityDefinitions, internal/openapigen generation pipeline (swag → openapi2conv.ToV3), Makefile target, initial committed spec, drift + schema-validation tests [Wave 1] — Assumption A1 PASSED
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 12-02-PLAN.md — Annotate core handler group (workspace/config/doctor/collections/documents/symbols/tags/wakeup/ticket/harvest/reload/events) + protocol-tunnel (/mcp,/sse) presence [Wave 2, parallel with 03]
+- [x] 12-03-PLAN.md — Annotate graph/search handler group (query/search/graph/flow/impact/trace/links/embed/reindex/summarize/code-summarize/stats) with per-tier @Security [Wave 2, parallel with 02]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 12-04-PLAN.md — Regenerate complete spec, serve at GET /api/openapi.json (public via BypassPaths), route-reconciliation drift test (single source of truth), handler test, docs pointer (README/SETUP_AGENT/CLAUDE.md) [Wave 3] — 53 paths, all 4 issue #530 acceptance criteria closed
+
+**Cross-cutting constraints:**
+
+- The whole project still builds and the existing test suite stays green — annotations are pure comments, zero behavior change

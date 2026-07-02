@@ -25,10 +25,10 @@ type WakeUpRequest struct {
 }
 
 type WakeUpResponse struct {
-	Summary           string                 `json:"summary"`
-	RecentMemories    []RecentMemory         `json:"recent_memories"`
-	ActiveCollections []ActiveCollection     `json:"active_collections"`
-	Stats             WakeUpStats            `json:"stats"`
+	Summary           string             `json:"summary"`
+	RecentMemories    []RecentMemory     `json:"recent_memories"`
+	ActiveCollections []ActiveCollection `json:"active_collections"`
+	Stats             WakeUpStats        `json:"stats"`
 }
 
 type RecentMemory struct {
@@ -53,6 +53,45 @@ type WakeUpStats struct {
 
 const defaultWakeUpLimit = 10
 
+// wakeUpUnauthenticatedDoc and wakeUpScopedDoc are never called — they exist
+// purely as swag doc-comment anchors. WakeUpHandler backs both GET
+// /api/v1/wake-up (api group, no middleware) and POST /api/v1/wake-up (data
+// group, gated by workspaceMiddleware) with the SAME implementation, but the
+// two routes have DIFFERENT auth requirements — a single shared @Router
+// block can't carry two different @Security tags, so each mount point gets
+// its own doc-only anchor (mirroring protocol_doc.go's pattern) rather than
+// one block silently omitting @Security for the authenticated path.
+
+// wakeUpUnauthenticatedDoc godoc
+// @Summary      Get a session-start context summary (unauthenticated)
+// @Description  Returns recent memories, active collections, and workspace stats. No workspace middleware on this GET mount.
+// @Tags         wakeup
+// @Produce      json
+// @Success      200 {object} WakeUpResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Router       /api/v1/wake-up [get]
+//
+//nolint:unused // doc-only anchor for swag, never invoked
+func wakeUpUnauthenticatedDoc() {}
+
+// wakeUpScopedDoc godoc
+// @Summary      Get a session-start context summary (workspace-scoped)
+// @Description  Returns recent memories, active collections, and workspace stats. This POST mount is in the data group, gated by workspaceMiddleware.
+// @Tags         wakeup
+// @Produce      json
+// @Success      200 {object} WakeUpResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/wake-up [post]
+//
+//nolint:unused // doc-only anchor for swag, never invoked
+func wakeUpScopedDoc() {}
+
+// WakeUpHandler backs both /api/v1/wake-up mount points (see the doc anchors
+// above for their swag annotations — this function is not itself annotated
+// since the two routes require different @Security tags).
 func WakeUpHandler(q WakeUpQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req WakeUpRequest
@@ -85,12 +124,12 @@ func WakeUpHandler(q WakeUpQuerier, logger zerolog.Logger) echo.HandlerFunc {
 
 		ctx := c.Request().Context()
 
-	docs, err := q.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
-		WorkspaceHash: workspace,
-		MaxResults:    int32(limit),
-		Collections:   []string{"memory", "sessions"},
-	})
-	if err != nil {
+		docs, err := q.RecentDocuments(ctx, sqlc.RecentDocumentsParams{
+			WorkspaceHash: workspace,
+			MaxResults:    int32(limit),
+			Collections:   []string{"memory", "sessions"},
+		})
+		if err != nil {
 			logger.Error().Err(err).Str("workspace", workspace).Msg("wake-up: recent documents failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch recent documents")
 		}
@@ -149,8 +188,8 @@ func WakeUpHandler(q WakeUpQuerier, logger zerolog.Logger) echo.HandlerFunc {
 		summary := formatWakeUpSummary(docStats.TotalDocuments, int64(len(collections)), docStats.LastUpdated)
 
 		return c.JSON(http.StatusOK, WakeUpResponse{
-			Summary:        summary,
-			RecentMemories: memories,
+			Summary:           summary,
+			RecentMemories:    memories,
 			ActiveCollections: cols,
 			Stats: WakeUpStats{
 				TotalDocuments: docStats.TotalDocuments,

@@ -1,0 +1,4456 @@
+{
+  "components": {
+    "schemas": {
+      "config.PatchRequest": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "value": {}
+        },
+        "type": "object"
+      },
+      "handlers.ActiveCollection": {
+        "properties": {
+          "document_count": {
+            "type": "integer"
+          },
+          "last_updated": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.AddCollectionRequest": {
+        "properties": {
+          "allowed_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "exclude_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "glob_pattern": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.BM25SearchRequest": {
+        "properties": {
+          "created_after": {
+            "type": "string"
+          },
+          "created_before": {
+            "type": "string"
+          },
+          "max_results": {
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_after": {
+            "type": "string"
+          },
+          "updated_before": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.CodeSummarizeRequest": {
+        "properties": {
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.CodeSummarizeResponse": {
+        "properties": {
+          "errors": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "processed": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.CodeSummarizeStatusResponse": {
+        "properties": {
+          "failed": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer"
+          },
+          "summarized": {
+            "type": "integer"
+          },
+          "total_symbols": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.CollectionResponse": {
+        "properties": {
+          "allowed_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "document_count": {
+            "type": "integer"
+          },
+          "exclude_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "glob_pattern": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "update_mode": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.EmbedResponse": {
+        "properties": {
+          "embedded": {
+            "type": "integer"
+          },
+          "remaining": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.FailureResponse": {
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "error_reason": {
+            "type": "string"
+          },
+          "error_type": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_attempt_at": {
+            "type": "string"
+          },
+          "source_file": {
+            "type": "string"
+          },
+          "symbol_kind": {
+            "type": "string"
+          },
+          "symbol_name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.HarvestResponse": {
+        "properties": {
+          "errors": {
+            "type": "integer"
+          },
+          "harvested": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.QueryRequest": {
+        "properties": {
+          "chunk_type": {
+            "type": "string"
+          },
+          "created_after": {
+            "type": "string"
+          },
+          "created_before": {
+            "type": "string"
+          },
+          "max_results": {
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_after": {
+            "type": "string"
+          },
+          "updated_before": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.RecentMemory": {
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.RenameCollectionRequest": {
+        "properties": {
+          "new_name": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.RetryRequest": {
+        "properties": {
+          "failure_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.RetryResponse": {
+        "properties": {
+          "failed": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retried": {
+            "type": "integer"
+          },
+          "succeeded": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.SearchResponse": {
+        "properties": {
+          "query_ms": {
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.SearchResult"
+            },
+            "type": "array"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.SearchResult": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.SummarizeRequest": {
+        "properties": {
+          "force": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.SummarizeResponse": {
+        "properties": {
+          "errors": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "summarized": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.TicketSessionResult": {
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.VSearchRequest": {
+        "properties": {
+          "created_after": {
+            "type": "string"
+          },
+          "created_before": {
+            "type": "string"
+          },
+          "max_results": {
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_after": {
+            "type": "string"
+          },
+          "updated_before": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.WakeUpResponse": {
+        "properties": {
+          "active_collections": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.ActiveCollection"
+            },
+            "type": "array"
+          },
+          "recent_memories": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.RecentMemory"
+            },
+            "type": "array"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/handlers.WakeUpStats"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.WakeUpStats": {
+        "properties": {
+          "last_activity": {
+            "type": "string"
+          },
+          "total_chunks": {
+            "type": "integer"
+          },
+          "total_documents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.WorkspaceResolveResponse": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "registered": {
+            "type": "boolean"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.WriteRequest": {
+        "type": "object"
+      },
+      "handlers.WriteResponse": {
+        "properties": {
+          "chunk_count": {
+            "type": "integer"
+          },
+          "collection": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.backlinkItem": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.backlinksResponse": {
+        "properties": {
+          "doc_id": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.backlinkItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.chunksByEmbedStatusObj": {
+        "properties": {
+          "embed_failed": {
+            "type": "integer"
+          },
+          "embedded": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.collectionItem": {
+        "properties": {
+          "doc_count": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.documentListItem": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "superseded_by_id": {
+            "type": "string"
+          },
+          "supersedes_id": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.embedRequest": {
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.embeddingInfo": {
+        "properties": {
+          "dim": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowGraphEdge": {
+        "properties": {
+          "condition_label": {
+            "type": "string"
+          },
+          "conditional": {
+            "type": "boolean"
+          },
+          "from": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowNode": {
+        "properties": {
+          "ambiguous": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowRequest": {
+        "properties": {
+          "entry": {
+            "type": "string"
+          },
+          "format": {
+            "description": "\"mermaid\" (default) | \"json\"",
+            "type": "string"
+          },
+          "max_depth": {
+            "type": "integer"
+          },
+          "stitch_workspaces": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowResponse": {
+        "properties": {
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.flowNode"
+            },
+            "type": "array"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.flowGraphEdge"
+            },
+            "type": "array"
+          },
+          "entry": {
+            "type": "string"
+          },
+          "externals": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.flowNode"
+            },
+            "type": "array"
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "mermaid": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.flowNode"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowchartRequest": {
+        "properties": {
+          "entry": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.flowchartResponse": {
+        "properties": {
+          "cfg": {
+            "type": "object"
+          },
+          "entry": {
+            "type": "string"
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.getDocumentRequest": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.getDocumentResponse": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "supersedes_id": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.graphEdgeItem": {
+        "properties": {
+          "edge_type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.graphQueryRequest": {
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "edge_type": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.graphQueryResponse": {
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.graphEdgeItem"
+            },
+            "type": "array"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.harvestInfo": {
+        "properties": {
+          "last_at": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "sessions_seen": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.harvesterStatusResponse": {
+        "properties": {
+          "claude_code": {
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "session_dir": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "opencode": {
+            "properties": {
+              "db_count": {
+                "type": "integer"
+              },
+              "db_path": {
+                "type": "string"
+              },
+              "db_root": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "mode": {
+                "type": "string"
+              },
+              "session_dir": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "poll_interval_seconds": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.healthResponse": {
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "uptime_s": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          },
+          "workspace_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.impactNode": {
+        "properties": {
+          "depth": {
+            "type": "integer"
+          },
+          "edge_type": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.impactRequest": {
+        "properties": {
+          "edge_type": {
+            "type": "string"
+          },
+          "max_depth": {
+            "type": "integer"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.impactResponse": {
+        "properties": {
+          "impacted": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.impactNode"
+            },
+            "type": "array"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.initRequest": {
+        "properties": {
+          "root_path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.initResponse": {
+        "properties": {
+          "agents_snippet": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "workspace_hash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.listDocumentsResponse": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.documentListItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.listWorkspacesResponse": {
+        "properties": {
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.workspaceItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.multiGetRequest": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.multiGetResponse": {
+        "properties": {
+          "not_found": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.getDocumentResponse"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.neighborhoodEdge": {
+        "properties": {
+          "edge_type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.neighborhoodNode": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.neighborhoodRequest": {
+        "properties": {
+          "depth": {
+            "type": "integer"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "edge_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "focus": {
+            "type": "string"
+          },
+          "node_kind": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.neighborhoodResponse": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.neighborhoodEdge"
+            },
+            "type": "array"
+          },
+          "frontier_nodes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "node_kind": {
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.neighborhoodNode"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.overviewRequest": {
+        "properties": {
+          "edge_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.recentDocItem": {
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reindexCFGRequest": {
+        "properties": {
+          "full": {
+            "type": "boolean"
+          },
+          "wipe": {
+            "type": "boolean"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reindexCFGResponse": {
+        "properties": {
+          "cfgs_extracted": {
+            "type": "integer"
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "files_processed": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reindexRequest": {
+        "properties": {
+          "force_wipe": {
+            "type": "boolean"
+          },
+          "root": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reindexResponse": {
+        "properties": {
+          "chunks_enqueued": {
+            "type": "integer"
+          },
+          "deleted": {
+            "type": "integer"
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "embedded": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "scanned": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "watcher_triggered": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.reloadResponse": {
+        "properties": {
+          "reloaded": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requires_restart": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unchanged": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.removeWorkspaceResponse": {
+        "properties": {
+          "deleted_docs": {
+            "type": "integer"
+          },
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_removed": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resetWorkspaceRequest": {
+        "properties": {
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resetWorkspaceResponse": {
+        "properties": {
+          "deleted_documents": {
+            "type": "integer"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resolveResponse": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.resolveResult"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.resolveResult": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "match": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.statsResponse": {
+        "properties": {
+          "chunks_by_embed_status": {
+            "$ref": "#/components/schemas/handlers.chunksByEmbedStatusObj"
+          },
+          "chunks_total": {
+            "type": "integer"
+          },
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.collectionItem"
+            },
+            "type": "array"
+          },
+          "docs_total": {
+            "type": "integer"
+          },
+          "embedding": {
+            "$ref": "#/components/schemas/handlers.embeddingInfo"
+          },
+          "embeddings_total": {
+            "type": "integer"
+          },
+          "graph_edges_by_type": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "harvest": {
+            "$ref": "#/components/schemas/handlers.harvestInfo"
+          },
+          "migration_version": {
+            "type": "integer"
+          },
+          "recent_docs": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.recentDocItem"
+            },
+            "type": "array"
+          },
+          "server_version": {
+            "type": "string"
+          },
+          "tags_top_20": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.tagCountItem"
+            },
+            "type": "array"
+          },
+          "uptime_sec": {
+            "type": "integer"
+          },
+          "watcher": {
+            "$ref": "#/components/schemas/handlers.watcherInfo"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.statusResponse": {
+        "properties": {
+          "active_provider": {
+            "type": "string"
+          },
+          "embedding_queue_depth": {
+            "type": "integer"
+          },
+          "harvester_status": {
+            "$ref": "#/components/schemas/handlers.harvesterStatusResponse"
+          },
+          "migration_version": {
+            "type": "integer"
+          },
+          "pg_status": {
+            "type": "string"
+          },
+          "queue_capacity": {
+            "type": "integer"
+          },
+          "queue_depth": {
+            "type": "integer"
+          },
+          "queue_pending": {
+            "type": "integer"
+          },
+          "queue_status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "workspace_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.tagCountItem": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.tagItem": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.traceRequest": {
+        "properties": {
+          "max_depth": {
+            "type": "integer"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.traceResponse": {
+        "properties": {
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/handlers.traceStep"
+            },
+            "type": "array"
+          },
+          "entry": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.traceStep": {
+        "properties": {
+          "depth": {
+            "type": "integer"
+          },
+          "node": {
+            "type": "string"
+          },
+          "via": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.versionResponse": {
+        "properties": {
+          "api_max": {
+            "type": "integer"
+          },
+          "api_min": {
+            "type": "integer"
+          },
+          "migration_version": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.watcherInfo": {
+        "properties": {
+          "collections_watched": {
+            "type": "integer"
+          },
+          "debounce_ms": {
+            "type": "integer"
+          },
+          "dirty": {
+            "type": "integer"
+          },
+          "poll_interval_sec": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.workspaceItem": {
+        "properties": {
+          "chunk_count": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "doc_count": {
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "last_document_updated": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "root_path": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "handlers.workspaceResolveRequest": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "CSRFToken": {
+        "description": "Required on write endpoints; enforced by middleware.CSRF.",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "type": "apiKey"
+      },
+      "WorkspaceAuth": {
+        "description": "Workspace hash via query param or JSON body; resolved by workspaceMiddleware.",
+        "in": "query",
+        "name": "workspace",
+        "type": "apiKey"
+      },
+      "WorkspaceRegisteredAuth": {
+        "description": "Workspace must be already-registered (write-path gate); enforced by workspaceRegisteredMiddleware.",
+        "in": "query",
+        "name": "workspace",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "contact": {},
+    "description": "Self-describing OpenAPI 3.0 spec for nano-brain's non-MCP REST API",
+    "title": "nano-brain REST API",
+    "version": "1.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/api/harvest": {
+      "post": {
+        "description": "Runs a single harvest pass (OpenCode/Claude Code session ingestion) synchronously",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.HarvestResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Trigger a session harvest run",
+        "tags": [
+          "harvest"
+        ]
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "description": "Returns the committed OpenAPI 3.0 document describing every REST route in this server. Regenerated via `make generate-openapi`; see docs/openapi.json.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Serve the generated OpenAPI 3.0 specification",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/reload-config": {
+      "post": {
+        "description": "Re-reads the YAML config file and applies any reloadable settings without restarting the server",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reloadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Reload server configuration",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/status": {
+      "get": {
+        "description": "Reports DB status, migration version, embedding queue depth, and harvester status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.statusResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Detailed server status",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/v1/code/summarize": {
+      "post": {
+        "description": "Runs one batch of code-symbol summarization for the workspace, subject to daily budget limits",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.CodeSummarizeRequest"
+              }
+            }
+          },
+          "description": "Code summarize options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.CodeSummarizeResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Summarize pending code symbols for a workspace",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/code/summarize/failures": {
+      "get": {
+        "description": "Returns unresolved code-symbol summarization failures for the workspace",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/handlers.FailureResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "List unresolved code summarization failures",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/code/summarize/retry": {
+      "post": {
+        "description": "Retries code summarization for the given failure_ids",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.RetryRequest"
+              }
+            }
+          },
+          "description": "Retry options (failure_ids required)",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.RetryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Retry specific failed code summarizations",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/code/summarize/retry-all": {
+      "post": {
+        "description": "Retries code summarization for every unresolved failure in the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.RetryRequest"
+              }
+            }
+          },
+          "description": "Retry options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.RetryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Retry all failed code summarizations",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/code/summarize/status": {
+      "get": {
+        "description": "Reports total/summarized/pending/failed code symbol counts for the workspace",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.CodeSummarizeStatusResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Get code summarization status for a workspace",
+        "tags": [
+          "code-summarize"
+        ]
+      }
+    },
+    "/api/v1/collections": {
+      "get": {
+        "description": "Returns all collections for the workspace with document counts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/handlers.CollectionResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List collections in a workspace",
+        "tags": [
+          "collections"
+        ]
+      },
+      "post": {
+        "description": "Registers a new file-watched collection under the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.AddCollectionRequest"
+              }
+            }
+          },
+          "description": "Collection to add",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.CollectionResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Add a collection to a workspace",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/collections/{name}": {
+      "delete": {
+        "description": "Deletes a collection and detaches its file watcher",
+        "parameters": [
+          {
+            "description": "Collection name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Remove a collection",
+        "tags": [
+          "collections"
+        ]
+      },
+      "put": {
+        "description": "Renames a collection and re-points its documents to the new name",
+        "parameters": [
+          {
+            "description": "Current collection name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.RenameCollectionRequest"
+              }
+            }
+          },
+          "description": "New collection name",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.CollectionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Rename a collection",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "description": "Returns the current resolved config with secrets redacted. Pass ?include_source=true to also return the config file path.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get the current resolved config",
+        "tags": [
+          "config"
+        ]
+      },
+      "post": {
+        "description": "Applies a single-field patch to the config YAML and triggers a config reload. Secret fields cannot be patched via this endpoint.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/config.PatchRequest"
+              }
+            }
+          },
+          "description": "Field path and new value",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Patch a single config field",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/v1/doctor": {
+      "get": {
+        "description": "Runs config and binary prerequisite checks and reports pass/fail status for each",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Run environment/prerequisite checks",
+        "tags": [
+          "doctor"
+        ]
+      }
+    },
+    "/api/v1/documents": {
+      "get": {
+        "description": "Returns documents for the workspace, optionally filtered by text/collection/tags query params",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.listDocumentsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List documents in a workspace",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{id}": {
+      "delete": {
+        "description": "Deletes a document by ID within the workspace",
+        "parameters": [
+          {
+            "description": "Document ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Delete a document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/embed": {
+      "post": {
+        "description": "Embeds a batch of pending chunks (up to an internal limit) for the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.embedRequest"
+              }
+            }
+          },
+          "description": "Embed options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.EmbedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Embed pending chunks for a workspace",
+        "tags": [
+          "embed"
+        ]
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "description": "Streams document/collection/workspace change events for the given workspace as an SSE stream. Not a JSON request/response endpoint — no response body schema.",
+        "responses": {
+          "200": {
+            "description": "text/event-stream of events"
+          },
+          "429": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Stream workspace events via Server-Sent Events",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/v1/flow/materialize": {
+      "post": {
+        "description": "Queues asynchronous flow-graph materialization for the workspace; returns immediately",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Trigger flow materialization for a workspace",
+        "tags": [
+          "flow"
+        ]
+      }
+    },
+    "/api/v1/get": {
+      "post": {
+        "description": "Fetches a document by source path or ID within the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.getDocumentRequest"
+              }
+            }
+          },
+          "description": "Path or ID to look up",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.getDocumentResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Get a single document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/graph/flow": {
+      "post": {
+        "description": "Loads all workspace edges, builds a flow starting from entry, and returns the node chain plus an optional Mermaid diagram",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.flowRequest"
+              }
+            }
+          },
+          "description": "Flow query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.flowResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Build a call-chain flow diagram from an entry point",
+        "tags": [
+          "flow"
+        ]
+      }
+    },
+    "/api/v1/graph/flow/endpoints": {
+      "get": {
+        "description": "Returns the HTTP-route entry edges available for flow tracing in a workspace",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List HTTP flow endpoints",
+        "tags": [
+          "flow"
+        ]
+      }
+    },
+    "/api/v1/graph/flowchart": {
+      "post": {
+        "description": "Resolves an HTTP route entry or handler symbol to its stored control-flow graph",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.flowchartRequest"
+              }
+            }
+          },
+          "description": "Flowchart query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.flowchartResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Get a function's control-flow graph",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/impact": {
+      "post": {
+        "description": "Returns nodes that would be impacted (transitively depend on) a given node, up to max_depth",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.impactRequest"
+              }
+            }
+          },
+          "description": "Impact query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.impactResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Impact analysis for a graph node",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/neighborhood": {
+      "post": {
+        "description": "Breadth-first traverses the graph around a focus node up to a given depth",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.neighborhoodRequest"
+              }
+            }
+          },
+          "description": "Neighborhood query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.neighborhoodResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "BFS graph neighborhood around a focus node",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/overview": {
+      "post": {
+        "description": "Returns the top-N most-connected nodes for the workspace and all edges between them",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.overviewRequest"
+              }
+            }
+          },
+          "description": "Overview query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.neighborhoodResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Top-N most-connected graph nodes overview",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/pagerank/compute": {
+      "post": {
+        "description": "Recomputes and persists PageRank centrality scores over the workspace's call-edge graph",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Recompute PageRank scores for the call graph",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/query": {
+      "post": {
+        "description": "Returns outgoing, incoming, or both-direction edges for a given graph node, scoped to a workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.graphQueryRequest"
+              }
+            }
+          },
+          "description": "Graph query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.graphQueryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Query graph edges for a node",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/graph/trace": {
+      "post": {
+        "description": "Breadth-first traces the outgoing call chain from an entry node, up to max_depth",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.traceRequest"
+              }
+            }
+          },
+          "description": "Trace query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.traceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Trace a call chain from an entry node",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/v1/init": {
+      "post": {
+        "description": "Registers a root path as a workspace and creates its default collections (memory, sessions, code). When db is non-nil, all three DB operations are wrapped in a single transaction.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.initRequest"
+              }
+            }
+          },
+          "description": "Workspace root path",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.initResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Register a workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/links/resolve": {
+      "get": {
+        "description": "Resolves a query string as either a document UUID or a title match",
+        "parameters": [
+          {
+            "description": "Document ID or title to resolve",
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.resolveResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Resolve a link query to document IDs",
+        "tags": [
+          "links"
+        ]
+      }
+    },
+    "/api/v1/links/{doc_id}/backlinks": {
+      "get": {
+        "description": "Returns documents that link to the given doc_id, paginated",
+        "parameters": [
+          {
+            "description": "Target document ID",
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Max results (default 20, max 100)",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Result offset",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.backlinksResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List documents that link to a document",
+        "tags": [
+          "links"
+        ]
+      }
+    },
+    "/api/v1/multi-get": {
+      "post": {
+        "description": "Fetches multiple documents by source paths and/or IDs within the workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.multiGetRequest"
+              }
+            }
+          },
+          "description": "Paths and/or IDs to look up",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.multiGetResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Get multiple documents in one call",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/query": {
+      "post": {
+        "description": "Runs the hybrid search pipeline (BM25 + vector + RRF fusion) scoped to a workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.QueryRequest"
+              }
+            }
+          },
+          "description": "Search query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.SearchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Hybrid BM25 + vector search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/reindex": {
+      "post": {
+        "description": "Rescans collections for a workspace, enqueueing changed/new files for embedding; force_wipe clears and re-embeds everything",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.reindexRequest"
+              }
+            }
+          },
+          "description": "Reindex options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reindexResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reindexResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Trigger a reindex (incremental or force-wipe) for a workspace",
+        "tags": [
+          "reindex"
+        ]
+      }
+    },
+    "/api/v1/reindex-cfg": {
+      "post": {
+        "description": "Extracts and persists function control-flow graphs (CFGs) for JS/TS/Ruby files, incrementally or via full filesystem walk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.reindexCFGRequest"
+              }
+            }
+          },
+          "description": "Reindex-CFG options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reindexCFGResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Reindex control-flow graphs for a workspace's code collection",
+        "tags": [
+          "reindex"
+        ]
+      }
+    },
+    "/api/v1/reset-workspace": {
+      "post": {
+        "description": "Deletes all documents (and related code-summarization data) for a workspace without removing the workspace registration itself",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.resetWorkspaceRequest"
+              }
+            }
+          },
+          "description": "Workspace to reset",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.resetWorkspaceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete all documents in a workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/search": {
+      "post": {
+        "description": "Runs a BM25 full-text search scoped to a workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.BM25SearchRequest"
+              }
+            }
+          },
+          "description": "Search query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.SearchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "BM25 full-text search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/sessions/by-ticket": {
+      "get": {
+        "description": "Queries sessions tagged \"ticket:\u003cid\u003e\" across all workspaces (not scoped to a single workspace)",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/handlers.TicketSessionResult"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Find sessions by ticket ID across all workspaces",
+        "tags": [
+          "tickets"
+        ]
+      }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "description": "Reports document/chunk/embedding/graph-edge counts, top tags, harvester and watcher status, and recent documents for a workspace",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.statsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Workspace statistics dashboard",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/summarize": {
+      "post": {
+        "description": "Summarizes up to `limit` session documents for a workspace via the configured summarizer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.SummarizeRequest"
+              }
+            }
+          },
+          "description": "Summarize options",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.SummarizeResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Summarize pending session documents for a workspace",
+        "tags": [
+          "summarize"
+        ]
+      }
+    },
+    "/api/v1/symbols": {
+      "get": {
+        "description": "Returns indexed symbols (functions, types, etc.) optionally filtered by name query or kind",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List code symbols in a workspace",
+        "tags": [
+          "symbols"
+        ]
+      }
+    },
+    "/api/v1/tags": {
+      "get": {
+        "description": "Returns all tags used in the workspace with document counts per tag",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/handlers.tagItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "List tags in a workspace",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/v1/update": {
+      "post": {
+        "description": "Asynchronously re-extracts graph edges and symbols for all collections in the workspace",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.reindexResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Re-extract graph edges and symbols for a workspace",
+        "tags": [
+          "reindex"
+        ]
+      }
+    },
+    "/api/v1/vsearch": {
+      "post": {
+        "description": "Embeds the query and returns the nearest documents by vector similarity, scoped to a workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.VSearchRequest"
+              }
+            }
+          },
+          "description": "Search query",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.SearchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Vector similarity search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/wake-up": {
+      "get": {
+        "description": "Returns recent memories, active collections, and workspace stats. No workspace middleware on this GET mount.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.WakeUpResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get a session-start context summary (unauthenticated)",
+        "tags": [
+          "wakeup"
+        ]
+      },
+      "post": {
+        "description": "Returns recent memories, active collections, and workspace stats. This POST mount is in the data group, gated by workspaceMiddleware.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.WakeUpResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceAuth": []
+          }
+        ],
+        "summary": "Get a session-start context summary (workspace-scoped)",
+        "tags": [
+          "wakeup"
+        ]
+      }
+    },
+    "/api/v1/workspaces": {
+      "get": {
+        "description": "Returns all registered workspaces with document/chunk counts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.listWorkspacesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List registered workspaces",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/resolve": {
+      "post": {
+        "description": "Computes the workspace hash for a path and reports whether it is already registered",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.workspaceResolveRequest"
+              }
+            }
+          },
+          "description": "Path to resolve",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.WorkspaceResolveResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Resolve a filesystem path to a workspace hash",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{hash}": {
+      "delete": {
+        "description": "Deletes a workspace and all its documents. When db is non-nil, deletion runs inside a transaction.",
+        "parameters": [
+          {
+            "description": "Workspace hash",
+            "in": "path",
+            "name": "hash",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.removeWorkspaceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Remove a workspace",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/write": {
+      "post": {
+        "description": "Creates or updates a document (upsert by content hash), chunks it, and enqueues chunks for embedding",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/handlers.WriteRequest"
+              }
+            }
+          },
+          "description": "Document content and metadata",
+          "required": true,
+          "x-originalParamName": "request"
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.WriteResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceRegisteredAuth": []
+          },
+          {
+            "CSRFToken": []
+          }
+        ],
+        "summary": "Write a document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/version": {
+      "get": {
+        "description": "Reports the running server version, migration version, and supported API range",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.versionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Server and migration version",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Reports DB connectivity, uptime, and workspace count. Always returns 200 (degraded state is reflected in the body, not the status code).",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/handlers.healthResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Liveness/readiness probe",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/mcp": {
+      "delete": {
+        "description": "Bidirectional MCP protocol transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "MCP streamable HTTP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "get": {
+        "description": "Bidirectional MCP protocol transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "MCP streamable HTTP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "post": {
+        "description": "Bidirectional MCP protocol transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "MCP streamable HTTP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/sse": {
+      "get": {
+        "description": "MCP SSE transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "Server-Sent Events MCP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "post": {
+        "description": "MCP SSE transport wrapped via echo.WrapHandler; not a JSON request/response endpoint",
+        "responses": {
+          "200": {
+            "description": "protocol response (not JSON — see MCP spec)"
+          }
+        },
+        "summary": "Server-Sent Events MCP transport (protocol endpoint, not a typical JSON REST API — see the MCP spec)",
+        "tags": [
+          "protocol"
+        ]
+      }
+    }
+  }
+}

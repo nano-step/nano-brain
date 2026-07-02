@@ -8,7 +8,13 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// GetConfig returns the current resolved config with secrets redacted.
+// GetConfig godoc
+// @Summary      Get the current resolved config
+// @Description  Returns the current resolved config with secrets redacted. Pass ?include_source=true to also return the config file path.
+// @Tags         config
+// @Produce      json
+// @Success      200 {object} map[string]interface{}
+// @Router       /api/v1/config [get]
 func GetConfig(cfgPath string, currentCfg func() *config.Config, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		cfg := currentCfg()
@@ -23,7 +29,17 @@ func GetConfig(cfgPath string, currentCfg func() *config.Config, logger zerolog.
 	}
 }
 
-// PatchConfig applies a single-field patch to the config YAML and triggers reload.
+// PatchConfig godoc
+// @Summary      Patch a single config field
+// @Description  Applies a single-field patch to the config YAML and triggers a config reload. Secret fields cannot be patched via this endpoint.
+// @Tags         config
+// @Accept       json
+// @Produce      json
+// @Param        request body config.PatchRequest true "Field path and new value"
+// @Success      200 {object} map[string]string
+// @Failure      400 {object} map[string]string
+// @Failure      422 {object} map[string]string
+// @Router       /api/v1/config [post]
 func PatchConfig(cfgPath string, currentCfg func() *config.Config, reload func(), logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req config.PatchRequest

@@ -36,6 +36,19 @@ type getDocumentResponse struct {
 	UpdatedAt     string   `json:"updated_at"`
 }
 
+// GetDocument godoc
+// @Summary      Get a single document
+// @Description  Fetches a document by source path or ID within the workspace
+// @Tags         documents
+// @Accept       json
+// @Produce      json
+// @Param        request body getDocumentRequest true "Path or ID to look up"
+// @Success      200 {object} getDocumentResponse
+// @Failure      400 {object} map[string]string
+// @Failure      404 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/get [post]
 func GetDocument(q GetDocumentQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.Get("workspace").(string)

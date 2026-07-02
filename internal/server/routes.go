@@ -27,6 +27,7 @@ func registerRoutes(s *Server) {
 	s.echo.GET("/health", h.Health)
 	s.echo.GET("/api/status", h.Status)
 	s.echo.GET("/api/version", h.Version)
+	s.echo.GET("/api/openapi.json", handlers.OpenAPISpec())
 
 	api := s.echo.Group("/api/v1", contentTypeMiddleware())
 	api.POST("/init", handlers.InitWorkspace(s.queries, s.db, s.watcher, s.currentConfig().Watcher, s.logger))

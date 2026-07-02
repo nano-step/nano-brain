@@ -32,6 +32,18 @@ type EmbedResponse struct {
 	Remaining int64 `json:"remaining"`
 }
 
+// TriggerEmbed godoc
+// @Summary      Embed pending chunks for a workspace
+// @Description  Embeds a batch of pending chunks (up to an internal limit) for the workspace
+// @Tags         embed
+// @Accept       json
+// @Produce      json
+// @Param        request body embedRequest true "Embed options"
+// @Success      200 {object} EmbedResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/embed [post]
 func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model string, maxChars int, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if embedder == nil {

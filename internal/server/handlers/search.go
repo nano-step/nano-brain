@@ -28,13 +28,13 @@ type VSearchQuerier interface {
 }
 
 type VSearchRequest struct {
-	Query           string   `json:"query"`
-	MaxResults      int      `json:"max_results,omitempty"`
-	Tags            []string `json:"tags,omitempty"`
-	CreatedAfter    string   `json:"created_after,omitempty"`
-	CreatedBefore   string   `json:"created_before,omitempty"`
-	UpdatedAfter    string   `json:"updated_after,omitempty"`
-	UpdatedBefore   string   `json:"updated_before,omitempty"`
+	Query         string   `json:"query"`
+	MaxResults    int      `json:"max_results,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	CreatedAfter  string   `json:"created_after,omitempty"`
+	CreatedBefore string   `json:"created_before,omitempty"`
+	UpdatedAfter  string   `json:"updated_after,omitempty"`
+	UpdatedBefore string   `json:"updated_before,omitempty"`
 }
 
 const maxSnippetLen = 700
@@ -59,6 +59,17 @@ type SearchResponse struct {
 	QueryMs int64          `json:"query_ms"`
 }
 
+// VectorSearch godoc
+// @Summary      Vector similarity search
+// @Description  Embeds the query and returns the nearest documents by vector similarity, scoped to a workspace
+// @Tags         search
+// @Accept       json
+// @Produce      json
+// @Param        request body VSearchRequest true "Search query"
+// @Success      200 {object} SearchResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/vsearch [post]
 func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, rec ...*telemetry.Recorder) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if embedder == nil {
@@ -124,7 +135,7 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, re
 				WorkspaceHash:  workspace,
 				Tags:           req.Tags,
 				MaxResults:     int32(maxResults),
-				CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
+				CreatedAfter:   ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 			})
 			if err != nil {
 				logger.Error().Err(err).Str("workspace", workspace).Msg("vector search failed")
@@ -151,7 +162,7 @@ func VectorSearch(q VSearchQuerier, embedder Embedder, logger zerolog.Logger, re
 				QueryEmbedding: pgvector_go.NewVector(vec),
 				WorkspaceHash:  workspace,
 				MaxResults:     int32(maxResults),
-				CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
+				CreatedAfter:   ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 			})
 			if err != nil {
 				logger.Error().Err(err).Str("workspace", workspace).Msg("vector search failed")

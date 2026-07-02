@@ -26,6 +26,18 @@ type CodeSummarizer interface {
 	RunOnce(ctx context.Context, workspaceHash string) (processed, skipped, errors int, err error)
 }
 
+// TriggerCodeSummarize godoc
+// @Summary      Summarize pending code symbols for a workspace
+// @Description  Runs one batch of code-symbol summarization for the workspace, subject to daily budget limits
+// @Tags         code-summarize
+// @Accept       json
+// @Produce      json
+// @Param        request body CodeSummarizeRequest true "Code summarize options"
+// @Success      200 {object} CodeSummarizeResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/code/summarize [post]
 func TriggerCodeSummarize(
 	getSummarizer func() CodeSummarizer,
 	cfg config.CodeSummarizationConfig,

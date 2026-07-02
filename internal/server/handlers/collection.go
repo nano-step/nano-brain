@@ -72,6 +72,18 @@ func toCollectionResponse(col sqlc.Collection, docCount int64) CollectionRespons
 	}
 }
 
+// AddCollection godoc
+// @Summary      Add a collection to a workspace
+// @Description  Registers a new file-watched collection under the workspace
+// @Tags         collections
+// @Accept       json
+// @Produce      json
+// @Param        request body AddCollectionRequest true "Collection to add"
+// @Success      201 {object} CollectionResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/collections [post]
 func AddCollection(q CollectionQuerier, fw *watcher.Watcher, watcherCfg config.WatcherConfig, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req AddCollectionRequest
@@ -151,6 +163,16 @@ func AddCollection(q CollectionQuerier, fw *watcher.Watcher, watcherCfg config.W
 	}
 }
 
+// ListCollectionsHandler godoc
+// @Summary      List collections in a workspace
+// @Description  Returns all collections for the workspace with document counts
+// @Tags         collections
+// @Produce      json
+// @Success      200 {array} CollectionResponse
+// @Failure      400 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/collections [get]
 func ListCollectionsHandler(q CollectionQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.QueryParam("workspace")
@@ -187,6 +209,20 @@ func ListCollectionsHandler(q CollectionQuerier, logger zerolog.Logger) echo.Han
 	}
 }
 
+// RenameCollectionHandler godoc
+// @Summary      Rename a collection
+// @Description  Renames a collection and re-points its documents to the new name
+// @Tags         collections
+// @Accept       json
+// @Produce      json
+// @Param        name path string true "Current collection name"
+// @Param        request body RenameCollectionRequest true "New collection name"
+// @Success      200 {object} CollectionResponse
+// @Failure      400 {object} map[string]string
+// @Failure      404 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/collections/{name} [put]
 func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, watcherCfg config.WatcherConfig, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")
@@ -256,6 +292,18 @@ func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, watcherCf
 	}
 }
 
+// RemoveCollection godoc
+// @Summary      Remove a collection
+// @Description  Deletes a collection and detaches its file watcher
+// @Tags         collections
+// @Produce      json
+// @Param        name path string true "Collection name"
+// @Success      204 "No Content"
+// @Failure      400 {object} map[string]string
+// @Failure      404 {object} map[string]string
+// @Failure      500 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/collections/{name} [delete]
 func RemoveCollection(q CollectionQuerier, fw *watcher.Watcher, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")

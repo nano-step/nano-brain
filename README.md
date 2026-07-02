@@ -511,6 +511,8 @@ go test -race -short ./...
 go test -race -tags=integration ./...
 ```
 
+`GET /api/openapi.json` serves the current OpenAPI 3.0 spec for the full REST API — import it into Postman, Swagger UI, or any codegen tool to discover the endpoint surface without reading Go source. Regenerate it via `make generate-openapi` after adding or changing routes.
+
 ### Project Structure
 
 ```

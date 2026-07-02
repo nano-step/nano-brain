@@ -65,6 +65,17 @@ type flowResponse struct {
 // GraphFlow handles POST /api/v1/graph/flow.
 // It loads all workspace edges, builds a flow starting from entry, and
 // returns the node chain plus an optional Mermaid diagram.
+//
+// @Summary      Build a call-chain flow diagram from an entry point
+// @Description  Loads all workspace edges, builds a flow starting from entry, and returns the node chain plus an optional Mermaid diagram
+// @Tags         flow
+// @Accept       json
+// @Produce      json
+// @Param        request body flowRequest true "Flow query"
+// @Success      200 {object} flowResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/graph/flow [post]
 func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if !flowCfg.Enabled {
@@ -161,6 +172,16 @@ func GraphFlow(q FlowQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) 
 	}
 }
 
+// FlowMaterialize godoc
+// @Summary      Trigger flow materialization for a workspace
+// @Description  Queues asynchronous flow-graph materialization for the workspace; returns immediately
+// @Tags         flow
+// @Produce      json
+// @Success      200 {object} map[string]interface{}
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceRegisteredAuth
+// @Security     CSRFToken
+// @Router       /api/v1/flow/materialize [post]
 func FlowMaterialize(getMat func() FlowMaterializer, flowCfg config.FlowConfig, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if !flowCfg.Enabled {
@@ -198,6 +219,15 @@ type httpEndpoint struct {
 	Target string `json:"target"`
 }
 
+// ListFlowEndpoints godoc
+// @Summary      List HTTP flow endpoints
+// @Description  Returns the HTTP-route entry edges available for flow tracing in a workspace
+// @Tags         flow
+// @Produce      json
+// @Success      200 {object} map[string]interface{}
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/graph/flow/endpoints [get]
 func ListFlowEndpoints(q FlowQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		workspace := c.QueryParam("workspace")

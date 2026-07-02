@@ -14,7 +14,14 @@ type reloadResponse struct {
 	RequiresRestart []string `json:"requires_restart"`
 }
 
-// ReloadConfig returns a handler that re-reads the YAML config and applies reloadable settings.
+// ReloadConfig godoc
+// @Summary      Reload server configuration
+// @Description  Re-reads the YAML config file and applies any reloadable settings without restarting the server
+// @Tags         config
+// @Produce      json
+// @Success      200 {object} reloadResponse
+// @Failure      400 {object} map[string]string
+// @Router       /api/reload-config [post]
 func ReloadConfig(configPath string, currentCfg func() *config.Config, applyCfg func(*config.Config, *config.ReloadResult), logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		cur := currentCfg()

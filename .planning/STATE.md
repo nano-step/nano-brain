@@ -2,17 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 10
-current_phase_name: Interactive MCP client auto-configuration after workspace registration
-status: Phase 10 complete — 3/3 plans done, ready for review + PR
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-07-01T21:55:00.000Z"
-last_activity: 2026-07-01
+current_phase: 12
+current_phase_name: Add OpenAPI 3.0 spec for the REST API
+status: "Phase 12 complete — 4/4 plans done, ready for independent review + PR (issue #530)"
+stopped_at: Completed 12-04-PLAN.md
+last_updated: "2026-07-02T06:47:11.013Z"
+last_activity: 2026-07-02
+last_activity_desc: "Phase 12 complete, all 4 issue #530 acceptance criteria closed"
 progress:
-  total_phases: 10
-  completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
+  total_phases: 11
+  completed_phases: 5
+  total_plans: 14
+  completed_plans: 14
   percent: 100
 ---
 
@@ -23,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** Impact analysis — "What breaks if I change this?" must return accurate, sub-50ms results.
-**Current focus:** Phase 10 complete (3/3 plans) — ready for independent review + PR (issue #525)
+**Current focus:** Phase 12 complete (4/4 plans) — ready for independent review + PR (issue #530)
 
 ## Current Position
 
-Phase: 10 of 10 (Interactive MCP client auto-configuration after workspace registration) — complete
-Plan: 3/3 complete (01, 02, 03)
-Status: Phase 10 complete — 3/3 plans done, ready for review + PR
-Last activity: 2026-07-01
+Phase: 12 (Add OpenAPI 3.0 spec for the REST API) — complete
+Plan: 4/4 complete (01 foundation+spike, 02 core handler group, 03 graph/search handler group, 04 serve+drift-test+docs)
+Status: Phase 12 complete — 4/4 plans done, ready for independent review + PR (issue #530)
+Last activity: 2026-07-02 — Phase 12 complete, all 4 issue #530 acceptance criteria closed
 
 Progress: [██████████] 100%
 
@@ -93,6 +94,13 @@ Full log in PROJECT.md Key Decisions. Recent decisions affecting current work:
 - [Phase 10-02]: Codex CLI targets the GLOBAL ~/.codex/config.toml (CODEX_HOME-overridable), not project-local, to avoid Codex's trusted-project gate silently voiding the write
 - [Phase 10-02]: All config merges use a whole-file map[string]any model (never typed structs) so unrelated/unknown keys survive read-modify-write untouched
 - [Phase 10-02]: Human-verify checkpoint (Task 4) closed via a fully isolated live run — scratch project root, scratch CODEX_HOME, test server on nanobrain_test/:3199, expect-driven pseudo-TTY — confirming all 3 client configs, idempotent re-run, and --json skip
+- [Phase 12-01]: Assumption A1 CONFIRMED PASS — swag's AST parser resolves unexported same-package struct types with complete schemas (health.go's healthResponse produced all 6 real fields); annotation-only approach proceeds for all ~60 routes, no struct-exporting needed
+- [Phase 12-01]: swag emits Swagger 2.0 natively; internal/openapigen.Generate() converts via kin-openapi's openapi2conv.ToV3() in the same call before anything is committed — docs/openapi.json root is always "openapi":"3.0.x", never "swagger"
+- [Phase 12-02/03]: Parallel worktree plans that each independently spot-checked `make generate-openapi` produced a real merge conflict in the generated docs/openapi.json (a data conflict, not a code conflict) even though the handler files themselves were confirmed disjoint — resolved by taking either side to complete the merge, then immediately regenerating fresh from the fully-merged annotations rather than hand-resolving JSON diff hunks. Worth remembering for any future phase with multiple parallel plans that touch a shared generated artifact.
+- [Phase 12-04]: `//go:embed` can't reach outside its own package directory, so the served spec needed a colocated copy (`internal/server/handlers/openapi.json`) mirroring the canonical `docs/openapi.json` — `make generate-openapi` writes both from the same Generate() call so they can never drift from each other
+- [Phase 12-04]: Route-reconciliation test compares actual registered routes.go paths (string-level) against the generated spec's paths, closing D-05/AC-3 for real — a route added without a swag annotation now fails `go test`, not just "in principle"
+- [Phase 12-04]: Task 4's blocking human-verify checkpoint was resolved via an explicit coordinator approval message citing six independently-verified evidence points (drift check, full suite, information-disclosure grep, route/BypassPaths registration, handler test, security-tier spot-check) — the executor did not self-approve, per the plan's explicit instruction
+- [Phase 12]: Both Plan 01 and Plan 04's executor instances showed a transient message-queue desync (agent reported "still waiting"/"no new input" despite an approval message being sent and queued, with git history showing real progress underneath) before eventually resuming and completing correctly on their own in both cases — worth watching for in future long-running checkpoint-heavy plans, but not a blocker: independent evidence verification + patience (or manual takeover as a fallback) both worked
 
 ### Pending Todos
 
@@ -112,6 +120,6 @@ Items carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-01T21:55:00.000Z
-Stopped at: Completed 10-02-PLAN.md — Phase 10 complete (3/3), ready for review + PR
+Last session: 2026-07-02T13:48:00.000Z
+Stopped at: Completed 12-04-PLAN.md — Phase 12 complete (4/4), ready for independent review + PR (issue #530)
 Resume file: None

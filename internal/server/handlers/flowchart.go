@@ -31,7 +31,7 @@ type flowchartResponse struct {
 	Method string          `json:"method,omitempty"`
 	Path   string          `json:"path,omitempty"`
 	Status string          `json:"status,omitempty"`
-	CFG    json.RawMessage `json:"cfg"`
+	CFG    json.RawMessage `json:"cfg" swaggertype:"object"`
 }
 
 // GraphFlowchart handles POST /api/v1/graph/flowchart.
@@ -39,6 +39,17 @@ type flowchartResponse struct {
 // and returns that function's stored control-flow graph. Returns found:false
 // when no flowchart is stored for the resolved handler (e.g. a non-JS/TS
 // handler, since Phase 1b extracts CFGs for JS/TS only).
+//
+// @Summary      Get a function's control-flow graph
+// @Description  Resolves an HTTP route entry or handler symbol to its stored control-flow graph
+// @Tags         graph
+// @Accept       json
+// @Produce      json
+// @Param        request body flowchartRequest true "Flowchart query"
+// @Success      200 {object} flowchartResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/graph/flowchart [post]
 func GraphFlowchart(q FlowchartQuerier, flowCfg config.FlowConfig, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if !flowCfg.Enabled {

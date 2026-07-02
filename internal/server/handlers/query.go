@@ -18,16 +18,27 @@ type HybridSearcher interface {
 }
 
 type QueryRequest struct {
-	Query           string   `json:"query"`
-	MaxResults      int      `json:"max_results,omitempty"`
-	Tags            []string `json:"tags,omitempty"`
-	ChunkType       string   `json:"chunk_type,omitempty"`
-	CreatedAfter    string   `json:"created_after,omitempty"`
-	CreatedBefore   string   `json:"created_before,omitempty"`
-	UpdatedAfter    string   `json:"updated_after,omitempty"`
-	UpdatedBefore   string   `json:"updated_before,omitempty"`
+	Query         string   `json:"query"`
+	MaxResults    int      `json:"max_results,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	ChunkType     string   `json:"chunk_type,omitempty"`
+	CreatedAfter  string   `json:"created_after,omitempty"`
+	CreatedBefore string   `json:"created_before,omitempty"`
+	UpdatedAfter  string   `json:"updated_after,omitempty"`
+	UpdatedBefore string   `json:"updated_before,omitempty"`
 }
 
+// Query godoc
+// @Summary      Hybrid BM25 + vector search
+// @Description  Runs the hybrid search pipeline (BM25 + vector + RRF fusion) scoped to a workspace
+// @Tags         search
+// @Accept       json
+// @Produce      json
+// @Param        request body QueryRequest true "Search query"
+// @Success      200 {object} SearchResponse
+// @Failure      400 {object} map[string]string
+// @Security     WorkspaceAuth
+// @Router       /api/v1/query [post]
 func Query(searcher HybridSearcher, logger zerolog.Logger, rec ...*telemetry.Recorder) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req QueryRequest
