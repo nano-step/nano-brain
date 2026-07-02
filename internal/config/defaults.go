@@ -19,7 +19,7 @@ func getDefaults() *Config {
 			Auth: AuthConfig{
 				Enabled:     false,
 				Realm:       "nano-brain",
-				BypassPaths: []string{"/health"},
+				BypassPaths: []string{"/health", "/api/openapi.json"},
 			},
 		},
 		Database: DatabaseConfig{

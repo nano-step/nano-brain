@@ -20,5 +20,11 @@ test-e2e:
 clean:
 	rm -rf ./bin/
 
+# generate-openapi regenerates the canonical docs/openapi.json AND copies it
+# to internal/server/handlers/openapi.json (the //go:embed source for the
+# GET /api/openapi.json handler). Go's //go:embed directive cannot reach
+# paths outside its own package directory, so the served copy must be
+# colocated; writing both here guarantees they never drift apart.
 generate-openapi:
 	go run ./internal/openapigen/cmd/generate-openapi > docs/openapi.json
+	cp docs/openapi.json internal/server/handlers/openapi.json
