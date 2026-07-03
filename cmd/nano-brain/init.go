@@ -254,6 +254,11 @@ func runNonInteractiveInit(configPath string) {
 		fmt.Print(notes)
 	}
 
+	preExisting := false
+	if _, statErr := os.Stat(configPath); statErr == nil {
+		preExisting = true
+	}
+
 	writeConfigFile(configPath, yaml)
 
 	fmt.Printf("Config written to %s\n", configPath)
@@ -264,6 +269,13 @@ func runNonInteractiveInit(configPath string) {
 			fmt.Println("  PostgreSQL check failed — the written config points at an unreachable database.")
 			if c.Hint != "" {
 				fmt.Printf("  %s\n", c.Hint)
+			}
+			// Don't leave a broken config behind that a later bare `init`
+			// would silently keep — remove only the file we just created.
+			if !preExisting {
+				if rmErr := os.Remove(configPath); rmErr == nil {
+					fmt.Printf("  Removed %s — fix the database, then re-run: nano-brain init --yes\n", configPath)
+				}
 			}
 			os.Exit(1)
 		}

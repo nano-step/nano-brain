@@ -26,10 +26,14 @@ var detectOllamaFn = detectOllama
 // assert on them independently of the returned YAML block.
 func stepEmbedding(scanner *bufio.Scanner, notes io.Writer, defaultURL, defaultModel string) (embBlock string) {
 	const embConcurrency = "3"
+	// Commented defaults so a generated config self-documents the remaining
+	// embedding knobs (D-03) without changing behavior — config.Load fills
+	// these from getDefaults() when absent.
+	const embExtraDefaults = "  # max_chars: 3000    # truncate each chunk to N chars before embedding (tuned for nomic-embed-text)\n  # dimension: 0       # 0 = use the model's native dimension\n"
 
 	if detectOllamaFn(defaultURL) {
 		fmt.Printf("  ✓ Ollama detected at %s — using %s for embeddings\n", defaultURL, defaultModel)
-		return fmt.Sprintf("embedding:\n  provider: ollama\n  url: %s\n  model: %s\n  concurrency: %s\n", defaultURL, defaultModel, embConcurrency)
+		return fmt.Sprintf("embedding:\n  provider: ollama\n  url: %s\n  model: %s\n  concurrency: %s\n%s", defaultURL, defaultModel, embConcurrency, embExtraDefaults)
 	}
 
 	fmt.Print("\n── Embedding ──\n")
@@ -41,7 +45,7 @@ func stepEmbedding(scanner *bufio.Scanner, notes io.Writer, defaultURL, defaultM
 	}
 
 	printCloudCaveatIfRemote(notes, answer)
-	return fmt.Sprintf("embedding:\n  provider: ollama\n  url: %s\n  model: %s\n  concurrency: %s\n", answer, defaultModel, embConcurrency)
+	return fmt.Sprintf("embedding:\n  provider: ollama\n  url: %s\n  model: %s\n  concurrency: %s\n%s", answer, defaultModel, embConcurrency, embExtraDefaults)
 }
 
 // printCloudCaveatIfRemote prints a hint (Pitfall 6) when embURL is not a

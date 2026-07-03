@@ -27,6 +27,9 @@ func runInitCmd(args []string, configPath string) {
 	// when a TTY is attached — it is a distinct contract from the bare
 	// no-args path, which is TTY-gated and interactive.
 	if hasYes {
+		if hasRoot {
+			fmt.Fprintln(os.Stderr, "Note: --yes only writes config; --root is ignored. To register a workspace, run 'nano-brain init --root <path>' without --yes (needs a running server).")
+		}
 		runNonInteractiveInit(configPath)
 		cliLog.Info().Str("cmd", "init").Msg("cli command completed")
 		return

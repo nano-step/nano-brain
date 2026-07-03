@@ -21,6 +21,7 @@ Strengthen nano-brain's code intelligence and search across v1: add Vue SFC supp
 - [ ] **Phase 11: Benchmark token cost** - nano-brain vs baseline context-gathering token cost benchmark
 - [x] **Phase 12: OpenAPI 3.0 spec** - REST API spec served at GET /api/openapi.json (completed 2026-07-02, PR #531)
 - [x] **Phase 13: Interactive Init Wizard** - One-command `nano-brain init`: detect/provision PostgreSQL via Docker or remote URL, optional embeddings with BM25 degrade, serve + register + MCP client picker, docs rewrite (completed 2026-07-02)
+- [x] **Phase 15: Minimal zero-config init** - Collapse the wizard to 0-3 probes (Postgres/Ollama/harvester auto-detected), env-var secrets, full self-documenting config (all sections at defaults + comments, advanced disabled), context_hints not prompted, `--yes` non-interactive path (completed 2026-07-03) [dir 14-minimal-…; renumbered from 14 to avoid collision with PR #533]
 
 ## Phase Details
 
