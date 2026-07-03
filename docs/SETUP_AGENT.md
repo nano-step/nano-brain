@@ -4,7 +4,74 @@ This guide is written for AI agents (Claude Code, OpenCode, Cursor, etc.) to wal
 
 ---
 
-## Before you start
+## Quick setup (one command)
+
+nano-brain ships a single interactive wizard that walks a fresh machine from "binary installed" to "MCP tools working" — no manual Docker command, no separate `serve` step, no `init --root` afterthought. This is the primary path for a local machine with Docker available. If you're setting up a VPS / shared team server, a machine without Docker, or Windows, skip to [Manual setup / troubleshooting](#manual-setup--troubleshooting) below.
+
+### 1. Prerequisites check
+
+```bash
+node --version   # 18+ required — nano-brain installs via npm
+docker info 2>&1 | head -5   # recommended — the wizard can auto-provision PostgreSQL via Docker
+ollama --version 2>&1 | head -1   # optional — only needed for local embeddings
+```
+
+- **Node.js 18+** is required to install nano-brain via npm.
+- **Docker** is recommended: the wizard detects a reachable PostgreSQL, or offers to start one via Docker automatically. If there's no Docker, the wizard also accepts a remote PostgreSQL URL (see the Manual setup appendix for VPS-style setups).
+- **Ollama** is optional: only needed if the user wants local embeddings. The wizard also accepts any Ollama-compatible URL or a Voyage AI API key, and embeddings can be skipped entirely for BM25-only (keyword) search.
+
+### 2. Install
+
+```bash
+npm install -g @nano-step/nano-brain
+```
+
+### 3. Initialize
+
+```bash
+nano-brain init
+```
+
+Run with no arguments, in an interactive terminal. This single command:
+
+1. Gates on an existing config — **keep** (default) resumes/skips straight to starting the server, **overwrite** re-runs setup. This makes `nano-brain init` safely re-runnable.
+2. Detects a reachable PostgreSQL, or offers to provision one via Docker (or accepts a remote connection URL).
+3. Optionally enables embeddings — local Ollama, any Ollama-compatible URL, Voyage AI, or skip for BM25-only search.
+4. Writes the config file and runs `doctor` to verify the stack.
+5. Starts the server.
+6. Offers to register the current directory as a workspace.
+7. Configures the MCP client(s) the user selects (Claude Code, OpenCode, Codex CLI). Claude Code and OpenCode are written **project-local** (`.mcp.json` / `opencode.json` in the project root), each bound to this project's `?workspace=`. Codex CLI asks a scope: **global** (`~/.codex/config.toml`, shared by every project) writes a bare URL with **no** `?workspace=` — so registering another project can't override this one's binding, and the agent passes a workspace per call; **project** (`<project>/.codex/config.toml`) writes a workspace-bound URL but requires trusting the directory in Codex.
+8. Prints a summary — server URL, workspace name/hash — ending with: **restart your AI client** to pick up the new MCP configuration.
+
+The happy path is a handful of prompts (at most six consequential questions: overwrite/keep, database, embeddings, start server, register, per-MCP-client) — not the ~20-question flow of older versions. For per-step manual control instead of the wizard, see the appendix below.
+
+> **Windows note:** the wizard's automatic server auto-start is not available yet on Windows. `nano-brain init` will print a manual `nano-brain serve` instruction instead of starting the server itself — see [Step 7 — Start the server](#step-7--start-the-server) in the manual appendix.
+
+### 4. Verify
+
+After restarting your AI client, confirm the MCP tools respond:
+
+```
+memory_status → should return {"pg_status":"healthy", ...}
+```
+
+Then run a quick end-to-end check:
+
+```bash
+# Write a test memory
+nano-brain write --workspace=<hash> "nano-brain setup complete on $(date)"
+
+# Query it back
+nano-brain query --workspace=<hash> "setup complete"
+```
+
+If results come back, setup is successful.
+
+---
+
+## Manual setup / troubleshooting
+
+This per-step manual path stays valid and is the recommended route for a **VPS / shared-team server**, a machine **without Docker** (bring your own PostgreSQL), **Windows**, or when you want step-by-step control instead of the wizard.
 
 Ask the user which setup path they want:
 
@@ -16,7 +83,7 @@ The steps below cover **Path 1 (local)**. For VPS and Voyage AI, adapt the embed
 
 ---
 
-## Step 1 — Check Node.js
+### Step 1 — Check Node.js
 
 ```bash
 node --version
@@ -28,7 +95,7 @@ node --version
 
 ---
 
-## Step 2 — Check Docker
+### Step 2 — Check Docker
 
 ```bash
 docker --version
@@ -41,7 +108,7 @@ docker info 2>&1 | head -5
 
 ---
 
-## Step 3 — Check Ollama
+### Step 3 — Check Ollama
 
 ```bash
 ollama --version
@@ -60,7 +127,7 @@ curl -s http://localhost:11434/api/tags 2>&1 | head -3
 
 ---
 
-## Step 4 — Start PostgreSQL
+### Step 4 — Start PostgreSQL
 
 Check if a PostgreSQL instance is already running:
 
@@ -90,7 +157,7 @@ echo "PostgreSQL is ready"
 
 ---
 
-## Step 5 — Install nano-brain
+### Step 5 — Install nano-brain
 
 ```bash
 npm list -g @nano-step/nano-brain 2>/dev/null | head -3
@@ -106,7 +173,7 @@ nano-brain --version
 
 ---
 
-## Step 6 — Run doctor
+### Step 6 — Run doctor
 
 This verifies the full stack in one command:
 
@@ -128,7 +195,7 @@ If any check fails, fix it before continuing.
 
 ---
 
-## Step 7 — Start the server
+### Step 7 — Start the server
 
 ```bash
 # Check if already running
@@ -148,9 +215,11 @@ curl -s http://localhost:3100/health
 # Expected: {"status":"ok", ...}
 ```
 
+> **Windows:** `nano-brain init`'s automatic server auto-start is not available yet — run this step manually after `init` prints the instruction to do so.
+
 ---
 
-## Step 8 — Register the workspace
+### Step 8 — Register the workspace
 
 Ask the user: "Which project directory would you like to register with nano-brain? (press Enter for current directory)"
 
@@ -166,11 +235,11 @@ The output includes both the workspace **name** and **hash** — either can be u
 
 ---
 
-## Step 9 — Configure your MCP client
+### Step 9 — Configure your MCP client
 
 Ask the user which AI client they use:
 
-### Claude Code
+#### Claude Code
 Add to `~/.claude.json` under `mcpServers`:
 ```json
 {
@@ -183,7 +252,7 @@ Add to `~/.claude.json` under `mcpServers`:
 }
 ```
 
-### OpenCode
+#### OpenCode
 Add to OpenCode config:
 ```json
 {
@@ -197,10 +266,10 @@ Add to OpenCode config:
 }
 ```
 
-### Other MCP clients
+#### Other MCP clients
 Use `url: http://localhost:3100/mcp` with transport type `http` (MCP 2025-03-26 streamable HTTP) for Claude Code and generic streamable-HTTP clients. Note: OpenCode's own config schema names this transport `"type": "remote"` (not `"http"`).
 
-### Binding a default workspace (optional)
+#### Binding a default workspace (optional)
 
 Append `?workspace=<name-or-hash>` to the MCP URL to bind a default workspace to the connection. Run `nano-brain workspaces list` (Step 8) to see the registered name and hash for this project, e.g.:
 ```json
@@ -217,7 +286,7 @@ memory_status → should return {"pg_status":"healthy", ...}
 
 ---
 
-## Step 10 — Verify end-to-end
+### Step 10 — Verify end-to-end
 
 Run a quick test to confirm everything works:
 

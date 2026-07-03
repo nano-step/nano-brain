@@ -201,18 +201,14 @@ func mergeCodexTOMLEntry(configPath string, entry map[string]any) (changed bool,
 	return changed, oldURL, nil
 }
 
-// writeCodexMCPConfig writes/updates the global Codex CLI MCP config
-// (~/.codex/config.toml, or $CODEX_HOME/config.toml) with a nano-brain
-// entry bound to workspaceName. Codex's schema infers HTTP transport from
-// the presence of the "url" field alone — no explicit "type" key is used
-// (RESEARCH Code Examples).
-func writeCodexMCPConfig(baseMCPURL, workspaceName string) (changed bool, oldURL string, configPath string, err error) {
-	configPath = detectCodexConfigPath()
-	entry := map[string]any{
-		"url": buildWorkspaceURL(baseMCPURL, workspaceName),
-	}
-	changed, oldURL, err = mergeCodexTOMLEntry(configPath, entry)
-	return changed, oldURL, configPath, err
+// writeCodexMCPConfigTo writes/updates the Codex CLI MCP config at
+// configPath with a nano-brain entry whose url is mcpURL exactly as given
+// (the caller decides whether it carries a ?workspace= binding). Codex's
+// schema infers HTTP transport from the presence of the "url" field alone —
+// no explicit "type" key is used (RESEARCH Code Examples).
+func writeCodexMCPConfigTo(configPath, mcpURL string) (changed bool, oldURL string, err error) {
+	entry := map[string]any{"url": mcpURL}
+	return mergeCodexTOMLEntry(configPath, entry)
 }
 
 // shouldPromptMCPConfig reports whether promptMCPClientConfig should run at
@@ -261,20 +257,69 @@ func promptMCPClientConfig(scanner *bufio.Scanner, projectRoot, workspaceName st
 		return writeOpenCodeMCPConfig(projectRoot, baseURL, workspaceName)
 	})
 
-	codexPath := detectCodexConfigPath()
-	codexURL := buildWorkspaceURL(baseURL, workspaceName)
-	codexChanged := promptAndWrite(scanner, "Codex CLI", codexURL, func() (string, string) {
-		oldURL, nonEmpty := peekExistingCodexURL(codexPath)
-		caveat := ""
+	promptAndWriteCodex(scanner, baseURL, workspaceName, projectRoot)
+}
+
+// promptAndWriteCodex handles Codex CLI specially: unlike Claude Code and
+// OpenCode (always project-local), Codex config can be GLOBAL
+// (~/.codex/config.toml, shared by every project) or PROJECT-scoped
+// (<project>/.codex/config.toml). A single global config can only hold one
+// nano-brain entry, so binding it to one project's ?workspace= would make
+// every other project's Codex point at the wrong workspace. To avoid that,
+// the user picks the scope: global writes a bare URL with NO ?workspace=
+// (the agent passes a workspace per call), project writes a workspace-bound
+// URL but requires trusting the directory (Codex's trusted-project gate).
+func promptAndWriteCodex(scanner *bufio.Scanner, baseURL, workspaceName, projectRoot string) {
+	answer, ok := promptConsequential(scanner, "Configure Codex CLI for this workspace?", "Y")
+	if !ok || !isAffirmative(answer) {
+		return
+	}
+
+	scope, ok := promptConsequential(scanner, "Codex config scope — [g]lobal (shared, no workspace binding) or [p]roject (this dir, workspace-bound)?", "g")
+	if !ok {
+		fmt.Println("  Skipped Codex CLI.")
+		return
+	}
+
+	project := strings.EqualFold(scope, "p") || strings.EqualFold(scope, "project")
+	var configPath, newURL string
+	if project {
+		configPath = detectCodexProjectConfigPath(projectRoot)
+		newURL = buildWorkspaceURL(baseURL, workspaceName)
+	} else {
+		// Global config is shared across every project, so it carries NO
+		// ?workspace= — otherwise each init would override the previous
+		// project's binding. The agent supplies the workspace per call.
+		configPath = detectCodexConfigPath()
+		newURL = baseURL
+	}
+
+	if oldURL, nonEmpty := peekExistingCodexURL(configPath); oldURL != "" && oldURL != newURL {
+		fmt.Printf("  Codex CLI already has a nano-brain entry:\n    current: %s\n    new:     %s\n", oldURL, newURL)
 		if nonEmpty {
-			caveat = "rewriting this file may drop any hand-written comments (data keys/values are preserved)"
+			fmt.Println("  Note: rewriting this file may drop any hand-written comments (data keys/values are preserved).")
 		}
-		return oldURL, caveat
-	}, func() (bool, string, string, error) {
-		return writeCodexMCPConfig(baseURL, workspaceName)
-	})
-	if codexChanged {
-		fmt.Printf("  Note: %s is a GLOBAL config — it can only carry one nano-brain ?workspace= binding at a time across all your projects.\n", codexPath)
+		confirm, ok := promptConsequential(scanner, "Overwrite existing nano-brain entry?", "Y")
+		if !ok || !isAffirmative(confirm) {
+			fmt.Println("  Skipped Codex CLI (kept existing entry).")
+			return
+		}
+	}
+
+	changed, _, err := writeCodexMCPConfigTo(configPath, newURL)
+	if err != nil {
+		fmt.Printf("  Error configuring Codex CLI: %v\n", err)
+		return
+	}
+	if !changed {
+		fmt.Println("  Codex CLI already configured (no change).")
+		return
+	}
+	fmt.Printf("  Codex CLI configured: %s\n", configPath)
+	if project {
+		fmt.Println("  Note: Codex only loads project config from a TRUSTED directory — trust this project in Codex if the entry doesn't take effect.")
+	} else {
+		fmt.Println("  Note: global Codex config carries no ?workspace= (shared across all projects) — pass a workspace per tool call, or re-run with project scope for a bound default.")
 	}
 }
 

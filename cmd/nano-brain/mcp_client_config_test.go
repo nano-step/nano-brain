@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"net/url"
 	"os"
@@ -453,34 +454,112 @@ func TestMergeCodexTOMLEntry_DetectsURLChange(t *testing.T) {
 	}
 }
 
-func TestWriteCodexMCPConfig_Shape(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.toml")
-	t.Setenv("CODEX_HOME", dir)
-
-	changed, _, gotPath, err := writeCodexMCPConfig("http://localhost:3100/mcp", "my-workspace")
-	if err != nil {
-		t.Fatalf("writeCodexMCPConfig() error = %v", err)
-	}
-	if !changed {
-		t.Error("writeCodexMCPConfig() changed = false, want true")
-	}
-	if gotPath != configPath {
-		t.Errorf("configPath = %q, want %q", gotPath, configPath)
-	}
-
+func codexEntryURL(t *testing.T, configPath string) (url string, hasType bool) {
+	t.Helper()
 	raw := map[string]any{}
 	if _, err := toml.DecodeFile(configPath, &raw); err != nil {
 		t.Fatalf("decode written config: %v", err)
 	}
 	servers := raw["mcp_servers"].(map[string]any)
 	nb := servers["nano-brain"].(map[string]any)
-	if nb["url"] != "http://localhost:3100/mcp?workspace=my-workspace" {
-		t.Errorf("Codex url = %v, want the workspace-bound url", nb["url"])
+	u, _ := nb["url"].(string)
+	_, hasType = nb["type"]
+	return u, hasType
+}
+
+func TestWriteCodexMCPConfigTo_ProjectScopedBindsWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, ".codex", "config.toml")
+
+	changed, _, err := writeCodexMCPConfigTo(configPath, "http://localhost:3100/mcp?workspace=my-workspace")
+	if err != nil {
+		t.Fatalf("writeCodexMCPConfigTo() error = %v", err)
 	}
-	if _, hasType := nb["type"]; hasType {
+	if !changed {
+		t.Error("writeCodexMCPConfigTo() changed = false, want true")
+	}
+	url, hasType := codexEntryURL(t, configPath)
+	if url != "http://localhost:3100/mcp?workspace=my-workspace" {
+		t.Errorf("Codex url = %q, want the workspace-bound url", url)
+	}
+	if hasType {
 		t.Error("Codex entry should not have an explicit type key (transport inferred from url presence)")
 	}
+}
+
+func TestWriteCodexMCPConfigTo_GlobalHasNoWorkspaceBinding(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	// Global scope writes the bare base URL — no ?workspace= — so a second
+	// project's init cannot override this project's binding (there is none).
+	changed, _, err := writeCodexMCPConfigTo(configPath, "http://localhost:3100/mcp")
+	if err != nil {
+		t.Fatalf("writeCodexMCPConfigTo() error = %v", err)
+	}
+	if !changed {
+		t.Error("writeCodexMCPConfigTo() changed = false, want true")
+	}
+	url, _ := codexEntryURL(t, configPath)
+	if url != "http://localhost:3100/mcp" {
+		t.Errorf("global Codex url = %q, want the bare url with no ?workspace=", url)
+	}
+	if strings.Contains(url, "workspace=") {
+		t.Errorf("global Codex url %q must not carry a ?workspace= binding", url)
+	}
+}
+
+func TestPromptAndWriteCodex_GlobalVsProject(t *testing.T) {
+	baseURL := "http://localhost:3100/mcp"
+
+	t.Run("global scope writes ~/.codex with no workspace binding", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODEX_HOME", home)
+		projectRoot := t.TempDir()
+
+		// "Y" configure, "g" global scope.
+		scanner := bufio.NewScanner(bytes.NewBufferString("Y\ng\n"))
+		promptAndWriteCodex(scanner, baseURL, "proj-a", projectRoot)
+
+		url, _ := codexEntryURL(t, filepath.Join(home, "config.toml"))
+		if url != baseURL {
+			t.Errorf("global url = %q, want bare %q", url, baseURL)
+		}
+		if _, err := os.Stat(filepath.Join(projectRoot, ".codex", "config.toml")); err == nil {
+			t.Error("global scope must not write a project-local .codex/config.toml")
+		}
+	})
+
+	t.Run("project scope writes <project>/.codex bound to workspace", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODEX_HOME", home)
+		projectRoot := t.TempDir()
+
+		// "Y" configure, "p" project scope.
+		scanner := bufio.NewScanner(bytes.NewBufferString("Y\np\n"))
+		promptAndWriteCodex(scanner, baseURL, "proj-a", projectRoot)
+
+		url, _ := codexEntryURL(t, filepath.Join(projectRoot, ".codex", "config.toml"))
+		if url != baseURL+"?workspace=proj-a" {
+			t.Errorf("project url = %q, want workspace-bound", url)
+		}
+		if _, err := os.Stat(filepath.Join(home, "config.toml")); err == nil {
+			t.Error("project scope must not write the global ~/.codex/config.toml")
+		}
+	})
+
+	t.Run("decline configure writes nothing", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODEX_HOME", home)
+		projectRoot := t.TempDir()
+
+		scanner := bufio.NewScanner(bytes.NewBufferString("n\n"))
+		promptAndWriteCodex(scanner, baseURL, "proj-a", projectRoot)
+
+		if _, err := os.Stat(filepath.Join(home, "config.toml")); err == nil {
+			t.Error("declining Codex config must not write any file")
+		}
+	})
 }
 
 func TestShouldPromptMCPConfig(t *testing.T) {

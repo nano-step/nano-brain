@@ -98,6 +98,10 @@ func CheckPgvector(conn *pgx.Conn) Check {
 }
 
 func CheckEmbeddingProvider(cfg config.EmbeddingConfig) (Check, []byte) {
+	if cfg.Provider == "" {
+		return Check{Name: "Embedding provider", Status: "skip", Detail: "disabled — BM25-only"}, nil
+	}
+
 	if cfg.Provider == "voyage" {
 		key := cfg.VoyageAPIKey
 		if key == "" {
@@ -143,6 +147,10 @@ func CheckEmbeddingProvider(cfg config.EmbeddingConfig) (Check, []byte) {
 }
 
 func CheckEmbeddingModel(cfg config.EmbeddingConfig, ollamaBody []byte) Check {
+	if cfg.Provider == "" {
+		return Check{Name: "Embedding model", Status: "skip", Detail: "disabled — BM25-only"}
+	}
+
 	model := cfg.Model
 	if model == "" {
 		model = "nomic-embed-text"
