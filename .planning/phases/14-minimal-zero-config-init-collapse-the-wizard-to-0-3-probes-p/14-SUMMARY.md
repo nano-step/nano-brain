@@ -176,3 +176,14 @@ None - no external service configuration required. `nano-brain init` (interactiv
 ---
 *Phase: 14-minimal-zero-config-init-collapse-the-wizard-to-0-3-probes-p*
 *Completed: 2026-07-03*
+
+## Self-Check: PASSED
+
+- FOUND: internal/config/template.go
+- FOUND: internal/config/template_test.go
+- FOUND: cmd/nano-brain/init.go
+- FOUND: cmd/nano-brain/init_embedding.go
+- FOUND: .planning/phases/14-minimal-zero-config-init-collapse-the-wizard-to-0-3-probes-p/14-SUMMARY.md
+- FOUND commit: 0c3f132 (feat(14-01): add hand-authored commented full-config template)
+- FOUND commit: 765ddac (feat(14-02): collapse init wizard to 0-3 probes with --yes path)
+- FOUND commit: a85e224 (docs(14): complete minimal-zero-config-init plan)
