@@ -21,7 +21,8 @@ Strengthen nano-brain's code intelligence and search across v1: add Vue SFC supp
 - [ ] **Phase 11: Benchmark token cost** - nano-brain vs baseline context-gathering token cost benchmark
 - [x] **Phase 12: OpenAPI 3.0 spec** - REST API spec served at GET /api/openapi.json (completed 2026-07-02, PR #531)
 - [x] **Phase 13: Interactive Init Wizard** - One-command `nano-brain init`: detect/provision PostgreSQL via Docker or remote URL, optional embeddings with BM25 degrade, serve + register + MCP client picker, docs rewrite (completed 2026-07-02)
-- [x] **Phase 15: Minimal zero-config init** - Collapse the wizard to 0-3 probes (Postgres/Ollama/harvester auto-detected), env-var secrets, full self-documenting config (all sections at defaults + comments, advanced disabled), context_hints not prompted, `--yes` non-interactive path (completed 2026-07-03) [dir 14-minimal-…; renumbered from 14 to avoid collision with PR #533]
+- [x] **Phase 14: curl|bash install script** - One-line installer downloads the platform binary from GitHub Releases, verifies SHA256SUMS, installs into PATH; npm kept as alternative; docs lead with curl|bash (completed 2026-07-03)
+- [x] **Phase 15: Minimal zero-config init** - Collapse the wizard to 0-3 probes (Postgres/Ollama/harvester auto-detected), env-var secrets, full self-documenting config (all sections at defaults + comments, advanced disabled), context_hints not prompted, `--yes` non-interactive path (completed 2026-07-03)
 
 ## Phase Details
 
@@ -281,13 +282,14 @@ Plans:
 - [x] 13-07-PLAN.md — orchestrator: restructure runInteractiveInit into the step sequence, ≤6-question budget, advanced gate, TTY contract, summary (D-01, D-02, D-03, D-04, D-16, D-17)
 - [x] 13-08-PLAN.md — docs: rewrite SETUP_AGENT.md around the one-command flow + move manual steps to appendix, update README Start (D-18)
 
-### Phase 14: Minimal zero-config init — collapse the wizard to 0-3 probes (Postgres/Ollama/harvester auto-detected), move secrets to env vars, write a full self-documenting config with all sections at default values + comments (advanced disabled), context_hints not prompted, add --yes non-interactive path
+### Phase 14: curl|bash install script — one-line installer that downloads the platform binary from GitHub Releases, verifies SHA256SUMS, installs into PATH; keep npm as alternative; docs put curl|bash first
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** A `curl -fsSL … | bash` installer that downloads the platform binary from GitHub Releases, verifies it against SHA256SUMS, and installs it onto PATH — no Node.js needed; npm kept as an alternative.
+**Depends on:** none (reuses existing release artifacts)
+**Plans:** shipped directly (install.sh + release.yml asset + README/SETUP_AGENT docs), PR #533
+
+### Phase 15: Minimal zero-config init — collapse the wizard to 0-3 probes (Postgres/Ollama/harvester auto-detected), move secrets to env vars, write a full self-documenting config with all sections at default values + comments (advanced disabled), context_hints not prompted, add --yes non-interactive path
+
+**Goal:** Collapse `nano-brain init` to 0-3 probes with a full self-documenting default config; secrets via env vars; context_hints config-file-only; `--yes` non-interactive path.
 **Depends on:** Phase 13
-**Plans:** 0 plans
-
-Plans:
-
-- [ ] TBD (run /gsd-plan-phase 14 to break down)
+**Plans:** shipped (template + collapsed wizard + round-trip tests), PR #534
