@@ -83,7 +83,9 @@ main() {
 
   # ── Verify checksum ────────────────────────────────────────────────────────
   local want got
-  want="$(awk -v a="$asset" '$2 == a || $2 == "*"a {print $1}' "$tmp/SHA256SUMS" | head -n1)"
+  # awk exits after the first match (no `head`, which under pipefail could
+  # SIGPIPE awk → exit 141 → abort); tr strips any CR from a CRLF sums file.
+  want="$(awk -v a="$asset" '$2 == a || $2 == "*"a { print $1; exit }' "$tmp/SHA256SUMS" | tr -d '\r')"
   [ -n "$want" ] || die "no SHA256SUMS entry for $asset — refusing to install"
   got="$(sha256_of "$tmp/$asset")"
   if [ "$want" != "$got" ]; then
@@ -104,6 +106,10 @@ main() {
 
   # ── Install atomically ─────────────────────────────────────────────────────
   chmod +x "$tmp/$asset"
+  # Unlink any existing binary first: a running nano-brain would make an
+  # in-place `mv` fail with ETXTBSY (Text file busy) on Linux. Removing the
+  # inode is safe — a running process keeps its open handle to the old file.
+  rm -f "$bindir/nano-brain"
   mv -f "$tmp/$asset" "$bindir/nano-brain" \
     || die "cannot install to $bindir (try: NANO_BRAIN_BIN_DIR=\$HOME/.local/bin, or run with sudo)"
 
@@ -115,8 +121,14 @@ main() {
     *) printf '\n%s is not on your PATH. Add it:\n  export PATH="%s:$PATH"\n' "$bindir" "$bindir" >&2 ;;
   esac
 
-  printf '\nInstalled: %s\nNext step: run the interactive setup wizard\n\n  nano-brain init\n\n' \
-    "$("$bindir/nano-brain" version 2>/dev/null || echo "nano-brain")" >&2
+  # Surface an exec failure (e.g. glibc/arch mismatch) instead of hiding it
+  # behind a generic fallback string.
+  local version_info
+  if version_info="$("$bindir/nano-brain" version 2>/dev/null)"; then
+    printf '\nInstalled: %s\nNext step: run the interactive setup wizard\n\n  nano-brain init\n\n' "$version_info" >&2
+  else
+    printf '\nInstalled to %s/nano-brain, but running it failed — the binary may be incompatible with this system (architecture or libc mismatch).\nCheck: %s/nano-brain version\n\n' "$bindir" "$bindir" >&2
+  fi
 }
 
 main "$@"
