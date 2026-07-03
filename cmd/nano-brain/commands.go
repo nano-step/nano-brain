@@ -13,12 +13,28 @@ import (
 func runInitCmd(args []string, configPath string) {
 	cliLog.Info().Str("cmd", "init").Msg("cli command started")
 	hasRoot := false
+	hasYes := false
 	for _, a := range args {
-		if a == "--root" {
+		switch a {
+		case "--root":
 			hasRoot = true
-			break
+		case "--yes":
+			hasYes = true
 		}
 	}
+
+	// D-08: --yes takes the fully non-interactive path (zero prompts) even
+	// when a TTY is attached — it is a distinct contract from the bare
+	// no-args path, which is TTY-gated and interactive.
+	if hasYes {
+		if hasRoot {
+			fmt.Fprintln(os.Stderr, "Note: --yes only writes config; --root is ignored. To register a workspace, run 'nano-brain init --root <path>' without --yes (needs a running server).")
+		}
+		runNonInteractiveInit(configPath)
+		cliLog.Info().Str("cmd", "init").Msg("cli command completed")
+		return
+	}
+
 	if !hasRoot {
 		runInteractiveInit(configPath)
 		cliLog.Info().Str("cmd", "init").Msg("cli command completed")

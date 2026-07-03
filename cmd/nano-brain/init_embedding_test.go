@@ -17,94 +17,96 @@ func withDetectOllamaFn(t *testing.T, fn func(url string) bool) {
 	t.Cleanup(func() { detectOllamaFn = orig })
 }
 
-// TestStepEmbedding_Disabled covers D-11: declining the enable gate must
-// return a block with the empty-provider rendering (provider: "") and print
-// a BM25-only note, with no further prompts read.
-func TestStepEmbedding_Disabled(t *testing.T) {
-	withDetectOllamaFn(t, func(string) bool {
-		t.Fatal("detectOllamaFn must not be called when embeddings are declined")
-		return false
-	})
+// TestStepEmbedding_OllamaUp covers D-02.2's zero-question path: Ollama
+// reachable at the default URL silently defaults to provider/url/model/
+// concurrency with NO prompt read at all (the scanner has no input queued,
+// so a Scan() call here would return false/empty and the test would still
+// need to pass — the real assertion is that the well-known default values
+// appear, matching getDefaults()).
+func TestStepEmbedding_OllamaUp(t *testing.T) {
+	withDetectOllamaFn(t, func(string) bool { return true })
 
-	scanner := bufio.NewScanner(strings.NewReader("n\n"))
+	scanner := bufio.NewScanner(strings.NewReader(""))
+	var notes bytes.Buffer
+	block := stepEmbedding(scanner, &notes, "http://localhost:11434", "nomic-embed-text")
+
+	if !strings.Contains(block, "provider: ollama") {
+		t.Errorf("stepEmbedding() ollama-up block = %q, want provider: ollama", block)
+	}
+	if !strings.Contains(block, "http://localhost:11434") {
+		t.Errorf("stepEmbedding() ollama-up block = %q, want the default URL", block)
+	}
+	if !strings.Contains(block, "nomic-embed-text") {
+		t.Errorf("stepEmbedding() ollama-up block = %q, want the default model", block)
+	}
+	if !strings.Contains(block, "concurrency: 3") {
+		t.Errorf("stepEmbedding() ollama-up block = %q, want concurrency: 3", block)
+	}
+	if notes.Len() != 0 {
+		t.Errorf("stepEmbedding() ollama-up notes = %q, want empty (no caveat for the local default)", notes.String())
+	}
+}
+
+// TestStepEmbedding_OllamaDownBlankAnswer covers D-02.2's down branch when
+// the single prompt is declined (blank answer): degrades to BM25-only.
+func TestStepEmbedding_OllamaDownBlankAnswer(t *testing.T) {
+	withDetectOllamaFn(t, func(string) bool { return false })
+
+	scanner := bufio.NewScanner(strings.NewReader("\n"))
 	var notes bytes.Buffer
 	block := stepEmbedding(scanner, &notes, "http://localhost:11434", "nomic-embed-text")
 
 	if !strings.Contains(block, `provider: ""`) {
-		t.Errorf("stepEmbedding() disabled block = %q, want it to contain `provider: \"\"`", block)
-	}
-	if strings.Contains(block, "provider: none") {
-		t.Errorf("stepEmbedding() disabled block = %q, must not use a `none` sentinel", block)
+		t.Errorf("stepEmbedding() blank-answer block = %q, want it to contain `provider: \"\"`", block)
 	}
 	if !strings.Contains(notes.String(), "BM25") {
 		t.Errorf("stepEmbedding() notes = %q, want a BM25-only note", notes.String())
 	}
 }
 
-// TestStepEmbedding_OllamaDetected covers D-12's found branch: an injected
-// detectOllamaFn returning true should confirm the default URL + model and
-// return an ollama block containing both.
-func TestStepEmbedding_OllamaDetected(t *testing.T) {
-	withDetectOllamaFn(t, func(url string) bool { return true })
+// TestStepEmbedding_OllamaDownEOF covers the EOF-means-decline convention
+// (CR-01): a closed stdin at the single prompt must also degrade to
+// BM25-only, never be treated as consent.
+func TestStepEmbedding_OllamaDownEOF(t *testing.T) {
+	withDetectOllamaFn(t, func(string) bool { return false })
 
-	// y (enable) then Enter/Enter to accept the confirmed URL + model defaults.
-	scanner := bufio.NewScanner(strings.NewReader("y\n\n\n"))
+	scanner := bufio.NewScanner(strings.NewReader(""))
 	var notes bytes.Buffer
 	block := stepEmbedding(scanner, &notes, "http://localhost:11434", "nomic-embed-text")
 
-	if !strings.Contains(block, "provider: ollama") {
-		t.Errorf("stepEmbedding() ollama-detected block = %q, want provider: ollama", block)
-	}
-	if !strings.Contains(block, "http://localhost:11434") {
-		t.Errorf("stepEmbedding() ollama-detected block = %q, want the default URL", block)
-	}
-	if !strings.Contains(block, "nomic-embed-text") {
-		t.Errorf("stepEmbedding() ollama-detected block = %q, want the default model", block)
+	if !strings.Contains(block, `provider: ""`) {
+		t.Errorf("stepEmbedding() EOF block = %q, want it to contain `provider: \"\"`", block)
 	}
 }
 
-// TestStepEmbedding_OllamaManual covers D-12's not-found branch: user
-// selects provider "ollama" and enters a URL manually.
-func TestStepEmbedding_OllamaManual(t *testing.T) {
-	withDetectOllamaFn(t, func(url string) bool { return false })
+// TestStepEmbedding_OllamaDownProvidedURL covers D-02.2's down branch when
+// the user provides a URL: returns an ollama block using that URL and the
+// default model, with no provider-choice or concurrency prompt.
+func TestStepEmbedding_OllamaDownProvidedURL(t *testing.T) {
+	withDetectOllamaFn(t, func(string) bool { return false })
 
-	// y (enable), "ollama" (provider), URL, model (accept default).
-	scanner := bufio.NewScanner(strings.NewReader("y\nollama\nhttp://192.168.1.50:11434\n\n"))
+	scanner := bufio.NewScanner(strings.NewReader("http://192.168.1.50:11434\n"))
 	var notes bytes.Buffer
 	block := stepEmbedding(scanner, &notes, "http://localhost:11434", "nomic-embed-text")
 
 	if !strings.Contains(block, "provider: ollama") {
-		t.Errorf("stepEmbedding() ollama-manual block = %q, want provider: ollama", block)
+		t.Errorf("stepEmbedding() provided-URL block = %q, want provider: ollama", block)
 	}
 	if !strings.Contains(block, "http://192.168.1.50:11434") {
-		t.Errorf("stepEmbedding() ollama-manual block = %q, want the entered URL", block)
+		t.Errorf("stepEmbedding() provided-URL block = %q, want the entered URL", block)
 	}
-}
-
-// TestStepEmbedding_Voyage covers D-12's voyage branch.
-func TestStepEmbedding_Voyage(t *testing.T) {
-	withDetectOllamaFn(t, func(url string) bool { return false })
-
-	// y (enable), "voyage" (provider), model (accept default).
-	scanner := bufio.NewScanner(strings.NewReader("y\nvoyage\n\n"))
-	var notes bytes.Buffer
-	block := stepEmbedding(scanner, &notes, "http://localhost:11434", "nomic-embed-text")
-
-	if !strings.Contains(block, "provider: voyage") {
-		t.Errorf("stepEmbedding() voyage block = %q, want provider: voyage", block)
-	}
-	if !strings.Contains(block, "voyage-3") {
-		t.Errorf("stepEmbedding() voyage block = %q, want the default voyage-3 model", block)
+	if !strings.Contains(block, "nomic-embed-text") {
+		t.Errorf("stepEmbedding() provided-URL block = %q, want the default model (no model prompt)", block)
 	}
 }
 
 // TestStepEmbedding_CloudCaveat covers Pitfall 6: entering a non-local
-// Ollama URL must print a cloud-auth caveat hint (no new auth code).
+// Ollama URL at the single down-branch prompt must still print a cloud-auth
+// caveat hint (no new auth code).
 func TestStepEmbedding_CloudCaveat(t *testing.T) {
-	withDetectOllamaFn(t, func(url string) bool { return false })
+	withDetectOllamaFn(t, func(string) bool { return false })
 
-	// y (enable), "ollama" (provider), a non-local cloud URL, model (accept default).
-	scanner := bufio.NewScanner(strings.NewReader("y\nollama\nhttps://ollama.com\n\n"))
+	scanner := bufio.NewScanner(strings.NewReader("https://ollama.com\n"))
 	var notes bytes.Buffer
 	block := stepEmbedding(scanner, &notes, "http://localhost:11434", "nomic-embed-text")
 

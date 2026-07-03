@@ -559,7 +559,7 @@ Commands:
   serve -d           Start the server (background/daemon)
   stop               Stop background server
   restart            Restart background server
-  init               Interactive setup wizard (or --root <path> to register workspace)
+  init               Zero-config setup wizard (--yes for non-interactive, --root <path> to register workspace)
   doctor             Check prerequisites (PostgreSQL, pgvector, embedding provider)
   status             Show server status
   version            Show version

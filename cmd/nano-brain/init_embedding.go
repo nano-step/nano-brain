@@ -12,52 +12,40 @@ import (
 // real network call.
 var detectOllamaFn = detectOllama
 
-// stepEmbedding implements the D-11/D-12 embedding wizard step: it first
-// asks whether to enable semantic embeddings at all (D-11); declining
-// degrades to BM25-only via an empty `provider: ""` YAML value (verified to
-// correctly override the config default, see 13-RESEARCH.md). Accepting
-// auto-detects a local Ollama instance at defaultURL (D-12); if found it
-// confirms the URL + model, otherwise it prompts for a provider (ollama or
-// voyage). notes receives user-facing hints (the BM25-only note and the
-// cloud-auth caveat) so callers/tests can assert on them independently of
-// the returned YAML block.
+// stepEmbedding implements the D-02.2 minimal embedding probe: Ollama
+// reachable at defaultURL → silent default (zero questions), matching
+// getDefaults()'s provider/url/model/concurrency exactly so this branch
+// never diverges from the template's committed defaults. Ollama unreachable
+// → exactly one prompt offering to point at a different Ollama-compatible
+// URL; declining (or a closed stdin, EOF-means-decline per CR-01) degrades
+// to BM25-only via the empty `provider: ""` YAML value (verified to
+// correctly override the config default, see 13-RESEARCH.md). There is no
+// provider-choice or concurrency prompt — voyage/cloud embedding setup is
+// deferred to manual config-file editing (D-07). notes receives user-facing
+// hints (the BM25-only note and the cloud-auth caveat) so callers/tests can
+// assert on them independently of the returned YAML block.
 func stepEmbedding(scanner *bufio.Scanner, notes io.Writer, defaultURL, defaultModel string) (embBlock string) {
-	fmt.Print("\n── Embedding ──\n")
-	fmt.Println("  Converts text chunks into vectors for semantic search.")
+	const embConcurrency = "3"
+	// Commented defaults so a generated config self-documents the remaining
+	// embedding knobs (D-03) without changing behavior — config.Load fills
+	// these from getDefaults() when absent.
+	const embExtraDefaults = "  # max_chars: 3000    # truncate each chunk to N chars before embedding (tuned for nomic-embed-text)\n  # dimension: 0       # 0 = use the model's native dimension\n"
 
-	enable := promptWithDefault(scanner, "Enable semantic embeddings?", "Y")
-	if !isAffirmative(enable) {
+	if detectOllamaFn(defaultURL) {
+		fmt.Printf("  ✓ Ollama detected at %s — using %s for embeddings\n", defaultURL, defaultModel)
+		return fmt.Sprintf("embedding:\n  provider: ollama\n  url: %s\n  model: %s\n  concurrency: %s\n%s", defaultURL, defaultModel, embConcurrency, embExtraDefaults)
+	}
+
+	fmt.Print("\n── Embedding ──\n")
+	fmt.Println("  Ollama not found at the default URL — semantic search needs an embedding provider.")
+	answer, ok := promptConsequential(scanner, "Ollama URL (blank for BM25 keyword search only)", "")
+	if !ok || answer == "" {
 		fmt.Fprintln(notes, "  BM25 keyword search only — re-run nano-brain init to enable embeddings later")
 		return "embedding:\n  provider: \"\"\n"
 	}
 
-	fmt.Println("  Providers: ollama (local, free) | voyage (cloud, higher quality)")
-
-	if detectOllamaFn(defaultURL) {
-		fmt.Printf("  ✓ Ollama detected at %s\n", defaultURL)
-		embURL := promptWithDefault(scanner, "Ollama URL", defaultURL)
-		model := promptWithDefault(scanner, "Embedding model", defaultModel)
-		printCloudCaveatIfRemote(notes, embURL)
-		embConcurrency := "3"
-		return fmt.Sprintf("embedding:\n  provider: ollama\n  url: %s\n  model: %s\n  concurrency: %s\n", embURL, model, embConcurrency)
-	}
-
-	fmt.Println("  Ollama not found at default URL.")
-	provider := promptWithDefault(scanner, "Embedding provider (ollama/voyage)", "ollama")
-
-	if provider == "voyage" {
-		model := promptWithDefault(scanner, "Embedding model", "voyage-3")
-		embConcurrency := "3"
-		return fmt.Sprintf("embedding:\n  provider: voyage\n  model: %s\n  concurrency: %s\n", model, embConcurrency)
-	}
-
-	fmt.Println("  Enter any Ollama-compatible URL (local or remote).")
-	embURL := promptWithDefault(scanner, "Ollama URL", defaultURL)
-	fmt.Println("  Recommended embed models: nomic-embed-text (fast), mxbai-embed-large (better quality)")
-	model := promptWithDefault(scanner, "Embedding model", defaultModel)
-	printCloudCaveatIfRemote(notes, embURL)
-	embConcurrency := "3"
-	return fmt.Sprintf("embedding:\n  provider: ollama\n  url: %s\n  model: %s\n  concurrency: %s\n", embURL, model, embConcurrency)
+	printCloudCaveatIfRemote(notes, answer)
+	return fmt.Sprintf("embedding:\n  provider: ollama\n  url: %s\n  model: %s\n  concurrency: %s\n%s", answer, defaultModel, embConcurrency, embExtraDefaults)
 }
 
 // printCloudCaveatIfRemote prints a hint (Pitfall 6) when embURL is not a

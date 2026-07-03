@@ -232,18 +232,24 @@ func TestRunInteractiveInit_RegisterSkipOnN(t *testing.T) {
 	}
 }
 
-func TestRunInteractiveInit_QuestionBudget(t *testing.T) {
+// TestRunInteractiveInit_ZeroQuestions is the D-01 acceptance test: on a
+// fresh config (probe steps stubbed to their zero-question outcomes), the
+// orchestrator itself must read exactly ONE consequential prompt — the
+// register-workspace prompt — with no advanced-settings gate, no save
+// confirmation, and no config-detail prompts left to answer. Answering only
+// the register prompt (Enter = default cwd) must be enough to complete the
+// whole run.
+func TestRunInteractiveInit_ZeroQuestions(t *testing.T) {
 	h := &orchestratorHooks{}
 	withOrchestratorHooks(t, h)
 
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yml")
 
-	// Fresh config (no keep/overwrite gate consumed) → advanced gate (N,
-	// default) → save confirm (Y, default) → register prompt (Y, default).
-	// All step-internal prompts are stubbed out via the seams, so only the
-	// orchestrator's own consequential prompts are counted here.
-	answers := "N\nY\nY\n"
+	// Only the register prompt remains; stepDatabaseFn/stepEmbeddingFn are
+	// stubbed to their zero-question return values, so a single blank line
+	// (Enter = default cwd) is all runInteractiveInit needs to complete.
+	answers := "\n"
 	origStdin := os.Stdin
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -256,7 +262,7 @@ func TestRunInteractiveInit_QuestionBudget(t *testing.T) {
 		_ = w.Close()
 	}()
 
-	captureStdout(t, func() {
+	out := captureStdout(t, func() {
 		runInteractiveInit(configPath)
 	})
 
@@ -272,74 +278,59 @@ func TestRunInteractiveInit_QuestionBudget(t *testing.T) {
 	if h.registerCalls != 1 {
 		t.Errorf("registerWorkspaceFn called %d times, want 1", h.registerCalls)
 	}
+	if strings.Contains(out, "Advanced settings?") {
+		t.Error("D-09: the advanced-settings gate must be removed entirely")
+	}
+	if strings.Contains(out, "Save this config?") {
+		t.Error("D-01: the save-confirmation prompt must be removed — writing is silent once probes complete")
+	}
+	if strings.Contains(out, "Harvester (session indexing)") || strings.Contains(out, "Summarization (LLM session summaries)") {
+		t.Error("D-09: config-detail prompt blocks (stepAdvanced) must be gone")
+	}
 }
 
-func TestRunInteractiveInit_AdvancedGate(t *testing.T) {
-	t.Run("default N skips advanced prompts", func(t *testing.T) {
-		h := &orchestratorHooks{}
-		withOrchestratorHooks(t, h)
+// TestRunInteractiveInit_WritesCommentedTemplate verifies the written
+// config is the D-03/D-04 commented template (not the old ad-hoc
+// fmt.Sprintf assembly) by checking for a section only the template
+// contains, and that Save-confirmation preview/prompt text is gone.
+func TestRunInteractiveInit_WritesCommentedTemplate(t *testing.T) {
+	h := &orchestratorHooks{}
+	withOrchestratorHooks(t, h)
 
-		dir := t.TempDir()
-		configPath := filepath.Join(dir, "config.yml")
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yml")
 
-		answers := "\nY\nY\n" // advanced=default(N), save=Y, register=Y
-		origStdin := os.Stdin
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatalf("os.Pipe() error = %v", err)
-		}
-		os.Stdin = r
-		t.Cleanup(func() { os.Stdin = origStdin })
-		go func() {
-			_, _ = w.WriteString(answers)
-			_ = w.Close()
-		}()
+	origStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = origStdin })
+	go func() {
+		_, _ = w.WriteString("\n")
+		_ = w.Close()
+	}()
 
-		out := captureStdout(t, func() {
-			runInteractiveInit(configPath)
-		})
-
-		if strings.Contains(out, "Harvester (session indexing)") {
-			t.Error("default-N advanced gate should skip the harvester prompt block")
-		}
-		if strings.Contains(out, "Summarization (LLM session summaries)") {
-			t.Error("default-N advanced gate should skip the summarization prompt block")
-		}
+	out := captureStdout(t, func() {
+		runInteractiveInit(configPath)
 	})
 
-	t.Run("Y runs advanced prompts", func(t *testing.T) {
-		h := &orchestratorHooks{}
-		withOrchestratorHooks(t, h)
+	if strings.Contains(out, "Config preview") {
+		t.Error("the config preview step is gone — the commented template is self-documenting")
+	}
 
-		dir := t.TempDir()
-		configPath := filepath.Join(dir, "config.yml")
-
-		// advanced=Y, then harvester/summarization/search/watcher/logging
-		// answers all as blank (defaults), then save=Y, register=Y.
-		answers := "Y\n" + strings.Repeat("\n", 14) + "Y\nY\n"
-		origStdin := os.Stdin
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatalf("os.Pipe() error = %v", err)
-		}
-		os.Stdin = r
-		t.Cleanup(func() { os.Stdin = origStdin })
-		go func() {
-			_, _ = w.WriteString(answers)
-			_ = w.Close()
-		}()
-
-		out := captureStdout(t, func() {
-			runInteractiveInit(configPath)
-		})
-
-		if !strings.Contains(out, "Harvester (session indexing)") {
-			t.Error("Y advanced gate should run the harvester prompt block")
-		}
-		if !strings.Contains(out, "Summarization (LLM session summaries)") {
-			t.Error("Y advanced gate should run the summarization prompt block")
-		}
-	})
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read written config: %v", err)
+	}
+	written := string(data)
+	if !strings.Contains(written, "Advanced: disabled by default") {
+		t.Errorf("written config missing the commented advanced-sections banner from the template:\n%s", written)
+	}
+	if !strings.Contains(written, "summarization:") || !strings.Contains(written, "enabled: false") {
+		t.Errorf("written config missing the disabled summarization section:\n%s", written)
+	}
 }
 
 func TestRunInteractiveInit_Summary(t *testing.T) {
@@ -349,7 +340,7 @@ func TestRunInteractiveInit_Summary(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yml")
 
-	answers := "N\nY\nY\n"
+	answers := "\n" // register prompt only, Enter = default cwd
 	origStdin := os.Stdin
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -377,5 +368,81 @@ func TestRunInteractiveInit_Summary(t *testing.T) {
 	}
 	if !strings.Contains(out, "http://") {
 		t.Errorf("summary output missing server URL: %s", out)
+	}
+}
+
+// TestRunNonInteractiveInit_ZeroPrompts is the D-08 acceptance test: with
+// stepDatabaseFn/stepEmbeddingFn stubbed to their zero-question outcomes,
+// runNonInteractiveInit must complete without ever touching os.Stdin (no
+// pipe is set up at all — if it tried to read a prompt, the default
+// bufio.Scanner over os.Stdin would either block or read unrelated test
+// process input) and write a valid config.
+func TestRunNonInteractiveInit_ZeroPrompts(t *testing.T) {
+	h := &orchestratorHooks{}
+	withOrchestratorHooks(t, h)
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yml")
+
+	captureStdout(t, func() {
+		runNonInteractiveInit(configPath)
+	})
+
+	if h.stepDatabaseCalls != 1 {
+		t.Errorf("stepDatabaseFn called %d times, want 1", h.stepDatabaseCalls)
+	}
+	if h.stepEmbeddingCalls != 1 {
+		t.Errorf("stepEmbeddingFn called %d times, want 1", h.stepEmbeddingCalls)
+	}
+	if h.doctorCalls != 1 {
+		t.Errorf("runDoctorChecksFn called %d times, want 1", h.doctorCalls)
+	}
+	if h.stepServeCalls != 0 || h.registerCalls != 0 {
+		t.Errorf("runNonInteractiveInit must not chain into serve/register, got serve=%d register=%d", h.stepServeCalls, h.registerCalls)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read written config: %v", err)
+	}
+	written := string(data)
+	if !strings.Contains(written, `url: "postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev"`) {
+		t.Errorf("written config missing the default (quoted) database URL:\n%s", written)
+	}
+}
+
+// TestBuildRenderedConfig_DatabaseAbort verifies the shared probe helper's
+// ok=false contract that both runInteractiveInit and runNonInteractiveInit
+// rely on to avoid writing a config with no usable database.url: when
+// stepDatabaseFn reports failure, buildRenderedConfig must return ok=false
+// without calling stepEmbeddingFn at all.
+func TestBuildRenderedConfig_DatabaseAbort(t *testing.T) {
+	origStepDatabase := stepDatabaseFn
+	origStepEmbedding := stepEmbeddingFn
+	t.Cleanup(func() {
+		stepDatabaseFn = origStepDatabase
+		stepEmbeddingFn = origStepEmbedding
+	})
+
+	stepDatabaseFn = func(scanner *bufio.Scanner, defaultURL string) (string, bool) {
+		return "", false
+	}
+	embeddingCalled := false
+	stepEmbeddingFn = func(scanner *bufio.Scanner, notes io.Writer, defaultURL, defaultModel string) string {
+		embeddingCalled = true
+		return "embedding:\n  provider: \"\"\n"
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(""))
+	yaml, _, ok := buildRenderedConfig(scanner)
+
+	if ok {
+		t.Error("buildRenderedConfig() ok = true, want false when stepDatabaseFn fails")
+	}
+	if yaml != "" {
+		t.Errorf("buildRenderedConfig() yaml = %q, want empty on abort", yaml)
+	}
+	if embeddingCalled {
+		t.Error("stepEmbeddingFn must not be called when the database step aborts")
 	}
 }
