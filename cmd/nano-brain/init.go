@@ -275,6 +275,8 @@ func runNonInteractiveInit(configPath string) {
 			if !preExisting {
 				if rmErr := os.Remove(configPath); rmErr == nil {
 					fmt.Printf("  Removed %s — fix the database, then re-run: nano-brain init --yes\n", configPath)
+				} else {
+					fmt.Fprintf(os.Stderr, "  Warning: failed to remove broken config %s: %v\n", configPath, rmErr)
 				}
 			}
 			os.Exit(1)

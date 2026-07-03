@@ -69,8 +69,8 @@ func TestRenderConfig_Substitutions(t *testing.T) {
 		EmbeddingBlock: "embedding:\n  provider: \"\"\n",
 	})
 
-	if !strings.Contains(rendered, "url: postgres://custom:pass@dbhost:5432/mydb") {
-		t.Errorf("rendered config missing substituted database URL:\n%s", rendered)
+	if !strings.Contains(rendered, `url: "postgres://custom:pass@dbhost:5432/mydb"`) {
+		t.Errorf("rendered config missing substituted (quoted) database URL:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "provider: \"\"") {
 		t.Errorf("rendered config missing substituted embedding block:\n%s", rendered)
@@ -93,6 +93,31 @@ func TestRenderConfig_Substitutions(t *testing.T) {
 	}
 	if loaded.Embedding.VoyageAPIKey != "" {
 		t.Errorf("loaded.Embedding.VoyageAPIKey = %q, want empty — no key should ever be written", loaded.Embedding.VoyageAPIKey)
+	}
+}
+
+// TestRenderConfig_SpecialCharsInURL verifies a DSN whose password contains
+// YAML-significant characters (#, @, :) round-trips intact — the database.url
+// placeholder is double-quoted and RenderConfig escapes backslash/quote so the
+// value can't break out of the quoted scalar or be truncated as a comment.
+func TestRenderConfig_SpecialCharsInURL(t *testing.T) {
+	dsn := `postgres://user:p#a@ss:w"rd\x@dbhost:5432/mydb?sslmode=disable`
+	rendered := RenderConfig(RenderOpts{
+		DatabaseURL:    dsn,
+		EmbeddingBlock: "embedding:\n  provider: \"\"\n",
+	})
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configPath, []byte(rendered), 0600); err != nil {
+		t.Fatalf("write rendered template: %v", err)
+	}
+	loaded, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load(rendered with special-char URL) error = %v; rendered:\n%s", err, rendered)
+	}
+	if loaded.Database.URL != dsn {
+		t.Errorf("loaded.Database.URL = %q, want %q (special chars must survive YAML round-trip)", loaded.Database.URL, dsn)
 	}
 }
 

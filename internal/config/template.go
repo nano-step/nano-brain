@@ -27,7 +27,13 @@ type RenderOpts struct {
 // TestRenderConfig_RoundTrip for the correctness proof.
 func RenderConfig(opts RenderOpts) string {
 	out := fullConfigTemplate
-	out = strings.ReplaceAll(out, "{{.DatabaseURL}}", opts.DatabaseURL)
+	// The template quotes database.url ("..."), so a DSN whose password
+	// contains YAML-significant characters (#, @, :) stays a string literal.
+	// Escape backslash and double-quote so the value can't break out of the
+	// double-quoted scalar.
+	safeURL := strings.ReplaceAll(opts.DatabaseURL, `\`, `\\`)
+	safeURL = strings.ReplaceAll(safeURL, `"`, `\"`)
+	out = strings.ReplaceAll(out, "{{.DatabaseURL}}", safeURL)
 	out = strings.ReplaceAll(out, "{{.EmbeddingBlock}}", strings.TrimRight(opts.EmbeddingBlock, "\n"))
 	return out
 }
@@ -81,7 +87,7 @@ database:
   # Probed automatically by "nano-brain init" (Postgres reachable, or
   # auto-provisioned via Docker). Override with NANO_BRAIN_DATABASE_URL or
   # DATABASE_URL.
-  url: {{.DatabaseURL}}
+  url: "{{.DatabaseURL}}"
 
 {{.EmbeddingBlock}}
   # VoyageAPIKey (cloud embeddings only): set VOYAGE_API_KEY env var instead

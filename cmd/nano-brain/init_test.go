@@ -406,8 +406,8 @@ func TestRunNonInteractiveInit_ZeroPrompts(t *testing.T) {
 		t.Fatalf("read written config: %v", err)
 	}
 	written := string(data)
-	if !strings.Contains(written, "url: postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev") {
-		t.Errorf("written config missing the default database URL:\n%s", written)
+	if !strings.Contains(written, `url: "postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev"`) {
+		t.Errorf("written config missing the default (quoted) database URL:\n%s", written)
 	}
 }
 
