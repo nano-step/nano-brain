@@ -17,6 +17,7 @@ Strengthen nano-brain's code intelligence and search across v1: add Vue SFC supp
 - [ ] **Phase 7: HyDE & Documentation** - Auto-generate HyDE hints, complete docs
 - [x] **Phase 8: Session Harvest Unification & Ticket Linking** - Pluggable multi-source harvest, one sessions collection, cross-source/cross-repo ticket linking (completed 2026-06-29)
 - [x] **Phase 9: MCP workspace config binding** - Bind a default workspace to the MCP connection via a `?workspace=` URL query param so agents skip manual workspace discovery (completed 2026-07-01, PR #524)
+- [x] **Phase 14: curl|bash install script** - One-line installer downloads the platform binary from GitHub Releases, verifies SHA256SUMS, installs into PATH; npm kept as alternative; docs lead with curl|bash (completed 2026-07-03)
 
 ## Phase Details
 
@@ -257,3 +258,14 @@ Plans:
 **Cross-cutting constraints:**
 
 - The whole project still builds and the existing test suite stays green — annotations are pure comments, zero behavior change
+
+### Phase 14: curl|bash install script — one-line installer that downloads the platform binary from GitHub Releases, verifies SHA256SUMS, installs into PATH; keep npm as alternative; docs put curl|bash first
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 13
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 14 to break down)

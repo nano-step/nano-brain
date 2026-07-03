@@ -16,6 +16,8 @@ The steps below cover **Path 1 (local)**. For VPS and Voyage AI, adapt the embed
 
 ---
 
+> **Node.js is only needed for the npm install path (Step 5).** If you use the recommended `curl | bash` installer, skip this step.
+
 ## Step 1 — Check Node.js
 
 ```bash
@@ -92,16 +94,23 @@ echo "PostgreSQL is ready"
 
 ## Step 5 — Install nano-brain
 
+- **Already installed:** check version: `nano-brain version`
+- **Not installed:** ask which method the user prefers:
+
+**Recommended — one-line installer (no Node.js required):** downloads the prebuilt binary from GitHub Releases and verifies its SHA-256.
+
 ```bash
-npm list -g @nano-step/nano-brain 2>/dev/null | head -3
+curl -fsSL https://raw.githubusercontent.com/nano-step/nano-brain/master/install.sh | bash
+nano-brain version
 ```
 
-- **Already installed:** check version: `nano-brain --version`
-- **Not installed:** ask: "Would you like me to install nano-brain globally?" → if yes:
+Honors `NANO_BRAIN_VERSION=<tag>` to pin a release and `NANO_BRAIN_BIN_DIR=<dir>` to choose the install directory.
+
+**Alternative — npm** (requires Node.js 18+, see Step 1):
 
 ```bash
 npm install -g @nano-step/nano-brain
-nano-brain --version
+nano-brain version
 ```
 
 ---

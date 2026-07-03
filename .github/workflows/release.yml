@@ -47,6 +47,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -54,6 +56,11 @@ jobs:
 
       - name: Compute SHA-256 checksums
         run: cd artifacts && sha256sum nano-brain-* > SHA256SUMS
+
+      # Publish install.sh as a release asset too, so both the master raw URL
+      # and releases/latest/download/install.sh resolve to a working installer.
+      - name: Stage installer
+        run: cp install.sh artifacts/install.sh
 
       - name: Create Release with binaries
         uses: softprops/action-gh-release@v2

@@ -15,27 +15,34 @@ Agent-oriented memory and code intelligence. AI agents don't read docs — they 
 ### Install
 
 ```bash
-# Via npm (recommended)
+# Recommended — one-line installer (no Node.js needed): downloads the prebuilt
+# binary for your platform from GitHub Releases and verifies its SHA-256.
+curl -fsSL https://raw.githubusercontent.com/nano-step/nano-brain/master/install.sh | bash
+
+# Or via npm (handy if you're already in a JS/agent toolchain)
 npm install -g @nano-step/nano-brain
 
 # Or build from source
 CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain
 ```
 
+Prefer to read the installer before running it? Download, inspect, then run:
+
+```bash
+curl -fsSL -o install.sh https://raw.githubusercontent.com/nano-step/nano-brain/master/install.sh
+less install.sh && bash install.sh
+```
+
 ### Start
 
 ```bash
-# Start PostgreSQL
-docker run -d --name nanobrain-pg -p 5432:5432 \
-  -e POSTGRES_USER=nanobrain -e POSTGRES_PASSWORD=nanobrain -e POSTGRES_DB=nanobrain_dev \
-  pgvector/pgvector:pg17
-
-# Start nano-brain
-nano-brain serve -d
-
-# Register your project
-nano-brain init --root=/path/to/your/project
+# One command — the interactive wizard provisions PostgreSQL (via Docker or a
+# remote URL), configures embeddings, starts the server, registers this
+# project, and sets up your MCP client.
+nano-brain init
 ```
+
+Setting up a VPS / shared server or a machine without Docker? See the manual steps in [docs/SETUP_AGENT.md](docs/SETUP_AGENT.md).
 ---
 
 ## Why Star This Project?
