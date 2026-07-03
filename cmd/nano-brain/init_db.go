@@ -47,6 +47,9 @@ func waitForPostgresReady(ctx context.Context, dbURL string, timeout, interval t
 	deadline := time.Now().Add(timeout)
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := pingPostgres(ctx, dbURL); err == nil {
 			return nil
 		}

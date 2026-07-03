@@ -49,6 +49,21 @@ func TestWaitForPostgresReady_ImmediateSuccess(t *testing.T) {
 	}
 }
 
+func TestWaitForPostgresReady_CancelledContext(t *testing.T) {
+	withPostgresPinger(t, []error{errConnRefused})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := waitForPostgresReady(ctx, "postgres://x", 2*time.Second, 50*time.Millisecond)
+	if err == nil {
+		t.Fatal("expected error from cancelled context, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
+}
+
 func TestWaitForPostgresReady_Timeout(t *testing.T) {
 	withPostgresPinger(t, []error{errConnRefused})
 

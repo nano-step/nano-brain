@@ -116,6 +116,27 @@ func TestStepServe_DeclineSkipsLaunch(t *testing.T) {
 	}
 }
 
+func TestStepServe_EOFSkipsLaunch(t *testing.T) {
+	// A closed stdin at the start prompt is a decline (CR-01), never an
+	// implicit "start the server".
+	launchCount := 0
+	withServeHooks(t, true, false, &launchCount)
+
+	checks := []doctor.Check{
+		{Name: "PostgreSQL", Status: "ok", Detail: "localhost:5432"},
+	}
+	scanner := bufio.NewScanner(bytes.NewBufferString("")) // immediate EOF
+
+	got := stepServe(scanner, checks, "")
+
+	if got != serveSkipped {
+		t.Errorf("stepServe() = %v, want serveSkipped on EOF", got)
+	}
+	if launchCount != 0 {
+		t.Errorf("launchServeDaemonFn called %d times on EOF, want 0", launchCount)
+	}
+}
+
 func TestStepServe_NonTTYSkipsLaunch(t *testing.T) {
 	launchCount := 0
 	withServeHooks(t, false, false, &launchCount)

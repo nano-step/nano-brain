@@ -75,8 +75,10 @@ func stepServe(scanner *bufio.Scanner, checks []doctor.Check, configPath string)
 
 	// Read through the wizard's shared scanner — a second bufio.Scanner over
 	// the same os.Stdin fd would race it for buffered bytes (review CR-01).
-	answer := promptWithDefault(scanner, "Start the nano-brain server now? (Y/n)", "Y")
-	if !isAffirmative(answer) {
+	// promptConsequential so a closed stdin declines instead of defaulting to
+	// starting the server (CR-01 EOF-means-decline).
+	answer, ok := promptConsequential(scanner, "Start the nano-brain server now?", "Y")
+	if !ok || !isAffirmative(answer) {
 		fmt.Printf("  Skipped. Start it later with: %s\n", suggestStartCommand())
 		return serveSkipped
 	}
