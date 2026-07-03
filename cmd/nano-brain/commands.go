@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -14,12 +13,28 @@ import (
 func runInitCmd(args []string, configPath string) {
 	cliLog.Info().Str("cmd", "init").Msg("cli command started")
 	hasRoot := false
+	hasYes := false
 	for _, a := range args {
-		if a == "--root" {
+		switch a {
+		case "--root":
 			hasRoot = true
-			break
+		case "--yes":
+			hasYes = true
 		}
 	}
+
+	// D-08: --yes takes the fully non-interactive path (zero prompts) even
+	// when a TTY is attached — it is a distinct contract from the bare
+	// no-args path, which is TTY-gated and interactive.
+	if hasYes {
+		if hasRoot {
+			fmt.Fprintln(os.Stderr, "Note: --yes only writes config; --root is ignored. To register a workspace, run 'nano-brain init --root <path>' without --yes (needs a running server).")
+		}
+		runNonInteractiveInit(configPath)
+		cliLog.Info().Str("cmd", "init").Msg("cli command completed")
+		return
+	}
+
 	if !hasRoot {
 		runInteractiveInit(configPath)
 		cliLog.Info().Str("cmd", "init").Msg("cli command completed")
@@ -75,58 +90,12 @@ func runInitCmd(args []string, configPath string) {
 		}
 	}
 
-	body := map[string]string{"root_path": root}
-	if workspace != "" {
-		body["workspace"] = workspace
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	resp, _, err := doRequest("POST", getBaseURL()+"/api/v1/init", bytes.NewReader(data))
+	result, err := registerWorkspace(root, workspace, jsonFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		cliLog.Error().Err(err).Str("cmd", "init").Msg("init request failed")
 		os.Exit(1)
 	}
-
-	if jsonFlag {
-		fmt.Println(string(resp))
-		cliLog.Info().Str("cmd", "init").Msg("cli command completed")
-		return
-	}
-
-	var result struct {
-		WorkspaceHash string `json:"workspace_hash"`
-		RootPath      string `json:"root_path"`
-		Name          string `json:"name"`
-		AgentsSnippet string `json:"agents_snippet"`
-	}
-	if err := json.Unmarshal(resp, &result); err != nil {
-		fmt.Println(string(resp))
-		cliLog.Info().Str("cmd", "init").Msg("cli command completed")
-		return
-	}
-	fmt.Printf("Workspace registered: %s\n", result.WorkspaceHash)
-	fmt.Printf("Root path: %s\n", result.RootPath)
-	fmt.Println()
-	fmt.Println(result.AgentsSnippet)
-
-	if shouldPromptMCPConfig(jsonFlag, isTTY()) {
-		if result.Name == "" {
-			// A server started before this CLI version was upgraded won't
-			// have returned a name (field didn't exist yet) — writing a
-			// ?workspace= URL with an empty name would silently produce a
-			// broken binding in every accepted client's config.
-			fmt.Println("Warning: server did not return a workspace name (server may need restarting) — skipping MCP client auto-configuration.")
-		} else {
-			promptMCPClientConfig(bufio.NewScanner(os.Stdin), result.RootPath, result.Name)
-		}
-	}
-
-	triggerInitBackground(result.WorkspaceHash, root)
 
 	cliLog.Info().Str("cmd", "init").Str("workspace_hash", result.WorkspaceHash).Msg("cli command completed")
 }

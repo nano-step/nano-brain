@@ -17,7 +17,12 @@ Strengthen nano-brain's code intelligence and search across v1: add Vue SFC supp
 - [ ] **Phase 7: HyDE & Documentation** - Auto-generate HyDE hints, complete docs
 - [x] **Phase 8: Session Harvest Unification & Ticket Linking** - Pluggable multi-source harvest, one sessions collection, cross-source/cross-repo ticket linking (completed 2026-06-29)
 - [x] **Phase 9: MCP workspace config binding** - Bind a default workspace to the MCP connection via a `?workspace=` URL query param so agents skip manual workspace discovery (completed 2026-07-01, PR #524)
+- [x] **Phase 10: Interactive MCP client auto-configuration** - Prompt which AI clients to auto-configure MCP for after workspace registration (completed 2026-07-01, PR #526)
+- [ ] **Phase 11: Benchmark token cost** - nano-brain vs baseline context-gathering token cost benchmark
+- [x] **Phase 12: OpenAPI 3.0 spec** - REST API spec served at GET /api/openapi.json (completed 2026-07-02, PR #531)
+- [x] **Phase 13: Interactive Init Wizard** - One-command `nano-brain init`: detect/provision PostgreSQL via Docker or remote URL, optional embeddings with BM25 degrade, serve + register + MCP client picker, docs rewrite (completed 2026-07-02)
 - [x] **Phase 14: curl|bash install script** - One-line installer downloads the platform binary from GitHub Releases, verifies SHA256SUMS, installs into PATH; npm kept as alternative; docs lead with curl|bash (completed 2026-07-03)
+- [x] **Phase 15: Minimal zero-config init** - Collapse the wizard to 0-3 probes (Postgres/Ollama/harvester auto-detected), env-var secrets, full self-documenting config (all sections at defaults + comments, advanced disabled), context_hints not prompted, `--yes` non-interactive path (completed 2026-07-03)
 
 ## Phase Details
 
@@ -259,13 +264,32 @@ Plans:
 
 - The whole project still builds and the existing test suite stays green — annotations are pure comments, zero behavior change
 
-### Phase 14: curl|bash install script — one-line installer that downloads the platform binary from GitHub Releases, verifies SHA256SUMS, installs into PATH; keep npm as alternative; docs put curl|bash first
+### Phase 13: Interactive Init Wizard — one-command interactive setup: detect/provision PostgreSQL (Docker auto-provision with confirmation, or remote Postgres URL), optional embeddings (any Ollama/OpenAI-compatible URL, degrade to BM25 when disabled), start server, register workspace, show supported MCP clients for user to pick and auto-configure
 
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 13
-**Plans:** 0 plans
+**Goal:** `nano-brain init` (no args, TTY) takes a user from binary-installed to MCP-tools-working in one interactive command: detect/provision PostgreSQL → optional embeddings → write config → doctor → start server → register workspace → auto-configure chosen MCP clients → summary — in ≤6 core questions, safely re-runnable.
+**Requirements**: D-01..D-18 (CONTEXT-scoped; no REQUIREMENTS.md IDs)
+**Depends on:** Phase 12
+**Plans:** 8/8 plans complete
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 14 to break down)
+- [x] 13-01-PLAN.md — Docker CLI wrapper (os/exec): detect + provision pgvector container with name/port-conflict recovery (D-06, D-07)
+- [x] 13-02-PLAN.md — doctor: skip (not fail) embedding checks when provider is disabled (D-13)
+- [x] 13-03-PLAN.md — database wizard step: detect → Docker-provision → remote-URL fallback with readiness poll + validate (D-05, D-08, D-09)
+- [x] 13-04-PLAN.md — embedding wizard step: enable gate + Ollama auto-detect / any-URL / voyage, BM25 degrade (D-11, D-12)
+- [x] 13-05-PLAN.md — extract registerWorkspace helper shared by init --root and the wizard (D-15)
+- [x] 13-06-PLAN.md — serve wizard step: gated daemon start with Windows guard and abort-on-PG-fail (D-14)
+- [x] 13-07-PLAN.md — orchestrator: restructure runInteractiveInit into the step sequence, ≤6-question budget, advanced gate, TTY contract, summary (D-01, D-02, D-03, D-04, D-16, D-17)
+- [x] 13-08-PLAN.md — docs: rewrite SETUP_AGENT.md around the one-command flow + move manual steps to appendix, update README Start (D-18)
+
+### Phase 14: curl|bash install script — one-line installer that downloads the platform binary from GitHub Releases, verifies SHA256SUMS, installs into PATH; keep npm as alternative; docs put curl|bash first
+
+**Goal:** A `curl -fsSL … | bash` installer that downloads the platform binary from GitHub Releases, verifies it against SHA256SUMS, and installs it onto PATH — no Node.js needed; npm kept as an alternative.
+**Depends on:** none (reuses existing release artifacts)
+**Plans:** shipped directly (install.sh + release.yml asset + README/SETUP_AGENT docs), PR #533
+
+### Phase 15: Minimal zero-config init — collapse the wizard to 0-3 probes (Postgres/Ollama/harvester auto-detected), move secrets to env vars, write a full self-documenting config with all sections at default values + comments (advanced disabled), context_hints not prompted, add --yes non-interactive path
+
+**Goal:** Collapse `nano-brain init` to 0-3 probes with a full self-documenting default config; secrets via env vars; context_hints config-file-only; `--yes` non-interactive path.
+**Depends on:** Phase 13
+**Plans:** shipped (template + collapsed wizard + round-trip tests), PR #534

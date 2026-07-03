@@ -42,7 +42,7 @@ less install.sh && bash install.sh
 nano-brain init
 ```
 
-Setting up a VPS / shared server or a machine without Docker? See the manual steps in [docs/SETUP_AGENT.md](docs/SETUP_AGENT.md).
+For a manual, per-step setup (VPS / team, no Docker, or Windows), see [docs/SETUP_AGENT.md](docs/SETUP_AGENT.md).
 ---
 
 ## Why Star This Project?
