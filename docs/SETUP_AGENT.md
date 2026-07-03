@@ -40,7 +40,7 @@ Run with no arguments, in an interactive terminal. This single command:
 4. Writes the config file and runs `doctor` to verify the stack.
 5. Starts the server.
 6. Offers to register the current directory as a workspace.
-7. Configures the MCP client(s) the user selects (Claude Code, OpenCode, etc.).
+7. Configures the MCP client(s) the user selects (Claude Code, OpenCode, Codex CLI). Claude Code and OpenCode are written **project-local** (`.mcp.json` / `opencode.json` in the project root), each bound to this project's `?workspace=`. Codex CLI asks a scope: **global** (`~/.codex/config.toml`, shared by every project) writes a bare URL with **no** `?workspace=` — so registering another project can't override this one's binding, and the agent passes a workspace per call; **project** (`<project>/.codex/config.toml`) writes a workspace-bound URL but requires trusting the directory in Codex.
 8. Prints a summary — server URL, workspace name/hash — ending with: **restart your AI client** to pick up the new MCP configuration.
 
 The happy path is a handful of prompts (at most six consequential questions: overwrite/keep, database, embeddings, start server, register, per-MCP-client) — not the ~20-question flow of older versions. For per-step manual control instead of the wizard, see the appendix below.

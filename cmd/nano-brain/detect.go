@@ -128,6 +128,15 @@ func detectCodexConfigPath() string {
 	return filepath.Join(home, ".codex", "config.toml")
 }
 
+// detectCodexProjectConfigPath returns the project-scoped Codex CLI config
+// path (.codex/config.toml in the project root). Codex only loads a
+// project-scoped config from a TRUSTED directory, so callers must warn the
+// user to trust the project; the tradeoff buys a per-project ?workspace=
+// binding that the single global config cannot carry.
+func detectCodexProjectConfigPath(projectRoot string) string {
+	return filepath.Join(projectRoot, ".codex", "config.toml")
+}
+
 func detectOpenCodeDBPath() string {
 	if v := os.Getenv("OPENCODE_DB_PATH"); v != "" {
 		if _, err := os.Stat(v); err == nil {
