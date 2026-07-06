@@ -1,0 +1,25 @@
+# Harness gate 3.3 baseline — known-failing integration test packages (R91).
+# One package path per line. Gate 3.3 FAILs only on packages NOT listed here
+# ("this PR must not make master worse", not "this PR must pay off all debt").
+#
+# Regenerate against origin/master with:
+#   go test -race -tags=integration -count=1 -timeout=180s ./... 2>&1 \
+#     | awk '/^FAIL[[:space:]]/{print $2}' | sort -u
+#
+# Shrink this list by fixing packages (tracked by issues #325, #326, #327);
+# never grow it to sneak a new failure past the gate — that requires a
+# [HARNESS-OVERRIDE] (R7) with justification.
+#
+# Note: several entries fail only because `go test -tags=integration` runs
+# without the test database (nanobrain_test / :3199). They are still baseline:
+# the gate compares like-for-like (script runs the same bare command).
+#
+# Seeded 2026-07-06 from origin/master (d64ab8e).
+github.com/nano-brain/nano-brain/cmd/nano-brain
+github.com/nano-brain/nano-brain/internal/bench
+github.com/nano-brain/nano-brain/internal/embed
+github.com/nano-brain/nano-brain/internal/graph
+github.com/nano-brain/nano-brain/internal/harvest
+github.com/nano-brain/nano-brain/internal/mcp
+github.com/nano-brain/nano-brain/internal/storage/sqlc
+github.com/nano-brain/nano-brain/internal/summarize

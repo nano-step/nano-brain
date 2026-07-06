@@ -4,13 +4,12 @@ Gate specification for the nano-brain v2 Go project. Each gate defines the check
 
 **Core rules:**
 - 1 feature = 1 PR = 1 GitHub issue
-- **All story PRs target `b-main`** — NEVER target `master` directly
-- `master` is updated ONLY via a final release PR when v2 is complete
+- **All PRs target `master`** (the v2 `b-main` staging branch is retired; gate 3.9 enforces this)
 - Agent MUST NOT start the next feature until all gates pass
 - PASS = all checks in current phase ✅ → proceed
 - FAIL = any check ❌ → BLOCK, must fix before continuing
 - SKIP = check not applicable (e.g., first feature → skip 1.1, 1.2)
-- **State file:** `docs/harness-state.json` — read BEFORE every story/epic transition. If any debt item has `"status":"open"`, resolve before proceeding.
+- **State:** git history + `.planning/STATE.md` are the source of truth (the old `docs/harness-state.json` is retired). Process debt is tracked as GitHub issues labeled `harness-debt` — resolve open ones before starting a new epic.
 - **Delegation rule:** Orchestrator (Sisyphus) does NOT write code or tests directly. ALL code/test work MUST be delegated to subagents. Orchestrator only: plans, delegates, verifies results, manages git/PR workflow.
 
 ---
@@ -36,12 +35,12 @@ Run before starting any new feature.
 
 | # | Check | How to verify | Evidence Required |
 |---|-------|---------------|-------------------|
-| 1.1 | Previous feature PR merged & issue closed | `gh pr list --state merged`, `gh issue view` | PR link + issue link |
+| 1.1 | No open PR **overlaps** this work (R90) — an open PR blocks only if its changed files intersect this branch's changed files; orthogonal PRs proceed in parallel | `gh pr view <N> --json files` ∩ `git diff --name-only origin/master...HEAD` = empty | Overlap check output |
 | 1.2 | No active GSD phase | `.planning/STATE.md` — current phase is "None" or all phases Pending/Completed | STATE.md snapshot |
 | 1.3 | GitHub issue exists for new feature | `gh issue view <N>` | Issue URL |
-| 1.4 | Branch `b-main` up-to-date | `git log origin/b-main..HEAD` = empty | git log output |
-| 1.5 | Validation ladder clean on `b-main` | `go build ./... && go test -race -short ./...` | Build + test output |
-| 1.6 | Feature branch created off `b-main` (NOT master) | `git log --oneline b-main..HEAD` — parent is b-main | Branch name + parent commit |
+| 1.4 | Branch `master` up-to-date | `git log origin/master..master` = empty | git log output |
+| 1.5 | Validation ladder clean on `master` | `go build ./... && go test -race -short ./...` | Build + test output |
+| 1.6 | Feature branch created off `master` | `git merge-base --is-ancestor master <branch>` | Branch name + parent commit |
 | 1.7 | Deep-design completed (normal+ risk) | `docs/evidence/deep-design-{phase}.md` exists with verdict | Deep-design evidence file |
 
 **SKIP rules:** 
@@ -56,7 +55,7 @@ Run continuously during development. Check after each story completes.
 
 | # | Check | How to verify |
 |---|-------|---------------|
-| 2.1 | On feature branch, not `b-main` | `git branch --show-current` ≠ `b-main` |
+| 2.1 | On feature branch, not `master` | `git branch --show-current` ≠ `master` |
 | 2.2 | Active GSD phase exists | `.planning/STATE.md` — current phase shows "in progress" |
 | 2.3 | Validation ladder pass after each story | `go build ./... && go test -race -short ./...` |
 | 2.4 | Self-review after PR creation — Oracle on PR diff, all critical/major findings fixed, evidence saved | Evidence file `docs/evidence/self-review-{story}.md` exists and no unresolved critical/major findings |
@@ -68,8 +67,8 @@ The review flow is designed for parallelism: create the PR first so Gemini bot s
 **Step-by-step flow:**
 
 1. **Commit and push** code to feature branch
-2. **Create PR** targeting `b-main` — this triggers Gemini bot review automatically
-3. **Run Oracle self-review** on the diff (`git diff b-main..HEAD` or PR diff) while Gemini is reviewing
+2. **Create PR** targeting `master` — this triggers Gemini bot review automatically
+3. **Run Oracle self-review** on the diff (`git diff master..HEAD` or PR diff) while Gemini is reviewing
 4. **Fix ALL critical and major Oracle findings** — push fixes to the same PR branch
 5. **Save Oracle review** to `docs/evidence/self-review-{story-id}.md`
 6. **Check Gemini PR comments** — read all comments from `gh pr view <N> --comments`
@@ -138,16 +137,16 @@ Run before creating or merging a PR. All checks must be green.
 |---|-------|---------------|
 | 3.1 | `go build ./...` pass | exit code 0 |
 | 3.2 | `go test -race -short ./...` pass | exit code 0 |
-| 3.3 | `go test -race -tags=integration ./...` pass | exit code 0 |
-| 3.4 | `golangci-lint run` clean (if available) | exit code 0 |
+| 3.3 | Integration tests introduce **no NEW failing packages** vs `docs/harness-baseline.txt` (R91) — pre-existing master debt is tracked by issues, not paid per-PR | `go test -race -tags=integration ./...` failing packages ⊆ baseline |
+| 3.4 | `golangci-lint run --new-from-rev=<merge-base>` clean (R91) — only issues introduced by this branch fail the gate | exit code 0 |
 | 3.5 | Review Gate pass by an **independent** reviewer (R27 verdict + R88 reviewer ≠ author) | `docs/evidence/review-<story>.md` for THIS story: `Review Verdict: PASS` + a `Reviewer:` naming a separate spawned sub-agent (not self/author/implementer) |
 | 3.6 | PR review comments addressed — all critical/high Gemini comments fixed, medium acknowledged | `gh pr view --comments` — no unresolved critical/high comments |
 | 3.7 | CI workflow pass | `gh pr checks` all green |
 | 3.8 | PR linked to GitHub issue | PR body contains `Closes #N` |
-| 3.9 | PR targets `b-main` (NOT master) | `gh pr view --json baseRefName` = `b-main` |
-| 3.10 | Self-review evidence exists for this story | `ls docs/evidence/self-review-*.md` for current story |
-| 3.11 | No real workspace names/paths/hashes in staged files | `grep -rn 'Phil-timeshel\|capyhome\|zengamingx\|/Users/tamlh/workspaces/self/Projects/' --include='*.go' --include='*.md' --include='*.json' --include='*.sh' --include='*.yml' .` = empty |
-| 3.12 | E2E workspace test pass — extractor/indexer tested on real project with >100 files | Build binary → start server → index a real workspace → verify edges stored → query memory_graph → 0 errors in logs. **Privacy:** use placeholder names in evidence files, never real workspace names/paths |
+| 3.9 | PR targets `master` | `gh pr view --json baseRefName` = `master` |
+| 3.10 | Self-review evidence exists for this story — SKIP for docs-only changes (R92, change-type detected from `git diff --name-only origin/master...HEAD`) | `ls docs/evidence/self-review-*.md` for current story |
+| 3.11 | Max 3 feature commits per PR (R29) — counted via `git rev-list --count <merge-base>..HEAD`, NOT the GitHub PR view (which includes base commits when master advanced) | commit count ≤ 3 |
+| 3.12 | smoke:e2e evidence for user-feature/bug-fix (R19, R20) — SKIP for docs-only and test-only changes: no runtime surface (R92). E2E workspace test for extractor/indexer stories: build binary → start server → index a real workspace → verify edges stored → query memory_graph → 0 errors in logs. **Privacy:** use placeholder names in evidence files, never real workspace names/paths | `docs/evidence/smoke-e2e-<story>*` contains curl + HTTP responses |
 | 3.13 | E2E extractor test pass — all fixtures in `testdata/<feature>/` exercise the extractor with 0 panics, 0 errors | `go test -race -short -run=E2E ./internal/<pkg>/...` — all E2E tests pass. Fixture files are synthetic (never real project content). |
 | 3.14 | Capability benchmark pass — recall-based benchmark against live server, no regression vs baseline | `go test -tags=capbench -run=TestCapabilityBenchmark ./benchmarks/<overlay>/capability/` — overall recall >= baseline. Save results to `results_current.json`. |
 
@@ -239,7 +238,7 @@ Run immediately after the PR merges.
 | 4.2 | GitHub issue auto-closed | `gh issue view <N> --json state` = CLOSED |
 | 4.3 | GSD phase completed | `.planning/STATE.md` — current phase marked "completed" or moved to next |
 | 4.4 | Feature branch deleted | `git branch -r` no longer has branch |
-| 4.5 | `b-main` validation pass after merge | `go build ./... && go test -race -short ./...` |
+| 4.5 | `master` validation pass after merge | `go build ./... && go test -race -short ./...` |
 
 ---
 
@@ -300,3 +299,24 @@ Save retro output to `docs/evidence/retro-epic-{N}.md` with these sections:
 | SKIP | Check not applicable | Document reason, proceed |
 
 See `docs/HARNESS.md` for the Review Gate and PR Bot Review process referenced in gate 3.5 and 3.6.
+
+## Rules added by retro 2026-07-06 (override-pattern recalibration)
+
+Derived from auditing 40 gate overrides across 23 evidence files — see
+`docs/evidence/retro-harness-recalibration-2026-07-06.md`.
+
+- **R90 — overlap-based serialization (gate 1.1).** An open PR blocks new work
+  only when its changed files intersect the new branch's changed files.
+  Zero-overlap PRs proceed in parallel. Rationale: 8/8 gate-1.1 overrides
+  documented zero file overlap.
+- **R91 — differential quality gates (gates 3.3, 3.4).** A PR must not make
+  master worse; it is not required to pay off pre-existing debt. Gate 3.3
+  compares failing packages against `docs/harness-baseline.txt` (shrink-only;
+  growing it requires R7 override). Gate 3.4 uses
+  `golangci-lint run --new-from-rev=<merge-base>`. Rationale: 21/40 overrides
+  were pre-existing master failures.
+- **R92 — change-type–aware gates (gates 3.10, 3.12).** Change type is
+  detected measurably from `git diff --name-only origin/master...HEAD`:
+  all files docs/planning → `docs`; all files `_test.go`/testdata/docs →
+  `test-only`. Docs-only skips 3.10 + 3.12; test-only skips 3.12. This makes
+  the checker honor the HARNESS.md change-type table it previously ignored.
