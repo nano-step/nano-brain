@@ -243,16 +243,22 @@ When an agent is confused, repeats manual reasoning, needs a new validation
 command, discovers a missing rule, or sees a recurring failure pattern, it must
 either improve the harness directly or add a proposal to `HARNESS_BACKLOG.md`.
 
-## Recommended Workflow: `/harness-on`
+## Entry Points (Claude Code — current)
 
-For autonomous feature development, use the `/harness-on` slash command in OpenCode. It drives the agent through all gates automatically, injecting fix instructions on failure and stopping when all gates PASS.
+The harness frames the process (gates, evidence, rules); GSD is the executor
+inside a feature (discuss → plan → execute → verify). Drivers:
 
-```
-/harness-on          # Start the loop
-/harness-off         # Cancel at any time
-```
+| Entry point | When | What it does |
+|---|---|---|
+| `/harness-gsd <description>` | Any fix/feature directive | Full autonomous pipeline per CLAUDE.md's Autonomous Delivery Protocol: intake → lane → GSD phase → independent review → evidence → PR |
+| `harness-check` skill | Manual gate run at any phase boundary | Runs `./scripts/harness-check.sh <phase>`; you drive the fix-and-re-run loop |
+| PreToolUse hook (`.claude/hooks/harness-pre-merge-hook.sh`) | Automatic on `gh pr create` | Safety net: blocks PR creation while pre-merge gates FAIL (respects `[HARNESS-OVERRIDE]`, R7) |
+| `./scripts/harness-check.sh <gate> --json` | Ad-hoc / CI | Machine-readable gate output (see `docs/HARNESS_RUNNER_CONTRACT.md`) |
 
-Manual invocation (`./scripts/harness-check.sh <gate> --json`) remains available for ad-hoc checks and CI scripts.
+### Legacy: `/harness-on` (OpenCode only)
+
+The `/harness-on` / `/harness-off` autonomous gate loop was an OpenCode plugin
+(`.opencode/plugin/harness-loop/`) and does not exist on Claude Code.
 
 ## Validation Ladder
 

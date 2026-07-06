@@ -53,3 +53,8 @@ benchmarks/vue/capability/dataset.json
 # docs/openapi.json (OpenAPI 3.0, converted) is committed
 docs/swagger.json
 docs/docs.go
+
+# GSD-managed hooks (shipped/updated by gsd-tools, per-machine — do not track)
+.claude/hooks/gsd-*
+.claude/hooks/lib/
+.claude/hooks/managed-hooks-registry.cjs

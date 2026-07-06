@@ -291,14 +291,39 @@ phase_pre_work() {
     [[ "$JSON_OUTPUT" != true ]] && echo "─ PRE-WORK checks"
     run_phase_hook_before "pre-work" || return 0
 
-    # 1.1 Previous feature PR merged & issue closed
+    # 1.1 Previous feature PR merged & issue closed — an open PR blocks only
+    # when its files overlap this branch's changes (R90). Orthogonal PRs
+    # (zero file overlap) do not serialize the pipeline; this was the #1
+    # override pattern (8/40 overrides, all citing zero overlap).
     if cmd_exists gh; then
-        open_prs=$(gh pr list --state open --json number 2>/dev/null || echo "[]")
-        pr_count=$(echo "$open_prs" | grep -c '"number"' || true)
-        if [[ $pr_count -eq 0 ]]; then
+        open_pr_numbers=$(gh pr list --state open --json number --jq '.[].number' 2>/dev/null || echo "")
+        if [[ -z "$open_pr_numbers" ]]; then
             add_check "PASS" "1.1 No open feature PRs"
         else
-            add_check "FAIL" "1.1 Open PRs still pending ($pr_count)"
+            pr_count=$(echo "$open_pr_numbers" | wc -l | tr -d ' ')
+            branch_files=$(git diff --name-only origin/master...HEAD 2>/dev/null || echo "")
+            if [[ -z "$branch_files" ]]; then
+                add_check "SKIP" "1.1 $pr_count open PR(s); branch has no commits yet — verify zero file overlap with planned scope (R90)"
+            else
+                overlap=""
+                for prn in $open_pr_numbers; do
+                    pr_files=$(gh pr view "$prn" --json files --jq '.files[].path' 2>/dev/null || echo "")
+                    # || true: head closing the pipe early SIGPIPEs comm (exit
+                    # 141) under pipefail when the overlap set is large.
+                    # printf (not echo): a filename starting with '-' must not
+                    # be parsed as an echo option.
+                    common=$(comm -12 <(printf '%s\n' "$branch_files" | sort -u) <(printf '%s\n' "$pr_files" | sort -u) | head -5 || true)
+                    if [[ -n "$common" ]]; then
+                        overlap="PR #$prn: $(echo "$common" | tr '\n' ' ')"
+                        break
+                    fi
+                done
+                if [[ -n "$overlap" ]]; then
+                    add_check "FAIL" "1.1 Open PR overlaps this branch — $overlap(R90: merge/rebase first)" "R90"
+                else
+                    add_check "PASS" "1.1 $pr_count open PR(s), zero file overlap with this branch (R90)"
+                fi
+            fi
         fi
     else
         add_check "SKIP" "1.1 gh CLI not installed"
@@ -468,8 +493,14 @@ phase_pre_merge() {
     [[ "$JSON_OUTPUT" != true ]] && echo "─ PRE-MERGE checks"
     run_phase_hook_before "pre-merge" || return 0
 
+    # HARNESS_FAST=1 (set by the PreToolUse hook) skips the slow build/test/
+    # lint gates 3.1–3.4 so the hook stays under its timeout. The validation
+    # ladder still requires running them before merge; the hook is a safety
+    # net for the evidence/process gates, not a substitute for tests.
     # 3.1 go build
-    if cmd_exists go; then
+    if [[ -n "${HARNESS_FAST:-}" ]]; then
+        add_check "SKIP" "3.1 go build (HARNESS_FAST: run full pre-merge before merge)"
+    elif cmd_exists go; then
         if go build ./... &>/dev/null; then
             add_check "PASS" "3.1 go build ./..."
         else
@@ -480,7 +511,9 @@ phase_pre_merge() {
     fi
     
     # 3.2 go test -race -short
-    if cmd_exists go; then
+    if [[ -n "${HARNESS_FAST:-}" ]]; then
+        add_check "SKIP" "3.2 go test -race -short (HARNESS_FAST)"
+    elif cmd_exists go; then
         if go test -race -short -count=1 -timeout=60s ./... >/dev/null 2>&1; then
             add_check "PASS" "3.2 go test -race -short ./..."
         else
@@ -490,23 +523,75 @@ phase_pre_merge() {
         add_check "SKIP" "3.2 Go not installed"
     fi
     
-    # 3.3 go test -race -tags=integration
-    if cmd_exists go; then
-        if go test -race -tags=integration -count=1 -timeout=180s ./... >/dev/null 2>&1; then
+    # 3.3 go test -race -tags=integration — differential vs baseline (R91).
+    # Pre-existing master failures live in docs/harness-baseline.txt (one
+    # package per line, each tracked by an issue). Only NEW failing packages
+    # fail the gate — "this PR must not make master worse", not "this PR must
+    # pay off all prior debt". This was the #1 override source (11/40).
+    # Shrink-only enforcement (R91): the baseline may never GROW in a PR —
+    # adding a package would sneak a NEW failure past the gate. Cheap git
+    # check, so it runs even under HARNESS_FAST (the hook enforces it too).
+    baseline_added=""
+    if git cat-file -e origin/master:docs/harness-baseline.txt 2>/dev/null; then
+        baseline_added=$(git diff origin/master...HEAD -- docs/harness-baseline.txt 2>/dev/null \
+            | grep -E '^\+[^+#]' || true)
+    fi  # file absent on master = initial seeding, allowed
+    if [[ -n "$baseline_added" ]]; then
+        add_check "FAIL" "3.3 docs/harness-baseline.txt GREW in this PR (R91: shrink-only; requires [HARNESS-OVERRIDE]): $(printf '%s\n' "$baseline_added" | head -3 | tr '\n' ' ' || true)" "R91"
+    elif [[ -n "${HARNESS_FAST:-}" ]]; then
+        add_check "SKIP" "3.3 integration tests (HARNESS_FAST)"
+    elif cmd_exists go; then
+        test_out=$(go test -race -tags=integration -count=1 -timeout=180s ./... 2>&1 || true)
+        failing_pkgs=$(echo "$test_out" | awk '/^FAIL[[:space:]]/{print $2}' | sort -u)
+        if [[ -z "$failing_pkgs" ]]; then
             add_check "PASS" "3.3 go test -race -tags=integration ./..."
         else
-            add_check "FAIL" "3.3 go test -race -tags=integration ./... failed"
+            baseline_file="docs/harness-baseline.txt"
+            # tr -d '\r': a Windows checkout (core.autocrlf) would give the
+            # baseline CRLF endings and break the comm comparison.
+            new_failures=$(comm -23 <(printf '%s\n' "$failing_pkgs") <(grep -v '^#' "$baseline_file" 2>/dev/null | tr -d '\r' | sort -u))
+            if [[ -z "$new_failures" ]]; then
+                cnt=$(echo "$failing_pkgs" | wc -l | tr -d ' ')
+                add_check "PASS" "3.3 Integration tests: $cnt baseline failure(s) only, no NEW failures (R91)"
+            else
+                # Flaky guard: full-suite runs can fail on resource contention
+                # (observed: internal/server/handlers fails in-suite, passes
+                # alone). Re-run each suspect in isolation before declaring it
+                # a NEW failure.
+                confirmed=""
+                for pkg in $new_failures; do
+                    if ! go test -race -tags=integration -count=1 -timeout=120s "$pkg" >/dev/null 2>&1; then
+                        confirmed="$confirmed $pkg"
+                    fi
+                done
+                if [[ -z "$confirmed" ]]; then
+                    add_check "PASS" "3.3 Integration tests: full-suite failures passed in isolation (flaky guard) — no NEW failures (R91)"
+                else
+                    add_check "FAIL" "3.3 NEW integration failures (not in baseline):$confirmed" "R91"
+                fi
+            fi
         fi
     else
         add_check "SKIP" "3.3 Go not installed"
     fi
-    
-    # 3.4 Lint (golangci-lint)
-    if cmd_exists golangci-lint; then
-        if golangci-lint run >/dev/null 2>&1; then
-            add_check "PASS" "3.4 golangci-lint passes"
+
+    # 3.4 Lint — differential: only issues introduced since merge-base fail
+    # (R91, golangci-lint --new-from-rev). Pre-existing lint debt is tracked
+    # by issues, not paid per-PR (was 10/40 overrides).
+    if [[ -n "${HARNESS_FAST:-}" ]]; then
+        add_check "SKIP" "3.4 golangci-lint (HARNESS_FAST)"
+    elif cmd_exists golangci-lint; then
+        lint_base=$(git merge-base HEAD origin/master 2>/dev/null || echo "")
+        if [[ -n "$lint_base" ]]; then
+            if golangci-lint run --new-from-rev="$lint_base" >/dev/null 2>&1; then
+                add_check "PASS" "3.4 golangci-lint clean for changes since merge-base (R91)"
+            else
+                add_check "FAIL" "3.4 golangci-lint found NEW issues in this branch (R91)" "R91"
+            fi
+        elif golangci-lint run >/dev/null 2>&1; then
+            add_check "PASS" "3.4 golangci-lint passes (full run; no merge-base)"
         else
-            add_check "FAIL" "3.4 golangci-lint found issues"
+            add_check "FAIL" "3.4 golangci-lint found issues (full run; no merge-base)"
         fi
     else
         add_check "SKIP" "3.4 golangci-lint not installed"
@@ -533,7 +618,11 @@ phase_pre_merge() {
         if grep -qE '^Review Verdict: FAIL' "$story_review"; then
             add_check "FAIL" "3.5 Review Verdict: FAIL in $story_review — fix before merge" "R27"
         elif ! grep -qE '^Review Verdict: PASS' "$story_review"; then
-            add_check "FAIL" "3.5 $story_review missing 'Review Verdict: PASS|FAIL' line" "R27"
+            if [[ -n "${HARNESS_FAST:-}" ]]; then
+                add_check "SKIP" "3.5 Review not finalized (HARNESS_FAST: PR-first flow — review completes after PR creation)"
+            else
+                add_check "FAIL" "3.5 $story_review missing 'Review Verdict: PASS|FAIL' line" "R27"
+            fi
         else
             reviewer=$(grep -iE '^Reviewer:' "$story_review" | head -1 | sed 's/^[Rr]eviewer:[[:space:]]*//')
             if [[ -z "$reviewer" ]]; then
@@ -544,6 +633,11 @@ phase_pre_merge() {
                 add_check "PASS" "3.5 Review Verdict: PASS by independent reviewer '$reviewer' (R27, R88)"
             fi
         fi
+    elif [[ -n "${HARNESS_FAST:-}" ]]; then
+        # PR-first flow (HARNESS.md § Review process): the PR is created FIRST,
+        # then independent review runs. At pre-create time a missing review
+        # file is expected — only an explicit 'Review Verdict: FAIL' blocks.
+        add_check "SKIP" "3.5 Review pending (HARNESS_FAST: PR-first flow — R88 review required before merge)"
     elif find docs/evidence -name "review-*.md" -type f 2>/dev/null | grep -q .; then
         add_check "FAIL" "3.5 No review-${rg_sid}*.md for this story (R88: independent review required)" "R88"
     else
@@ -645,11 +739,32 @@ phase_pre_merge() {
         add_check "SKIP" "3.9 gh CLI not installed"
     fi
     
+    # Change-type detection from the diff itself (R92, measurable):
+    # docs-only → SKIP 3.10 + 3.12; test-only → SKIP 3.12. This enforces the
+    # HARNESS.md change-type table the checker previously ignored (4/40
+    # overrides were docs/test-only changes forced through code gates).
+    ct_files=$(git diff --name-only origin/master...HEAD 2>/dev/null || echo "")
+    change_type="code"
+    if [[ -n "$ct_files" ]]; then
+        # Classify by EXTENSION only, never by directory: a directory match
+        # (^docs/ etc.) would classify docs/foo.go as docs-only and let code
+        # skip the code gates — a gate-evasion vector. Fails safe: anything
+        # not provably docs/test is "code". testdata/ is safe to include —
+        # go ignores testdata dirs at build time (fixtures, not runtime).
+        if ! printf '%s\n' "$ct_files" | grep -qvE '\.(md|txt)$'; then
+            change_type="docs"
+        elif ! printf '%s\n' "$ct_files" | grep -qvE '_test\.go$|(^|/)testdata/|\.(md|txt)$'; then
+            change_type="test-only"
+        fi
+    fi
+
     # 3.10 Self-review evidence exists for current story
     current_branch=$(git branch --show-current 2>/dev/null || echo "")
     branch_slug=$(echo "$current_branch" | sed 's|^[^/]*/||' | sed 's/-.*//g' 2>/dev/null || echo "")
     story_id=$(echo "$current_branch" | sed 's/story\///' | sed 's/-.*//g' 2>/dev/null || echo "")
-    if [[ -n "$branch_slug" ]]; then
+    if [[ "$change_type" == "docs" ]]; then
+        add_check "SKIP" "3.10 Docs-only change — self-review evidence not required (R92)"
+    elif [[ -n "$branch_slug" ]]; then
         evidence_file=$(find docs/evidence -name "*self-review*${branch_slug}*" -type f 2>/dev/null | head -1)
         if [[ -z "$evidence_file" && -n "$story_id" ]]; then
             evidence_file=$(find docs/evidence -name "*self-review*${story_id}*" -type f 2>/dev/null | head -1)
@@ -663,26 +778,25 @@ phase_pre_merge() {
         add_check "SKIP" "3.10 Cannot determine story ID from branch name"
     fi
 
-    # 3.11 Max 3 push cycles per PR (R29)
-    if cmd_exists gh; then
-        pr_number=$(gh pr view --json number --jq '.number' 2>/dev/null || echo "")
-        if [[ -n "$pr_number" ]]; then
-            commit_count=$(gh pr view "$pr_number" --json commits \
-                --jq '.commits | length' 2>/dev/null || echo "0")
-            if [[ "$commit_count" -gt 3 ]]; then
-                add_check "FAIL" "3.11 PR has $commit_count commits (max 3 push cycles; escalate to human)" "R29"
-            else
-                add_check "PASS" "3.11 PR commit count: $commit_count (R29: ≤ 3)"
-            fi
+    # 3.11 Max 3 push cycles per PR (R29) — count feature commits via git
+    # (merge-base..HEAD), NOT the GitHub PR view, which includes base commits
+    # when master advanced between branch creation and PR submission.
+    cc_base=$(git merge-base HEAD origin/master 2>/dev/null || echo "")
+    if [[ -n "$cc_base" ]]; then
+        commit_count=$(git rev-list --count "$cc_base"..HEAD 2>/dev/null || echo "0")
+        if [[ "$commit_count" -gt 3 ]]; then
+            add_check "FAIL" "3.11 Branch has $commit_count feature commits (max 3 push cycles; escalate to human)" "R29"
         else
-            add_check "SKIP" "3.11 No open PR found"
+            add_check "PASS" "3.11 Feature commit count: $commit_count (R29: ≤ 3)"
         fi
     else
-        add_check "SKIP" "3.11 gh CLI not installed"
+        add_check "SKIP" "3.11 Cannot determine merge-base with origin/master"
     fi
 
     # 3.12 smoke:e2e evidence for user-feature/bug-fix changes (R19, R20)
-    if [[ -n "$branch_slug" ]]; then
+    if [[ "$change_type" == "docs" || "$change_type" == "test-only" ]]; then
+        add_check "SKIP" "3.12 ${change_type} change — no runtime surface, smoke:e2e not required (R92)"
+    elif [[ -n "$branch_slug" ]]; then
         smoke_file=$(find docs/evidence -name "smoke-e2e-${branch_slug}*" -type f 2>/dev/null | head -1)
         if [[ -z "$smoke_file" && -n "$story_id" ]]; then
             smoke_file=$(find docs/evidence -name "smoke-e2e-${story_id}*" -type f 2>/dev/null | head -1)

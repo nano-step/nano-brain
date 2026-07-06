@@ -1,6 +1,15 @@
 # Harness Runner Contract
 
-Any script or binary can serve as a harness runner. This document defines the contract the plugin expects.
+> **Status: legacy interface.** The autonomous gate-loop *plugin* that consumed
+> this contract was OpenCode-only (`.opencode/plugin/harness-loop/`, `/harness-on`)
+> and is no longer the driver. On Claude Code, gates are driven by the
+> `/harness-gsd` command (autonomous pipeline) or the `harness-check` skill
+> (manual runs) — see `docs/HARNESS.md` § Entry points. This document remains
+> the authoritative spec for `scripts/harness-check.sh --json` output, which
+> any driver (hook, CI, future plugin) can consume. "Plugin" below refers to
+> the legacy OpenCode consumer.
+
+Any script or binary can serve as a harness runner. This document defines the contract a driver expects.
 
 ## Invocation
 

@@ -119,4 +119,5 @@ that every acceptance criterion has evidence. Output is a verdict: `PASS` or
 - `openspec/specs/<capability>/` — accepted behavior contracts
 - `openspec/archive/<name>/` — archived OpenSpec changes
 - `scripts/harness-check.sh` — gate enforcement script
-- `.opencode/skills/harness-check/SKILL.md` — agent-side enforcement skill
+- `.claude/skills/harness-check/SKILL.md` — agent-side enforcement skill
+- `.claude/commands/harness-gsd.md` — autonomous Harness+GSD pipeline entry point

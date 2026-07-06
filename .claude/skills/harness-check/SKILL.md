@@ -24,8 +24,11 @@ compatibility: Claude Code with bash + git + go. Optional: gh CLI, openspec CLI,
 Enforce the harness gate specification defined in `docs/HARNESS_GATES.md`.
 
 > **Note:** The autonomous gate loop (`/harness-on`, `.opencode/plugin/harness-loop/`)
-> is OpenCode-only. On Claude Code this skill runs the gates manually / on trigger;
-> you drive the fix-and-re-run loop yourself based on the script output below.
+> was OpenCode-only. On Claude Code the drivers are: `/harness-gsd <description>`
+> (full autonomous pipeline), this skill (manual gate runs — you drive the
+> fix-and-re-run loop from the script output), and the PreToolUse hook
+> `.claude/hooks/harness-pre-merge-hook.sh` (blocks `gh pr create` while fast
+> pre-merge gates FAIL). See `docs/HARNESS.md` § Entry Points.
 
 ## Core Rules
 
@@ -194,3 +197,6 @@ Current explicit rules with IDs:
 - **R56** — Verdict-based (no effort threshold)
 - **R88** — Independent review: review by a spawned sub-agent; author ≠ reviewer (gate 3.5)
 - **R89** — Measurable skip-issue conditions (gate 1.3)
+- **R90** — Gate 1.1 blocks only on file overlap with the open PR; orthogonal PRs run in parallel
+- **R91** — Differential quality gates: 3.3 vs `docs/harness-baseline.txt`, 3.4 via `--new-from-rev` (PR must not make master worse)
+- **R92** — Change-type from diff: docs-only skips 3.10+3.12, test-only skips 3.12
