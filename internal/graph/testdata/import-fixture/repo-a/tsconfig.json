@@ -1,0 +1,9 @@
+{
+  // repo-a's own alias root — "~/" points at repo-a itself, never repo-b.
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["./*"], // trailing comment + trailing comma below tolerate JSONC
+    }
+  }
+}
