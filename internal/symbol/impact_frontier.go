@@ -18,8 +18,11 @@ import "strings"
 // (bare-name collision, #542 F2) fixes this centrally for both call sites in a later
 // phase. Deliberately not scoped per-repo here (Phase 2 Gate 1.7 decision G1).
 func ExpandImpactFrontier(nodes []string) []string {
-	expanded := make([]string, 0, len(nodes))
-	seen := make(map[string]bool, len(nodes))
+	if len(nodes) == 0 {
+		return nil
+	}
+	expanded := make([]string, 0, 2*len(nodes))
+	seen := make(map[string]bool, 2*len(nodes))
 	for _, n := range nodes {
 		if !seen[n] {
 			seen[n] = true

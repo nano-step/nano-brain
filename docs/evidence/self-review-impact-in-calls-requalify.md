@@ -45,9 +45,11 @@
 
 ## Gemini Verification Triage
 
-_Pending — PR not yet opened. Populate after the Gemini bot posts comments
-(one row per comment; verdict vocabulary per HARNESS.md § PR + Bot Review Loop)._
+PR #554. Gemini review state COMMENTED (non-blocking); 3 inline suggestions, all
+perf, no correctness/security. All applied.
 
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| PR#554 `internal/symbol/impact_frontier.go:22` | VALID:low | Prealloc `expanded`/`seen` at `2*len` + empty fast-path — genuine micro-opt, zero risk (helper doubles when nodes are qualified). | fixed in commit e146169 |
+| PR#554 `internal/server/handlers/impact.go:81` | VALID:medium | `queried` map to skip re-querying targets across depths — real (bounded) inefficiency; safe since results already deduped by `seen` and the query is deterministic. Matters for the tool's 50ms latency goal. | fixed in commit e146169 |
+| PR#554 `internal/mcp/tools.go:2071` | VALID:medium | Same `queried`-map dedup on the MCP path; kept consistent with the REST handler. | fixed in commit e146169 |

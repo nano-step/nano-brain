@@ -79,10 +79,22 @@ func collectImpact(ctx context.Context, q ImpactQuerier, workspace, node, edgeTy
 	// G1: expand with the bare symbol suffix of qualified nodes so calls-edge targets
 	// stored bare (e.g. "checkAccess") are also matched. See symbol.ExpandImpactFrontier.
 	frontier := symbol.ExpandImpactFrontier([]string{node})
+	queried := map[string]bool{}
 	for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
+		targets := make([]string, 0, len(frontier))
+		for _, f := range frontier {
+			if queried[f] {
+				continue
+			}
+			queried[f] = true
+			targets = append(targets, f)
+		}
+		if len(targets) == 0 {
+			break
+		}
 		rows, err := q.GetImpactorsByTargets(ctx, sqlc.GetImpactorsByTargetsParams{
 			WorkspaceHash: workspace,
-			Column2:       frontier,
+			Column2:       targets,
 			Column3:       edgeType,
 		})
 		if err != nil {
