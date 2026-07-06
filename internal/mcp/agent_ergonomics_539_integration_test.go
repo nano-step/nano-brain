@@ -449,8 +449,10 @@ func TestMemoryGet_GraphNodePathReturnsBody(t *testing.T) {
 func TestMemoryGet_SymbolPathFallsBackToSignatureWhenParentMissing(t *testing.T) {
 	ctx, q, wsHash, callTool := setupFindingsMCP(t)
 
-	// No parent file document exists for orphan.go.
-	upsertSymbolDoc(t, ctx, q, wsHash, "orphan.go", "Bar", "function", "func Bar() {}", "1", "1")
+	// No parent file document exists for orphan.go. The symbol starts past
+	// line 1, so a naive fallback would slice the 1-line signature by [3:5] and
+	// return "" — assert we get the signature back intact instead.
+	upsertSymbolDoc(t, ctx, q, wsHash, "orphan.go", "Bar", "function", "func Bar() {}", "3", "5")
 
 	result := callTool("memory_get", map[string]any{
 		"workspace": wsHash,
@@ -461,6 +463,6 @@ func TestMemoryGet_SymbolPathFallsBackToSignatureWhenParentMissing(t *testing.T)
 	}
 	resp := unmarshalGraphResp(t, result)
 	if resp["content"].(string) != "func Bar() {}" {
-		t.Errorf("content = %q, want fallback signature", resp["content"])
+		t.Errorf("content = %q, want fallback signature (not an empty slice)", resp["content"])
 	}
 }

@@ -1156,7 +1156,15 @@ func resolveDocumentByAnyID(ctx context.Context, q *sqlc.Queries, ws string, id 
 		return sqlc.Document{}, err
 	}
 	chunk, chunkErr := q.GetChunkByID(ctx, id)
-	if chunkErr != nil || chunk.WorkspaceHash != ws {
+	if chunkErr != nil {
+		if errors.Is(chunkErr, sql.ErrNoRows) {
+			return sqlc.Document{}, fmt.Errorf("no document or chunk found for id %s in workspace %s", id, ws)
+		}
+		// A real DB/connection error on the chunk lookup — surface it rather
+		// than masking it as a misleading "not found".
+		return sqlc.Document{}, chunkErr
+	}
+	if chunk.WorkspaceHash != ws {
 		return sqlc.Document{}, fmt.Errorf("no document or chunk found for id %s in workspace %s", id, ws)
 	}
 	return q.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{ID: chunk.DocumentID, WorkspaceHash: ws})
@@ -1260,27 +1268,35 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 			if qIdx := strings.Index(doc.SourcePath, "?symbol="); qIdx >= 0 {
 				// Resolve the symbol's own line span from metadata unless the
 				// caller supplied an explicit start_line/end_line (which wins).
+				symSpanFromMeta := false
 				if !explicitLines && doc.Metadata.Valid {
 					var meta map[string]string
 					if json.Unmarshal(doc.Metadata.RawMessage, &meta) == nil {
 						if symStart, sErr := strconv.Atoi(meta["line"]); sErr == nil && symStart > 0 {
 							if symEnd, eErr := strconv.Atoi(meta["end_line"]); eErr == nil && symEnd > 0 {
 								startLine, endLine = symStart, symEnd
+								symSpanFromMeta = true
 							}
 						}
 					}
 				}
-				// Only pull in the parent file's body when we actually have a
-				// span to slice. Without line info (e.g. a workspace indexed
-				// before symbols carried line metadata) keep the symbol doc's own
-				// content — its signature — rather than dumping the whole file.
+				// Pull in the parent file's body so the caller gets the full
+				// definition rather than just the signature — but only when we
+				// have a span to slice.
 				if startLine > 0 || endLine > 0 {
 					parentPath := doc.SourcePath[:qIdx]
-					if parentDoc, perr := a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+					parentDoc, perr := a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 						SourcePath:    parentPath,
 						WorkspaceHash: ws,
-					}); perr == nil {
+					})
+					if perr == nil {
 						content = parentDoc.Content
+					} else if symSpanFromMeta {
+						// Parent unavailable (e.g. a workspace indexed before
+						// symbols carried line metadata): keep the signature and
+						// clear the metadata span so it isn't sliced into an
+						// empty string when the symbol starts past line 1.
+						startLine, endLine = 0, 0
 					}
 				}
 			}

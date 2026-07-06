@@ -61,4 +61,13 @@ point). See review-539.md § smoke:e2e note.
 
 ## Gemini Verification Triage
 
-_(pending — populated after PR creation when Gemini review arrives; R31)_
+Gemini posted 1 review (COMMENTED) with 4 inline findings on PR #540.
+
+| Comment ref | Agent verdict | Reasoning | Action |
+| --- | --- | --- | --- |
+| PR#540 tools.go:1285 (symbol body slice) | VALID:high | Real regression I introduced: metadata span (e.g. lines 2–4) stayed set when the parent doc failed to load, so the 1-line signature got sliced to `""` for any symbol starting past line 1. | fixed — reset span to 0 on parent-miss when span came from metadata; strengthened `TestMemoryGet_SymbolPathFallsBackToSignatureWhenParentMissing` (line 3–5) |
+| PR#540 tools.go:1161 (chunk error masked) | VALID:medium | A real DB error on `GetChunkByID` was masked as "no document or chunk found". | fixed — surface non-`ErrNoRows` chunk errors |
+| PR#540 service.go:127 (nil embedder/cache guard) | FALSE_POSITIVE | `embedQueryCached` is only reached after the existing `if s.embedder == nil { return nil }` guards at both call sites (service.go:352, 859); `queryEmbedCache` is set by the sole constructor `NewSearchService` — no struct-literal path exists. Adding an internal nil guard is defensive code for an unreachable state. | acknowledged in reply |
+| PR#540 cache.go:80 (zero-value-safe QueryCache) | FALSE_POSITIVE | `QueryCache` is only ever created via `NewQueryCache`; no zero-value/struct-literal construction path exists in the codebase. Lazy-init would guard an impossible state. | acknowledged in reply |
+
+Both VALID findings fixed; both FALSE_POSITIVE findings have documented reasoning. No `VALID:critical`/`VALID:high` left unresolved.
