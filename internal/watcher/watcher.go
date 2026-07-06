@@ -543,7 +543,7 @@ func (w *Watcher) warmFileCacheFromDB(ctx context.Context, col watchedCollection
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 	w.warmFileCacheFromDB(ctx, col)
 
-	stack := &GitignoreStack{}
+	adm := newWalkAdmitter(col.filter)
 
 	err := filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -554,34 +554,7 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 			return ctx.Err()
 		}
 
-		stack.PopAbove(path)
-
-		if d.IsDir() {
-			gitignorePath := filepath.Join(path, ".gitignore")
-			if info, err := os.Stat(gitignorePath); err == nil && !info.IsDir() {
-				if gi, err := gitignore.CompileIgnoreFile(gitignorePath); err == nil {
-					stack.Push(path, gi)
-					w.logger.Debug().Str("path", gitignorePath).Msg("loaded nested .gitignore")
-				}
-			}
-			localIgnorePath := filepath.Join(path, ".nano-brainignore")
-			if info, err := os.Stat(localIgnorePath); err == nil && !info.IsDir() {
-				if li, err := gitignore.CompileIgnoreFile(localIgnorePath); err == nil {
-					stack.Push(path, li)
-				}
-			}
-		}
-
-		if col.filter != nil && col.filter.ShouldSkip(path, d.IsDir()) {
-			if d.IsDir() {
-				w.cleanupPathPrefix(ctx, col, path)
-				return filepath.SkipDir
-			}
-			w.cleanupIgnoredDocument(ctx, col, path)
-			return nil
-		}
-
-		if stack.Matches(path) {
+		if adm.ignore(path, d.IsDir()) {
 			if d.IsDir() {
 				w.cleanupPathPrefix(ctx, col, path)
 				return filepath.SkipDir
@@ -625,6 +598,11 @@ func (w *Watcher) ShouldSkipPath(collectionName, workspaceHash, absPath string, 
 // then removes the entry from the file cache. Called when a file newly
 // matches .nano-brainignore or .gitignore patterns during a walk.
 func (w *Watcher) cleanupIgnoredDocument(ctx context.Context, col watchedCollection, filePath string) {
+	// Graph rows have no FK to documents, so remove them explicitly (issue #535).
+	// Done first — orphan edges can outlive the document, so this must run even
+	// when the document lookup below returns ErrNoRows.
+	w.deleteGraphRowsForFile(ctx, col, filePath)
+
 	doc, err := w.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    filePath,
 		WorkspaceHash: col.workspaceHash,
@@ -679,6 +657,9 @@ func (w *Watcher) cleanupDeletedDocument(filePath string) {
 
 	ctx := context.Background()
 	for _, col := range cols {
+		// Graph rows have no FK to documents (issue #535); delete them explicitly.
+		w.deleteGraphRowsForFile(ctx, col, filePath)
+
 		doc, err := w.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    filePath,
 			WorkspaceHash: col.workspaceHash,
@@ -734,6 +715,20 @@ func (w *Watcher) cleanupPathPrefix(ctx context.Context, col watchedCollection, 
 		w.logger.Debug().Str("prefix", prefix).Int64("deleted", n).Msg("cleaned up documents under ignored directory")
 	}
 
+	// Graph rows have no FK to documents (issue #535); sweep them under the same
+	// prefix. source_file is stored workspace-relative or absolute, so match both.
+	relPrefix := collRelFile(col.dirPath, filepath.Clean(dirPath)) + "/"
+	if _, err := w.db.ExecContext(ctx,
+		`DELETE FROM graph_edges WHERE workspace_hash = $1 AND (source_file LIKE $2 OR source_file LIKE $3)`,
+		col.workspaceHash, prefix+"%", relPrefix+"%"); err != nil {
+		w.logger.Warn().Err(err).Str("prefix", prefix).Msg("cleanupPathPrefix: delete graph edges failed")
+	}
+	if _, err := w.db.ExecContext(ctx,
+		`DELETE FROM function_flowcharts WHERE workspace_hash = $1 AND (source_file LIKE $2 OR source_file LIKE $3)`,
+		col.workspaceHash, prefix+"%", relPrefix+"%"); err != nil {
+		w.logger.Warn().Err(err).Str("prefix", prefix).Msg("cleanupPathPrefix: delete flowcharts failed")
+	}
+
 	w.fileCacheMu.Lock()
 	for cachedPath := range w.fileCache {
 		if strings.HasPrefix(cachedPath, prefix) {
@@ -741,6 +736,34 @@ func (w *Watcher) cleanupPathPrefix(ctx context.Context, col watchedCollection, 
 		}
 	}
 	w.fileCacheMu.Unlock()
+}
+
+// deleteGraphRowsForFile removes graph_edges + function_flowcharts for a single
+// file across both stored source_file formats — workspace-relative (as written
+// by extractAndUpsertEdges) and absolute. Best-effort: logs and continues on
+// error. Uses raw SQL (like cleanupPathPrefix) because these deletes are not on
+// the WatcherQuerier interface and run outside the extraction transaction.
+func (w *Watcher) deleteGraphRowsForFile(ctx context.Context, col watchedCollection, filePath string) {
+	if w.db == nil {
+		// The mock-querier unit tests construct a Watcher without a raw *sql.DB;
+		// graph-row deletion needs it. Production New() always supplies one.
+		return
+	}
+	relFile := collRelFile(col.dirPath, filePath)
+	forms := []string{relFile}
+	if filePath != relFile {
+		forms = append(forms, filePath)
+	}
+	if _, err := w.db.ExecContext(ctx,
+		`DELETE FROM graph_edges WHERE workspace_hash = $1 AND source_file = ANY($2::text[])`,
+		col.workspaceHash, forms); err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("deleteGraphRowsForFile: delete graph edges failed")
+	}
+	if _, err := w.db.ExecContext(ctx,
+		`DELETE FROM function_flowcharts WHERE workspace_hash = $1 AND source_file = ANY($2::text[])`,
+		col.workspaceHash, forms); err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("deleteGraphRowsForFile: delete flowcharts failed")
+	}
 }
 
 func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePath string) {
@@ -1125,14 +1148,24 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 
 	var count int
 	for _, col := range cols {
+		adm := newWalkAdmitter(col.filter)
 		_ = filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			if err != nil || d.IsDir() {
+			if err != nil {
 				return nil
 			}
-			if col.filter != nil && col.filter.ShouldSkip(path, false) {
+			if adm.ignore(path, d.IsDir()) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if info, ierr := d.Info(); ierr == nil && info.Size() > w.maxFileSize {
 				return nil
 			}
 			content, err := os.ReadFile(path)
@@ -1151,6 +1184,12 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 // the workspace's collections, bypassing the content-hash early-exit. This is
 // needed when a new extractor is added after the workspace was already indexed.
 // Returns the number of files processed.
+//
+// It uses the exact same admission gate as scanCollection (nested gitignore
+// stack + max_file_size) so this path can never index a file the startup scan
+// would skip (issue #535). After a clean walk it sweeps graph rows for files
+// that were not admitted, reconciling orphans left by earlier index runs or by
+// files that became gitignored/oversized/deleted.
 func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash string) int {
 	if w.graphRegistry == nil {
 		return 0
@@ -1166,17 +1205,43 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 	w.mu.Unlock()
 
 	var count int
+	admitted := make(map[string]bool)
+	sweepSafe := true
 	for _, col := range cols {
-		_ = filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
+		adm := newWalkAdmitter(col.filter)
+		walkErr := filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			if err != nil || d.IsDir() {
+			if err != nil {
+				// A localized walk error (e.g. permission denied on a subdir) skips
+				// that entry's files, so they never enter `admitted` — but the walk
+				// still returns nil overall. Disable the sweep for this run so those
+				// files' existing graph rows are not deleted as false orphans.
+				sweepSafe = false
 				return nil
 			}
-			if col.filter != nil && col.filter.ShouldSkip(path, false) {
+			if adm.ignore(path, d.IsDir()) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
 				return nil
 			}
+			if d.IsDir() {
+				return nil
+			}
+			if info, ierr := d.Info(); ierr == nil && info.Size() > w.maxFileSize {
+				return nil
+			}
+			// Record every admitted file (in both stored forms — workspace-relative
+			// as written by extractAndUpsertEdges, and absolute) as soon as it passes
+			// the gate + size check, BEFORE ReadFile. A file that passes admission is
+			// admitted whether or not this run re-extracts it: a transient read error
+			// must not drop it from the set, or the sweep below would delete its live
+			// graph rows. Keeping it admitted preserves the existing (stale) rows until
+			// a later successful re-extract replaces them.
+			admitted[collRelFile(col.dirPath, path)] = true
+			admitted[path] = true
 			content, err := os.ReadFile(path)
 			if err != nil {
 				return nil
@@ -1188,9 +1253,60 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 			count++
 			return nil
 		})
+		if walkErr != nil {
+			// An incomplete walk (ctx cancel, fatal walk error) leaves admitted
+			// under-populated; sweeping then would delete live files' rows.
+			sweepSafe = false
+		}
 		w.resolveRubyCrossFileCalls(ctx, col)
 	}
+
+	if sweepSafe {
+		w.sweepOrphanGraphRows(ctx, workspaceHash, admitted)
+	}
 	return count
+}
+
+// sweepOrphanGraphRows deletes graph_edges and function_flowcharts for the
+// workspace whose source_file is not in admitted — i.e. files the admission gate
+// no longer indexes (gitignored, oversized, or deleted). admitted must hold both
+// the workspace-relative and absolute source_file forms of every currently
+// indexed file. This enforces issue #535's invariant: a file has graph rows only
+// if the document indexer would also index it. It is a no-op when admitted is
+// empty, so an empty or failed walk never wipes the graph.
+func (w *Watcher) sweepOrphanGraphRows(ctx context.Context, workspaceHash string, admitted map[string]bool) {
+	if len(admitted) == 0 {
+		return
+	}
+	keep := make([]string, 0, len(admitted))
+	for f := range admitted {
+		keep = append(keep, f)
+	}
+
+	edgeRes, err := w.db.ExecContext(ctx,
+		`DELETE FROM graph_edges WHERE workspace_hash = $1 AND source_file <> ALL($2::text[])`,
+		workspaceHash, keep)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("workspace", workspaceHash).Msg("sweep orphan graph_edges failed")
+		return
+	}
+	cfgRes, err := w.db.ExecContext(ctx,
+		`DELETE FROM function_flowcharts WHERE workspace_hash = $1 AND source_file <> ALL($2::text[])`,
+		workspaceHash, keep)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("workspace", workspaceHash).Msg("sweep orphan function_flowcharts failed")
+		return
+	}
+
+	edges, _ := edgeRes.RowsAffected()
+	cfgs, _ := cfgRes.RowsAffected()
+	if edges > 0 || cfgs > 0 {
+		w.logger.Info().
+			Str("workspace", workspaceHash).
+			Int64("orphan_edges", edges).
+			Int64("orphan_flowcharts", cfgs).
+			Msg("swept orphan graph rows")
+	}
 }
 
 func (w *Watcher) publishFileEvent(workspace, filePath, action string) {

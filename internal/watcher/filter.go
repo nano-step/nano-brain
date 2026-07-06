@@ -61,6 +61,58 @@ func (s *GitignoreStack) Matches(path string) bool {
 	return false
 }
 
+// walkAdmitter is the single file-admission gate shared by every WalkDir-based
+// graph-build path (scanCollection and the Reextract* walks). It maintains the
+// nested .gitignore/.nano-brainignore stack and applies the collection filter so
+// the startup scan and the re-extract path can never diverge on which files are
+// indexed (issue #535). Size is checked separately by callers that read the file.
+// Not safe for concurrent use — construct one per WalkDir.
+type walkAdmitter struct {
+	filter *FileFilter
+	stack  *GitignoreStack
+}
+
+func newWalkAdmitter(filter *FileFilter) *walkAdmitter {
+	return &walkAdmitter{filter: filter, stack: &GitignoreStack{}}
+}
+
+// ignore updates the nested-ignore stack for the current walk position and
+// reports whether the path is excluded. For a directory an ignored==true result
+// means the caller must return filepath.SkipDir. Order mirrors scanCollection's
+// original inline logic exactly: PopAbove → push nested ignores on dir entry →
+// filter.ShouldSkip → stack.Matches.
+func (a *walkAdmitter) ignore(path string, isDir bool) bool {
+	a.stack.PopAbove(path)
+
+	if isDir {
+		// Compile directly and check the error rather than os.Stat-ing first — a
+		// missing/unreadable/dir path just fails to compile and is skipped, and we
+		// avoid a redundant syscall (repo convention).
+		if gi, err := gitignore.CompileIgnoreFile(filepath.Join(path, ".gitignore")); err == nil {
+			a.stack.Push(path, gi)
+		}
+		if li, err := gitignore.CompileIgnoreFile(filepath.Join(path, ".nano-brainignore")); err == nil {
+			a.stack.Push(path, li)
+		}
+	}
+
+	if a.filter != nil && a.filter.ShouldSkip(path, isDir) {
+		return true
+	}
+	return a.stack.Matches(path)
+}
+
+// collRelFile returns filePath as a slash-separated path relative to dirPath,
+// matching the source_file form written by extractAndUpsertEdges. Falls back to
+// filePath unchanged when it is not under dirPath.
+func collRelFile(dirPath, filePath string) string {
+	rel, err := filepath.Rel(dirPath, filePath)
+	if err != nil {
+		return filePath
+	}
+	return filepath.ToSlash(rel)
+}
+
 var defaultExcludeDirs = map[string]bool{
 	"node_modules": true,
 	".git":         true,
