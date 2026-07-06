@@ -346,7 +346,7 @@ When Tâm gives an implementation/bugfix directive — "fix …", "giải quyế
 
 Commits and PRs: author `kokorolx`, **no AI footers** (no `Co-Authored-By`, no 🤖).
 
-### Build & Codegen Commands
+## Build & Codegen Commands
 
 ```bash
 CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain   # Build
