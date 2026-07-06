@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/rs/zerolog"
 )
 
@@ -75,11 +76,25 @@ func collectImpact(ctx context.Context, q ImpactQuerier, workspace, node, edgeTy
 	seen := map[string]bool{node: true}
 	var result []impactNode
 
-	frontier := []string{node}
+	// G1: expand with the bare symbol suffix of qualified nodes so calls-edge targets
+	// stored bare (e.g. "checkAccess") are also matched. See symbol.ExpandImpactFrontier.
+	frontier := symbol.ExpandImpactFrontier([]string{node})
+	queried := map[string]bool{}
 	for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
+		targets := make([]string, 0, len(frontier))
+		for _, f := range frontier {
+			if queried[f] {
+				continue
+			}
+			queried[f] = true
+			targets = append(targets, f)
+		}
+		if len(targets) == 0 {
+			break
+		}
 		rows, err := q.GetImpactorsByTargets(ctx, sqlc.GetImpactorsByTargetsParams{
 			WorkspaceHash: workspace,
-			Column2:       frontier,
+			Column2:       targets,
 			Column3:       edgeType,
 		})
 		if err != nil {
@@ -98,7 +113,7 @@ func collectImpact(ctx context.Context, q ImpactQuerier, workspace, node, edgeTy
 			})
 			next = append(next, r.SourceNode)
 		}
-		frontier = next
+		frontier = symbol.ExpandImpactFrontier(next)
 	}
 	return result, nil
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/search"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/nano-brain/nano-brain/internal/symbol"
 	pgvector_go "github.com/pgvector/pgvector-go"
 	"github.com/sqlc-dev/pqtype"
 )
@@ -2065,7 +2066,11 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			pathStyle := argString(args, "paths")
 
 			frontier := []string{node}
+			if direction == "in" {
+				frontier = symbol.ExpandImpactFrontier(frontier)
+			}
 			seen := map[string]bool{node: true}
+			queried := map[string]bool{}
 
 			type impactItem struct {
 				Node     string `json:"node"`
@@ -2100,9 +2105,21 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 					}
 					frontier = next
 				default:
+					targets := make([]string, 0, len(frontier))
+					for _, f := range frontier {
+						if queried[f] {
+							continue
+						}
+						queried[f] = true
+						targets = append(targets, f)
+					}
+					if len(targets) == 0 {
+						frontier = nil
+						break
+					}
 					rows, err := a.queries.GetImpactorsByTargets(ctx, sqlc.GetImpactorsByTargetsParams{
 						WorkspaceHash: ws,
-						Column2:       frontier,
+						Column2:       targets,
 						Column3:       edgeType,
 					})
 					if err != nil {
@@ -2121,7 +2138,7 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 						})
 						next = append(next, r.SourceNode)
 					}
-					frontier = next
+					frontier = symbol.ExpandImpactFrontier(next)
 				}
 			}
 
