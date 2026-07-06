@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/search/hyde"
 	"github.com/nano-brain/nano-brain/internal/search/preprocess"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -87,10 +88,42 @@ type SearchService struct {
 	preprocessor   *preprocess.Preprocessor
 	hydeGenerator  *hyde.Generator
 	reranker       Reranker
+	// queryEmbedCache avoids a redundant embedding-provider round-trip when
+	// the same query text is embedded more than once (retries, cursor
+	// pagination, mode=debugging fan-out). It caches query embeddings only —
+	// document/chunk embeddings go through embed.Queue directly and never
+	// touch this cache. See issue #539 Finding 4.
+	queryEmbedCache *embed.QueryCache
 }
 
 func NewSearchService(queries Querier, embedder Embedder, cfg config.SearchConfig, logger zerolog.Logger) *SearchService {
-	return &SearchService{queries: queries, embedder: embedder, config: cfg, logger: logger}
+	return &SearchService{
+		queries:         queries,
+		embedder:        embedder,
+		config:          cfg,
+		logger:          logger,
+		queryEmbedCache: embed.NewQueryCache(embed.DefaultQueryCacheSize),
+	}
+}
+
+// embedQueryCached returns the embedding for text, serving from
+// queryEmbedCache when available and falling back to the underlying
+// Embedder on a miss.
+func (s *SearchService) embedQueryCached(ctx context.Context, text string) ([]float32, error) {
+	if vec, ok := s.queryEmbedCache.Get(text); ok {
+		return vec, nil
+	}
+	vec, err := s.embedder.Embed(ctx, text)
+	if err != nil {
+		return nil, err
+	}
+	// Don't cache a degenerate/empty embedding — a later real result for the
+	// same query would otherwise be shadowed by the empty one until eviction.
+	if len(vec) == 0 {
+		return vec, nil
+	}
+	s.queryEmbedCache.Put(text, vec)
+	return vec, nil
 }
 
 func (s *SearchService) SetEntityQuerier(eq EntityQuerier) {
@@ -332,7 +365,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 				}
 			}
 		}
-		vec, err := s.embedder.Embed(gctx, embedQuery)
+		vec, err := s.embedQueryCached(gctx, embedQuery)
 		if err != nil {
 			vectorErr = err
 			s.logger.Warn().Err(err).Msg("embed failed, degrading")
@@ -826,7 +859,7 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 		if s.embedder == nil {
 			return nil
 		}
-		vec, err := s.embedder.Embed(gctx, query)
+		vec, err := s.embedQueryCached(gctx, query)
 		if err != nil {
 			vectorErr = err
 			s.logger.Warn().Err(err).Msg("debug embed failed, degrading")

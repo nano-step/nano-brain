@@ -79,6 +79,31 @@ func (m *mockEmbedder) Dimension() int {
 	return 1536
 }
 
+// countingEmbedder tracks how many times Embed was actually called, so tests
+// can assert the query-embedding cache (issue #539 Finding 4) suppresses
+// redundant embedding-provider round-trips for repeated identical queries.
+type countingEmbedder struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (c *countingEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	c.mu.Lock()
+	c.calls++
+	c.mu.Unlock()
+	return make([]float32, 1536), nil
+}
+
+func (c *countingEmbedder) Dimension() int {
+	return 1536
+}
+
+func (c *countingEmbedder) CallCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
+}
+
 func TestUpdateConfig_ChangesAppliedToSubsequentSearches(t *testing.T) {
 	logger := zerolog.Nop()
 	initialCfg := config.SearchConfig{
@@ -165,6 +190,41 @@ func TestUpdateConfig_ConcurrentReadersAndWriters(t *testing.T) {
 
 	for err := range errors {
 		t.Errorf("concurrent operation failed: %v", err)
+	}
+}
+
+func TestHybridSearch_RepeatedQuery_EmbedsOnce(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+	emb := &countingEmbedder{}
+	service := NewSearchService(&mockQuerier{}, emb, cfg, logger)
+
+	for i := 0; i < 3; i++ {
+		if _, err := service.HybridSearch(context.Background(), "same query text", "ws1", 10, nil, nil, ""); err != nil {
+			t.Fatalf("unexpected error on call %d: %v", i, err)
+		}
+	}
+
+	if got := emb.CallCount(); got != 1 {
+		t.Errorf("expected embedder.Embed to be called once for repeated identical queries, got %d calls", got)
+	}
+}
+
+func TestHybridSearch_DifferentQueries_EmbedsEach(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+	emb := &countingEmbedder{}
+	service := NewSearchService(&mockQuerier{}, emb, cfg, logger)
+
+	if _, err := service.HybridSearch(context.Background(), "query one", "ws1", 10, nil, nil, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := service.HybridSearch(context.Background(), "query two", "ws1", 10, nil, nil, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := emb.CallCount(); got != 2 {
+		t.Errorf("expected embedder.Embed to be called once per distinct query, got %d calls", got)
 	}
 }
 

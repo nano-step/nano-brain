@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -951,6 +952,8 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 			"kind":        string(s.Kind),
 			"language":    s.Language,
 			"signature":   s.Signature,
+			"line":        strconv.Itoa(s.Line),
+			"end_line":    strconv.Itoa(s.EndLine),
 		})
 		sourcePath := filePath + "?symbol=" + s.Name + "&kind=" + string(s.Kind)
 		sum := sha256.Sum256([]byte(sourcePath + s.Signature))

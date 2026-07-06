@@ -19,6 +19,7 @@ type Symbol struct {
 	Kind      Kind
 	File      string
 	Line      int
+	EndLine   int
 	Signature string
 	Language  string
 }

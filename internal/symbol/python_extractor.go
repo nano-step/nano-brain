@@ -69,6 +69,7 @@ func (e *PythonExtractor) Extract(filePath string, content []byte) ([]Symbol, er
 			Kind:      kind,
 			File:      filePath,
 			Line:      lineForByte(content, nameNode.StartByte()),
+			EndLine:   lineForByte(content, declNode.EndByte()),
 			Signature: firstLine(bt.NodeText(declNode)),
 			Language:  "python",
 		})
