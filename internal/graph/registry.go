@@ -136,6 +136,61 @@ func (r *Registry) ExtractEdgesForFrameworks(filePath string, content []byte, fr
 	return r.extractWith(filePath, content, ext, extractors, seen, all)
 }
 
+// ExtractEdgesForFrameworksWithImports is ExtractEdgesForFrameworks plus
+// import-specifier resolution (Fix B, #501): extractors implementing
+// ImportResolvingExtractor (the JS/TS/Vue graph extractors) are called via
+// ExtractEdgesWithImportContext(filePath, content, ic) instead of the plain
+// Extractor.ExtractEdges, so imports edges get resolved workspace-relative
+// target_node values. Every other extractor (the ~17 that don't implement
+// ImportResolvingExtractor) is invoked exactly as before — the shared
+// Extractor interface is untouched.
+func (r *Registry) ExtractEdgesForFrameworksWithImports(filePath string, content []byte, frameworks []string, ic ImportContext) ([]Edge, error) {
+	if isMinified(filePath, content) {
+		return nil, nil
+	}
+	ext := filepath.Ext(filePath)
+	var all []Edge
+	seen := make(map[string]struct{})
+
+	var extractors []Extractor
+	for _, ex := range r.extractors {
+		if fa, ok := ex.(FrameworkAwareExtractor); ok {
+			if req := fa.RequiresFrameworks(); len(req) > 0 && !hasIntersection(req, frameworks) {
+				continue
+			}
+		}
+		extractors = append(extractors, ex)
+	}
+	if len(extractors) == 0 {
+		extractors = r.extractors
+	}
+
+	for _, ex := range extractors {
+		if !ex.Supports(ext) {
+			continue
+		}
+		var edges []Edge
+		var err error
+		if iae, ok := ex.(ImportResolvingExtractor); ok {
+			edges, err = iae.ExtractEdgesWithImportContext(filePath, content, ic)
+		} else {
+			edges, err = ex.ExtractEdges(filePath, content)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("extract edges %s: %w", filePath, err)
+		}
+		for _, e := range edges {
+			key := fmt.Sprintf("%s:%s:%s:%d", e.Kind, e.SourceNode, e.TargetNode, e.Line)
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			all = append(all, e)
+		}
+	}
+	return all, nil
+}
+
 // isMinified reports whether a file looks like minified/generated output that
 // would only add noise to the graph (webpack/nuxt bundles, *.min.js, etc.).
 // Minified files pack everything onto a few extremely long lines, so a very

@@ -98,6 +98,8 @@ func (e *VueSFCExtractor) Supports(ext string) bool {
 	return ext == ".vue"
 }
 
+var _ ImportResolvingExtractor = (*VueSFCExtractor)(nil)
+
 func (e *VueSFCExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
 	result, err := e.ip.Parse(content, "vue")
 	if err != nil {
@@ -126,6 +128,45 @@ func (e *VueSFCExtractor) ExtractEdges(filePath string, content []byte) ([]Edge,
 
 		edges = append(edges, e.extractContains(bt, tree, content, relFile, containsQ)...)
 		edges = append(edges, e.extractImports(bt, tree, content, relFile, lang, importQ)...)
+		edges = append(edges, e.extractCalls(bt, tree, content, relFile, callFuncQ, callExprQ)...)
+
+		bt.Release()
+	}
+
+	return edges, nil
+}
+
+// ExtractEdgesWithImportContext is identical to ExtractEdges except imports
+// edges are resolved via ic (see ImportResolvingExtractor). ExtractEdges
+// itself is untouched so existing callers/tests keep seeing raw specifiers.
+func (e *VueSFCExtractor) ExtractEdgesWithImportContext(filePath string, content []byte, ic ImportContext) ([]Edge, error) {
+	result, err := e.ip.Parse(content, "vue")
+	if err != nil {
+		return nil, fmt.Errorf("parse vue sfc %s: %w", filePath, err)
+	}
+	defer func() {
+		if result != nil {
+			result.Tree.Release()
+		}
+	}()
+
+	relFile := filepath.ToSlash(filePath)
+
+	var edges []Edge
+	for _, inj := range result.Injections {
+		if inj.Tree == nil || inj.Language == "" {
+			continue
+		}
+		lang, importQ, containsQ, callFuncQ, callExprQ := e.resolveLang(inj.Language)
+		if lang == nil {
+			continue
+		}
+
+		bt := gotreesitter.Bind(inj.Tree)
+		tree := inj.Tree
+
+		edges = append(edges, e.extractContains(bt, tree, content, relFile, containsQ)...)
+		edges = append(edges, e.extractImportsResolved(bt, tree, content, relFile, lang, importQ, ic)...)
 		edges = append(edges, e.extractCalls(bt, tree, content, relFile, callFuncQ, callExprQ)...)
 
 		bt.Release()
@@ -255,6 +296,106 @@ func (e *VueSFCExtractor) walkRequire(bt *gotreesitter.BoundTree, node *gotreesi
 	for i := 0; i < int(node.ChildCount()); i++ {
 		e.walkRequire(bt, node.Child(i), content, filePath, lang, seen, edges)
 	}
+}
+
+// extractImportsResolved mirrors extractImports but resolves each raw import
+// specifier via ic (relative/aliased specifiers become workspace-relative
+// paths; bare packages and unresolvable specifiers pass through unchanged).
+// The component-import metadata marker is preserved and merged with the
+// raw_specifier metadata resolveImport may add.
+func (e *VueSFCExtractor) extractImportsResolved(bt *gotreesitter.BoundTree, tree *gotreesitter.Tree, content []byte, filePath string, lang *gotreesitter.Language, q *gotreesitter.Query, ic ImportContext) []Edge {
+	matches := q.Execute(tree)
+	var edges []Edge
+	seen := map[string]bool{}
+
+	for _, match := range matches {
+		for _, cap := range match.Captures {
+			if cap.Name != "path" {
+				continue
+			}
+			raw := bt.NodeText(cap.Node)
+			importPath := strings.Trim(raw, "\"'`")
+			if importPath == "" || seen[importPath] {
+				continue
+			}
+			seen[importPath] = true
+			target, meta := resolveImport(ic, importPath, filePath)
+			edge := Edge{
+				SourceNode: filePath,
+				TargetNode: target,
+				Kind:       EdgeImports,
+				SourceFile: filePath,
+				Line:       lineForByte(content, cap.Node.StartByte()),
+				Language:   "vue",
+				Metadata:   meta,
+			}
+			if strings.HasSuffix(importPath, ".vue") {
+				edge.Metadata = mergeComponentMeta(edge.Metadata)
+			}
+			edges = append(edges, edge)
+		}
+	}
+
+	edges = append(edges, e.extractRequireImportsResolved(bt, tree, content, filePath, lang, seen, ic)...)
+
+	return edges
+}
+
+func (e *VueSFCExtractor) extractRequireImportsResolved(bt *gotreesitter.BoundTree, tree *gotreesitter.Tree, content []byte, filePath string, lang *gotreesitter.Language, seen map[string]bool, ic ImportContext) []Edge {
+	root := tree.RootNode()
+	var edges []Edge
+	e.walkRequireResolved(bt, root, content, filePath, lang, seen, ic, &edges)
+	return edges
+}
+
+func (e *VueSFCExtractor) walkRequireResolved(bt *gotreesitter.BoundTree, node *gotreesitter.Node, content []byte, filePath string, lang *gotreesitter.Language, seen map[string]bool, ic ImportContext, edges *[]Edge) {
+	if node == nil {
+		return
+	}
+	if node.Type(lang) == "call_expression" {
+		fnNode := node.ChildByFieldName("function", lang)
+		if fnNode != nil && fnNode.Type(lang) == "identifier" && bt.NodeText(fnNode) == "require" {
+			argsNode := node.ChildByFieldName("arguments", lang)
+			if argsNode != nil {
+				argNode := firstChildOfType(argsNode, lang, "string")
+				if argNode != nil {
+					raw := bt.NodeText(argNode)
+					importPath := strings.Trim(raw, "\"'`")
+					if importPath != "" && !seen[importPath] {
+						seen[importPath] = true
+						target, meta := resolveImport(ic, importPath, filePath)
+						edge := Edge{
+							SourceNode: filePath,
+							TargetNode: target,
+							Kind:       EdgeImports,
+							SourceFile: filePath,
+							Line:       lineForByte(content, fnNode.StartByte()),
+							Language:   "vue",
+							Metadata:   meta,
+						}
+						if strings.HasSuffix(importPath, ".vue") {
+							edge.Metadata = mergeComponentMeta(edge.Metadata)
+						}
+						*edges = append(*edges, edge)
+					}
+				}
+			}
+		}
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		e.walkRequireResolved(bt, node.Child(i), content, filePath, lang, seen, ic, edges)
+	}
+}
+
+// mergeComponentMeta adds the {"component": true} marker (used by consumers
+// to identify Vue component imports) onto whatever metadata resolveImport
+// already produced, without discarding a raw_specifier entry.
+func mergeComponentMeta(meta map[string]any) map[string]any {
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	meta["component"] = true
+	return meta
 }
 
 func (e *VueSFCExtractor) extractCalls(bt *gotreesitter.BoundTree, tree *gotreesitter.Tree, content []byte, filePath string, funcQ, exprQ *gotreesitter.Query) []Edge {

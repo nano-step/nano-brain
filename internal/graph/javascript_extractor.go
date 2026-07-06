@@ -70,6 +70,8 @@ func (e *JavaScriptGraphExtractor) Supports(ext string) bool {
 	return ext == ".js" || ext == ".jsx"
 }
 
+var _ ImportResolvingExtractor = (*JavaScriptGraphExtractor)(nil)
+
 func (e *JavaScriptGraphExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
 	parser := gotreesitter.NewParser(e.lang)
 	tree, err := parser.Parse(content)
@@ -84,6 +86,27 @@ func (e *JavaScriptGraphExtractor) ExtractEdges(filePath string, content []byte)
 	var edges []Edge
 	edges = append(edges, e.extractContains(bt, tree, content, relFile)...)
 	edges = append(edges, e.extractImports(bt, tree, content, relFile)...)
+	edges = append(edges, e.extractCalls(bt, tree, content, relFile)...)
+	return edges, nil
+}
+
+// ExtractEdgesWithImportContext is identical to ExtractEdges except imports
+// edges are resolved via ic (see ImportResolvingExtractor). ExtractEdges
+// itself is untouched so existing callers/tests keep seeing raw specifiers.
+func (e *JavaScriptGraphExtractor) ExtractEdgesWithImportContext(filePath string, content []byte, ic ImportContext) ([]Edge, error) {
+	parser := gotreesitter.NewParser(e.lang)
+	tree, err := parser.Parse(content)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", filePath, err)
+	}
+	bt := gotreesitter.Bind(tree)
+	defer bt.Release()
+
+	relFile := filepath.ToSlash(filePath)
+
+	var edges []Edge
+	edges = append(edges, e.extractContains(bt, tree, content, relFile)...)
+	edges = append(edges, e.extractImportsResolved(bt, tree, content, relFile, ic)...)
 	edges = append(edges, e.extractCalls(bt, tree, content, relFile)...)
 	return edges, nil
 }
@@ -183,6 +206,79 @@ func (e *JavaScriptGraphExtractor) walkRequireJS(bt *gotreesitter.BoundTree, nod
 	}
 	for i := 0; i < int(node.ChildCount()); i++ {
 		e.walkRequireJS(bt, node.Child(i), content, filePath, seen, edges)
+	}
+}
+
+// extractImportsResolved mirrors extractImports but resolves each raw import
+// specifier via ic (relative/aliased specifiers become workspace-relative
+// paths; bare packages and unresolvable specifiers pass through unchanged).
+func (e *JavaScriptGraphExtractor) extractImportsResolved(bt *gotreesitter.BoundTree, tree *gotreesitter.Tree, content []byte, filePath string, ic ImportContext) []Edge {
+	matches := e.importQuery.Execute(tree)
+	var edges []Edge
+	seen := map[string]bool{}
+
+	for _, match := range matches {
+		for _, cap := range match.Captures {
+			if cap.Name != "path" {
+				continue
+			}
+			raw := bt.NodeText(cap.Node)
+			importPath := strings.Trim(raw, "\"'`")
+			if importPath == "" || seen[importPath] {
+				continue
+			}
+			seen[importPath] = true
+			target, meta := resolveImport(ic, importPath, filePath)
+			edges = append(edges, Edge{
+				SourceNode: filePath,
+				TargetNode: target,
+				Kind:       EdgeImports,
+				SourceFile: filePath,
+				Line:       lineForByte(content, cap.Node.StartByte()),
+				Language:   "javascript",
+				Metadata:   meta,
+			})
+		}
+	}
+
+	root := tree.RootNode()
+	e.walkRequireJSResolved(bt, root, content, filePath, seen, ic, &edges)
+
+	return edges
+}
+
+func (e *JavaScriptGraphExtractor) walkRequireJSResolved(bt *gotreesitter.BoundTree, node *gotreesitter.Node, content []byte, filePath string, seen map[string]bool, ic ImportContext, edges *[]Edge) {
+	if node == nil {
+		return
+	}
+	if node.Type(e.lang) == "call_expression" {
+		fnNode := node.ChildByFieldName("function", e.lang)
+		if fnNode != nil && fnNode.Type(e.lang) == "identifier" && bt.NodeText(fnNode) == "require" {
+			argsNode := node.ChildByFieldName("arguments", e.lang)
+			if argsNode != nil {
+				argNode := firstChildOfType(argsNode, e.lang, "string")
+				if argNode != nil {
+					raw := bt.NodeText(argNode)
+					importPath := strings.Trim(raw, "\"'`")
+					if importPath != "" && !seen[importPath] {
+						seen[importPath] = true
+						target, meta := resolveImport(ic, importPath, filePath)
+						*edges = append(*edges, Edge{
+							SourceNode: filePath,
+							TargetNode: target,
+							Kind:       EdgeImports,
+							SourceFile: filePath,
+							Line:       lineForByte(content, fnNode.StartByte()),
+							Language:   "javascript",
+							Metadata:   meta,
+						})
+					}
+				}
+			}
+		}
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		e.walkRequireJSResolved(bt, node.Child(i), content, filePath, seen, ic, edges)
 	}
 }
 

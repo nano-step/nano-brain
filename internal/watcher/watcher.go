@@ -92,6 +92,15 @@ type Watcher struct {
 	embedQueue        *embed.Queue
 	dispatcher        *chunker.Dispatcher
 
+	// aliasIndexes caches one *graph.AliasIndex per collection root
+	// (keyed by watchedCollection.dirPath), built lazily on first import
+	// extraction for that collection. A single Watcher processes many
+	// collections/workspaces against a shared graphRegistry, so the alias
+	// map cannot live on the extractor instances (see G3 in
+	// .planning/phases/02-import-edge-fix/design.md) — it is looked up
+	// per file from this cache instead and passed in as an ImportContext.
+	aliasIndexes sync.Map
+
 	fsw         *fsnotify.Watcher
 	mu          sync.Mutex
 	collections map[string]watchedCollection
@@ -998,6 +1007,23 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 	return len(syms)
 }
 
+// aliasIndexFor returns the cached *graph.AliasIndex for a collection root,
+// building it (once) on first use via graph.BuildAliasIndex. Building walks
+// dirPath for tsconfig.json/jsconfig.json — cheap relative to the file watch
+// itself, but still only paid once per collection rather than per file.
+func (w *Watcher) aliasIndexFor(dirPath string) *graph.AliasIndex {
+	if cached, ok := w.aliasIndexes.Load(dirPath); ok {
+		return cached.(*graph.AliasIndex)
+	}
+	idx, err := graph.BuildAliasIndex(dirPath)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("dir", dirPath).Msg("alias index build failed, imports will not be resolved via aliases")
+		idx = &graph.AliasIndex{}
+	}
+	actual, _ := w.aliasIndexes.LoadOrStore(dirPath, idx)
+	return actual.(*graph.AliasIndex)
+}
+
 // buildEdgeMetadata merges e.Metadata (if non-nil) with {"line", "language"},
 // giving the caller-supplied fields priority but always including line+language.
 func buildEdgeMetadata(e graph.Edge) ([]byte, error) {
@@ -1017,7 +1043,11 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 	}
 	relFile := filepath.ToSlash(relPath)
 
-	edges, err := w.graphRegistry.ExtractEdgesForFrameworks(relFile, content, col.detectedFrameworks)
+	ic := graph.ImportContext{
+		AliasMap: w.aliasIndexFor(col.dirPath).AliasMapFor(relFile),
+		Exists:   graph.DiskExistsChecker(col.dirPath),
+	}
+	edges, err := w.graphRegistry.ExtractEdgesForFrameworksWithImports(relFile, content, col.detectedFrameworks, ic)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("graph edge extraction failed")
 		return

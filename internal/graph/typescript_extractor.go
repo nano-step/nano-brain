@@ -101,6 +101,8 @@ func (e *TypeScriptGraphExtractor) Supports(ext string) bool {
 	return ext == ".ts" || ext == ".tsx"
 }
 
+var _ ImportResolvingExtractor = (*TypeScriptGraphExtractor)(nil)
+
 func (e *TypeScriptGraphExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
 	lang, importQ, containsQ, callFuncQ, callExprQ := e.lang, e.importQuery, e.containsQuery, e.callFuncQuery, e.callExprQuery
 	if filepath.Ext(filePath) == ".tsx" {
@@ -120,6 +122,32 @@ func (e *TypeScriptGraphExtractor) ExtractEdges(filePath string, content []byte)
 	var edges []Edge
 	edges = append(edges, e.extractContains(bt, tree, content, relFile, containsQ)...)
 	edges = append(edges, e.extractImports(bt, tree, content, relFile, lang, importQ)...)
+	edges = append(edges, e.extractCalls(bt, tree, content, relFile, callFuncQ, callExprQ)...)
+	return edges, nil
+}
+
+// ExtractEdgesWithImportContext is identical to ExtractEdges except imports
+// edges are resolved via ic (see ImportResolvingExtractor). ExtractEdges
+// itself is untouched so existing callers/tests keep seeing raw specifiers.
+func (e *TypeScriptGraphExtractor) ExtractEdgesWithImportContext(filePath string, content []byte, ic ImportContext) ([]Edge, error) {
+	lang, importQ, containsQ, callFuncQ, callExprQ := e.lang, e.importQuery, e.containsQuery, e.callFuncQuery, e.callExprQuery
+	if filepath.Ext(filePath) == ".tsx" {
+		lang, importQ, containsQ, callFuncQ, callExprQ = e.tsxLang, e.tsxImportQ, e.tsxContainsQ, e.tsxCallFuncQ, e.tsxCallExprQ
+	}
+
+	parser := gotreesitter.NewParser(lang)
+	tree, err := parser.Parse(content)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", filePath, err)
+	}
+	bt := gotreesitter.Bind(tree)
+	defer bt.Release()
+
+	relFile := filepath.ToSlash(filePath)
+
+	var edges []Edge
+	edges = append(edges, e.extractContains(bt, tree, content, relFile, containsQ)...)
+	edges = append(edges, e.extractImportsResolved(bt, tree, content, relFile, lang, importQ, ic)...)
 	edges = append(edges, e.extractCalls(bt, tree, content, relFile, callFuncQ, callExprQ)...)
 	return edges, nil
 }
@@ -225,6 +253,85 @@ func (e *TypeScriptGraphExtractor) walkRequire(bt *gotreesitter.BoundTree, node 
 	}
 	for i := 0; i < int(node.ChildCount()); i++ {
 		e.walkRequire(bt, node.Child(i), content, filePath, lang, seen, edges)
+	}
+}
+
+// extractImportsResolved mirrors extractImports but resolves each raw import
+// specifier via ic (relative/aliased specifiers become workspace-relative
+// paths; bare packages and unresolvable specifiers pass through unchanged).
+func (e *TypeScriptGraphExtractor) extractImportsResolved(bt *gotreesitter.BoundTree, tree *gotreesitter.Tree, content []byte, filePath string, lang *gotreesitter.Language, q *gotreesitter.Query, ic ImportContext) []Edge {
+	matches := q.Execute(tree)
+	var edges []Edge
+	seen := map[string]bool{}
+
+	for _, match := range matches {
+		for _, cap := range match.Captures {
+			if cap.Name != "path" {
+				continue
+			}
+			raw := bt.NodeText(cap.Node)
+			importPath := strings.Trim(raw, "\"'`")
+			if importPath == "" || seen[importPath] {
+				continue
+			}
+			seen[importPath] = true
+			target, meta := resolveImport(ic, importPath, filePath)
+			edges = append(edges, Edge{
+				SourceNode: filePath,
+				TargetNode: target,
+				Kind:       EdgeImports,
+				SourceFile: filePath,
+				Line:       lineForByte(content, cap.Node.StartByte()),
+				Language:   "typescript",
+				Metadata:   meta,
+			})
+		}
+	}
+
+	edges = append(edges, e.extractRequireImportsResolved(bt, tree, content, filePath, lang, seen, ic)...)
+
+	return edges
+}
+
+func (e *TypeScriptGraphExtractor) extractRequireImportsResolved(bt *gotreesitter.BoundTree, tree *gotreesitter.Tree, content []byte, filePath string, lang *gotreesitter.Language, seen map[string]bool, ic ImportContext) []Edge {
+	root := tree.RootNode()
+	var edges []Edge
+	e.walkRequireResolved(bt, root, content, filePath, lang, seen, ic, &edges)
+	return edges
+}
+
+func (e *TypeScriptGraphExtractor) walkRequireResolved(bt *gotreesitter.BoundTree, node *gotreesitter.Node, content []byte, filePath string, lang *gotreesitter.Language, seen map[string]bool, ic ImportContext, edges *[]Edge) {
+	if node == nil {
+		return
+	}
+	if node.Type(lang) == "call_expression" {
+		fnNode := node.ChildByFieldName("function", lang)
+		if fnNode != nil && fnNode.Type(lang) == "identifier" && bt.NodeText(fnNode) == "require" {
+			argsNode := node.ChildByFieldName("arguments", lang)
+			if argsNode != nil {
+				argNode := firstChildOfType(argsNode, lang, "string")
+				if argNode != nil {
+					raw := bt.NodeText(argNode)
+					importPath := strings.Trim(raw, "\"'`")
+					if importPath != "" && !seen[importPath] {
+						seen[importPath] = true
+						target, meta := resolveImport(ic, importPath, filePath)
+						*edges = append(*edges, Edge{
+							SourceNode: filePath,
+							TargetNode: target,
+							Kind:       EdgeImports,
+							SourceFile: filePath,
+							Line:       lineForByte(content, fnNode.StartByte()),
+							Language:   "typescript",
+							Metadata:   meta,
+						})
+					}
+				}
+			}
+		}
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		e.walkRequireResolved(bt, node.Child(i), content, filePath, lang, seen, ic, edges)
 	}
 }
 
