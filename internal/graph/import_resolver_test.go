@@ -58,6 +58,35 @@ func TestResolveImportTarget_LongestAliasPrefixWins(t *testing.T) {
 	}
 }
 
+func TestResolveImportTarget_ExactVsWildcardAliasMatch(t *testing.T) {
+	// "@utils" (no trailing slash) came from a non-wildcard tsconfig mapping
+	// ("@utils": ["./src/utils"]) and must match the specifier EXACTLY.
+	// "@utils/*" (stored with a trailing slash, see parseTSConfigPaths) is a
+	// wildcard mapping and may prefix-match.
+	aliasMap := map[string]string{
+		"@utils":  "src/exact-utils",
+		"@utils/": "src/wild-utils",
+	}
+
+	got := graph.ResolveImportTarget("@utils", "consumer.ts", aliasMap, nil)
+	if want := "src/exact-utils"; got != want {
+		t.Errorf("exact alias %q resolved to %q, want %q", "@utils", got, want)
+	}
+
+	got = graph.ResolveImportTarget("@utils/foo", "consumer.ts", aliasMap, nil)
+	if want := "src/wild-utils/foo"; got != want {
+		t.Errorf("wildcard alias %q resolved to %q, want %q", "@utils/foo", got, want)
+	}
+
+	// "@utils-sibling" must NOT match the exact "@utils" alias (it is neither
+	// an exact match nor prefixed by the wildcard "@utils/" key).
+	raw := "@utils-sibling"
+	got = graph.ResolveImportTarget(raw, "consumer.ts", aliasMap, nil)
+	if got != raw {
+		t.Errorf("non-alias specifier %q resolved to %q, want unchanged (raw fallback)", raw, got)
+	}
+}
+
 func TestResolveImportTarget_BarePackagePassthrough(t *testing.T) {
 	aliasMap := map[string]string{"~/": "repo-a"}
 	for _, raw := range []string{"vue", "ramda", "@scope/pkg", "lodash/debounce"} {
@@ -189,6 +218,33 @@ func TestBuildAliasIndex_TolerantJSONC(t *testing.T) {
 	m := idx.AliasMapFor("consumer.ts")
 	if m["~/"] != "" {
 		t.Errorf("JSONC-tolerant alias map[\"~/\"] = %q, want %q", m["~/"], "")
+	}
+}
+
+func TestBuildAliasIndex_TolerantJSONCPreservesCommaInsideString(t *testing.T) {
+	root := t.TempDir()
+	// The trailing comma after the "paths" object forces the tolerant JSONC
+	// path (strict json.Unmarshal fails). The alias target string itself
+	// contains a literal ",}" — a naive trailing-comma stripper that doesn't
+	// track string-literal state would mistake that for a real trailing
+	// comma before a closing brace and corrupt the string value.
+	mustWriteFile(t, filepath.Join(root, "tsconfig.json"), `{
+		"compilerOptions": {
+			"baseUrl": ".",
+			"paths": {
+				"@weird/*": ["./glob,}pattern/*"],
+			}
+		},
+	}`)
+
+	idx, err := graph.BuildAliasIndex(root)
+	if err != nil {
+		t.Fatalf("BuildAliasIndex: %v", err)
+	}
+	m := idx.AliasMapFor("consumer.ts")
+	want := "glob,}pattern"
+	if m["@weird/"] != want {
+		t.Errorf("alias target with embedded \",}\" in a string literal = %q, want %q (string content must survive intact)", m["@weird/"], want)
 	}
 }
 

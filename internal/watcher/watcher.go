@@ -92,8 +92,9 @@ type Watcher struct {
 	embedQueue        *embed.Queue
 	dispatcher        *chunker.Dispatcher
 
-	// aliasIndexes caches one *graph.AliasIndex per collection root
-	// (keyed by watchedCollection.dirPath), built lazily on first import
+	// aliasIndexes caches one *aliasIndexEntry (guarding a *graph.AliasIndex
+	// build with a sync.Once) per collection root, keyed by
+	// watchedCollection.dirPath, built lazily on first import
 	// extraction for that collection. A single Watcher processes many
 	// collections/workspaces against a shared graphRegistry, so the alias
 	// map cannot live on the extractor instances (see G3 in
@@ -1007,21 +1008,31 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 	return len(syms)
 }
 
+// aliasIndexEntry guards a single collection root's *graph.AliasIndex build
+// with a sync.Once, so concurrent cold-cache callers for the same dirPath
+// block on one BuildAliasIndex walk instead of each running (and discarding)
+// their own redundant disk walk.
+type aliasIndexEntry struct {
+	once sync.Once
+	idx  *graph.AliasIndex
+}
+
 // aliasIndexFor returns the cached *graph.AliasIndex for a collection root,
 // building it (once) on first use via graph.BuildAliasIndex. Building walks
 // dirPath for tsconfig.json/jsconfig.json — cheap relative to the file watch
 // itself, but still only paid once per collection rather than per file.
 func (w *Watcher) aliasIndexFor(dirPath string) *graph.AliasIndex {
-	if cached, ok := w.aliasIndexes.Load(dirPath); ok {
-		return cached.(*graph.AliasIndex)
-	}
-	idx, err := graph.BuildAliasIndex(dirPath)
-	if err != nil {
-		w.logger.Warn().Err(err).Str("dir", dirPath).Msg("alias index build failed, imports will not be resolved via aliases")
-		idx = &graph.AliasIndex{}
-	}
-	actual, _ := w.aliasIndexes.LoadOrStore(dirPath, idx)
-	return actual.(*graph.AliasIndex)
+	val, _ := w.aliasIndexes.LoadOrStore(dirPath, &aliasIndexEntry{})
+	entry := val.(*aliasIndexEntry)
+	entry.once.Do(func() {
+		idx, err := graph.BuildAliasIndex(dirPath)
+		if err != nil {
+			w.logger.Warn().Err(err).Str("dir", dirPath).Msg("alias index build failed, imports will not be resolved via aliases")
+			idx = &graph.AliasIndex{}
+		}
+		entry.idx = idx
+	})
+	return entry.idx
 }
 
 // buildEdgeMetadata merges e.Metadata (if non-nil) with {"line", "language"},

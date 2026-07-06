@@ -112,10 +112,23 @@ func escapesRoot(p string) bool {
 	return clean == ".." || strings.HasPrefix(clean, "../")
 }
 
+// longestAliasMatch finds the best-matching alias key for specifier. Keys
+// derived from a wildcard tsconfig pattern (e.g. "@utils/*") are stored with
+// a trailing "/" (see parseTSConfigPaths/conventionAliases) and may
+// prefix-match. A key with no trailing slash came from a non-wildcard
+// mapping (e.g. "@utils") and, per tsconfig "paths" semantics, must match the
+// specifier exactly — otherwise "@utils-sibling" or "@utils/foo" would
+// wrongly match the "@utils" alias.
 func longestAliasMatch(specifier string, aliasMap map[string]string) (prefix, targetRoot string, ok bool) {
 	bestLen := -1
 	for p, root := range aliasMap {
-		if strings.HasPrefix(specifier, p) && len(p) > bestLen {
+		var match bool
+		if strings.HasSuffix(p, "/") {
+			match = strings.HasPrefix(specifier, p)
+		} else {
+			match = specifier == p
+		}
+		if match && len(p) > bestLen {
 			bestLen = len(p)
 			prefix, targetRoot, ok = p, root, true
 		}
@@ -251,7 +264,7 @@ func BuildAliasIndex(workspaceRootAbs string) (*AliasIndex, error) {
 // (workspace-relative path, forward-slash). Returns nil if the index has no
 // entries at all.
 func (idx *AliasIndex) AliasMapFor(sourceRelPath string) map[string]string {
-	if idx == nil {
+	if idx == nil || idx.aliasMaps == nil {
 		return nil
 	}
 	sourceDir := toWorkspaceRel(path.Dir(filepath.ToSlash(sourceRelPath)))
@@ -307,8 +320,12 @@ func parseTSConfigPaths(raw []byte, configDirRelSlash string) map[string]string 
 			continue
 		}
 		prefix := strings.TrimSuffix(key, "*")
-		target := strings.TrimSuffix(targetStr, "*")
-		joined := path.Join(configDirRelSlash, baseURL, target)
+		// Normalize backslashes: a tsconfig.json authored on Windows may use
+		// "./src\\utils" or a baseUrl with backslashes; path.Join only
+		// understands "/", so on a Linux/macOS indexing host those would
+		// otherwise survive verbatim in the resolved alias target.
+		target := strings.ReplaceAll(strings.TrimSuffix(targetStr, "*"), "\\", "/")
+		joined := path.Join(configDirRelSlash, strings.ReplaceAll(baseURL, "\\", "/"), target)
 		result[prefix] = toWorkspaceRel(joined)
 	}
 	return result
@@ -376,10 +393,31 @@ func stripJSONCComments(raw []byte) []byte {
 	return stripTrailingCommas(out)
 }
 
+// stripTrailingCommas strips a comma immediately followed (across
+// whitespace) by a closing "}"/"]", while tracking string-literal state
+// (with escape handling) so commas inside string values — e.g. a "," in a
+// glob pattern or regex stored as a JSON string — are never touched.
 func stripTrailingCommas(raw []byte) []byte {
 	var out []byte
+	inString, escaped := false, false
 	for i := 0; i < len(raw); i++ {
 		c := raw[i]
+		if inString {
+			if escaped {
+				escaped = false
+			} else if c == '\\' {
+				escaped = true
+			} else if c == '"' {
+				inString = false
+			}
+			out = append(out, c)
+			continue
+		}
+		if c == '"' {
+			inString = true
+			out = append(out, c)
+			continue
+		}
 		if c == ',' {
 			j := i + 1
 			for j < len(raw) && (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n' || raw[j] == '\r') {

@@ -46,9 +46,13 @@
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR (one row per inline
-comment; verdict vocabulary per HARNESS.md § PR + Bot Review Loop)._
+PR #555. Gemini review COMMENTED (non-blocking state); 5 inline comments, all
+legitimate — all fixed in commit f16ef75.
 
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| PR#555 `import_resolver.go:124` | VALID:high | Real tsconfig semantics: non-wildcard `paths` keys must match the specifier EXACTLY, only wildcard-derived keys prefix-match. `longestAliasMatch` used `HasPrefix` for all → wrong for exact mappings (fixture only had wildcards so tests missed it). | fixed in commit f16ef75 (+ `TestResolveImportTarget_ExactVsWildcardAliasMatch`) |
+| PR#555 `import_resolver.go:395` | VALID:high | `stripTrailingCommas` didn't track string literals → could corrupt a tsconfig string value containing `,}`/`,]`. Low real-world trigger but a genuine JSONC-parser flaw; fix is cheap+correct. | fixed in commit f16ef75 (+ `TestBuildAliasIndex_TolerantJSONCPreservesCommaInsideString`) |
+| PR#555 `watcher.go:1025` | VALID:medium | Cold-cache stampede: concurrent callers all run heavy `BuildAliasIndex` before `LoadOrStore`. Switched to `sync.Once`-per-entry so it builds exactly once per dir. | fixed in commit f16ef75 |
+| PR#555 `import_resolver.go:312` | VALID:medium | `parseTSConfigPaths` target join didn't normalize backslashes (Windows-authored tsconfig) before `path.Join`. | fixed in commit f16ef75 |
+| PR#555 `import_resolver.go:256` | VALID:low | Reading a nil map doesn't panic in Go (Gemini agrees), so defensive-only; but the `idx.aliasMaps == nil` early return is 2 lines and closes the comment cleanly. | fixed in commit f16ef75 |
