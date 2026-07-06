@@ -23,6 +23,7 @@ Strengthen nano-brain's code intelligence and search across v1: add Vue SFC supp
 - [x] **Phase 13: Interactive Init Wizard** - One-command `nano-brain init`: detect/provision PostgreSQL via Docker or remote URL, optional embeddings with BM25 degrade, serve + register + MCP client picker, docs rewrite (completed 2026-07-02)
 - [x] **Phase 14: curl|bash install script** - One-line installer downloads the platform binary from GitHub Releases, verifies SHA256SUMS, installs into PATH; npm kept as alternative; docs lead with curl|bash (completed 2026-07-03)
 - [x] **Phase 15: Minimal zero-config init** - Collapse the wizard to 0-3 probes (Postgres/Ollama/harvester auto-detected), env-var secrets, full self-documenting config (all sections at defaults + comments, advanced disabled), context_hints not prompted, `--yes` non-interactive path (completed 2026-07-03)
+- [ ] **Phase 16: Unify graph-build file admission (issue #535)** - The re-extract path (`ReextractEdges/SymbolsForWorkspace`, reached via `memory_update`) bypasses the nested `.gitignore` stack + `max_file_size` guard that `scanCollection` applies, re-polluting the graph with orphan edges from gitignored/oversized generated files. Fix: single shared admission gate for both walks; cleanup functions delete graph rows (no FK to documents); orphan sweep on re-extract. Deferred: path-format canonicalization (#4, ties into #501) and first-class prune MCP/CLI tool (#5).
 
 ## Phase Details
 

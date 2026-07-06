@@ -526,3 +526,66 @@ func TestGitignoreStack_NestedGitignoreExclusion(t *testing.T) {
 		}
 	}
 }
+
+// TestWalkAdmitter_NestedGitignore is the regression guard for issue #535: the
+// shared admission gate must honor a nested repo's own .gitignore during a walk,
+// exactly as scanCollection does. Before the fix, the Reextract* walks only
+// consulted the workspace-root filter and walked straight into nested-gitignored
+// build output.
+func TestWalkAdmitter_NestedGitignore(t *testing.T) {
+	root := t.TempDir()
+	// Workspace-root source file — always admitted.
+	mustWrite(t, filepath.Join(root, "a.ts"), "export const a = 1")
+	// A nested git repo with its own .gitignore excluding generated/.
+	sub := filepath.Join(root, "sub")
+	mustWrite(t, filepath.Join(sub, ".gitignore"), "generated/\n")
+	mustWrite(t, filepath.Join(sub, "keep.ts"), "export const k = 2")
+	mustWrite(t, filepath.Join(sub, "generated", "big.ts"), "export const g = 3")
+
+	filter, err := NewFileFilter(root, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewFileFilter: %v", err)
+	}
+
+	admitted := map[string]bool{}
+	adm := newWalkAdmitter(filter)
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if adm.ignore(path, d.IsDir()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.IsDir() {
+			rel, _ := filepath.Rel(root, path)
+			admitted[filepath.ToSlash(rel)] = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+
+	want := []string{"a.ts", "sub/keep.ts", "sub/.gitignore"}
+	for _, f := range want {
+		if !admitted[f] {
+			t.Errorf("expected %q to be admitted, but it was skipped", f)
+		}
+	}
+	if admitted["sub/generated/big.ts"] {
+		t.Errorf("sub/generated/big.ts should be excluded by nested .gitignore, but it was admitted")
+	}
+}
+
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
