@@ -308,7 +308,9 @@ phase_pre_work() {
                 overlap=""
                 for prn in $open_pr_numbers; do
                     pr_files=$(gh pr view "$prn" --json files --jq '.files[].path' 2>/dev/null || echo "")
-                    common=$(comm -12 <(echo "$branch_files" | sort -u) <(echo "$pr_files" | sort -u) | head -5)
+                    # || true: head closing the pipe early SIGPIPEs comm (exit
+                    # 141) under pipefail when the overlap set is large.
+                    common=$(comm -12 <(echo "$branch_files" | sort -u) <(echo "$pr_files" | sort -u) | head -5 || true)
                     if [[ -n "$common" ]]; then
                         overlap="PR #$prn: $(echo "$common" | tr '\n' ' ')"
                         break
@@ -524,7 +526,17 @@ phase_pre_merge() {
     # package per line, each tracked by an issue). Only NEW failing packages
     # fail the gate — "this PR must not make master worse", not "this PR must
     # pay off all prior debt". This was the #1 override source (11/40).
-    if [[ -n "${HARNESS_FAST:-}" ]]; then
+    # Shrink-only enforcement (R91): the baseline may never GROW in a PR —
+    # adding a package would sneak a NEW failure past the gate. Cheap git
+    # check, so it runs even under HARNESS_FAST (the hook enforces it too).
+    baseline_added=""
+    if git cat-file -e origin/master:docs/harness-baseline.txt 2>/dev/null; then
+        baseline_added=$(git diff origin/master...HEAD -- docs/harness-baseline.txt 2>/dev/null \
+            | grep -E '^\+[^+#]' || true)
+    fi  # file absent on master = initial seeding, allowed
+    if [[ -n "$baseline_added" ]]; then
+        add_check "FAIL" "3.3 docs/harness-baseline.txt GREW in this PR (R91: shrink-only; requires [HARNESS-OVERRIDE]): $(echo "$baseline_added" | head -3 | tr '\n' ' ')" "R91"
+    elif [[ -n "${HARNESS_FAST:-}" ]]; then
         add_check "SKIP" "3.3 integration tests (HARNESS_FAST)"
     elif cmd_exists go; then
         test_out=$(go test -race -tags=integration -count=1 -timeout=180s ./... 2>&1 || true)
@@ -538,7 +550,21 @@ phase_pre_merge() {
                 cnt=$(echo "$failing_pkgs" | wc -l | tr -d ' ')
                 add_check "PASS" "3.3 Integration tests: $cnt baseline failure(s) only, no NEW failures (R91)"
             else
-                add_check "FAIL" "3.3 NEW integration failures (not in baseline): $(echo "$new_failures" | tr '\n' ' ')" "R91"
+                # Flaky guard: full-suite runs can fail on resource contention
+                # (observed: internal/server/handlers fails in-suite, passes
+                # alone). Re-run each suspect in isolation before declaring it
+                # a NEW failure.
+                confirmed=""
+                for pkg in $new_failures; do
+                    if ! go test -race -tags=integration -count=1 -timeout=120s "$pkg" >/dev/null 2>&1; then
+                        confirmed="$confirmed $pkg"
+                    fi
+                done
+                if [[ -z "$confirmed" ]]; then
+                    add_check "PASS" "3.3 Integration tests: full-suite failures passed in isolation (flaky guard) — no NEW failures (R91)"
+                else
+                    add_check "FAIL" "3.3 NEW integration failures (not in baseline):$confirmed" "R91"
+                fi
             fi
         fi
     else
@@ -588,7 +614,11 @@ phase_pre_merge() {
         if grep -qE '^Review Verdict: FAIL' "$story_review"; then
             add_check "FAIL" "3.5 Review Verdict: FAIL in $story_review — fix before merge" "R27"
         elif ! grep -qE '^Review Verdict: PASS' "$story_review"; then
-            add_check "FAIL" "3.5 $story_review missing 'Review Verdict: PASS|FAIL' line" "R27"
+            if [[ -n "${HARNESS_FAST:-}" ]]; then
+                add_check "SKIP" "3.5 Review not finalized (HARNESS_FAST: PR-first flow — review completes after PR creation)"
+            else
+                add_check "FAIL" "3.5 $story_review missing 'Review Verdict: PASS|FAIL' line" "R27"
+            fi
         else
             reviewer=$(grep -iE '^Reviewer:' "$story_review" | head -1 | sed 's/^[Rr]eviewer:[[:space:]]*//')
             if [[ -z "$reviewer" ]]; then
@@ -599,6 +629,11 @@ phase_pre_merge() {
                 add_check "PASS" "3.5 Review Verdict: PASS by independent reviewer '$reviewer' (R27, R88)"
             fi
         fi
+    elif [[ -n "${HARNESS_FAST:-}" ]]; then
+        # PR-first flow (HARNESS.md § Review process): the PR is created FIRST,
+        # then independent review runs. At pre-create time a missing review
+        # file is expected — only an explicit 'Review Verdict: FAIL' blocks.
+        add_check "SKIP" "3.5 Review pending (HARNESS_FAST: PR-first flow — R88 review required before merge)"
     elif find docs/evidence -name "review-*.md" -type f 2>/dev/null | grep -q .; then
         add_check "FAIL" "3.5 No review-${rg_sid}*.md for this story (R88: independent review required)" "R88"
     else
@@ -707,9 +742,14 @@ phase_pre_merge() {
     ct_files=$(git diff --name-only origin/master...HEAD 2>/dev/null || echo "")
     change_type="code"
     if [[ -n "$ct_files" ]]; then
-        if ! echo "$ct_files" | grep -qvE '\.(md|txt)$|^docs/|^\.claude/|^\.planning/'; then
+        # Classify by EXTENSION only, never by directory: a directory match
+        # (^docs/ etc.) would classify docs/foo.go as docs-only and let code
+        # skip the code gates — a gate-evasion vector. Fails safe: anything
+        # not provably docs/test is "code". testdata/ is safe to include —
+        # go ignores testdata dirs at build time (fixtures, not runtime).
+        if ! echo "$ct_files" | grep -qvE '\.(md|txt)$'; then
             change_type="docs"
-        elif ! echo "$ct_files" | grep -qvE '_test\.go$|(^|/)testdata/|\.(md|txt)$|^docs/'; then
+        elif ! echo "$ct_files" | grep -qvE '_test\.go$|(^|/)testdata/|\.(md|txt)$'; then
             change_type="test-only"
         fi
     fi

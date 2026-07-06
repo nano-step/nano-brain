@@ -311,12 +311,16 @@ Derived from auditing 40 gate overrides across 23 evidence files — see
   documented zero file overlap.
 - **R91 — differential quality gates (gates 3.3, 3.4).** A PR must not make
   master worse; it is not required to pay off pre-existing debt. Gate 3.3
-  compares failing packages against `docs/harness-baseline.txt` (shrink-only;
-  growing it requires R7 override). Gate 3.4 uses
-  `golangci-lint run --new-from-rev=<merge-base>`. Rationale: 21/40 overrides
-  were pre-existing master failures.
+  compares failing packages against `docs/harness-baseline.txt`; suspects are
+  re-run in isolation before counting as NEW (flaky guard). The baseline is
+  **shrink-only, enforced**: gate 3.3 FAILs if the PR's diff adds non-comment
+  lines to the baseline (initial seeding exempt); growing it requires an R7
+  override. Gate 3.4 uses `golangci-lint run --new-from-rev=<merge-base>`.
+  Rationale: 21/40 overrides were pre-existing master failures.
 - **R92 — change-type–aware gates (gates 3.10, 3.12).** Change type is
-  detected measurably from `git diff --name-only origin/master...HEAD`:
-  all files docs/planning → `docs`; all files `_test.go`/testdata/docs →
-  `test-only`. Docs-only skips 3.10 + 3.12; test-only skips 3.12. This makes
-  the checker honor the HARNESS.md change-type table it previously ignored.
+  detected measurably from `git diff --name-only origin/master...HEAD`, by
+  **extension only** (never by directory — `docs/foo.go` must not classify as
+  docs): all files `.md`/`.txt` → `docs`; all files `_test.go`/`testdata/`/
+  `.md`/`.txt` → `test-only`. Docs-only skips 3.10 + 3.12; test-only skips
+  3.12. This makes the checker honor the HARNESS.md change-type table it
+  previously ignored.

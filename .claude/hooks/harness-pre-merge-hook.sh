@@ -15,9 +15,10 @@ case "$command_text" in
   *) exit 0 ;;
 esac
 
-# R7 escape hatch: explicit override in the PR body being created.
-if [[ "$command_text" == *"[HARNESS-OVERRIDE]"* ]]; then
-  echo "harness: [HARNESS-OVERRIDE] present — pre-merge hook bypassed (R7). Document the override in docs/evidence/." >&2
+# R7 escape hatch: explicit override WITH a reason (>= 20 chars, same bar as
+# gate 3.6) — a bare "[HARNESS-OVERRIDE]" substring does not bypass.
+if echo "$command_text" | grep -qE '\[HARNESS-OVERRIDE\]: .{20,}'; then
+  echo "harness: [HARNESS-OVERRIDE] with reason present — pre-merge hook bypassed (R7). Document the override in docs/evidence/." >&2
   exit 0
 fi
 
