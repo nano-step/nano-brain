@@ -33,7 +33,7 @@ out=$(cd "$repo_root" && HARNESS_FAST=1 "$checker" pre-merge --no-color 2>&1)
 if echo "$out" | grep -q '^\[FAIL\]'; then
   {
     echo "harness: pre-merge gate FAILED — fix before creating the PR (or use [HARNESS-OVERRIDE]: <reason> per R7 with evidence)."
-    echo "$out" | grep -E '^\[(FAIL|PASS|SKIP)\]' | head -20
+    echo "$out" | grep -E '^\[(FAIL|PASS|SKIP)\]' | head -20 || true
   } >&2
   exit 2
 fi

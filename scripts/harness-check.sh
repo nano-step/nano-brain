@@ -310,7 +310,9 @@ phase_pre_work() {
                     pr_files=$(gh pr view "$prn" --json files --jq '.files[].path' 2>/dev/null || echo "")
                     # || true: head closing the pipe early SIGPIPEs comm (exit
                     # 141) under pipefail when the overlap set is large.
-                    common=$(comm -12 <(echo "$branch_files" | sort -u) <(echo "$pr_files" | sort -u) | head -5 || true)
+                    # printf (not echo): a filename starting with '-' must not
+                    # be parsed as an echo option.
+                    common=$(comm -12 <(printf '%s\n' "$branch_files" | sort -u) <(printf '%s\n' "$pr_files" | sort -u) | head -5 || true)
                     if [[ -n "$common" ]]; then
                         overlap="PR #$prn: $(echo "$common" | tr '\n' ' ')"
                         break
@@ -535,7 +537,7 @@ phase_pre_merge() {
             | grep -E '^\+[^+#]' || true)
     fi  # file absent on master = initial seeding, allowed
     if [[ -n "$baseline_added" ]]; then
-        add_check "FAIL" "3.3 docs/harness-baseline.txt GREW in this PR (R91: shrink-only; requires [HARNESS-OVERRIDE]): $(echo "$baseline_added" | head -3 | tr '\n' ' ')" "R91"
+        add_check "FAIL" "3.3 docs/harness-baseline.txt GREW in this PR (R91: shrink-only; requires [HARNESS-OVERRIDE]): $(printf '%s\n' "$baseline_added" | head -3 | tr '\n' ' ' || true)" "R91"
     elif [[ -n "${HARNESS_FAST:-}" ]]; then
         add_check "SKIP" "3.3 integration tests (HARNESS_FAST)"
     elif cmd_exists go; then
@@ -545,7 +547,9 @@ phase_pre_merge() {
             add_check "PASS" "3.3 go test -race -tags=integration ./..."
         else
             baseline_file="docs/harness-baseline.txt"
-            new_failures=$(comm -23 <(echo "$failing_pkgs") <(grep -v '^#' "$baseline_file" 2>/dev/null | sort -u))
+            # tr -d '\r': a Windows checkout (core.autocrlf) would give the
+            # baseline CRLF endings and break the comm comparison.
+            new_failures=$(comm -23 <(printf '%s\n' "$failing_pkgs") <(grep -v '^#' "$baseline_file" 2>/dev/null | tr -d '\r' | sort -u))
             if [[ -z "$new_failures" ]]; then
                 cnt=$(echo "$failing_pkgs" | wc -l | tr -d ' ')
                 add_check "PASS" "3.3 Integration tests: $cnt baseline failure(s) only, no NEW failures (R91)"
@@ -747,9 +751,9 @@ phase_pre_merge() {
         # skip the code gates — a gate-evasion vector. Fails safe: anything
         # not provably docs/test is "code". testdata/ is safe to include —
         # go ignores testdata dirs at build time (fixtures, not runtime).
-        if ! echo "$ct_files" | grep -qvE '\.(md|txt)$'; then
+        if ! printf '%s\n' "$ct_files" | grep -qvE '\.(md|txt)$'; then
             change_type="docs"
-        elif ! echo "$ct_files" | grep -qvE '_test\.go$|(^|/)testdata/|\.(md|txt)$'; then
+        elif ! printf '%s\n' "$ct_files" | grep -qvE '_test\.go$|(^|/)testdata/|\.(md|txt)$'; then
             change_type="test-only"
         fi
     fi
