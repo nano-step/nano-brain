@@ -77,4 +77,10 @@ untouched), and `TestWalkAdmitter_NestedGitignore` (nested `.gitignore` honored 
 real filesystem walk). Same treatment as the #497 watcher-internal bug-fix.
 
 ## Gemini Verification Triage
-_To be completed after the PR bot review (R31)._
+
+Gemini (gemini-code-assist) posted a review with 2 inline comments on PR #538. Both valid, both fixed.
+
+| Comment ref       | Agent verdict  | Reasoning                                                                                                    | Action                        |
+| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------- |
+| line watcher.go:1218 | VALID:high     | A per-entry `WalkDir` error (e.g. EACCES on a subdir) returned nil without disabling the sweep; the skipped files never entered `admitted`, so the orphan sweep would delete their live graph rows. Real silent-data-loss bug. | fixed in commit b58ab0d — set `sweepSafe = false` on any per-entry walk error |
+| line filter.go:100   | VALID:medium   | Repo convention: don't `os.Stat` before `gitignore.CompileIgnoreFile`; compile directly and check the error to drop a redundant syscall and not swallow non-NotExist errors.                                                  | fixed in commit b58ab0d — removed the `os.Stat` pre-checks |

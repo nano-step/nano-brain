@@ -1214,6 +1214,11 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 				return ctx.Err()
 			}
 			if err != nil {
+				// A localized walk error (e.g. permission denied on a subdir) skips
+				// that entry's files, so they never enter `admitted` — but the walk
+				// still returns nil overall. Disable the sweep for this run so those
+				// files' existing graph rows are not deleted as false orphans.
+				sweepSafe = false
 				return nil
 			}
 			if adm.ignore(path, d.IsDir()) {

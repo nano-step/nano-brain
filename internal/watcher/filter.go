@@ -85,17 +85,14 @@ func (a *walkAdmitter) ignore(path string, isDir bool) bool {
 	a.stack.PopAbove(path)
 
 	if isDir {
-		gitignorePath := filepath.Join(path, ".gitignore")
-		if info, err := os.Stat(gitignorePath); err == nil && !info.IsDir() {
-			if gi, err := gitignore.CompileIgnoreFile(gitignorePath); err == nil {
-				a.stack.Push(path, gi)
-			}
+		// Compile directly and check the error rather than os.Stat-ing first — a
+		// missing/unreadable/dir path just fails to compile and is skipped, and we
+		// avoid a redundant syscall (repo convention).
+		if gi, err := gitignore.CompileIgnoreFile(filepath.Join(path, ".gitignore")); err == nil {
+			a.stack.Push(path, gi)
 		}
-		localIgnorePath := filepath.Join(path, ".nano-brainignore")
-		if info, err := os.Stat(localIgnorePath); err == nil && !info.IsDir() {
-			if li, err := gitignore.CompileIgnoreFile(localIgnorePath); err == nil {
-				a.stack.Push(path, li)
-			}
+		if li, err := gitignore.CompileIgnoreFile(filepath.Join(path, ".nano-brainignore")); err == nil {
+			a.stack.Push(path, li)
 		}
 	}
 
