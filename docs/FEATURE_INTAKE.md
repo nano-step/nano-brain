@@ -146,7 +146,10 @@ Steps:
    ```
    /deep-design
    ```
-   - If gaps found → revise artifacts → re-run deep-design.
+   - **Claude Code:** `/deep-design` (Metis/Oracle/Momus) isn't registered here —
+     run the ultrathink fallback instead (`docs/HARNESS.md` § Claude Code
+     fallback: ultrathink gap analysis).
+   - If gaps found → revise artifacts → re-run gap analysis.
    - Proceed only on clean pass.
       → `gh issue comment <N> --body "Deep-design synthesis: <gaps + resolutions>"`
 
@@ -208,6 +211,9 @@ Steps:
 2. **Deep-design gap analysis** — mandatory; do not skip.
    - All blocking gaps must be resolved before proceeding.
    - Record architecture decisions in `docs/decisions/`.
+   - **Claude Code:** no Metis/Oracle/Momus agents registered — use the
+     ultrathink fallback (`docs/HARNESS.md` § Claude Code fallback) and flag
+     the substitution to the human before requesting sign-off in step 3.
       → Issue: paste full Metis + Oracle synthesis as a comment.
 
 3. **Human confirmation** — present synthesis to human; get explicit go-ahead

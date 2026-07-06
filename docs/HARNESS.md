@@ -219,6 +219,35 @@ deep-design finds gaps
 A gap is blocking if it touches: auth, data model, API contract, isolation
 boundary, or multi-domain scope. Stylistic gaps are non-blocking.
 
+### Claude Code fallback: ultrathink gap analysis
+
+`/gsd-deep-design` and the OpenCode `deep-design` skill (Metis + Oracle +
+Momus subagents) are **not registered on Claude Code** — no such skill or
+agent type exists in this runtime. Gate 1.7 still applies; it cannot be
+satisfied by skipping the step.
+
+When running under Claude Code, substitute a single-pass **ultrathink gap
+analysis** over `proposal.md` + `design.md`:
+
+1. Trigger extended reasoning (the `ultrathink` keyword, or equivalent
+   deliberate multi-angle reasoning).
+2. Reason from at least these two angles, one at a time:
+   - **Scope/risk** (Metis's role): hidden complexity, scope creep, missing
+     requirements, phasing.
+   - **Architecture/security** (Oracle's role): fit with existing code, MVA,
+     security/performance/data-integrity risks.
+3. Write the findings as a synthesis (gaps, ambiguities, open questions) —
+   same shape as the pipeline output above, minus the cross-critique round.
+4. Post it as Gate 1.7 evidence:
+   `gh issue comment <N> --body "Deep-design (ultrathink fallback): <gaps + resolutions>"`.
+5. **Disclose the substitution explicitly.** Do not present single-agent
+   output as if it were the full Metis+Oracle+Momus pipeline — confidence is
+   lower with no independent second opinion and no cross-critique.
+
+Satisfies Gate 1.7 for **normal** lane. For **high-risk** lane (mandatory,
+not skippable), flag the substitution to the human before requesting sign-off
+— they may prefer the real pipeline via OpenCode instead.
+
 ## Spec Lifecycle
 
 Ongoing work enters the harness as one of these input types:
