@@ -51,6 +51,16 @@ DELETE FROM documents WHERE id = $1 AND workspace_hash = $2;
 -- name: UpdateDocumentsCollection :exec
 UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = $3;
 
+-- name: ResolveSymbolByName :many
+-- Resolves a bare symbol name (e.g. a calls-edge target, which graph.sql
+-- stores unqualified) to its defining symbol document(s), so callers can
+-- requalify it as "<file>::<name>" for further graph traversal.
+SELECT source_path, metadata
+FROM documents
+WHERE workspace_hash = $1
+  AND metadata->>'source_type' = 'symbol'
+  AND title = $2::text;
+
 -- name: ListSymbolsByWorkspace :many
 SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, metadata, created_at, updated_at
 FROM documents

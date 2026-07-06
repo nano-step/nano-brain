@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1140,13 +1141,34 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 	)
 }
 
+// resolveDocumentByAnyID looks up a document by ID, falling back to chunk ID
+// when the UUID belongs to a chunk rather than a document. Search results
+// expose chunk IDs as their primary "id" field, so a bare UUID or #<uuid>
+// passed to memory_get frequently refers to a chunk, not a document.
+func resolveDocumentByAnyID(ctx context.Context, q *sqlc.Queries, ws string, id uuid.UUID) (sqlc.Document, error) {
+	doc, err := q.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{ID: id, WorkspaceHash: ws})
+	if err == nil {
+		return doc, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		// A real DB/connection error — surface it rather than masking it as a
+		// misleading "not found" behind the chunk fallback.
+		return sqlc.Document{}, err
+	}
+	chunk, chunkErr := q.GetChunkByID(ctx, id)
+	if chunkErr != nil || chunk.WorkspaceHash != ws {
+		return sqlc.Document{}, fmt.Errorf("no document or chunk found for id %s in workspace %s", id, ws)
+	}
+	return q.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{ID: chunk.DocumentID, WorkspaceHash: ws})
+}
+
 func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_get",
 			Description: "Fetch full content for one known document. Use after memory_query/memory_search/memory_vsearch when a result snippet is relevant and you need exact text or line slices. Do not use for broad discovery; search first, then get one selected hit.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"path":       {"type": "string", "description": "Document source_path, UUID (auto-detected), or #<uuid> from a search result for explicit ID lookup"},
+				"path":       {"type": "string", "description": "Document source_path, UUID (auto-detected), #<uuid> (document or chunk id from a search result), or a \"file::Symbol\" graph node from memory_trace/memory_graph (returns the symbol's full body)"},
 				"workspace":  {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash. Optional if the MCP connection was configured with a default workspace via the ?workspace= URL query param; otherwise required."},
 				"start_line": {"type": "number", "description": "Start line (1-indexed, inclusive)"},
 				"end_line":   {"type": "number", "description": "End line (1-indexed, inclusive)"},
@@ -1171,24 +1193,45 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 
 			var doc sqlc.Document
 			switch {
+			case strings.Contains(path, "::"):
+				// A graph node like "relpath::Symbol" as emitted by
+				// memory_trace / memory_graph. Resolve it to the backing symbol
+				// document so the node is directly re-feedable into memory_get.
+				sepIdx := strings.Index(path, "::")
+				filePart, symName := path[:sepIdx], path[sepIdx+2:]
+				matches, rErr := a.queries.ResolveSymbolByName(ctx, sqlc.ResolveSymbolByNameParams{
+					WorkspaceHash: ws,
+					Column2:       symName,
+				})
+				if rErr != nil {
+					return errResult(fmt.Sprintf("symbol lookup failed for %q", symName)), nil
+				}
+				for _, m := range matches {
+					if qi := strings.Index(m.SourcePath, "?"); qi >= 0 && m.SourcePath[:qi] == filePart {
+						doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+							SourcePath:    m.SourcePath,
+							WorkspaceHash: ws,
+						})
+						break
+					}
+				}
+				if err == nil && doc.ID == uuid.Nil {
+					return errResult(fmt.Sprintf("no symbol %q found in %q in workspace %s", symName, filePart, ws)), nil
+				}
 			case strings.HasPrefix(path, "#"):
-				// Explicit UUID lookup via #<uuid> prefix
+				// Explicit ID lookup via #<uuid> prefix. Search results expose
+				// chunk IDs first, so this may be a document or a chunk ID.
 				docID, parseErr := uuid.Parse(strings.TrimPrefix(path, "#"))
 				if parseErr != nil {
 					return errResult(fmt.Sprintf("invalid document ID: %v", parseErr)), nil
 				}
-				doc, err = a.queries.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{
-					ID:            docID,
-					WorkspaceHash: ws,
-				})
+				doc, err = resolveDocumentByAnyID(ctx, a.queries, ws, docID)
 			default:
-				// Try UUID-first: many clients pass the document_id (UUID) returned
-				// by memory_query / memory_search directly as the path.
+				// Try UUID-first: many clients pass the document_id or chunk_id
+				// (UUID) returned by memory_query / memory_search directly as
+				// the path.
 				if docID, parseErr := uuid.Parse(path); parseErr == nil {
-					doc, err = a.queries.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{
-						ID:            docID,
-						WorkspaceHash: ws,
-					})
+					doc, err = resolveDocumentByAnyID(ctx, a.queries, ws, docID)
 				} else {
 					doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 						SourcePath:    path,
@@ -1197,12 +1240,50 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 				}
 			}
 			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return errResult(fmt.Sprintf("no document found for path %q in workspace %s", path, ws)), nil
+				}
 				return errResult(fmt.Sprintf("document not found: %v", err)), nil
 			}
 
 			content := doc.Content
 			startLine := argInt(args, "start_line", 0, 1<<30)
 			endLine := argInt(args, "end_line", 0, 1<<30)
+			explicitLines := startLine > 0 || endLine > 0
+
+			// A symbol doc's own content is just its signature. Swap in the
+			// parent file's content so the caller gets the full body: default to
+			// the symbol's own line span from metadata, but an explicit
+			// start_line/end_line from the caller still wins. Never error out
+			// solely because the body couldn't be resolved — fall back to the
+			// signature.
+			if qIdx := strings.Index(doc.SourcePath, "?symbol="); qIdx >= 0 {
+				// Resolve the symbol's own line span from metadata unless the
+				// caller supplied an explicit start_line/end_line (which wins).
+				if !explicitLines && doc.Metadata.Valid {
+					var meta map[string]string
+					if json.Unmarshal(doc.Metadata.RawMessage, &meta) == nil {
+						if symStart, sErr := strconv.Atoi(meta["line"]); sErr == nil && symStart > 0 {
+							if symEnd, eErr := strconv.Atoi(meta["end_line"]); eErr == nil && symEnd > 0 {
+								startLine, endLine = symStart, symEnd
+							}
+						}
+					}
+				}
+				// Only pull in the parent file's body when we actually have a
+				// span to slice. Without line info (e.g. a workspace indexed
+				// before symbols carried line metadata) keep the symbol doc's own
+				// content — its signature — rather than dumping the whole file.
+				if startLine > 0 || endLine > 0 {
+					parentPath := doc.SourcePath[:qIdx]
+					if parentDoc, perr := a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+						SourcePath:    parentPath,
+						WorkspaceHash: ws,
+					}); perr == nil {
+						content = parentDoc.Content
+					}
+				}
+			}
 			if startLine > 0 || endLine > 0 {
 				lines := strings.Split(content, "\n")
 				total := len(lines)
@@ -1765,10 +1846,11 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			Name:        "memory_trace",
 			Description: "Downstream call-chain trace from a known entry symbol. Use to answer 'what does this function eventually call?' with transitive calls and cycle detection. For one-hop neighbors use memory_graph; for affected callers before edits use memory_impact. Node accepts workspace-relative or absolute paths.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash. Optional if the MCP connection was configured with a default workspace via the ?workspace= URL query param; otherwise required."},
-				"node":      {"type": "string", "description": "Known entry symbol (e.g. file::FunctionName) whose downstream calls should be followed. Use memory_symbols first if needed."},
-				"max_depth": {"type": "number", "description": "Max traversal depth 1-10 (default 5)"},
-				"paths":     {"type": "string", "description": "Output path style: \"absolute\" (default) or \"relative\""},
+				"workspace":        {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash. Optional if the MCP connection was configured with a default workspace via the ?workspace= URL query param; otherwise required."},
+				"node":             {"type": "string", "description": "Known entry symbol (e.g. file::FunctionName) whose downstream calls should be followed. Use memory_symbols first if needed."},
+				"max_depth":        {"type": "number", "description": "Max traversal depth 1-10 (default 5)"},
+				"paths":            {"type": "string", "description": "Output path style: \"absolute\" (default) or \"relative\""},
+				"include_external": {"type": "boolean", "description": "Include calls to builtins/third-party symbols that cannot be resolved to a workspace file (default false — these are dropped)"},
 			}, []string{"node"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -1790,12 +1872,16 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			}
 			maxDepth := argInt(args, "max_depth", 5, 10)
 			pathStyle := argString(args, "paths")
+			includeExternal, _ := args["include_external"].(bool)
 
 			seen := map[string]bool{node: true}
 			type traceItem struct {
-				Node  string `json:"node"`
-				Depth int    `json:"depth"`
-				Via   string `json:"via"`
+				Node      string `json:"node"`
+				Name      string `json:"name"`
+				Depth     int    `json:"depth"`
+				Via       string `json:"via"`
+				Ambiguous bool   `json:"ambiguous,omitempty"`
+				External  bool   `json:"external,omitempty"`
 			}
 			var chain []traceItem
 
@@ -1831,16 +1917,74 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 					return errResult(fmt.Sprintf("trace query failed: %v", err)), nil
 				}
 				for _, e := range edges {
-					if seen[e.TargetNode] {
+					// calls-edge targets are stored as bare identifiers (e.g.
+					// "applyCredit"); requalify each one as "file::symbol" so the
+					// chain stays feedable into memory_get/memory_graph and two
+					// unrelated files defining the same-named symbol don't collide
+					// into a single traversal node.
+					if strings.Contains(e.TargetNode, "::") {
+						if seen[e.TargetNode] {
+							continue
+						}
+						seen[e.TargetNode] = true
+						chain = append(chain, traceItem{
+							Node:  e.TargetNode,
+							Name:  e.TargetNode[strings.Index(e.TargetNode, "::")+2:],
+							Depth: cur.depth + 1,
+							Via:   cur.node,
+						})
+						queue = append(queue, frame{node: e.TargetNode, depth: cur.depth + 1, via: cur.node})
 						continue
 					}
-					seen[e.TargetNode] = true
-					chain = append(chain, traceItem{
-						Node:  e.TargetNode,
-						Depth: cur.depth + 1,
-						Via:   cur.node,
+
+					matches, rErr := a.queries.ResolveSymbolByName(ctx, sqlc.ResolveSymbolByNameParams{
+						WorkspaceHash: ws,
+						Column2:       e.TargetNode,
 					})
-					queue = append(queue, frame{node: e.TargetNode, depth: cur.depth + 1, via: cur.node})
+					if rErr != nil {
+						return errResult(fmt.Sprintf("trace query failed: %v", rErr)), nil
+					}
+					if len(matches) == 0 {
+						// Builtin or third-party symbol — not defined anywhere in
+						// this workspace. Drop by default; traversal stops here
+						// either way since it has no outgoing edges of its own.
+						if !includeExternal || seen[e.TargetNode] {
+							continue
+						}
+						seen[e.TargetNode] = true
+						chain = append(chain, traceItem{
+							Node:     e.TargetNode,
+							Name:     e.TargetNode,
+							Depth:    cur.depth + 1,
+							Via:      cur.node,
+							External: true,
+						})
+						continue
+					}
+					ambiguous := len(matches) > 1
+					for _, m := range matches {
+						// Symbol docs are stored as "<relpath>?symbol=...". Guard
+						// against a malformed source_path with no "?" (e.g. a
+						// hand-written doc via memory_write) so a bad row can't
+						// panic the trace handler on a negative slice index.
+						qIdx := strings.Index(m.SourcePath, "?")
+						if qIdx < 0 {
+							continue
+						}
+						qualified := m.SourcePath[:qIdx] + "::" + e.TargetNode
+						if seen[qualified] {
+							continue
+						}
+						seen[qualified] = true
+						chain = append(chain, traceItem{
+							Node:      qualified,
+							Name:      e.TargetNode,
+							Depth:     cur.depth + 1,
+							Via:       cur.node,
+							Ambiguous: ambiguous,
+						})
+						queue = append(queue, frame{node: qualified, depth: cur.depth + 1, via: cur.node})
+					}
 				}
 			}
 
@@ -2024,6 +2168,8 @@ func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 				Signature  string  `json:"signature,omitempty"`
 				SourcePath string  `json:"source_path"`
 				Summary    *string `json:"summary"`
+				StartLine  int     `json:"start_line,omitempty"`
+				EndLine    int     `json:"end_line,omitempty"`
 			}
 			results := make([]symbolResult, 0, len(rows))
 			for _, r := range rows {
@@ -2037,6 +2183,8 @@ func registerMemorySymbols(server *mcpsdk.Server, a *Adapter) {
 						item.Kind = meta["kind"]
 						item.Language = meta["language"]
 						item.Signature = meta["signature"]
+						item.StartLine, _ = strconv.Atoi(meta["line"])
+						item.EndLine, _ = strconv.Atoi(meta["end_line"])
 					}
 				}
 				results = append(results, item)

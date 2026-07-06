@@ -71,6 +71,7 @@ func (e *GoExtractor) Extract(filePath string, content []byte) ([]Symbol, error)
 			Kind:      kind,
 			File:      filePath,
 			Line:      lineForByte(content, nameNode.StartByte()),
+			EndLine:   lineForByte(content, declNode.EndByte()),
 			Signature: firstLine(bt.NodeText(declNode)),
 			Language:  "go",
 		})
