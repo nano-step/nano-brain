@@ -378,6 +378,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					Tags:           tags,
 					MaxResults:     fetchLimit,
+					ChunkType:      chunkTypeNullStr,
 					CreatedAfter:   ca,
 					CreatedBefore:  cb,
 					UpdatedAfter:   ua,
@@ -409,6 +410,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 				rows, err := s.queries.VectorSearchAll(gctx, sqlc.VectorSearchAllParams{
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					MaxResults:     fetchLimit,
+					ChunkType:      chunkTypeNullStr,
 					CreatedAfter:   ca,
 					CreatedBefore:  cb,
 					UpdatedAfter:   ua,
@@ -444,6 +446,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					WorkspaceHash:  workspace,
 					Tags:           tags,
 					MaxResults:     fetchLimit,
+					ChunkType:      chunkTypeNullStr,
 					CreatedAfter:   ca,
 					CreatedBefore:  cb,
 					UpdatedAfter:   ua,
@@ -476,6 +479,7 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					QueryEmbedding: pgvector_go.NewVector(vec),
 					WorkspaceHash:  workspace,
 					MaxResults:     fetchLimit,
+					ChunkType:      chunkTypeNullStr,
 					CreatedAfter:   ca,
 					CreatedBefore:  cb,
 					UpdatedAfter:   ua,
@@ -892,7 +896,7 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 			if len(tags) > 0 {
 				rows, err := s.queries.VectorSearchAllWithTags(gctx, sqlc.VectorSearchAllWithTagsParams{
 					QueryEmbedding: pgvector_go.NewVector(vec), Tags: tags,
-					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					MaxResults: fetchLimit, ChunkType: chunkTypeNullStr, CreatedAfter: ca, CreatedBefore: cb,
 					UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
@@ -912,7 +916,7 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 			} else {
 				rows, err := s.queries.VectorSearchAll(gctx, sqlc.VectorSearchAllParams{
 					QueryEmbedding: pgvector_go.NewVector(vec),
-					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					MaxResults:     fetchLimit, ChunkType: chunkTypeNullStr, CreatedAfter: ca, CreatedBefore: cb,
 					UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
@@ -934,7 +938,7 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 			if len(tags) > 0 {
 				rows, err := s.queries.VectorSearchWithTags(gctx, sqlc.VectorSearchWithTagsParams{
 					QueryEmbedding: pgvector_go.NewVector(vec), WorkspaceHash: workspace, Tags: tags,
-					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					MaxResults: fetchLimit, ChunkType: chunkTypeNullStr, CreatedAfter: ca, CreatedBefore: cb,
 					UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
@@ -954,7 +958,7 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 			} else {
 				rows, err := s.queries.VectorSearch(gctx, sqlc.VectorSearchParams{
 					QueryEmbedding: pgvector_go.NewVector(vec), WorkspaceHash: workspace,
-					MaxResults: fetchLimit, CreatedAfter: ca, CreatedBefore: cb,
+					MaxResults: fetchLimit, ChunkType: chunkTypeNullStr, CreatedAfter: ca, CreatedBefore: cb,
 					UpdatedAfter: ua, UpdatedBefore: ub,
 				})
 				if err != nil {
