@@ -438,7 +438,7 @@ func (x *JSIntegrationExtractor) handleMemberExpression(bt *gotreesitter.BoundTr
 	// call, so it needs the same topic-based edge the generic bus/Redis paths
 	// use. Gated on a "queue" naming hint plus a literal job-name argument, to
 	// avoid misreading an unrelated Set/Map .add()/.process() call as a queue op.
-	if isBullQueueReceiver(receiverName) && (methodName == "add" || methodName == "process") {
+	if (methodName == "add" || methodName == "process") && isBullQueueReceiver(receiverName) {
 		firstArg := echoArgNode(argsNode, lang, 0)
 		if firstArg != nil && tsCountArgs(argsNode, lang) >= 2 {
 			if t := firstArg.Type(lang); t == "string" || t == "template_string" {
