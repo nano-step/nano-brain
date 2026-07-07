@@ -62,19 +62,19 @@ func TestNearestSymbolMatch(t *testing.T) {
 	}
 }
 
-func TestSharedPathDepth(t *testing.T) {
+func TestCommonSegments(t *testing.T) {
 	cases := []struct {
-		a, b string
+		a, b []string
 		want int
 	}{
-		{"a/b/x.go", "a/b/y.go", 2},
-		{"a/x.go", "c/y.go", 0},
-		{"backend/ctrl.js", "backend/svc.js", 1},
-		{"a/b/c.go", "a/b/c.go", 3},
+		{[]string{"a", "b", "x.go"}, []string{"a", "b", "y.go"}, 2},
+		{[]string{"a", "x.go"}, []string{"c", "y.go"}, 0},
+		{[]string{"backend", "ctrl.js"}, []string{"backend", "svc.js"}, 1},
+		{[]string{"a", "b", "c.go"}, []string{"a", "b", "c.go"}, 3},
 	}
 	for _, c := range cases {
-		if got := sharedPathDepth(c.a, c.b); got != c.want {
-			t.Errorf("sharedPathDepth(%q,%q) = %d, want %d", c.a, c.b, got, c.want)
+		if got := commonSegments(c.a, c.b); got != c.want {
+			t.Errorf("commonSegments(%v,%v) = %d, want %d", c.a, c.b, got, c.want)
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -85,12 +86,21 @@ func lookupWorkspaceRoot(ctx context.Context, queries *sqlc.Queries, workspaceHa
 	return ws.Path
 }
 
-// sharedPathDepth counts the leading path segments two workspace-relative file
-// paths have in common ("a/b/x.go" vs "a/b/y.go" -> 2; "a/x.go" vs "c/y.go" -> 0).
-func sharedPathDepth(a, b string) int {
-	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
+// relSegments normalizes a file path to workspace-relative, "/"-separated,
+// slash-trimmed segments. filepath.ToSlash makes it Windows-safe (backslashes),
+// and trimming avoids empty leading/trailing segments skewing the depth count.
+func relSegments(p, wsRoot string) []string {
+	rel := strings.Trim(stripWorkspacePrefix(filepath.ToSlash(wsRoot), filepath.ToSlash(p)), "/")
+	if rel == "" {
+		return nil
+	}
+	return strings.Split(rel, "/")
+}
+
+// commonSegments counts the leading path segments two segment slices share.
+func commonSegments(a, b []string) int {
 	n := 0
-	for n < len(as) && n < len(bs) && as[n] == bs[n] {
+	for n < len(a) && n < len(b) && a[n] == b[n] {
 		n++
 	}
 	return n
@@ -109,7 +119,7 @@ func nearestSymbolMatch(callerFile, wsRoot string, matches []sqlc.ResolveSymbolB
 	if callerFile == "" {
 		return zero, false
 	}
-	caller := stripWorkspacePrefix(wsRoot, callerFile)
+	callerSegs := relSegments(callerFile, wsRoot) // split once
 	bestDepth, tie := -1, false
 	var best sqlc.ResolveSymbolByNameRow
 	for _, m := range matches {
@@ -117,8 +127,7 @@ func nearestSymbolMatch(callerFile, wsRoot string, matches []sqlc.ResolveSymbolB
 		if qIdx < 0 {
 			continue
 		}
-		cf := stripWorkspacePrefix(wsRoot, m.SourcePath[:qIdx])
-		switch d := sharedPathDepth(caller, cf); {
+		switch d := commonSegments(callerSegs, relSegments(m.SourcePath[:qIdx], wsRoot)); {
 		case d > bestDepth:
 			bestDepth, best, tie = d, m, false
 		case d == bestDepth:

@@ -59,8 +59,8 @@ Author: kokorolx.
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR._
+Gemini: COMMENTED, CI pass, MERGEABLE/CLEAN. One inline (HIGH, 3 sub-points).
 
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| graph_paths.go:132 [high] — (1) Windows `\` not normalized in the split; (2) leading/trailing slashes can skew depth; (3) caller re-split each loop iteration | VALID (consistent with the `filepath.ToSlash` precedent set in #566) | Refactored: `relSegments` normalizes via `filepath.ToSlash` + `strings.Trim("/")` and `commonSegments` counts shared segments; caller split once outside the loop. `stripWorkspacePrefix` itself left untouched (shared helper, out of scope) — inputs are ToSlash'd before calling it. `sharedPathDepth` → `commonSegments` (test updated). | **Fixed** |
