@@ -207,6 +207,17 @@ func requireRegisteredWorkspace(ctx context.Context, a *Adapter, args map[string
 
 const mcpSnippetLen = 200
 
+// Over-fetch factor/cap applied to vector-search fetchLimit when
+// group_by="document" collapses chunks to documents (#545). Vector search
+// ranks and fetches CHUNKS with no similarity threshold; when the top chunks
+// cluster into few documents, deduplicateByDocument can yield far fewer than
+// max_results distinct documents unless more chunks are fetched up front so
+// dedup has enough candidates to draw from.
+const (
+	vsearchDedupOverFetchFactor = 5
+	vsearchDedupOverFetchCap    = 200
+)
+
 // mcpSearchResultItem is the per-result payload returned by memory_query,
 // memory_search, and memory_vsearch over MCP. By default content is omitted;
 // agents set include_content=true (or call memory_get) to obtain full text.
@@ -950,7 +961,26 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				return errResult(fmt.Sprintf("embedding query failed: %v", err)), nil
 			}
 
-			fetchLimit := int32(offset + maxResults + 1)
+			groupBy := argString(args, "group_by")
+			if groupBy == "" {
+				groupBy = "document"
+			}
+
+			baseFetchLimit := offset + maxResults + 1
+			fetchLimit := int32(baseFetchLimit)
+			if groupBy == "document" {
+				// Over-fetch chunks so deduplicateByDocument has enough
+				// candidates to collapse into up to maxResults distinct
+				// documents (#545) — vector search has no similarity
+				// threshold, so a diluted compound-query embedding can rank
+				// many chunks from the same few documents at the top.
+				// The cap is a ceiling on the over-fetch boost, never a
+				// reduction below what the page window itself needs — at
+				// deep offsets baseFetchLimit can exceed the cap, and
+				// min()-ing straight into the cap would starve the page
+				// (R88 review #545 follow-up).
+				fetchLimit = int32(max(baseFetchLimit, min(baseFetchLimit*vsearchDedupOverFetchFactor, vsearchDedupOverFetchCap)))
+			}
 			var ca, cb, ua, ub sql.NullTime
 			if timeRange != nil {
 				ca, cb, ua, ub = timeRange.ToSqlNullTimes()
@@ -1019,34 +1049,6 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 				}
 				return allRows[i].ID < allRows[j].ID
 			})
-
-			groupBy := argString(args, "group_by")
-			if groupBy == "" {
-				groupBy = "document"
-			}
-			if groupBy == "document" {
-				vsearchResults := make([]search.Result, len(allRows))
-				for i, r := range allRows {
-					vsearchResults[i] = search.Result{
-						ID: r.ID, DocumentID: r.DocumentID,
-						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
-						Content: r.Content, SourcePath: r.SourcePath,
-						Collection: r.Collection, Tags: r.Tags,
-						Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-					}
-				}
-				deduped := deduplicateByDocument(vsearchResults)
-				allRows = make([]vsRow, len(deduped))
-				for i, r := range deduped {
-					allRows[i] = vsRow{
-						ID: r.ID, DocumentID: r.DocumentID,
-						WorkspaceHash: r.WorkspaceHash, Title: r.Title,
-						Content: r.Content, SourcePath: r.SourcePath,
-						Collection: r.Collection, Tags: r.Tags,
-						Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-					}
-				}
-			}
 
 			if groupBy == "document" {
 				vsearchResults := make([]search.Result, len(allRows))
