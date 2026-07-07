@@ -54,12 +54,20 @@ func TestMemoryFlow_AutoStitchesInWorkspacePubSub(t *testing.T) {
 	if !sawConsumer {
 		t.Fatalf("consumer entry not linked into the flow (auto-stitch failed): nodes=%+v", resp["nodes"])
 	}
-	// ...and via a cross_service edge (not a normal call/http edge).
+	// ...and via a cross_service edge (not a normal call/http edge). The edge must
+	// originate from the in-flow publisher node ("createTrade") — NOT the qualified
+	// "svc.js::createTrade", which would be a duplicate, disconnected node splitting
+	// the graph (the publisher endpoint is often qualified while the flow carries
+	// only the bare symbol).
 	var sawCrossService bool
 	if es, ok := resp["edges"].([]any); ok {
 		for _, e := range es {
-			if e.(map[string]any)["kind"] == "cross_service" {
+			em := e.(map[string]any)
+			if em["kind"] == "cross_service" {
 				sawCrossService = true
+				if from := em["from"].(string); from != "createTrade" {
+					t.Errorf("cross_service edge must originate from the in-flow node %q, got %q (graph split)", "createTrade", from)
+				}
 			}
 		}
 	}

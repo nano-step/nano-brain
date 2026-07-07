@@ -63,8 +63,6 @@ blocked the Redis pub/sub case:
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR._
-
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| tools.go:2847 (HIGH) — qualified `se.From` (`svc.js::createTrade`) doesn't match a bare flow node (`createTrade`), so `appendStitchedToFlow` adds a duplicate, disconnected node → split graph | VALID | Correct. My integration test only asserted no-dangling / no-self-edge, not connectivity, so the split slipped through. The publisher edge source is qualified while the http/call graph node is bare. | FIXED — `appendStitchedToFlow` rewrites `se.From` to its bare id when the bare id is already a flow node, before registering endpoints. Integration test strengthened to assert the `cross_service` edge originates from the in-flow `createTrade` node (red under old code). |

@@ -2833,10 +2833,21 @@ func appendStitchedToFlow(f *flow.Flow, stitched []flow.FlowEdge) {
 	for _, n := range f.Nodes {
 		existing[n.ID] = true
 	}
-	for _, se := range stitched {
+	for i := range stitched {
+		se := stitched[i]
+		// The publisher endpoint is often qualified (svc.js::createTrade) while the
+		// built flow carries only the bare symbol (createTrade). Rewrite From to the
+		// bare id when it's already a flow node, so the stitched edge connects to it
+		// instead of spawning a duplicate, disconnected node that splits the graph.
+		if !existing[se.From] {
+			if idx := strings.LastIndex(se.From, "::"); idx >= 0 {
+				if bare := se.From[idx+2:]; existing[bare] {
+					se.From = bare
+				}
+			}
+		}
 		// Register BOTH endpoints so a stitched edge never references an id absent
-		// from nodes[] (a dangling edge in the JSON) — the publisher may not be a
-		// node in the built flow.
+		// from nodes[] (a dangling edge in the JSON) — the consumer entry is new.
 		for _, id := range []string{se.From, se.To} {
 			if !existing[id] {
 				existing[id] = true
