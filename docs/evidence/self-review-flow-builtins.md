@@ -45,8 +45,8 @@ Author: kokorolx.
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR._
+Gemini: COMMENTED, CI pass, MERGEABLE/CLEAN. One inline (MEDIUM).
 
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| tools.go:2668 [medium] — `ResolveSymbolByName` error silently ignored; on context cancellation the loop keeps issuing doomed DB queries | VALID | Context cancellation (client disconnect/timeout) is a real named threat; without an early exit the loop wastes a query per remaining external node. | **Fixed** — on error, `if ctx.Err() != nil { break }` before the keep-node default; non-cancellation errors still keep the node and continue. |

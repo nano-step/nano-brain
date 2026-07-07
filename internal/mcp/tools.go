@@ -2663,6 +2663,12 @@ func dropExternalBuiltins(ctx context.Context, q *sqlc.Queries, ws string, f *fl
 			Column2:       n.Name,
 		})
 		if err != nil {
+			// On context cancellation (client disconnect/timeout) stop — the
+			// remaining per-name queries would all fail too. Otherwise keep the
+			// node (safe default) and move on.
+			if ctx.Err() != nil {
+				break
+			}
 			dropName[n.Name] = false
 			continue
 		}
