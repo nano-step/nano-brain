@@ -791,6 +791,56 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 				}
 			}
 
+			// F9: memory_search uses websearch_to_tsquery, which ANDs multi-word
+			// terms, so a phrase where no single chunk contains every word returns
+			// 0 — worse under a chunk_type filter. Mirror HybridSearch's relaxation:
+			// on an empty AND result with a multi-word query, retry with an OR
+			// tsquery. (No tag-OR SQL variant exists yet, so this covers the
+			// untagged case — the reported repro.)
+			// Skipped when a time filter is set: the OR SQL variants have no
+			// time-range params, so relaxing there could surface rows outside the
+			// requested window — return 0 (as before) instead.
+			if len(allRows) == 0 && len(tags) == 0 && timeRange == nil {
+				// Only relax when >=2 non-stopword terms survive: a single term
+				// (e.g. "the deposit" -> "deposit") yields the same query the AND
+				// leg already ran with 0 rows, so the "|" is what makes it useful.
+				if orQuery := search.BuildORQuery(query); strings.Contains(orQuery, " | ") {
+					if ws == "all" {
+						rows, orErr := a.queries.BM25SearchAllOR(ctx, sqlc.BM25SearchAllORParams{
+							Query: orQuery, ChunkType: chunkTypeNull, MaxResults: fetchLimit,
+						})
+						if orErr != nil {
+							return errResult(fmt.Sprintf("bm25 OR search failed: %v", orErr)), nil
+						}
+						for _, r := range rows {
+							allRows = append(allRows, bm25Row{
+								ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+								WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+								Content: r.Content, SourcePath: r.SourcePath,
+								Collection: r.Collection, Tags: r.Tags,
+								Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+							})
+						}
+					} else {
+						rows, orErr := a.queries.BM25SearchOR(ctx, sqlc.BM25SearchORParams{
+							Query: orQuery, WorkspaceHash: ws, ChunkType: chunkTypeNull, MaxResults: fetchLimit,
+						})
+						if orErr != nil {
+							return errResult(fmt.Sprintf("bm25 OR search failed: %v", orErr)), nil
+						}
+						for _, r := range rows {
+							allRows = append(allRows, bm25Row{
+								ID: r.ID.String(), DocumentID: r.DocumentID.String(),
+								WorkspaceHash: r.WorkspaceHash, Title: r.Title,
+								Content: r.Content, SourcePath: r.SourcePath,
+								Collection: r.Collection, Tags: r.Tags,
+								Score: r.Score, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+							})
+						}
+					}
+				}
+			}
+
 			total := len(allRows)
 			hasMore := total > offset+maxResults
 			pageEnd := offset + maxResults
