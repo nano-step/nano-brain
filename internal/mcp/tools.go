@@ -2299,17 +2299,77 @@ func registerMemoryWorkspacesResolve(server *mcpsdk.Server, a *Adapter) {
 				})
 			}
 			if errors.Is(err, sql.ErrNoRows) {
-				return textResult(map[string]any{
+				result := map[string]any{
 					"workspace_hash": hash,
 					"workspace_name": filepath.Base(absPath),
 					"root_path":      absPath,
 					"registered":     false,
 					"use":            hash,
-				})
+				}
+				// The exact path isn't registered, but a registered ancestor may
+				// already cover it (the "one workspace per monorepo" model). Point
+				// the agent at the most-specific ancestor so it queries that instead
+				// of registering a redundant overlapping workspace (issue #565/#542 F5).
+				if anc, ok := mcpCoveringAncestor(ctx, a.queries, absPath); ok {
+					useName := anc.Name
+					if useName == "" {
+						useName = anc.Hash
+					}
+					result["covered_by"] = map[string]any{
+						"workspace_hash": anc.Hash,
+						"workspace_name": anc.Name,
+						"root_path":      anc.Path,
+						"use":            useName,
+					}
+				}
+				return textResult(result)
 			}
 			return errResult(fmt.Sprintf("resolve workspace failed: %v", err)), nil
 		},
 	)
+}
+
+// mcpCoveringAncestor returns the most-specific registered workspace whose root
+// is a path-boundary ancestor of absPath, or ok=false if none covers it.
+func mcpCoveringAncestor(ctx context.Context, q *sqlc.Queries, absPath string) (sqlc.Workspace, bool) {
+	all, err := q.ListWorkspaces(ctx)
+	if err != nil {
+		return sqlc.Workspace{}, false
+	}
+	return mostSpecificAncestor(all, absPath)
+}
+
+// mostSpecificAncestor picks the registered workspace whose Path is the longest
+// path-boundary ancestor of absPath. A workspace at exactly absPath is skipped —
+// that is the "registered" case, resolved by hash before we ever get here.
+//
+// absPath is assumed already filepath.Abs-normalized (no trailing slash) — as it
+// is at the only call site and as stored Paths are (both go through WorkspaceHash
+// → filepath.Abs). That invariant is what makes tie-breaking deterministic: two
+// distinct paths cannot both be boundary-ancestors of absPath at equal length.
+func mostSpecificAncestor(workspaces []sqlc.Workspace, absPath string) (sqlc.Workspace, bool) {
+	var best sqlc.Workspace
+	bestLen := -1
+	// Normalize separators so the "/"-based boundary check is correct on Windows
+	// too (filepath.Abs yields "\" there); a no-op on unix. ToSlash is a 1:1 char
+	// swap, so lengths — and thus most-specific selection — are unaffected.
+	normAbs := filepath.ToSlash(absPath)
+	for _, w := range workspaces {
+		if w.Path == "" {
+			continue
+		}
+		normW := filepath.ToSlash(w.Path)
+		if normW == normAbs {
+			continue
+		}
+		// Boundary-aligned containment: absPath must sit under w.Path/, not merely
+		// share a string prefix (e.g. "/repo-api" is NOT under "/repo").
+		if strings.HasPrefix(normAbs, strings.TrimRight(normW, "/")+"/") && len(normW) > bestLen {
+			bestLen = len(normW)
+			best = w
+		}
+	}
+	return best, bestLen >= 0
 }
 
 func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
