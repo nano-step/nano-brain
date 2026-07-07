@@ -2380,7 +2380,8 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 			// Rails/Ruby class, job, worker, or service entry that has indexed graph
 			// edges. BuildFlow always emits the entry node itself, so node count cannot
 			// distinguish a real flow from an unknown entry.
-			if !mcpHasFlowEntry(edges, entry) {
+			resolvedEntry, entryCandidates, ok := resolveFlowEntry(edges, entry)
+			if !ok {
 				return textResult(map[string]any{
 					"found":   false,
 					"entry":   entry,
@@ -2388,7 +2389,7 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				})
 			}
 
-			f := flow.BuildFlow(edges, entry, maxDepth, a.flowCfg.MaxFanout)
+			f := flow.BuildFlow(edges, resolvedEntry, maxDepth, a.flowCfg.MaxFanout)
 
 			stitchWorkspaces := argStringSlice(args, "stitch_workspaces")
 			if len(stitchWorkspaces) > 0 {
@@ -2462,6 +2463,16 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				"nodes":     allNodes,
 				"edges":     graphEdges,
 			}
+			// The stored HTTP key is router-local; if we resolved the caller's
+			// full mounted URL to it via suffix match, tell the caller which key
+			// was used (and any other candidates the requested path matched).
+			if resolvedEntry != entry {
+				result["requested_entry"] = entry
+				result["resolved_via"] = "suffix-match"
+				if len(entryCandidates) > 1 {
+					result["candidates"] = entryCandidates
+				}
+			}
 			if diagram := flow.Render(f, format, loadCFGsForFlow(ctx, a.queries, ws, format, f)...); diagram != "" {
 				result["mermaid"] = diagram
 			}
@@ -2500,6 +2511,66 @@ func mcpFlowSymbolPart(node string) string {
 
 func mcpFlowSymbolMatches(symbol, entry string) bool {
 	return symbol == entry || (!strings.Contains(entry, "#") && strings.HasPrefix(symbol, entry+"#"))
+}
+
+// resolveFlowEntry maps a requested flow entry to the stored edge key BuildFlow
+// should start from. It returns the resolved key, distinct candidate keys when
+// the match was fuzzy/ambiguous, and whether a usable entry was found.
+//
+// HTTP routes are keyed router-local (e.g. "POST /payment-intent"), but an agent
+// typically supplies the full mounted URL ("POST /api/payments/payment-intent")
+// since it never knows the internal router-file layout. When the exact key
+// misses, resolve to the stored HTTP key whose path is a trailing, "/"-aligned
+// suffix of the requested path; the most specific (longest) stored path wins.
+// Exact matches and symbol entries keep their existing behavior unchanged.
+func resolveFlowEntry(edges []graph.Edge, entry string) (string, []string, bool) {
+	if mcpHasFlowEntry(edges, entry) {
+		return entry, nil, true
+	}
+	// Only HTTP-shaped entries ("METHOD /path") get the suffix fallback; symbol
+	// entries were already handled (and rejected) by mcpHasFlowEntry above.
+	sp := strings.IndexByte(entry, ' ')
+	if sp <= 0 {
+		return "", nil, false
+	}
+	method, path := entry[:sp], entry[sp+1:]
+	if !strings.HasPrefix(path, "/") {
+		return "", nil, false
+	}
+	var best string
+	var bestLen int
+	seen := map[string]bool{}
+	var candidates []string
+	for _, e := range edges {
+		if e.Kind != graph.EdgeHTTP {
+			continue
+		}
+		ssp := strings.IndexByte(e.SourceNode, ' ')
+		if ssp <= 0 {
+			continue
+		}
+		sMethod, sPath := e.SourceNode[:ssp], e.SourceNode[ssp+1:]
+		if sMethod != method || !strings.HasPrefix(sPath, "/") {
+			continue
+		}
+		// sPath must be a strictly shorter, "/"-boundary-aligned trailing suffix
+		// of the requested path (an equal path would have matched exactly above).
+		// Because sPath starts with "/", HasSuffix alone guarantees the boundary.
+		if sPath != path && strings.HasSuffix(path, sPath) {
+			if !seen[e.SourceNode] {
+				seen[e.SourceNode] = true
+				candidates = append(candidates, e.SourceNode)
+			}
+			if len(sPath) > bestLen {
+				bestLen = len(sPath)
+				best = e.SourceNode
+			}
+		}
+	}
+	if best == "" {
+		return "", nil, false
+	}
+	return best, candidates, true
 }
 
 func loadCFGsForFlow(ctx context.Context, q flow.CFGQuerier, ws, format string, f flow.Flow) []flow.FlowCFGs {
