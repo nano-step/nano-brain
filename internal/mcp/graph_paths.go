@@ -84,3 +84,49 @@ func lookupWorkspaceRoot(ctx context.Context, queries *sqlc.Queries, workspaceHa
 	}
 	return ws.Path
 }
+
+// sharedPathDepth counts the leading path segments two workspace-relative file
+// paths have in common ("a/b/x.go" vs "a/b/y.go" -> 2; "a/x.go" vs "c/y.go" -> 0).
+func sharedPathDepth(a, b string) int {
+	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
+	n := 0
+	for n < len(as) && n < len(bs) && as[n] == bs[n] {
+		n++
+	}
+	return n
+}
+
+// nearestSymbolMatch disambiguates same-named symbol candidates by directory
+// proximity to callerFile: it returns the single candidate that shares the
+// strictly-deepest path prefix with the caller, or ("", false) when the deepest
+// prefix is tied across candidates (genuinely ambiguous) or callerFile is empty.
+// Candidate files come from documents.source_path ("<relpath>?symbol=...", which
+// is absolute in production) so each is normalized to workspace-relative via
+// wsRoot before comparison. This scopes a bare call in a monorepo to the nearest
+// definition (backend over frontend) without a re-index.
+func nearestSymbolMatch(callerFile, wsRoot string, matches []sqlc.ResolveSymbolByNameRow) (sqlc.ResolveSymbolByNameRow, bool) {
+	var zero sqlc.ResolveSymbolByNameRow
+	if callerFile == "" {
+		return zero, false
+	}
+	caller := stripWorkspacePrefix(wsRoot, callerFile)
+	bestDepth, tie := -1, false
+	var best sqlc.ResolveSymbolByNameRow
+	for _, m := range matches {
+		qIdx := strings.Index(m.SourcePath, "?")
+		if qIdx < 0 {
+			continue
+		}
+		cf := stripWorkspacePrefix(wsRoot, m.SourcePath[:qIdx])
+		switch d := sharedPathDepth(caller, cf); {
+		case d > bestDepth:
+			bestDepth, best, tie = d, m, false
+		case d == bestDepth:
+			tie = true
+		}
+	}
+	if bestDepth < 0 || tie {
+		return zero, false
+	}
+	return best, true
+}
