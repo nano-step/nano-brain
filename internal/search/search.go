@@ -23,6 +23,9 @@ type Result struct {
 	SourcePath    string    `json:"source_path"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	// Source labels which DebugSearch leg produced this result: "code",
+	// "session", or "config". Empty for all non-debug search paths (#543).
+	Source string `json:"source,omitempty"`
 }
 
 // Reranker is the interface for search result reranking.
