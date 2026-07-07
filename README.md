@@ -38,7 +38,7 @@ npm install -g @nano-step/nano-brain
 CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain
 ```
 
-Prefer to read the installer first? `curl -fsSL -o install.sh …/install.sh && less install.sh && bash install.sh`.
+Prefer to read the installer first? `curl -fsSL -o install.sh https://raw.githubusercontent.com/nano-step/nano-brain/master/install.sh && less install.sh && bash install.sh`.
 
 ## Start
 

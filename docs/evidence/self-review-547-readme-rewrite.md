@@ -47,8 +47,8 @@ smoke:e2e nor an independent review gate; this self-review is the record.
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR._
+Gemini review: COMMENTED, CI pass, MERGEABLE/CLEAN. One inline comment.
 
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| README.md:41 [medium] — `curl` uses a Unicode ellipsis (`…/install.sh`) in a copy-pasteable command | VALID | The "read the installer first" one-liner is meant to be run; a literal `…` would fail on paste. (Inherited verbatim from the issue draft.) | Fixed — replaced with the real URL `https://raw.githubusercontent.com/nano-step/nano-brain/master/install.sh`. The other two `…` (line 23 prose list, line 65 illustrative URL-suffix fragment) are not runnable commands → left as-is. |
