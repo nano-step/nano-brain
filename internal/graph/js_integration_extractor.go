@@ -361,6 +361,25 @@ func (x *JSIntegrationExtractor) handleRedisCall(bt *gotreesitter.BoundTree, cal
 
 	if kind == "cache_pubsub" {
 		topic := jsStringArgOrVar(bt, argsNode, lang, 0)
+		// Redis subscribe/consume: emit a "CONSUME <topic>" consumer entry (same
+		// shape as the generic message bus) so flow.Stitch can link it to
+		// publishers by topic (#546/#577). Previously this produced a
+		// "subscribe:<topic>" leaf that ListConsumerEntryNodesByWorkspace never
+		// matched, so redis.subscribe was invisible to the stitcher. The publish
+		// side stays a topic-carrying publisher edge (still qualifies as a producer).
+		if jsConsumeMethods[methodName] {
+			consumeNode := "CONSUME " + topic
+			*edges = append(*edges, Edge{
+				SourceNode: consumeNode,
+				TargetNode: source,
+				Kind:       EdgeIntegration,
+				SourceFile: relFile,
+				Line:       line,
+				Language:   langLabel,
+				Metadata:   map[string]any{"kind": "queue_consumer", "method": methodName, "topic": topic},
+			})
+			return consumeNode
+		}
 		target = methodName + ":" + topic
 		*edges = append(*edges, Edge{
 			SourceNode: source,
