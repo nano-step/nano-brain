@@ -27,6 +27,11 @@ var bm25StopWords = map[string]bool{
 	"trace": true, "debug": true,
 }
 
+// BuildORQuery exposes buildORQuery so other packages (e.g. the memory_search
+// MCP handler) can apply the same OR-relaxation fallback the hybrid path uses:
+// stopword-filtered, punctuation-stripped terms joined with " | ".
+func BuildORQuery(query string) string { return buildORQuery(query) }
+
 func buildORQuery(query string) string {
 	words := strings.Fields(query)
 	var filtered []string
