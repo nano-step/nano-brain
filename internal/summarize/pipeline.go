@@ -3,6 +3,7 @@ package summarize
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -10,6 +11,23 @@ import (
 	"github.com/nano-brain/nano-brain/internal/chunk"
 	"github.com/rs/zerolog"
 )
+
+// reGoalHeading matches the "## Goal" heading that opens the 5-section
+// summary format (see ReduceSystemPrompt). Some summarizer models echo their
+// own instructions, intermediate drafts, or the output template before the
+// real summary (#550) despite being told not to; extractFinalSection keeps
+// only the LAST such heading onward, discarding any preamble. If no heading
+// is found, the completion is returned unchanged rather than risk discarding
+// a valid summary that used different wording.
+var reGoalHeading = regexp.MustCompile(`(?im)^##\s+Goal\b`)
+
+func extractFinalSection(raw string) string {
+	locs := reGoalHeading.FindAllStringIndex(raw, -1)
+	if len(locs) == 0 {
+		return raw
+	}
+	return strings.TrimSpace(raw[locs[len(locs)-1][0]:])
+}
 
 const (
 	SingleShotThreshold = 4000
@@ -123,7 +141,7 @@ func (p *Pipeline) singleShot(ctx context.Context, content string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("summarize: single-shot failed: %w", err)
 	}
-	return result, nil
+	return extractFinalSection(result), nil
 }
 
 func (p *Pipeline) mapReduce(ctx context.Context, content string) (string, error) {
@@ -199,7 +217,7 @@ func (p *Pipeline) runReduce(ctx context.Context, chunkSummaries []string, depth
 		if err != nil {
 			return "", fmt.Errorf("summarize: reduce failed at depth %d: %w", depth, err)
 		}
-		return result, nil
+		return extractFinalSection(result), nil
 	}
 
 	var batchResults []string
@@ -213,7 +231,7 @@ func (p *Pipeline) runReduce(ctx context.Context, chunkSummaries []string, depth
 		if err != nil {
 			return "", fmt.Errorf("summarize: batch reduce failed at depth %d: %w", depth, err)
 		}
-		batchResults = append(batchResults, result)
+		batchResults = append(batchResults, extractFinalSection(result))
 	}
 
 	return p.runReduce(ctx, batchResults, depth+1)
