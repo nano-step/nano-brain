@@ -2383,6 +2383,7 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				"max_depth":         {"type": "number", "description": "Max call-chain depth 1-10 (default: config value)"},
 				"format":            {"type": "string", "description": "Output format: 'mermaid' (default), 'sequence' (sequence diagram), or 'json'"},
 				"stitch_workspaces": {"type": "array", "description": "Target workspace hashes to stitch cross-service integration edges against", "items": map[string]any{"type": "string"}},
+				"include_external":  {"type": "boolean", "description": "Include calls to builtins/third-party names that don't resolve to a workspace symbol (default false — these are dropped as noise). Note: a real symbol not yet indexed also resolves to nothing and is dropped until indexing catches up (check memory_status.queue_pending)."},
 			}, []string{"entry"}),
 		},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -2410,6 +2411,7 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				format = "mermaid"
 			}
 			maxDepth := argInt(args, "max_depth", a.flowCfg.MaxDepth, a.flowCfg.MaxDepth)
+			includeExternal, _ := args["include_external"].(bool)
 
 			rawEdges, err := a.queries.ListAllEdgesByWorkspace(ctx, ws)
 			if err != nil {
@@ -2456,6 +2458,14 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 				publishEdges := filterPublishEdges(edges)
 				stitched := flow.Stitch(ctx, publishEdges, stitchWorkspaces, a.queries)
 				appendStitchedToFlow(&f, stitched)
+			}
+
+			// External nodes with no workspace symbol are JS/TS builtins & keywords
+			// (Number, catch, toFixed, push, for, get) that pollute the flow. Drop
+			// them by default — mirrors memory_trace's ResolveSymbolByName drop; real
+			// leaf functions (which resolve) are kept. include_external keeps all.
+			if !includeExternal {
+				dropExternalBuiltins(ctx, a.queries, ws, &f)
 			}
 
 			type nodeItem struct {
@@ -2631,6 +2641,56 @@ func resolveFlowEntry(edges []graph.Edge, entry string) (string, []string, bool)
 		return "", nil, false
 	}
 	return best, candidates, true
+}
+
+// dropExternalBuiltins removes RoleExternal flow nodes whose bare name resolves
+// to no workspace symbol — JS/TS builtins and keywords (Number, catch, toFixed,
+// push, for, get, …) that would otherwise pollute the graph. Real leaf functions
+// (which resolve) and non-external roles (handler/middleware/integration) are
+// kept. Distinct names are resolved once; on a query error the node is kept
+// (safe default). Mirrors memory_trace's ResolveSymbolByName drop.
+func dropExternalBuiltins(ctx context.Context, q *sqlc.Queries, ws string, f *flow.Flow) {
+	dropName := map[string]bool{}
+	for _, n := range f.Nodes {
+		if n.Role != flow.RoleExternal {
+			continue
+		}
+		if _, done := dropName[n.Name]; done {
+			continue
+		}
+		matches, err := q.ResolveSymbolByName(ctx, sqlc.ResolveSymbolByNameParams{
+			WorkspaceHash: ws,
+			Column2:       n.Name,
+		})
+		if err != nil {
+			dropName[n.Name] = false
+			continue
+		}
+		dropName[n.Name] = len(matches) == 0
+	}
+
+	dropID := map[string]bool{}
+	kept := f.Nodes[:0:0]
+	for _, n := range f.Nodes {
+		if n.Role == flow.RoleExternal && dropName[n.Name] {
+			dropID[n.ID] = true
+			continue
+		}
+		kept = append(kept, n)
+	}
+	if len(dropID) == 0 {
+		return
+	}
+	f.Nodes = kept
+
+	keptEdges := f.Edges[:0:0]
+	for _, e := range f.Edges {
+		if dropID[e.From] || dropID[e.To] {
+			continue
+		}
+		keptEdges = append(keptEdges, e)
+	}
+	f.Edges = keptEdges
 }
 
 func loadCFGsForFlow(ctx context.Context, q flow.CFGQuerier, ws, format string, f flow.Flow) []flow.FlowCFGs {
