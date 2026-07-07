@@ -497,6 +497,88 @@ func TestDebugSearch_RRFMergeDeduplicates(t *testing.T) {
 	}
 }
 
+// TestDebugSearch_TagsResultsWithSourceLabel verifies each DebugSearch leg's
+// results carry the correct Source label ("code"/"session"/"config") after
+// the RRF merge — the core fix for #543 (DebugSearch dropped leg origin).
+func TestDebugSearch_TagsResultsWithSourceLabel(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+
+	codeRow := makeBM25Row("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000011", "tax.go", "calculateTax function", "code")
+	sessionRow := makeBM25Row("00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000012", "debug session", "tax was wrong due to rounding", "session-summary")
+	configRow := makeBM25Row("00000000-0000-0000-0000-000000000003", "00000000-0000-0000-0000-000000000013", "tax-config.md", "tax rate config value", "config")
+
+	q := &debugMockQuerier{
+		bm25Results: map[string][]sqlc.BM25SearchRow{
+			"tax":                     {codeRow},
+			"tax debug session error": {sessionRow},
+			"tax:config,memory":       {configRow},
+		},
+	}
+	embedder := &mockEmbedder{}
+	service := NewSearchService(q, embedder, cfg, logger)
+
+	results, err := service.DebugSearch(context.Background(), "tax", "ws1", 10, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	sourceByID := make(map[string]string, len(results))
+	for _, r := range results {
+		sourceByID[r.ID] = r.Source
+	}
+
+	want := map[string]string{
+		"00000000-0000-0000-0000-000000000001": "code",
+		"00000000-0000-0000-0000-000000000002": "session",
+		"00000000-0000-0000-0000-000000000003": "config",
+	}
+	for id, wantSource := range want {
+		got, ok := sourceByID[id]
+		if !ok {
+			t.Errorf("result %s missing from DebugSearch output", id)
+			continue
+		}
+		if got != wantSource {
+			t.Errorf("result %s: Source = %q, want %q", id, got, wantSource)
+		}
+	}
+}
+
+// TestDebugSearch_MultiLegMatch_SourceTieBreak verifies the tie rule: when
+// the same chunk is returned by more than one leg, the merged/deduplicated
+// result keeps exactly one Source label — the first-seen leg in merge order
+// (code, then session, then config), matching RRFMerge's existing
+// "metadata kept from first occurrence" convention.
+func TestDebugSearch_MultiLegMatch_SourceTieBreak(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+
+	sharedRow := makeBM25Row("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000011", "rate.go", "rate limiting logic", "code")
+
+	q := &debugMockQuerier{
+		bm25Results: map[string][]sqlc.BM25SearchRow{
+			"rate limiting":                     {sharedRow},
+			"rate limiting debug session error": {sharedRow},
+			"rate limiting:config,memory":       {sharedRow},
+		},
+	}
+	embedder := &mockEmbedder{}
+	service := NewSearchService(q, embedder, cfg, logger)
+
+	results, err := service.DebugSearch(context.Background(), "rate limiting", "ws1", 10, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected exactly 1 deduplicated result, got %d", len(results))
+	}
+	if results[0].Source != "code" {
+		t.Errorf("expected deterministic tie-break to keep %q (first-seen leg), got %q", "code", results[0].Source)
+	}
+}
+
 func TestBuildORQuery_RemovesStopWords(t *testing.T) {
 	tests := []struct {
 		input string

@@ -166,3 +166,109 @@ Integration test (`-tags=integration`, `testutil.SetupTestDB`, runs against
   `group_by == "document"`.
 
 No unit test was added for `memory_query` (G-C3: not modified).
+
+## PR-D — debugging-mode source labels (#543)
+
+Tracking: #543 finding (debugging-buckets) — see the new focused issue filed
+for this PR.
+
+### Root cause
+
+`DebugSearch` (`internal/search/service.go:642` pre-fix) runs 3 parallel legs
+— code / session / config — each returning `[]Result`, then RRF-merges them
+(`DynamicRRFMerge`, `internal/search/rrf.go:50`) into ONE flat `[]Result`.
+Its docstring claimed "returns results with a source field," but
+`search.Result` (`internal/search/search.go:13`) had no source/bucket field,
+and the merge/dedup path discarded which leg each result came from. The
+`memory_query` tool description (`internal/mcp/tools.go:335`) advertises
+"parallel code/session/config searches with source labels," and the
+debugging branch (`tools.go` ~408-471) called `DebugSearch` but rendered
+flat items with no source label — the advertised labeling did not exist.
+(#543 has other findings — trace collision, latency, ticket pollution — out
+of scope for this PR.)
+
+### Decisions
+
+**G-D1 — additive `Source` field on `search.Result`.**
+`Source string \`json:"source,omitempty"\`` added to `search.Result`
+(`internal/search/search.go`). Empty for every non-debug search path
+(`HybridSearch`, `hybridSearchInner`'s direct callers outside `DebugSearch`,
+vsearch, etc.) — none of them ever assign it, so the zero value flows
+through unchanged. No existing struct-literal in the codebase constructs
+`Result` exhaustively with positional fields (all call sites use named
+fields), so the additive field is backward-compatible; confirmed by
+`go build ./...` passing unchanged.
+
+**G-D2 — tag each leg before merge; first-seen tie rule.**
+A small helper, `tagSource(results []Result, source string) []Result`
+(`internal/search/service.go`), sets `Source` on every result of a leg
+in place. Each of the 3 goroutines in `DebugSearch` calls it right after
+its `hybridSearchInner` call succeeds: `tagSource(results, "code")`,
+`tagSource(results, "session")`, `tagSource(results, "config")` —
+before the results are appended to `allResultSets` and RRF-merged.
+
+Tie rule for a chunk returned by more than one leg: **first-seen wins**, in
+merge order `code > session > config` (the order legs are appended to
+`allResultSets`, then folded left-to-right via
+`merged = DynamicRRFMerge(merged, allResultSets[i], rrfK)`). This falls out
+of `RRFMerge`'s existing, already-documented convention — "When a chunk
+appears in both lists, metadata is kept from the first occurrence" — with
+no additional logic needed: since `Source` is just another field on the
+`Result` struct value, and both `RRFMerge` (map insert keyed by `r.ID`,
+first list wins ties) and `DeduplicateResults` (copies whole `Result`
+values, dedups by `DocumentID` then content hash) operate on full struct
+copies, `Source` rides along automatically. Verified by
+`TestDebugSearch_MultiLegMatch_SourceTieBreak`.
+
+**G-D3 — surface `source` per result item in MCP responses.**
+`mcpSearchResultItem` (`internal/mcp/tools.go`) gets a matching
+`Source string \`json:"source,omitempty"\`` field. Populated
+(`Source: r.Source`) in the two render loops that build items from
+`DebugSearch` output: the single `memory_query` loop (`tools.go` ~462,
+used for both normal and debug results since they share one `results`
+slice and one loop) and the `memory_search` debugging-branch loop
+(`tools.go` ~651) — `memory_search` advertises the identical "source
+labels" claim for `mode="debugging"` and calls the same `DebugSearch`, so
+leaving it unfixed would keep the same bug alive under a different tool
+name. The two `memory_vsearch`/non-debug `memory_search` render loops
+(`tools.go` ~811, ~1103) were left untouched — they never call
+`DebugSearch`, so `r.Source` is always `""` there and `omitempty` already
+drops the key. Also added a `source` case to `filterFields` (used by the
+`fields=` param) for consistency with every other `mcpSearchResultItem`
+field. No response restructuring into grouped buckets — a flat list where
+each item carries its own `source` label satisfies the advertised
+"source labels" with the smallest possible diff.
+
+The `memory_query`/`memory_search` tool descriptions already read
+"...runs parallel code/session/config searches with source labels..." —
+accurate wording, no "buckets" language present — so no description text
+changed; it is simply now true.
+
+### Testing approach
+
+Unit tests (`internal/search/service_test.go`), mock-querier based (no DB):
+
+- `TestDebugSearch_TagsResultsWithSourceLabel` — 3 distinct rows, one keyed
+  to each leg's exact query (code: `"tax"`, session: `"tax debug session
+  error"`, config: `"tax:config,memory"` via the mock's
+  `BM25SearchWithTags` key format) — asserts each result's `Source` matches
+  its leg.
+- `TestDebugSearch_MultiLegMatch_SourceTieBreak` — the same row returned
+  under all 3 legs' query keys — asserts exactly 1 deduplicated result
+  survives and its `Source == "code"` (first-seen per the tie rule).
+
+Integration test (`-tags=integration`, `testutil.SetupTestDB`, runs against
+`nanobrain_test`), new file
+`internal/mcp/debugsearch_mode_543_integration_test.go`:
+
+- `TestMemoryQuery_DebugMode_ResultsCarrySourceLabel` — seeds a
+  `["config","memory"]`-tagged doc and a plain doc sharing a query term,
+  calls `memory_query` with `mode="debugging"` and asserts every result
+  item has a non-empty `source` in `{"code","session","config"}`, then
+  calls the same query without `mode` and asserts `source` is absent from
+  every item. (Exact per-leg attribution against a real Postgres
+  `websearch_to_tsquery` corpus isn't deterministically constructible —
+  the session leg's query is a superset of the code leg's, so anything
+  matching session structurally also matches code — so the integration
+  test checks the MCP-layer contract; leg-level attribution correctness is
+  covered by the mock-based unit tests above.)

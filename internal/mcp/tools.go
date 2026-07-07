@@ -235,6 +235,10 @@ type mcpSearchResultItem struct {
 	CreatedAt     interface{} `json:"created_at,omitempty"`
 	UpdatedAt     interface{} `json:"updated_at,omitempty"`
 	HasMore       bool        `json:"has_more,omitempty"`
+	// Source labels which DebugSearch leg produced this result ("code",
+	// "session", "config"). Only populated for mode="debugging"; omitted
+	// for standard searches (#543).
+	Source string `json:"source,omitempty"`
 }
 
 // mcpSearchResponse is the response envelope for all three search tools.
@@ -288,6 +292,9 @@ func filterFields(item mcpSearchResultItem, fieldSet map[string]bool) map[string
 	}
 	if fieldSet["collection"] {
 		result["collection"] = item.Collection
+	}
+	if fieldSet["source"] && item.Source != "" {
+		result["source"] = item.Source
 	}
 	if fieldSet["document_id"] {
 		result["document_id"] = item.DocumentID
@@ -464,6 +471,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 					Collection: r.Collection, SourcePath: r.SourcePath,
 					CreatedAt: createdAt, UpdatedAt: updatedAt,
 					HasMore: len(r.Content) > mcpSnippetLen,
+					Source:  r.Source,
 				}
 				if includeContent {
 					item.Content = r.Content
@@ -653,6 +661,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 						Collection: r.Collection, SourcePath: r.SourcePath,
 						CreatedAt: createdAt, UpdatedAt: updatedAt,
 						HasMore: len(r.Content) > mcpSnippetLen,
+						Source:  r.Source,
 					}
 					if includeContent {
 						item.Content = r.Content

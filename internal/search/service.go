@@ -636,8 +636,30 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 // DebugSearchMode is the mode parameter for debugging-aware search.
 const DebugSearchMode = "debugging"
 
-// DebugSearch runs 3 parallel searches (code, session, config) with source labels,
-// merges them using RRF fusion, and returns results with a source field.
+// tagSource returns results with Source set to source, in place. Applied to
+// each DebugSearch leg before RRF merge so the label survives merge/dedup —
+// both operate on Result values and copy the whole struct, so Source rides
+// along without further plumbing (#543).
+func tagSource(results []Result, source string) []Result {
+	for i := range results {
+		results[i].Source = source
+	}
+	return results
+}
+
+// DebugSearch runs 3 parallel searches (code, session, config), tags each
+// leg's results with its Source ("code"/"session"/"config") before merging
+// them with RRF fusion, and returns a flat, deduplicated list where each
+// result carries the source label of the leg it came from.
+//
+// Tie rule: when a chunk is returned by more than one leg, RRFMerge keeps
+// that chunk's metadata (including Source) from its first occurrence across
+// the merge order below (code, then session, then config) — the same
+// "first occurrence wins" convention RRFMerge already uses for all other
+// fields (see RRFMerge doc comment). So a doc matching multiple legs is
+// deterministically labeled with the earliest leg, in code > session > config
+// priority order.
+//
 // Each sub-search has a 2s timeout. Partial failures are handled gracefully.
 func (s *SearchService) DebugSearch(ctx context.Context, query string, workspace string, maxResults int, timeRange *TimeRangeFilter, chunkType string) ([]Result, error) {
 	s.configMutex.RLock()
@@ -667,7 +689,7 @@ func (s *SearchService) DebugSearch(ctx context.Context, query string, workspace
 			s.logger.Warn().Err(err).Msg("debug: code search leg failed")
 			return nil
 		}
-		codeResults = subResult{results: results}
+		codeResults = subResult{results: tagSource(results, "code")}
 		return nil
 	})
 
@@ -681,7 +703,7 @@ func (s *SearchService) DebugSearch(ctx context.Context, query string, workspace
 			s.logger.Warn().Err(err).Msg("debug: session search leg failed")
 			return nil
 		}
-		sessionResults = subResult{results: results}
+		sessionResults = subResult{results: tagSource(results, "session")}
 		return nil
 	})
 
@@ -695,7 +717,7 @@ func (s *SearchService) DebugSearch(ctx context.Context, query string, workspace
 			s.logger.Warn().Err(err).Msg("debug: config search leg failed")
 			return nil
 		}
-		configResults = subResult{results: results}
+		configResults = subResult{results: tagSource(results, "config")}
 		return nil
 	})
 
