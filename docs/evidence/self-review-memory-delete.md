@@ -69,8 +69,6 @@ Author: kokorolx.
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR._
-
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| tools.go:1426 (MEDIUM) — `memory_delete` should use `requireRegisteredWorkspace` like `memory_write`/`memory_update`, not the bare `a.requireWorkspace` | VALID | Correct: delete is a mutating write path and should enforce the same registered-workspace constraint (#238) as other mutations; also subsumes the manual `"all"` check. | FIXED — switched to `requireRegisteredWorkspace`, removed the now-redundant `ws == "all"` check. |

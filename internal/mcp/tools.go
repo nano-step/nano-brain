@@ -1417,12 +1417,9 @@ func registerMemoryDelete(server *mcpsdk.Server, a *Adapter) {
 			if err != nil {
 				return errResult("invalid arguments"), nil
 			}
-			ws, errRes := a.requireWorkspace(ctx, args)
+			ws, errRes := requireRegisteredWorkspace(ctx, a, args)
 			if errRes != nil {
 				return errRes, nil
-			}
-			if ws == "all" {
-				return errResult("workspace 'all' is not valid for memory_delete"), nil
 			}
 			path := argString(args, "path")
 			if path == "" {
