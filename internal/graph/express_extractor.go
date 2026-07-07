@@ -67,6 +67,39 @@ func (e *ExpressExtractor) ExtractEdges(filePath string, content []byte) ([]Edge
 			return
 		}
 
+		argsNode := n.ChildByFieldName("arguments", lang)
+		// A single-argument use() call (app.use(corsMiddleware)) registers global
+		// middleware, not a route — there is no path/handler pair to extract, and
+		// tsExtractPath would otherwise misread the middleware reference as an
+		// (unresolvable) path argument and skip the call entirely.
+		if method == "USE" && tsCountArgs(argsNode, lang) == 1 {
+			arg := tsArgNode(argsNode, lang, 0)
+			if arg == nil {
+				return
+			}
+			if t := arg.Type(lang); t == "string" || t == "template_string" {
+				return
+			}
+			name := tsResolveMiddlewareName(bt, arg, lang)
+			if name == "" {
+				return
+			}
+			edgeKey := "middleware:" + name + "-><" + receiver + ">"
+			if seen[edgeKey] {
+				return
+			}
+			seen[edgeKey] = true
+			edges = append(edges, Edge{
+				SourceNode: name,
+				TargetNode: "<" + receiver + ">",
+				Kind:       EdgeMiddleware,
+				SourceFile: relFile,
+				Line:       lineForByte(content, n.StartByte()),
+				Language:   langStr,
+			})
+			return
+		}
+
 		path := tsExtractPath(bt, n, lang)
 		if path == "" {
 			e.logger.Warn().Str("file", filePath).Str("method", method).Msg("empty path in route")

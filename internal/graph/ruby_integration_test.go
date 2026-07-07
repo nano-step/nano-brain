@@ -35,6 +35,21 @@ func testWorkspace() string {
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
+// skipIfServerUnreachable skips the test when no live server is reachable at
+// testServerURL(). These are acceptance tests: they exercise the full
+// extraction pipeline via a running nano-brain server pre-indexed with the
+// rails-app fixture (testWorkspace()), not a self-contained fixture — there
+// is no server to connect to in a default CI run.
+func skipIfServerUnreachable(t *testing.T) {
+	t.Helper()
+	probe := &http.Client{Timeout: 2 * time.Second}
+	resp, err := probe.Get(testServerURL() + "/health")
+	if err != nil {
+		t.Skipf("skipping: no live server at %s (%v) — this acceptance test needs a running nano-brain server pre-indexed with the rails-app fixture (see NANO_BRAIN_TEST_SERVER_URL / NANO_BRAIN_TEST_WORKSPACE)", testServerURL(), err)
+	}
+	defer resp.Body.Close()
+}
+
 type apiResponse struct {
 	Found      bool          `json:"found"`
 	Entry      string        `json:"entry"`
@@ -138,6 +153,7 @@ func TestRailRouteExtraction(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+	skipIfServerUnreachable(t)
 
 	ws := testWorkspace()
 	resp := apiGet(t, fmt.Sprintf("/api/v1/graph/flow/endpoints?workspace=%s", ws))
@@ -195,6 +211,7 @@ func TestRubyCrossFileResolution(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+	skipIfServerUnreachable(t)
 
 	ws := testWorkspace()
 
@@ -246,6 +263,7 @@ func TestRubyReconcileEdges(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+	skipIfServerUnreachable(t)
 
 	ws := testWorkspace()
 
@@ -288,6 +306,7 @@ func TestRubyClassIndex(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+	skipIfServerUnreachable(t)
 
 	ws := testWorkspace()
 
@@ -339,6 +358,7 @@ func TestRubyFlowEndToEnd(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+	skipIfServerUnreachable(t)
 
 	ws := testWorkspace()
 
