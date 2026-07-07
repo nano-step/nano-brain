@@ -2516,10 +2516,14 @@ func registerMemoryFlow(server *mcpsdk.Server, a *Adapter) {
 
 			f := flow.BuildFlow(edges, resolvedEntry, maxDepth, a.flowCfg.MaxFanout)
 
-			stitchWorkspaces := argStringSlice(args, "stitch_workspaces")
-			if len(stitchWorkspaces) > 0 {
-				publishEdges := filterPublishEdges(edges)
-				stitched := flow.Stitch(ctx, publishEdges, stitchWorkspaces, a.queries)
+			// Always stitch within the current workspace so an in-workspace
+			// publisher -> consumer link (e.g. redis.publish('ch') -> a handler that
+			// redis.subscribe('ch')) surfaces without the caller passing hashes
+			// (#546/#577). Explicit stitch_workspaces add cross-service stitching on
+			// top. Stitch is a no-op when no consumer topic matches.
+			stitchTargets := append([]string{ws}, argStringSlice(args, "stitch_workspaces")...)
+			publishEdges := flowReachablePublishers(filterPublishEdges(edges), &f)
+			if stitched := flow.Stitch(ctx, publishEdges, stitchTargets, a.queries); len(stitched) > 0 {
 				appendStitchedToFlow(&f, stitched)
 			}
 
@@ -2779,7 +2783,42 @@ func filterPublishEdges(edges []graph.Edge) []graph.Edge {
 		if e.Kind != graph.EdgeIntegration {
 			continue
 		}
+		// Consumer entries ("CONSUME <topic>" / "ON <topic>") also carry a topic
+		// but are the subscribe side, not publishers. Excluding them stops a
+		// consumer from stitching to itself (a From==To self-edge).
+		if kind, _ := e.Metadata["kind"].(string); kind == "queue_consumer" {
+			continue
+		}
+		if strings.HasPrefix(e.SourceNode, "CONSUME ") || strings.HasPrefix(e.SourceNode, "ON ") {
+			continue
+		}
 		if topic, ok := e.Metadata["topic"].(string); ok && topic != "" {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// flowReachablePublishers keeps only publish edges whose source symbol is a node
+// in the built flow, so stitching links the current flow's publishers to their
+// consumers rather than importing every unrelated pub/sub pair in the workspace.
+// Matches on the flow node id or its bare "::"-suffix (flow route handlers are
+// bare names while publish edges are qualified "file::symbol").
+func flowReachablePublishers(pubs []graph.Edge, f *flow.Flow) []graph.Edge {
+	inFlow := make(map[string]bool, len(f.Nodes)*2)
+	for _, n := range f.Nodes {
+		inFlow[n.ID] = true
+		if i := strings.LastIndex(n.ID, "::"); i >= 0 {
+			inFlow[n.ID[i+2:]] = true
+		}
+	}
+	var out []graph.Edge
+	for _, e := range pubs {
+		bare := e.SourceNode
+		if i := strings.LastIndex(bare, "::"); i >= 0 {
+			bare = bare[i+2:]
+		}
+		if inFlow[e.SourceNode] || inFlow[bare] {
 			out = append(out, e)
 		}
 	}
@@ -2795,13 +2834,14 @@ func appendStitchedToFlow(f *flow.Flow, stitched []flow.FlowEdge) {
 		existing[n.ID] = true
 	}
 	for _, se := range stitched {
-		if !existing[se.To] {
-			existing[se.To] = true
-			f.Nodes = append(f.Nodes, flow.FlowNode{
-				ID:   se.To,
-				Name: se.To,
-				Role: flow.RoleIntegration,
-			})
+		// Register BOTH endpoints so a stitched edge never references an id absent
+		// from nodes[] (a dangling edge in the JSON) — the publisher may not be a
+		// node in the built flow.
+		for _, id := range []string{se.From, se.To} {
+			if !existing[id] {
+				existing[id] = true
+				f.Nodes = append(f.Nodes, flow.FlowNode{ID: id, Name: id, Role: flow.RoleIntegration})
+			}
 		}
 		f.Edges = append(f.Edges, se)
 	}

@@ -359,11 +359,14 @@ func TestJSIntegrationExtractor_Consumer(t *testing.T) {
 			wantKind:   "queue_consumer",
 		},
 		{
+			// #546/#577: redis.subscribe is a consumer entry ("CONSUME <topic>" ->
+			// handler), so flow.Stitch links it to a publisher by topic — not a
+			// cache_pubsub leaf sourced from the handler.
 			name:       "redis.subscribe channel",
 			src:        `function listen() { redis.subscribe("updates", (data) => { handle(data); }); }`,
-			wantSource: "test.js::listen",
+			wantSource: "CONSUME updates",
 			wantTopic:  "updates",
-			wantKind:   "cache_pubsub",
+			wantKind:   "queue_consumer",
 		},
 	}
 
@@ -493,9 +496,18 @@ function handler() {
 	}
 
 	seen := make(map[string]bool)
-	for _, e := range integrationEdges {
+	var consumeEdge *graph.Edge
+	for i := range integrationEdges {
+		e := integrationEdges[i]
 		if e.Kind != graph.EdgeIntegration {
 			t.Errorf("edge Kind = %v, want EdgeIntegration", e.Kind)
+		}
+		// #546/#577: redis.subscribe now yields a "CONSUME <topic>" consumer
+		// entry (source = the topic node, target = the handler), so the
+		// caller-side SourceNode check applies only to the outbound edges.
+		if kind, _ := e.Metadata["kind"].(string); kind == "queue_consumer" {
+			consumeEdge = &integrationEdges[i]
+			continue
 		}
 		seen[e.TargetNode] = true
 		if e.SourceNode != "test.js::handler" {
@@ -508,8 +520,14 @@ function handler() {
 	if !seen["emit:user.fetched"] {
 		t.Error("missing emit queue publish edge")
 	}
-	if !seen["subscribe:events"] {
-		t.Error("missing redis subscribe cache_pubsub edge")
+	// redis.subscribe('events', ...) is a consumer entry, not a cache_pubsub leaf,
+	// so flow.Stitch can link it to a redis.publish('events') producer by topic.
+	if consumeEdge == nil {
+		t.Fatal("missing redis subscribe consumer entry edge")
+	}
+	if consumeEdge.SourceNode != "CONSUME events" || consumeEdge.TargetNode != "test.js::handler" {
+		t.Errorf("consume edge = %q -> %q, want \"CONSUME events\" -> \"test.js::handler\"",
+			consumeEdge.SourceNode, consumeEdge.TargetNode)
 	}
 }
 
