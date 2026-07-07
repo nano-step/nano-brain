@@ -44,8 +44,8 @@ Author: kokorolx.
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR._
+Gemini: COMMENTED, CI pass, MERGEABLE/CLEAN. One inline (HIGH).
 
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| tools.go:2365 [high] — `mostSpecificAncestor` hardcodes `/`; Windows `filepath.Abs` yields `\` so prefix match would fail there | VALID (severity overstated for this project — binaries ship darwin/linux only and Phase 13 guards `serve` on Windows, so server paths are always `/`) | The fix is a no-op on supported platforms and zero-risk, so cheaper to apply than to justify dismissing a HIGH; forward-slash unit tests stay green. | **Fixed** — normalize both sides with `filepath.ToSlash` before the boundary check (1:1 char swap → lengths and most-specific selection unaffected). |

@@ -2350,14 +2350,22 @@ func mcpCoveringAncestor(ctx context.Context, q *sqlc.Queries, absPath string) (
 func mostSpecificAncestor(workspaces []sqlc.Workspace, absPath string) (sqlc.Workspace, bool) {
 	var best sqlc.Workspace
 	bestLen := -1
+	// Normalize separators so the "/"-based boundary check is correct on Windows
+	// too (filepath.Abs yields "\" there); a no-op on unix. ToSlash is a 1:1 char
+	// swap, so lengths — and thus most-specific selection — are unaffected.
+	normAbs := filepath.ToSlash(absPath)
 	for _, w := range workspaces {
-		if w.Path == "" || w.Path == absPath {
+		if w.Path == "" {
+			continue
+		}
+		normW := filepath.ToSlash(w.Path)
+		if normW == normAbs {
 			continue
 		}
 		// Boundary-aligned containment: absPath must sit under w.Path/, not merely
 		// share a string prefix (e.g. "/repo-api" is NOT under "/repo").
-		if strings.HasPrefix(absPath, strings.TrimRight(w.Path, "/")+"/") && len(w.Path) > bestLen {
-			bestLen = len(w.Path)
+		if strings.HasPrefix(normAbs, strings.TrimRight(normW, "/")+"/") && len(normW) > bestLen {
+			bestLen = len(normW)
 			best = w
 		}
 	}
