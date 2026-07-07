@@ -25,7 +25,10 @@ ORDER BY edge_type, target_node;
 -- name: GetIncomingEdges :many
 SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
 FROM graph_edges
-WHERE workspace_hash = $1 AND (target_node = $2 OR split_part(target_node, '::', 2) = $2)
+WHERE workspace_hash = $1
+  AND (target_node = $2
+       OR split_part(target_node, '::', 2) = $2
+       OR (strpos($2::text, '::') > 0 AND target_node = split_part($2::text, '::', 2)))
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, source_node;
 
