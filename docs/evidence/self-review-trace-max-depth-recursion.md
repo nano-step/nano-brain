@@ -51,8 +51,8 @@ Author: kokorolx.
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR._
+Gemini: COMMENTED, CI pass, MERGEABLE/CLEAN. One inline comment.
 
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| tools.go:1910 [medium] — `seen`-map key asymmetry (relative entry seed vs absolute child keys) lets a cycle back to the entry re-list it | VALID | Same item R88 raised (LOW). Bounded (no loop) but a real correctness nit in the exact traversal being fixed; two reviewers flagged it. | **Fixed** — dedup now keys on the workspace-relative form (`stripWorkspacePrefix(wsRoot, qualified)`) while keeping the absolute node for display. Locked by new red-green test `TestMemoryTrace_CycleBackToEntry_NotReListed_AbsoluteSourcePath` (RED: Main re-listed at depth 2; GREEN: deduped). |

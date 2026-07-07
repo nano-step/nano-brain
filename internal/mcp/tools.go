@@ -2011,10 +2011,17 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 							continue
 						}
 						qualified := m.SourcePath[:qIdx] + "::" + e.TargetNode
-						if seen[qualified] {
+						// Dedup on the workspace-relative form so this key is
+						// consistent with the relative entry seed and with the
+						// relative source_node used for the next-hop lookup;
+						// otherwise a cycle back to the entry (qualified absolute
+						// here, seeded relative) would re-list it. The absolute
+						// form is kept for the displayed node (see paths handling).
+						seenKey := stripWorkspacePrefix(wsRoot, qualified)
+						if seen[seenKey] {
 							continue
 						}
-						seen[qualified] = true
+						seen[seenKey] = true
 						chain = append(chain, traceItem{
 							Node:      qualified,
 							Name:      e.TargetNode,

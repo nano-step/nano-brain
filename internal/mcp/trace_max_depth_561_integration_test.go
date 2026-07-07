@@ -80,3 +80,45 @@ func TestMemoryTrace_RecursesPastDepth1_AbsoluteSourcePath(t *testing.T) {
 		t.Errorf("leaf depth = %d, want 2 (the transitive hop); got %v", byName["leaf"], chain)
 	}
 }
+
+// A cycle back to the entry symbol, with ABSOLUTE source_path, must not re-list
+// the entry (nor loop). Before the seen-key was normalized to the relative form,
+// the cycle target qualified absolute ("<root>/entry.go::Main") and missed the
+// relative entry seed ("entry.go::Main"), so Main was re-listed. (R88 + Gemini.)
+func TestMemoryTrace_CycleBackToEntry_NotReListed_AbsoluteSourcePath(t *testing.T) {
+	ctx, q, wsHash, callTool := setupFindingsMCP(t)
+	ws, err := q.GetWorkspaceByHash(ctx, wsHash)
+	if err != nil {
+		t.Fatalf("get workspace: %v", err)
+	}
+	root := ws.Path
+
+	// Both symbols carry absolute source_path; mid calls back to Main.
+	upsertSymbolDoc(t, ctx, q, wsHash, root+"/entry.go", "Main", "function", "func Main() {}", "1", "1")
+	upsertSymbolDoc(t, ctx, q, wsHash, root+"/mid.go", "mid", "function", "func mid() {}", "1", "1")
+	for _, e := range []struct{ source, target string }{
+		{"entry.go::Main", "mid"}, // Main -> mid
+		{"mid.go::mid", "Main"},   // mid -> Main (cycle)
+	} {
+		if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+			WorkspaceHash: wsHash, SourceNode: e.source, TargetNode: e.target,
+			EdgeType: "calls", SourceFile: "", Metadata: []byte("{}"),
+		}); err != nil {
+			t.Fatalf("upsert edge %+v: %v", e, err)
+		}
+	}
+
+	resp := unmarshalGraphResp(t, callTool("memory_trace", map[string]any{
+		"workspace": wsHash, "node": "entry.go::Main", "max_depth": float64(5), "paths": "relative",
+	}))
+	chain, _ := resp["chain"].([]any)
+	for _, c := range chain {
+		if c.(map[string]any)["name"].(string) == "Main" {
+			t.Fatalf("entry 'Main' re-listed in its own trace (cycle not deduped): %+v", chain)
+		}
+	}
+	// Only mid is reachable; the mid->Main hop is correctly skipped as the entry.
+	if len(chain) != 1 {
+		t.Fatalf("chain length = %d, want 1 (just mid; Main is the entry): %+v", len(chain), chain)
+	}
+}
