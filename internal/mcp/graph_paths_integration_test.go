@@ -21,7 +21,13 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func setupGraphMCP(t *testing.T) (context.Context, string, *mcpsdk.ClientSession, func(string, map[string]any) *mcpsdk.CallToolResult) {
+// setupGraphMCP seeds graph edges following the real watcher convention
+// (workspace-relative source/target nodes, e.g. filepath.Rel + ToSlash — see
+// internal/watcher/watcher.go relPath/relFile). normalizeNodeForQuery always
+// converts an agent-supplied node to this relative form before matching, so
+// relative-stored edges (not absolute-prefixed ones) are what a real query
+// actually finds.
+func setupGraphMCP(t *testing.T) (context.Context, *sqlc.Queries, string, string, *mcpsdk.ClientSession, func(string, map[string]any) *mcpsdk.CallToolResult) {
 	t.Helper()
 	pool := testutil.SetupTestDB(t)
 	ctx := context.Background()
@@ -40,10 +46,10 @@ func setupGraphMCP(t *testing.T) (context.Context, string, *mcpsdk.ClientSession
 	edges := []struct {
 		source, target, etype string
 	}{
-		{wsPath + "/internal/storage/migrate.go::RunMigrations", "context", "calls"},
-		{wsPath + "/internal/storage/migrate.go::RunMigrations", wsPath + "/internal/storage/migrate.go::GetCurrentVersion", "calls"},
-		{wsPath + "/internal/storage/migrate.go", wsPath + "/internal/storage/migrate.go::RunMigrations", "contains"},
-		{wsPath + "/cmd/main.go::startServer", wsPath + "/internal/storage/migrate.go::RunMigrations", "calls"},
+		{"internal/storage/migrate.go::RunMigrations", "context", "calls"},
+		{"internal/storage/migrate.go::RunMigrations", "internal/storage/migrate.go::GetCurrentVersion", "calls"},
+		{"internal/storage/migrate.go", "internal/storage/migrate.go::RunMigrations", "contains"},
+		{"cmd/main.go::startServer", "internal/storage/migrate.go::RunMigrations", "calls"},
 	}
 	for _, e := range edges {
 		if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
@@ -81,7 +87,7 @@ func setupGraphMCP(t *testing.T) (context.Context, string, *mcpsdk.ClientSession
 		}
 		return result
 	}
-	return ctx, wsHash, session, callTool
+	return ctx, q, wsHash, wsPath, session, callTool
 }
 
 func unmarshalGraphResp(t *testing.T, result *mcpsdk.CallToolResult) map[string]any {
@@ -97,7 +103,7 @@ func unmarshalGraphResp(t *testing.T, result *mcpsdk.CallToolResult) map[string]
 }
 
 func TestMemoryGraph_RelativeNodeInputResolvesToAbsolute(t *testing.T) {
-	_, wsHash, _, callTool := setupGraphMCP(t)
+	_, _, wsHash, _, _, callTool := setupGraphMCP(t)
 
 	rel := callTool("memory_graph", map[string]any{
 		"workspace": wsHash,
@@ -113,7 +119,7 @@ func TestMemoryGraph_RelativeNodeInputResolvesToAbsolute(t *testing.T) {
 }
 
 func TestMemoryGraph_AbsoluteNodeInputUnchanged(t *testing.T) {
-	ctx, wsHash, _, callTool := setupGraphMCP(t)
+	ctx, _, wsHash, _, _, callTool := setupGraphMCP(t)
 	_ = ctx
 
 	abs := callTool("memory_graph", map[string]any{
@@ -127,8 +133,25 @@ func TestMemoryGraph_AbsoluteNodeInputUnchanged(t *testing.T) {
 	}
 }
 
+// TestMemoryGraph_RelativeOutputStripsPrefix verifies the paths=relative strip
+// logic. normalizeNodeForQuery always normalizes the query NODE to relative
+// before matching, so a query can never reach an edge whose SOURCE is stored
+// absolute — but a TARGET can still carry a legacy absolute prefix (e.g. data
+// indexed before the relative convention). Seed exactly that shape.
 func TestMemoryGraph_RelativeOutputStripsPrefix(t *testing.T) {
-	_, wsHash, _, callTool := setupGraphMCP(t)
+	ctx, q, wsHash, wsPath, _, callTool := setupGraphMCP(t)
+
+	legacyTarget := wsPath + "/internal/storage/migrate.go::LegacyHelper"
+	if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+		WorkspaceHash: wsHash,
+		SourceNode:    "internal/storage/migrate.go::RunMigrations",
+		TargetNode:    legacyTarget,
+		EdgeType:      "calls",
+		SourceFile:    "",
+		Metadata:      []byte("{}"),
+	}); err != nil {
+		t.Fatalf("upsert legacy edge: %v", err)
+	}
 
 	abs := callTool("memory_graph", map[string]any{
 		"workspace": wsHash,
@@ -137,13 +160,19 @@ func TestMemoryGraph_RelativeOutputStripsPrefix(t *testing.T) {
 		"edge_type": "calls",
 	})
 	absResp := unmarshalGraphResp(t, abs)
-	edgesAbs := absResp["edges"].([]any)
+	edgesAbs, _ := absResp["edges"].([]any)
+	if len(edgesAbs) != 3 {
+		t.Fatalf("default output: edges=%d, want 3 (context + GetCurrentVersion + legacy)", len(edgesAbs))
+	}
+	var sawLegacyAbs bool
 	for _, e := range edgesAbs {
 		em := e.(map[string]any)
-		src := em["source"].(string)
-		if !strings.HasPrefix(src, "/tmp/test-ws-") {
-			t.Errorf("default (absolute) should return absolute source, got %q", src)
+		if em["target"].(string) == legacyTarget {
+			sawLegacyAbs = true
 		}
+	}
+	if !sawLegacyAbs {
+		t.Errorf("default (absolute) should return the legacy target unstripped: %+v", edgesAbs)
 	}
 
 	rel := callTool("memory_graph", map[string]any{
@@ -154,26 +183,28 @@ func TestMemoryGraph_RelativeOutputStripsPrefix(t *testing.T) {
 		"paths":     "relative",
 	})
 	relResp := unmarshalGraphResp(t, rel)
-	edgesRel := relResp["edges"].([]any)
-	if len(edgesRel) != 2 {
-		t.Fatalf("relative output: edges=%d, want 2", len(edgesRel))
+	edgesRel, _ := relResp["edges"].([]any)
+	if len(edgesRel) != 3 {
+		t.Fatalf("relative output: edges=%d, want 3", len(edgesRel))
 	}
-	var contextSeen, getCurrentSeen bool
+	var contextSeen, getCurrentSeen, legacySeen bool
 	for _, e := range edgesRel {
 		em := e.(map[string]any)
 		src := em["source"].(string)
 		tgt := em["target"].(string)
-		if strings.HasPrefix(src, "/tmp/") {
-			t.Errorf("relative output: source still has workspace prefix: %q", src)
+		if strings.HasPrefix(src, "/tmp/") || strings.HasPrefix(tgt, "/tmp/") {
+			t.Errorf("relative output: edge still has workspace prefix: source=%q target=%q", src, tgt)
 		}
 		if src != "internal/storage/migrate.go::RunMigrations" {
 			t.Errorf("relative output: source = %q, want stripped", src)
 		}
-		if tgt == "context" {
+		switch tgt {
+		case "context":
 			contextSeen = true
-		}
-		if tgt == "internal/storage/migrate.go::GetCurrentVersion" {
+		case "internal/storage/migrate.go::GetCurrentVersion":
 			getCurrentSeen = true
+		case "internal/storage/migrate.go::LegacyHelper":
+			legacySeen = true
 		}
 	}
 	if !contextSeen {
@@ -182,10 +213,13 @@ func TestMemoryGraph_RelativeOutputStripsPrefix(t *testing.T) {
 	if !getCurrentSeen {
 		t.Error("relative output: workspace-local symbol should have prefix stripped")
 	}
+	if !legacySeen {
+		t.Error("relative output: legacy absolute-prefixed target should have prefix stripped")
+	}
 }
 
 func TestMemoryGraph_InvalidWorkspaceHashErrorsClearly(t *testing.T) {
-	_, _, _, callTool := setupGraphMCP(t)
+	_, _, _, _, _, callTool := setupGraphMCP(t)
 
 	result := callTool("memory_graph", map[string]any{
 		"workspace": "nonexistent_workspace_hash_xxxxxx",
@@ -202,7 +236,7 @@ func TestMemoryGraph_InvalidWorkspaceHashErrorsClearly(t *testing.T) {
 }
 
 func TestMemoryTrace_RelativeInputAndOutput(t *testing.T) {
-	_, wsHash, _, callTool := setupGraphMCP(t)
+	_, _, wsHash, _, _, callTool := setupGraphMCP(t)
 
 	result := callTool("memory_trace", map[string]any{
 		"workspace": wsHash,
@@ -233,7 +267,7 @@ func TestMemoryTrace_RelativeInputAndOutput(t *testing.T) {
 }
 
 func TestMemoryImpact_RelativeInputAndOutput(t *testing.T) {
-	_, wsHash, _, callTool := setupGraphMCP(t)
+	_, _, wsHash, _, _, callTool := setupGraphMCP(t)
 
 	result := callTool("memory_impact", map[string]any{
 		"workspace": wsHash,
