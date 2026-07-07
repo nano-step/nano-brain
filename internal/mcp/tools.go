@@ -800,8 +800,11 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			// Skipped when a time filter is set: the OR SQL variants have no
 			// time-range params, so relaxing there could surface rows outside the
 			// requested window — return 0 (as before) instead.
-			if len(allRows) == 0 && len(tags) == 0 && timeRange == nil && len(strings.Fields(query)) >= 2 {
-				if orQuery := search.BuildORQuery(query); orQuery != "" {
+			if len(allRows) == 0 && len(tags) == 0 && timeRange == nil {
+				// Only relax when >=2 non-stopword terms survive: a single term
+				// (e.g. "the deposit" -> "deposit") yields the same query the AND
+				// leg already ran with 0 rows, so the "|" is what makes it useful.
+				if orQuery := search.BuildORQuery(query); strings.Contains(orQuery, " | ") {
 					if ws == "all" {
 						rows, orErr := a.queries.BM25SearchAllOR(ctx, sqlc.BM25SearchAllORParams{
 							Query: orQuery, ChunkType: chunkTypeNull, MaxResults: fetchLimit,

@@ -52,8 +52,8 @@ Author: kokorolx.
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR._
+Gemini: COMMENTED, CI pass, MERGEABLE/CLEAN. One inline (MEDIUM).
 
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| tools.go:804 [medium] — a stopword query (`"the deposit"`) passes `Fields>=2` but `BuildORQuery` yields a single term → the OR query equals the already-failed AND query (redundant round-trip) | VALID | The `" | "` check is stricter and more correct — it subsumes `Fields>=2` and skips the redundant query when <2 non-stopword terms survive. | **Fixed** — gate changed from `len(Fields(query))>=2` + `orQuery != ""` to `strings.Contains(orQuery, " | ")`. |
