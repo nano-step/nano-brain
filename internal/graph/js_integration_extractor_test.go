@@ -400,6 +400,100 @@ func TestJSIntegrationExtractor_Consumer(t *testing.T) {
 	}
 }
 
+// #546 E2: Bull/BullMQ couples queue.add("jobName", data) to
+// queue.process("jobName", handler) by the job-name string, not a call.
+func TestJSIntegrationExtractor_BullQueue(t *testing.T) {
+	ex, err := graph.NewJSIntegrationExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("queue.add producer", func(t *testing.T) {
+		src := `function schedule() { mainQueue.add("emailJob", { to: "a@b.com" }); }`
+		edges, err := ex.ExtractEdges("test.js", []byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var matching []graph.Edge
+		for _, e := range edges {
+			if e.Kind == graph.EdgeIntegration {
+				matching = append(matching, e)
+			}
+		}
+		if len(matching) == 0 {
+			t.Fatal("expected at least one EdgeIntegration edge")
+		}
+		e := matching[0]
+		if e.TargetNode != "produce:emailJob" {
+			t.Errorf("TargetNode = %q, want %q", e.TargetNode, "produce:emailJob")
+		}
+		if e.Metadata["kind"] != "queue_publish" {
+			t.Errorf("Metadata[kind] = %v, want %q", e.Metadata["kind"], "queue_publish")
+		}
+		if e.Metadata["topic"] != "emailJob" {
+			t.Errorf("Metadata[topic] = %v, want %q", e.Metadata["topic"], "emailJob")
+		}
+	})
+
+	t.Run("queue.process consumer", func(t *testing.T) {
+		src := `function setup() { screenshotQueue.process("captureJob", (job) => { capture(job); }); }`
+		edges, err := ex.ExtractEdges("test.js", []byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var matching []graph.Edge
+		for _, e := range edges {
+			if e.Kind == graph.EdgeIntegration {
+				matching = append(matching, e)
+			}
+		}
+		if len(matching) == 0 {
+			t.Fatal("expected at least one EdgeIntegration edge")
+		}
+		e := matching[0]
+		if e.SourceNode != "CONSUME captureJob" {
+			t.Errorf("SourceNode = %q, want %q", e.SourceNode, "CONSUME captureJob")
+		}
+		if e.Metadata["kind"] != "queue_consumer" {
+			t.Errorf("Metadata[kind] = %v, want %q", e.Metadata["kind"], "queue_consumer")
+		}
+		if e.Metadata["topic"] != "captureJob" {
+			t.Errorf("Metadata[topic] = %v, want %q", e.Metadata["topic"], "captureJob")
+		}
+	})
+
+	t.Run("non-queue receiver unaffected", func(t *testing.T) {
+		// A plain Set/Map .add() on a receiver without a "queue" naming hint must
+		// not be misread as a Bull producer.
+		src := `function track() { seenIds.add("emailJob"); }`
+		edges, err := ex.ExtractEdges("test.js", []byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range edges {
+			if e.Kind == graph.EdgeIntegration {
+				t.Errorf("expected no integration edge for seenIds.add(), got %+v", e)
+			}
+		}
+	})
+
+	t.Run("single-arg process not misread", func(t *testing.T) {
+		// queue.process(handler) (no job name) is a real Bull pattern ("process
+		// all jobs") but out of scope — it must not fall through and misread the
+		// handler function as a job-name topic.
+		src := `function setup() { mainQueue.process((job) => { run(job); }); }`
+		edges, err := ex.ExtractEdges("test.js", []byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range edges {
+			if e.Kind == graph.EdgeIntegration && e.Metadata["kind"] == "queue_consumer" {
+				t.Errorf("expected no queue_consumer edge for single-arg process(), got %+v", e)
+			}
+		}
+	})
+}
+
 func TestJSIntegrationExtractor_BareFunctionCall(t *testing.T) {
 	ex, err := graph.NewJSIntegrationExtractor()
 	if err != nil {

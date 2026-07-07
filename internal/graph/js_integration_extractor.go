@@ -122,6 +122,15 @@ var jsRedisReceivers = map[string]bool{
 	"db":          true,
 }
 
+// isBullQueueReceiver matches variable/class names that follow the common
+// Bull/BullMQ queue naming convention (mainQueue, ScreenshotQueue,
+// taskQueue, ...). Bull has no fixed client name to key off of like Redis's
+// jsRedisReceivers, so this is a substring heuristic rather than an
+// exact-match set.
+func isBullQueueReceiver(name string) bool {
+	return strings.Contains(strings.ToLower(name), "queue")
+}
+
 // JSIntegrationExtractor implements graph.Extractor for JS/TS outbound
 // integration calls (HTTP, queue publish, event emit, consumer patterns).
 type JSIntegrationExtractor struct {
@@ -421,6 +430,44 @@ func (x *JSIntegrationExtractor) handleMemberExpression(bt *gotreesitter.BoundTr
 		if isUnambiguous || isKnownReceiver {
 			x.handleRedisCall(bt, callNode, methodName, receiverName, argsNode, lang, langLabel, relFile, source, line, edges)
 			return
+		}
+	}
+
+	// Bull/BullMQ queue producer/consumer: queue.add("jobName", data) couples to
+	// queue.process("jobName", handler) by the job-name string (#546 E2) — not a
+	// call, so it needs the same topic-based edge the generic bus/Redis paths
+	// use. Gated on a "queue" naming hint plus a literal job-name argument, to
+	// avoid misreading an unrelated Set/Map .add()/.process() call as a queue op.
+	if isBullQueueReceiver(receiverName) && (methodName == "add" || methodName == "process") {
+		firstArg := echoArgNode(argsNode, lang, 0)
+		if firstArg != nil && tsCountArgs(argsNode, lang) >= 2 {
+			if t := firstArg.Type(lang); t == "string" || t == "template_string" {
+				jobName := jsStringArgOrVar(bt, argsNode, lang, 0)
+				if methodName == "add" {
+					target := "produce:" + jobName
+					*edges = append(*edges, Edge{
+						SourceNode: source,
+						TargetNode: target,
+						Kind:       EdgeIntegration,
+						SourceFile: relFile,
+						Line:       line,
+						Language:   langLabel,
+						Metadata:   map[string]any{"kind": "queue_publish", "method": methodName, "receiver": receiverName, "topic": jobName},
+					})
+				} else {
+					consumeNode := "CONSUME " + jobName
+					*edges = append(*edges, Edge{
+						SourceNode: consumeNode,
+						TargetNode: source,
+						Kind:       EdgeIntegration,
+						SourceFile: relFile,
+						Line:       line,
+						Language:   langLabel,
+						Metadata:   map[string]any{"kind": "queue_consumer", "method": methodName, "receiver": receiverName, "topic": jobName},
+					})
+				}
+				return
+			}
 		}
 	}
 
