@@ -47,7 +47,7 @@ func skipIfServerUnreachable(t *testing.T) {
 	if err != nil {
 		t.Skipf("skipping: no live server at %s (%v) — this acceptance test needs a running nano-brain server pre-indexed with the rails-app fixture (see NANO_BRAIN_TEST_SERVER_URL / NANO_BRAIN_TEST_WORKSPACE)", testServerURL(), err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 }
 
 type apiResponse struct {

@@ -93,8 +93,6 @@ this PR's `Closes #556` scope); will file as a new issue.
 
 ## Gemini Verification Triage
 
-_Pending — populate after the Gemini bot reviews the PR._
-
 | Comment ref | Agent verdict | Reasoning | Action |
 | --- | --- | --- | --- |
-| _(none yet)_ | | | |
+| ruby_integration_test.go:51 (MEDIUM) — `resp.Body.Close()` should be `defer`red immediately after the error check, per idiomatic Go | VALID | Trivial style nit, no behavioral bug in this specific function (single call site, no other exit paths), but the idiomatic form is correct and cheap to apply. | FIXED — changed to `defer resp.Body.Close()`. |
