@@ -2051,6 +2051,19 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 						continue
 					}
 					ambiguous := len(matches) > 1
+					// Scope a bare-call collision to the definition nearest the
+					// caller in the directory tree (#542 F2): a unique nearest
+					// resolves the call, dropping cross-repo frontend/script noise.
+					// This is a heuristic (assumes same-subtree resolution) — a
+					// nearer same-named collision could mask a farther real target;
+					// import-graph precision is a #542 follow-up. A tie stays
+					// ambiguous (today's fan-out), so ties lose nothing.
+					if ambiguous {
+						if m, ok := nearestSymbolMatch(e.SourceFile, wsRoot, matches); ok {
+							matches = []sqlc.ResolveSymbolByNameRow{m}
+							ambiguous = false
+						}
+					}
 					for _, m := range matches {
 						// Symbol docs are stored as "<relpath>?symbol=...". Guard
 						// against a malformed source_path with no "?" (e.g. a

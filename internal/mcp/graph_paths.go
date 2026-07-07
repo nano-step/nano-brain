@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -83,4 +84,58 @@ func lookupWorkspaceRoot(ctx context.Context, queries *sqlc.Queries, workspaceHa
 		return ""
 	}
 	return ws.Path
+}
+
+// relSegments normalizes a file path to workspace-relative, "/"-separated,
+// slash-trimmed segments. filepath.ToSlash makes it Windows-safe (backslashes),
+// and trimming avoids empty leading/trailing segments skewing the depth count.
+func relSegments(p, wsRoot string) []string {
+	rel := strings.Trim(stripWorkspacePrefix(filepath.ToSlash(wsRoot), filepath.ToSlash(p)), "/")
+	if rel == "" {
+		return nil
+	}
+	return strings.Split(rel, "/")
+}
+
+// commonSegments counts the leading path segments two segment slices share.
+func commonSegments(a, b []string) int {
+	n := 0
+	for n < len(a) && n < len(b) && a[n] == b[n] {
+		n++
+	}
+	return n
+}
+
+// nearestSymbolMatch disambiguates same-named symbol candidates by directory
+// proximity to callerFile: it returns the single candidate that shares the
+// strictly-deepest path prefix with the caller, or ("", false) when the deepest
+// prefix is tied across candidates (genuinely ambiguous) or callerFile is empty.
+// Candidate files come from documents.source_path ("<relpath>?symbol=...", which
+// is absolute in production) so each is normalized to workspace-relative via
+// wsRoot before comparison. This scopes a bare call in a monorepo to the nearest
+// definition (backend over frontend) without a re-index.
+func nearestSymbolMatch(callerFile, wsRoot string, matches []sqlc.ResolveSymbolByNameRow) (sqlc.ResolveSymbolByNameRow, bool) {
+	var zero sqlc.ResolveSymbolByNameRow
+	if callerFile == "" {
+		return zero, false
+	}
+	callerSegs := relSegments(callerFile, wsRoot) // split once
+	bestDepth, tie := -1, false
+	var best sqlc.ResolveSymbolByNameRow
+	for _, m := range matches {
+		qIdx := strings.Index(m.SourcePath, "?")
+		if qIdx < 0 {
+			continue
+		}
+		switch d := commonSegments(callerSegs, relSegments(m.SourcePath[:qIdx], wsRoot)); {
+		case d > bestDepth:
+			bestDepth, best, tie = d, m, false
+		case d == bestDepth:
+			tie = true
+		}
+	}
+	if bestDepth < 0 || tie {
+		return zero, false
+	}
+	return best, true
 }
