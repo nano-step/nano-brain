@@ -1902,6 +1902,13 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			pathStyle := argString(args, "paths")
 			includeExternal, _ := args["include_external"].(bool)
 
+			// Resolved child nodes are qualified from documents.source_path,
+			// which is absolute; the graph_edges.source_node they must match
+			// against is workspace-relative. Strip the root at query time so
+			// traversal recurses past depth 1 (previously every hop after the
+			// first missed and the chain stopped at the direct callees).
+			wsRoot := lookupWorkspaceRoot(ctx, a.queries, ws)
+
 			seen := map[string]bool{node: true}
 			type traceItem struct {
 				Node      string `json:"node"`
@@ -1928,16 +1935,20 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 				}
 				var edges []sqlc.GraphEdge
 				var err error
-				if strings.Contains(cur.node, "::") {
+				// Normalize to the workspace-relative form the DB stores before
+				// matching source_node; an absolute key (from a resolved child)
+				// would otherwise never match and traversal would die here.
+				lookupNode := stripWorkspacePrefix(wsRoot, cur.node)
+				if strings.Contains(lookupNode, "::") {
 					edges, err = a.queries.GetOutgoingEdges(ctx, sqlc.GetOutgoingEdgesParams{
 						WorkspaceHash: ws,
-						SourceNode:    cur.node,
+						SourceNode:    lookupNode,
 						Column3:       "calls",
 					})
 				} else {
 					edges, err = a.queries.GetOutgoingEdgesBySymbol(ctx, sqlc.GetOutgoingEdgesBySymbolParams{
 						WorkspaceHash: ws,
-						SourceNode:    cur.node,
+						SourceNode:    lookupNode,
 						Column3:       "calls",
 					})
 				}
@@ -2000,10 +2011,17 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 							continue
 						}
 						qualified := m.SourcePath[:qIdx] + "::" + e.TargetNode
-						if seen[qualified] {
+						// Dedup on the workspace-relative form so this key is
+						// consistent with the relative entry seed and with the
+						// relative source_node used for the next-hop lookup;
+						// otherwise a cycle back to the entry (qualified absolute
+						// here, seeded relative) would re-list it. The absolute
+						// form is kept for the displayed node (see paths handling).
+						seenKey := stripWorkspacePrefix(wsRoot, qualified)
+						if seen[seenKey] {
 							continue
 						}
-						seen[qualified] = true
+						seen[seenKey] = true
 						chain = append(chain, traceItem{
 							Node:      qualified,
 							Name:      e.TargetNode,
@@ -2016,9 +2034,7 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 				}
 			}
 
-			var wsRoot string
 			if pathStyle == "relative" {
-				wsRoot = lookupWorkspaceRoot(ctx, a.queries, ws)
 				for i := range chain {
 					chain[i].Node = stripWorkspacePrefix(wsRoot, chain[i].Node)
 					chain[i].Via = stripWorkspacePrefix(wsRoot, chain[i].Via)
