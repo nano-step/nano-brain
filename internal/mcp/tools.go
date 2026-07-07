@@ -32,6 +32,7 @@ func RegisterTools(server *mcpsdk.Server, a *Adapter) {
 	registerMemorySearch(server, a)
 	registerMemoryVSearch(server, a)
 	registerMemoryGet(server, a)
+	registerMemoryDelete(server, a)
 	registerMemoryWrite(server, a)
 	registerMemoryTags(server, a)
 	registerMemoryStatus(server, a)
@@ -1396,6 +1397,78 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 				"supersedes_id":  supersedes,
 				"created_at":     doc.CreatedAt.Format(time.RFC3339),
 				"updated_at":     doc.UpdatedAt.Format(time.RFC3339),
+			})
+		},
+	)
+}
+
+func registerMemoryDelete(server *mcpsdk.Server, a *Adapter) {
+	server.AddTool(
+		&mcpsdk.Tool{
+			Name:        "memory_delete",
+			Description: "Permanently delete one memory document (e.g. a note written in error or a throwaway test) written via memory_write. Use memory_write's superseding instead when the note should stay discoverable as prior context; use this only to remove it entirely. Cannot be undone.",
+			InputSchema: toolSchema(map[string]map[string]any{
+				"path":      {"type": "string", "description": "Document source_path, UUID, or #<uuid> (document or chunk id from a search result) — the same forms memory_get accepts, except a \"file::Symbol\" graph node."},
+				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash. Optional if the MCP connection was configured with a default workspace via the ?workspace= URL query param; otherwise required."},
+			}, []string{"path"}),
+		},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+			args, err := parseArgs(req.Params.Arguments)
+			if err != nil {
+				return errResult("invalid arguments"), nil
+			}
+			ws, errRes := a.requireWorkspace(ctx, args)
+			if errRes != nil {
+				return errRes, nil
+			}
+			if ws == "all" {
+				return errResult("workspace 'all' is not valid for memory_delete"), nil
+			}
+			path := argString(args, "path")
+			if path == "" {
+				return errResult("path is required"), nil
+			}
+
+			var doc sqlc.Document
+			switch {
+			case strings.HasPrefix(path, "#"):
+				docID, parseErr := uuid.Parse(strings.TrimPrefix(path, "#"))
+				if parseErr != nil {
+					return errResult(fmt.Sprintf("invalid document ID: %v", parseErr)), nil
+				}
+				doc, err = resolveDocumentByAnyID(ctx, a.queries, ws, docID)
+			default:
+				if docID, parseErr := uuid.Parse(path); parseErr == nil {
+					doc, err = resolveDocumentByAnyID(ctx, a.queries, ws, docID)
+				} else {
+					doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+						SourcePath:    path,
+						WorkspaceHash: ws,
+					})
+				}
+			}
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return errResult(fmt.Sprintf("no document found for path %q in workspace %s", path, ws)), nil
+				}
+				return errResult(fmt.Sprintf("document not found: %v", err)), nil
+			}
+
+			rows, err := a.queries.DeleteDocumentByIDAndWorkspace(ctx, sqlc.DeleteDocumentByIDAndWorkspaceParams{
+				ID:            doc.ID,
+				WorkspaceHash: ws,
+			})
+			if err != nil {
+				return errResult(fmt.Sprintf("delete failed: %v", err)), nil
+			}
+			if rows == 0 {
+				return errResult(fmt.Sprintf("no document found for path %q in workspace %s", path, ws)), nil
+			}
+
+			return textResult(map[string]any{
+				"deleted": true,
+				"id":      doc.ID.String(),
+				"title":   doc.Title,
 			})
 		},
 	)
