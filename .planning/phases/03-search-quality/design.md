@@ -211,13 +211,20 @@ Tie rule for a chunk returned by more than one leg: **first-seen wins**, in
 merge order `code > session > config` (the order legs are appended to
 `allResultSets`, then folded left-to-right via
 `merged = DynamicRRFMerge(merged, allResultSets[i], rrfK)`). This falls out
-of `RRFMerge`'s existing, already-documented convention — "When a chunk
-appears in both lists, metadata is kept from the first occurrence" — with
-no additional logic needed: since `Source` is just another field on the
-`Result` struct value, and both `RRFMerge` (map insert keyed by `r.ID`,
-first list wins ties) and `DeduplicateResults` (copies whole `Result`
-values, dedups by `DocumentID` then content hash) operate on full struct
-copies, `Source` rides along automatically. Verified by
+of `RRFMerge`'s existing convention, with no additional logic needed —
+`Source` is just another field on the `Result` struct value, carried through
+by whatever wins each dedup. **Precisely, determinism holds at two distinct
+levels** (the guarantee is not a single blanket "code always wins"):
+1. **Exact same chunk (`r.ID`) in >1 leg** → `RRFMerge` map-inserts keyed by
+   `r.ID`, first list wins, and legs fold left-to-right `code→session→config`,
+   so the `code` leg's `Source` survives. Deterministic.
+2. **Same *document* via *different* chunks in different legs** → these are
+   distinct chunk results through `RRFMerge`; `DeduplicateResults` later
+   collapses by `DocumentID` (then content hash), again keeping the
+   first-encountered (left-to-right, so `code`-leg) copy. Deterministic.
+Both dedup keys resolve first-seen in the same fixed leg order, so the
+surviving `Source` is stable (not map-iteration-order dependent). A document
+surfaced only by one leg keeps that leg's source. Verified by
 `TestDebugSearch_MultiLegMatch_SourceTieBreak`.
 
 **G-D3 — surface `source` per result item in MCP responses.**
