@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c0c11"/>
+      <stop offset="1" stop-color="#060608"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#22c55e" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#22c55e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="node" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#86efac"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="url(#bg)" stroke="#22c55e" stroke-opacity="0.25" stroke-width="1.5"/>
+
+  <!-- soft glow behind the core -->
+  <circle cx="32" cy="32" r="20" fill="url(#glow)"/>
+
+  <!-- synapses -->
+  <g stroke="#22c55e" stroke-width="2.4" stroke-linecap="round" stroke-opacity="0.7" fill="none">
+    <path d="M32 32 L21 21"/>
+    <path d="M32 32 L45 20"/>
+    <path d="M32 32 L19 45"/>
+    <path d="M32 32 L46 45"/>
+    <path d="M21 21 L45 20" stroke-opacity="0.4"/>
+    <path d="M19 45 L46 45" stroke-opacity="0.4"/>
+  </g>
+
+  <!-- outer neurons -->
+  <g fill="url(#node)">
+    <circle cx="21" cy="21" r="4.4"/>
+    <circle cx="45" cy="20" r="4.4"/>
+    <circle cx="19" cy="45" r="4.4"/>
+    <circle cx="46" cy="45" r="4.4"/>
+  </g>
+
+  <!-- core -->
+  <circle cx="32" cy="32" r="7" fill="url(#node)"/>
+  <circle cx="32" cy="32" r="2.6" fill="#eafff1"/>
+</svg>
