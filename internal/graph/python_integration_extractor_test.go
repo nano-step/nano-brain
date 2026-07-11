@@ -375,6 +375,31 @@ func TestPythonIntegrationExtractor_TopLevelCall_NoEdge(t *testing.T) {
 	}
 }
 
+// TestPythonIntegrationExtractor_TopLevelSubscribe_Module covers #586: a
+// subscriber registered at module top level (outside any function) must still
+// produce a CONSUME node, attributed to a synthetic "<module>" symbol, so the
+// pub/sub stitcher can link it to a publisher.
+func TestPythonIntegrationExtractor_TopLevelSubscribe_Module(t *testing.T) {
+	ex := newPythonIntegrationExtractor(t)
+	src := []byte("pubsub.subscribe('channelX', cb)\n")
+	edges, err := ex.ExtractEdges("consumer.py", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, e := range edges {
+		if e.Kind == graph.EdgeIntegration && e.SourceNode == "CONSUME channelX" {
+			found = true
+			if e.TargetNode != "consumer.py::<module>" {
+				t.Errorf("TargetNode = %q, want %q", e.TargetNode, "consumer.py::<module>")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected a CONSUME channelX edge for the top-level subscriber")
+	}
+}
+
 func TestPythonIntegrationExtractor_MultipleEdges(t *testing.T) {
 	ex := newPythonIntegrationExtractor(t)
 	src := []byte(`

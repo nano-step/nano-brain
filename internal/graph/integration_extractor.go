@@ -10,6 +10,39 @@ import (
 
 var _ Extractor = (*IntegrationExtractor)(nil) // compile-time interface check
 
+// moduleSourceSuffix names the synthetic source symbol used when an integration
+// call appears at module top level, outside any named function (#586). Callers
+// build it as relFile + moduleSourceSuffix.
+const moduleSourceSuffix = "::<module>"
+
+// topLevelCouplingKinds are the integration-edge kinds worth keeping when a call
+// appears at module top level. Pub/sub and queue coupling edges still link
+// producers to consumers by topic (the connect-then-subscribe bootstrap in #586
+// registers subscribers here), so they survive attributed to the "<module>"
+// symbol. HTTP and plain cache ops at top level are init noise, so they stay
+// dropped exactly as the previous blanket top-level skip did.
+var topLevelCouplingKinds = map[string]bool{
+	"queue_publish":  true,
+	"queue_consumer": true,
+	"cache_pubsub":   true,
+}
+
+// keepTopLevelCoupling trims the edges appended since `before` (i.e. by the
+// current top-level call) down to the coupling kinds in topLevelCouplingKinds.
+// Kept edges are collected into a temporary slice first, then appended back onto
+// edges[:before] in place: the tail range is finished before the append, so
+// overwriting the tail is safe, and reusing the original backing array preserves
+// its spare capacity for later calls (no per-call copy of the prefix).
+func keepTopLevelCoupling(edges []Edge, before int) []Edge {
+	var kept []Edge
+	for _, e := range edges[before:] {
+		if k, _ := e.Metadata["kind"].(string); topLevelCouplingKinds[k] {
+			kept = append(kept, e)
+		}
+	}
+	return append(edges[:before], kept...)
+}
+
 // integrationPublishMethods are method names that indicate publishing to a queue,
 // event bus, or message broker.
 var integrationPublishMethods = map[string]bool{
@@ -135,7 +168,13 @@ func (x *IntegrationExtractor) ExtractEdges(filePath string, content []byte) ([]
 		line := lineForByte(content, callNode.StartByte())
 		source := enclosingFunc(callNode.StartByte())
 		if source == "" {
-			return // top-level call, skip
+			// Top-level call, outside any named function. Attribute it to a
+			// synthetic module symbol and, on the way out, keep only the
+			// pub/sub coupling edges (#586). The defer fires on every return
+			// path below, including branches that return early.
+			source = relFile + moduleSourceSuffix
+			before := len(edges)
+			defer func() { edges = keepTopLevelCoupling(edges, before) }()
 		}
 
 		switch fnNode.Type(lang) {

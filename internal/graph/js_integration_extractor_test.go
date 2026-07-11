@@ -563,6 +563,34 @@ func TestJSIntegrationExtractor_TopLevelCall_NoEdge(t *testing.T) {
 	}
 }
 
+// TestJSIntegrationExtractor_TopLevelSubscribe_Module covers #586: a subscriber
+// registered at module top level (the connect-then-subscribe bootstrap, outside
+// any named function) must still produce a CONSUME node so the pub/sub stitcher
+// can link it to a publisher. It is attributed to a synthetic "<module>" symbol.
+func TestJSIntegrationExtractor_TopLevelSubscribe_Module(t *testing.T) {
+	ex, err := graph.NewJSIntegrationExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := []byte("sub.on('connect', () => {\n  sub.subscribe('channelX', (m) => {})\n})\n")
+	edges, err := ex.ExtractEdges("consumer.ts", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, e := range edges {
+		if e.Kind == graph.EdgeIntegration && e.SourceNode == "CONSUME channelX" {
+			found = true
+			if e.TargetNode != "consumer.ts::<module>" {
+				t.Errorf("TargetNode = %q, want %q", e.TargetNode, "consumer.ts::<module>")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected a CONSUME channelX edge for the top-level subscriber")
+	}
+}
+
 func TestJSIntegrationExtractor_MultipleEdges(t *testing.T) {
 	ex, err := graph.NewJSIntegrationExtractor()
 	if err != nil {

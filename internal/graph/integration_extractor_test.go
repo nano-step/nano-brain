@@ -385,3 +385,29 @@ func setup(b *Bus, topic string) {
 		t.Error("expected queue_consumer edge for variable topic")
 	}
 }
+
+// TestIntegrationExtractor_TopLevelPublish_Module covers #586: a publish call at
+// package top level (e.g. a package-var initializer, outside any func) must
+// still produce its topic-coupling edge, attributed to a synthetic "<module>"
+// symbol, so the pub/sub stitcher can link it. HTTP/cache calls at top level
+// stay dropped (see the JS/Python _NoEdge tests exercising the shared filter).
+func TestIntegrationExtractor_TopLevelPublish_Module(t *testing.T) {
+	ex := newIntegrationExtractor(t)
+	src := []byte("package main\n\nvar _ = bus.Publish(\"channelX\", nil)\n")
+	edges, err := ex.ExtractEdges("producer.go", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, e := range edges {
+		if e.Kind == graph.EdgeIntegration && e.TargetNode == "Publish:channelX" {
+			found = true
+			if e.SourceNode != "producer.go::<module>" {
+				t.Errorf("SourceNode = %q, want %q", e.SourceNode, "producer.go::<module>")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected a Publish:channelX edge for the top-level publisher")
+	}
+}
