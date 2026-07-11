@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
-	"github.com/nano-brain/nano-brain/internal/search/hyde"
 	"github.com/nano-brain/nano-brain/internal/search/preprocess"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -82,6 +81,13 @@ type EntityQuerier interface {
 	GetChunkIDsByEntityNames(ctx context.Context, arg sqlc.GetChunkIDsByEntityNamesParams) ([]uuid.UUID, error)
 }
 
+// HyDEGenerator generates a hypothetical-document embedding text for a query.
+// Defined consumer-side so tests can substitute a fake without an HTTP round-trip;
+// *hyde.Generator satisfies this interface as-is.
+type HyDEGenerator interface {
+	Generate(ctx context.Context, query string, workspace string) (string, error)
+}
+
 type SearchService struct {
 	queries        Querier
 	embedder       Embedder
@@ -91,7 +97,7 @@ type SearchService struct {
 	logger         zerolog.Logger
 	pagerankLoader PageRankLoader
 	preprocessor   *preprocess.Preprocessor
-	hydeGenerator  *hyde.Generator
+	hydeGenerator  HyDEGenerator
 	reranker       Reranker
 	// queryEmbedCache avoids a redundant embedding-provider round-trip when
 	// the same query text is embedded more than once (retries, cursor
@@ -143,7 +149,7 @@ func (s *SearchService) SetPreprocessor(pp *preprocess.Preprocessor) {
 	s.preprocessor = pp
 }
 
-func (s *SearchService) SetHydeGenerator(hg *hyde.Generator) {
+func (s *SearchService) SetHydeGenerator(hg HyDEGenerator) {
 	s.hydeGenerator = hg
 }
 
@@ -166,7 +172,7 @@ func (s *SearchService) DefaultLimit() int {
 	return s.config.Limit
 }
 
-func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *TimeRangeFilter, chunkType string) ([]Result, error) {
+func (s *SearchService) HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *TimeRangeFilter, chunkType string, hypothetical string) ([]Result, error) {
 	s.configMutex.RLock()
 	rrfK := s.config.RrfK
 	recencyWeight := s.config.RecencyWeight
@@ -358,15 +364,17 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 			return nil
 		}
 		embedQuery := query
-		if s.hydeGenerator != nil {
+		if hypothetical != "" {
+			embedQuery = hypothetical
+		} else if s.hydeGenerator != nil {
 			s.configMutex.RLock()
 			hydeEnabled := s.config.HyDE.Enabled
 			s.configMutex.RUnlock()
 			if hydeEnabled {
-				hypothetical, err := s.hydeGenerator.Generate(gctx, query, workspace)
-				if err == nil && hypothetical != "" {
-					s.logger.Debug().Str("original", query).Str("hyde", hypothetical).Msg("hyde: generated hypothetical document")
-					embedQuery = hypothetical
+				generated, err := s.hydeGenerator.Generate(gctx, query, workspace)
+				if err == nil && generated != "" {
+					s.logger.Debug().Str("original", query).Str("hyde", generated).Msg("hyde: generated hypothetical document")
+					embedQuery = generated
 				}
 			}
 		}
@@ -684,9 +692,9 @@ func (s *SearchService) DebugSearch(ctx context.Context, query string, workspace
 	g, gctx := errgroup.WithContext(ctx)
 
 	var (
-		codeResults   subResult
+		codeResults    subResult
 		sessionResults subResult
-		configResults subResult
+		configResults  subResult
 	)
 
 	// Sub-search 1: code results (original query)

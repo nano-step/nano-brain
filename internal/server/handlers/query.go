@@ -13,7 +13,7 @@ import (
 )
 
 type HybridSearcher interface {
-	HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *search.TimeRangeFilter, chunkType string) ([]search.Result, error)
+	HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *search.TimeRangeFilter, chunkType string, hypothetical string) ([]search.Result, error)
 	DefaultLimit() int
 }
 
@@ -26,6 +26,7 @@ type QueryRequest struct {
 	CreatedBefore string   `json:"created_before,omitempty"`
 	UpdatedAfter  string   `json:"updated_after,omitempty"`
 	UpdatedBefore string   `json:"updated_before,omitempty"`
+	Hypothetical  string   `json:"hypothetical,omitempty"`
 }
 
 // Query godoc
@@ -79,7 +80,7 @@ func Query(searcher HybridSearcher, logger zerolog.Logger, rec ...*telemetry.Rec
 			})
 		}
 
-		results, err := searcher.HybridSearch(c.Request().Context(), req.Query, workspace, maxResults, req.Tags, timeRange, req.ChunkType)
+		results, err := searcher.HybridSearch(c.Request().Context(), req.Query, workspace, maxResults, req.Tags, timeRange, req.ChunkType, req.Hypothetical)
 		if err != nil {
 			logger.Error().Err(err).Str("workspace", workspace).Msg("hybrid search failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "search failed")

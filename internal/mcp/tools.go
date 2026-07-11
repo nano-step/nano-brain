@@ -325,9 +325,10 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_query",
-			Description: "DEFAULT FIRST TOOL for broad agent questions: hybrid search (BM25 + vector + RRF + recency). Use for domain/codebase understanding, past decisions, and natural-language questions. For exact errors/identifiers use memory_search; for fuzzy concepts where wording may differ use memory_vsearch. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Use group_by='document' to deduplicate and paginate via cursor.",
+			Description: "DEFAULT FIRST TOOL for broad agent questions: hybrid search (BM25 + vector + RRF + recency). Use for domain/codebase understanding, past decisions, and natural-language questions. For exact errors/identifiers use memory_search; for fuzzy concepts where wording may differ use memory_vsearch. Returns 500-char snippets by default; set include_content=true or call memory_get for full text. Use group_by='document' to deduplicate and paginate via cursor. Optionally pass hypothetical: a short ideal-answer paragraph you (the agent) generate yourself to improve vector recall on conceptual queries — it replaces server-side HyDE for the vector leg; omit for exact/keyword lookups.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"query":           {"type": "string", "description": "Natural-language task or domain question. Start here for broad codebase understanding before falling back to exact search or symbols."},
+				"hypothetical":    {"type": "string", "description": "Optional. A short ideal-answer paragraph you generate with your own model, used to embed the vector leg instead of the raw query (skips server-side HyDE). Improves recall on conceptual questions; omit for exact/keyword lookups."},
 				"workspace":       {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash. Optional if the MCP connection was configured with a default workspace via the ?workspace= URL query param; otherwise required."},
 				"max_results":     {"type": "number", "description": "Max results (default 10, max 100)"},
 				"cursor":          {"type": "string", "description": "Opaque pagination cursor from a previous response's next_cursor field. Pass the same query when paginating."},
@@ -367,6 +368,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 				timeFormat = "rfc3339"
 			}
 			fields := argString(args, "fields")
+			hypothetical := argString(args, "hypothetical")
 
 			chunkType := argString(args, "chunk_type")
 			if chunkType != "" && chunkType != "raw" && chunkType != "symbol" {
@@ -427,7 +429,7 @@ func registerMemoryQuery(server *mcpsdk.Server, a *Adapter) {
 			if mode == search.DebugSearchMode {
 				results, err = a.searchService.DebugSearch(ctx, query, ws, fetchLimit, timeRange, chunkType)
 			} else {
-				results, err = a.searchService.HybridSearch(ctx, query, ws, fetchLimit, nil, timeRange, chunkType)
+				results, err = a.searchService.HybridSearch(ctx, query, ws, fetchLimit, nil, timeRange, chunkType, hypothetical)
 			}
 			if err != nil {
 				return errResult(fmt.Sprintf("hybrid search failed: %v", err)), nil
