@@ -29,16 +29,18 @@ var topLevelCouplingKinds = map[string]bool{
 
 // keepTopLevelCoupling trims the edges appended since `before` (i.e. by the
 // current top-level call) down to the coupling kinds in topLevelCouplingKinds.
-// The full three-index slice on the prefix forces append to allocate, so the
-// unfiltered tail we range over is never clobbered mid-loop.
+// Kept edges are collected into a temporary slice first, then appended back onto
+// edges[:before] in place: the tail range is finished before the append, so
+// overwriting the tail is safe, and reusing the original backing array preserves
+// its spare capacity for later calls (no per-call copy of the prefix).
 func keepTopLevelCoupling(edges []Edge, before int) []Edge {
-	out := edges[:before:before]
+	var kept []Edge
 	for _, e := range edges[before:] {
 		if k, _ := e.Metadata["kind"].(string); topLevelCouplingKinds[k] {
-			out = append(out, e)
+			kept = append(kept, e)
 		}
 	}
-	return out
+	return append(edges[:before], kept...)
 }
 
 // integrationPublishMethods are method names that indicate publishing to a queue,
