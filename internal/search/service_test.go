@@ -16,14 +16,19 @@ import (
 )
 
 type mockQuerier struct {
-	bm25WithTagsCalled        bool
-	bm25AllWithTagsCalled     bool
-	vectorWithTagsCalled      bool
-	vectorAllWithTagsCalled   bool
-	capturedTags              []string
+	mu                      sync.Mutex
+	bm25WithTagsCalled      bool
+	bm25AllWithTagsCalled   bool
+	vectorWithTagsCalled    bool
+	vectorAllWithTagsCalled bool
+	capturedTags            []string
+	capturedQuery           string
 }
 
 func (m *mockQuerier) BM25Search(ctx context.Context, arg sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error) {
+	m.mu.Lock()
+	m.capturedQuery = arg.Query
+	m.mu.Unlock()
 	return []sqlc.BM25SearchRow{}, nil
 }
 
@@ -104,6 +109,52 @@ func (c *countingEmbedder) CallCount() int {
 	return c.calls
 }
 
+// recordingEmbedder records the text of the most recent Embed call, so tests
+// can assert which text (raw query vs. HyDE hypothetical vs. agent-supplied
+// hypothetical) was actually sent to the vector leg (issue #588).
+type recordingEmbedder struct {
+	mu       sync.Mutex
+	lastText string
+}
+
+func (r *recordingEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	r.mu.Lock()
+	r.lastText = text
+	r.mu.Unlock()
+	return make([]float32, 1536), nil
+}
+
+func (r *recordingEmbedder) Dimension() int {
+	return 1536
+}
+
+func (r *recordingEmbedder) LastText() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.lastText
+}
+
+// fakeHydeGenerator is a HyDEGenerator test double that counts calls, so
+// tests can assert server-side HyDE is (or isn't) invoked.
+type fakeHydeGenerator struct {
+	mu           sync.Mutex
+	calls        int
+	hypothetical string
+}
+
+func (f *fakeHydeGenerator) Generate(ctx context.Context, query string, workspace string) (string, error) {
+	f.mu.Lock()
+	f.calls++
+	f.mu.Unlock()
+	return f.hypothetical, nil
+}
+
+func (f *fakeHydeGenerator) CallCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
 func TestUpdateConfig_ChangesAppliedToSubsequentSearches(t *testing.T) {
 	logger := zerolog.Nop()
 	initialCfg := config.SearchConfig{
@@ -178,7 +229,7 @@ func TestUpdateConfig_ConcurrentReadersAndWriters(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := service.HybridSearch(ctx, "test", "workspace", 10, nil, nil, "")
+			_, err := service.HybridSearch(ctx, "test", "workspace", 10, nil, nil, "", "")
 			if err != nil {
 				errors <- err
 			}
@@ -200,7 +251,7 @@ func TestHybridSearch_RepeatedQuery_EmbedsOnce(t *testing.T) {
 	service := NewSearchService(&mockQuerier{}, emb, cfg, logger)
 
 	for i := 0; i < 3; i++ {
-		if _, err := service.HybridSearch(context.Background(), "same query text", "ws1", 10, nil, nil, ""); err != nil {
+		if _, err := service.HybridSearch(context.Background(), "same query text", "ws1", 10, nil, nil, "", ""); err != nil {
 			t.Fatalf("unexpected error on call %d: %v", i, err)
 		}
 	}
@@ -216,15 +267,74 @@ func TestHybridSearch_DifferentQueries_EmbedsEach(t *testing.T) {
 	emb := &countingEmbedder{}
 	service := NewSearchService(&mockQuerier{}, emb, cfg, logger)
 
-	if _, err := service.HybridSearch(context.Background(), "query one", "ws1", 10, nil, nil, ""); err != nil {
+	if _, err := service.HybridSearch(context.Background(), "query one", "ws1", 10, nil, nil, "", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, err := service.HybridSearch(context.Background(), "query two", "ws1", 10, nil, nil, ""); err != nil {
+	if _, err := service.HybridSearch(context.Background(), "query two", "ws1", 10, nil, nil, "", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	if got := emb.CallCount(); got != 2 {
 		t.Errorf("expected embedder.Embed to be called once per distinct query, got %d calls", got)
+	}
+}
+
+// TestHybridSearch_Hypothetical_OverridesHyDE covers AC-1/AC-2 (issue #588):
+// when the caller supplies hypothetical, the vector leg embeds it (not a
+// server-side HyDE generation) and the BM25 leg still sees the raw query.
+func TestHybridSearch_Hypothetical_OverridesHyDE(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{
+		RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20,
+		HyDE: config.HyDEConfig{Enabled: true},
+	}
+	q := &mockQuerier{}
+	emb := &recordingEmbedder{}
+	service := NewSearchService(q, emb, cfg, logger)
+	hydeGen := &fakeHydeGenerator{hypothetical: "server-side hyde output should not be used"}
+	service.SetHydeGenerator(hydeGen)
+
+	_, err := service.HybridSearch(context.Background(), "raw query text", "ws1", 10, nil, nil, "", "agent-supplied hypothetical")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := hydeGen.CallCount(); got != 0 {
+		t.Errorf("expected HyDE generator NOT to be called when hypothetical is supplied, got %d calls", got)
+	}
+	if got := emb.LastText(); got != "agent-supplied hypothetical" {
+		t.Errorf("expected embedder to embed the supplied hypothetical, got %q", got)
+	}
+	if got := q.capturedQuery; got != "raw query text" {
+		t.Errorf("expected BM25 leg to receive the raw query, got %q", got)
+	}
+}
+
+// TestHybridSearch_NoHypothetical_HyDEStillRuns covers AC-3 (issue #588):
+// omitting hypothetical is byte-identical to today's behavior — server-side
+// HyDE still runs when enabled.
+func TestHybridSearch_NoHypothetical_HyDEStillRuns(t *testing.T) {
+	logger := zerolog.Nop()
+	cfg := config.SearchConfig{
+		RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20,
+		HyDE: config.HyDEConfig{Enabled: true},
+	}
+	q := &mockQuerier{}
+	emb := &recordingEmbedder{}
+	service := NewSearchService(q, emb, cfg, logger)
+	hydeGen := &fakeHydeGenerator{hypothetical: "generated hypothetical"}
+	service.SetHydeGenerator(hydeGen)
+
+	_, err := service.HybridSearch(context.Background(), "raw query text", "ws1", 10, nil, nil, "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := hydeGen.CallCount(); got != 1 {
+		t.Errorf("expected HyDE generator to be called once when hypothetical is empty and hyde enabled, got %d calls", got)
+	}
+	if got := emb.LastText(); got != "generated hypothetical" {
+		t.Errorf("expected embedder to embed the HyDE-generated text, got %q", got)
 	}
 }
 
@@ -234,7 +344,7 @@ func TestHybridSearch_WithTags_DispatchesToWithTagsQueries(t *testing.T) {
 	q := &mockQuerier{}
 	service := NewSearchService(q, &mockEmbedder{}, cfg, logger)
 
-	_, err := service.HybridSearch(context.Background(), "test", "ws1", 10, []string{"decision", "auth"}, nil, "")
+	_, err := service.HybridSearch(context.Background(), "test", "ws1", 10, []string{"decision", "auth"}, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -262,7 +372,7 @@ func TestHybridSearch_WithTags_ScopeAll_DispatchesToAllWithTagsQueries(t *testin
 	q := &mockQuerier{}
 	service := NewSearchService(q, &mockEmbedder{}, cfg, logger)
 
-	_, err := service.HybridSearch(context.Background(), "test", "all", 10, []string{"decision"}, nil, "")
+	_, err := service.HybridSearch(context.Background(), "test", "all", 10, []string{"decision"}, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -287,7 +397,7 @@ func TestHybridSearch_NoTags_DispatchesToBaseQueries(t *testing.T) {
 	q := &mockQuerier{}
 	service := NewSearchService(q, &mockEmbedder{}, cfg, logger)
 
-	_, err := service.HybridSearch(context.Background(), "test", "ws1", 10, nil, nil, "")
+	_, err := service.HybridSearch(context.Background(), "test", "ws1", 10, nil, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -411,7 +521,7 @@ func TestDebugSearch_ReturnsResults(t *testing.T) {
 
 	q := &debugMockQuerier{
 		bm25Results: map[string][]sqlc.BM25SearchRow{
-			"tax":                 {codeRow},
+			"tax":                     {codeRow},
 			"tax debug session error": {sessionRow},
 		},
 	}
@@ -480,7 +590,7 @@ func TestDebugSearch_RRFMergeDeduplicates(t *testing.T) {
 
 	q := &debugMockQuerier{
 		bm25Results: map[string][]sqlc.BM25SearchRow{
-			"rate limiting":           {sameRow},
+			"rate limiting":                     {sameRow},
 			"rate limiting debug session error": {sameRow},
 		},
 	}
@@ -617,7 +727,7 @@ func TestHybridSearch_ORFallback_WhenBM25ReturnsZero(t *testing.T) {
 	embedder := &mockEmbedder{}
 	service := NewSearchService(q, embedder, cfg, logger)
 
-	results, err := service.HybridSearch(context.Background(), "the quick brown fox", "ws1", 10, nil, nil, "")
+	results, err := service.HybridSearch(context.Background(), "the quick brown fox", "ws1", 10, nil, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -637,7 +747,7 @@ func TestHybridSearch_ORFallback_NotTriggeredForShortQuery(t *testing.T) {
 	embedder := &mockEmbedder{}
 	service := NewSearchService(q, embedder, cfg, logger)
 
-	results, err := service.HybridSearch(context.Background(), "error", "ws1", 10, nil, nil, "")
+	results, err := service.HybridSearch(context.Background(), "error", "ws1", 10, nil, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

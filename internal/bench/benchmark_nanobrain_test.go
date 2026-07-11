@@ -22,7 +22,7 @@ type httpSearcher struct {
 	httpClient *http.Client
 }
 
-func (h *httpSearcher) HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *search.TimeRangeFilter, chunkType string) ([]search.Result, error) {
+func (h *httpSearcher) HybridSearch(ctx context.Context, query string, workspace string, maxResults int, tags []string, timeRange *search.TimeRangeFilter, chunkType string, hypothetical string) ([]search.Result, error) {
 	body := map[string]any{
 		"query":       query,
 		"workspace":   workspace,

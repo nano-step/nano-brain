@@ -230,6 +230,9 @@
           "created_before": {
             "type": "string"
           },
+          "hypothetical": {
+            "type": "string"
+          },
           "max_results": {
             "type": "integer"
           },

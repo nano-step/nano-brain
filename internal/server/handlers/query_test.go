@@ -21,7 +21,7 @@ type mockSearcher struct {
 	capturedTags []string
 }
 
-func (m *mockSearcher) HybridSearch(_ context.Context, _ string, _ string, _ int, tags []string, _ *search.TimeRangeFilter, _ string) ([]search.Result, error) {
+func (m *mockSearcher) HybridSearch(_ context.Context, _ string, _ string, _ int, tags []string, _ *search.TimeRangeFilter, _ string, _ string) ([]search.Result, error) {
 	m.capturedTags = tags
 	return m.results, m.err
 }
