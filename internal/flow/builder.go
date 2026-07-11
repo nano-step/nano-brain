@@ -409,7 +409,10 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 							continue
 						}
 						if fanout >= maxFanout {
-							break
+							// Skip this calls edge but keep scanning: integration/
+							// reconcile edges later in the slice are exempt from the
+							// calls fanout cap and must still be emitted (#585).
+							continue
 						}
 						fanout++
 						var targetRole Role
@@ -461,7 +464,10 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 				}
 
 				if fanout >= maxFanout {
-					break
+					// Skip this calls edge but keep scanning: integration/reconcile
+					// edges later in the slice are exempt from the calls fanout cap
+					// and must still be emitted (#585).
+					continue
 				}
 				fanout++
 				var targetRole Role
