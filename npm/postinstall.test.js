@@ -6,7 +6,34 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
-const { parseSHA256Line, tryAutoLink } = require("./postinstall");
+const { parseSHA256Line, tryAutoLink, safeUnlink, download, downloadWithHash } = require("./postinstall");
+
+// #592 regression: a request/socket error must REJECT the promise (so main()'s
+// per-tag retry loop continues), never throw synchronously or crash the
+// process via an unguarded unlink. Point at a closed port → ECONNREFUSED.
+test("download: rejects (not throws) on connection error, no lingering file", async () => {
+  const dest = path.join(os.tmpdir(), `nb-dl-refused-${process.pid}-${Date.now()}`);
+  await assert.rejects(() => download("https://127.0.0.1:1/x", dest));
+  assert.strictEqual(fs.existsSync(dest), false);
+});
+
+test("downloadWithHash: rejects (not throws) on connection error, no lingering file", async () => {
+  const dest = path.join(os.tmpdir(), `nb-dlh-refused-${process.pid}-${Date.now()}`);
+  await assert.rejects(() => downloadWithHash("https://127.0.0.1:1/x", dest));
+  assert.strictEqual(fs.existsSync(dest), false);
+});
+
+test("safeUnlink: does not throw on a nonexistent path (#592 regression)", () => {
+  const missing = path.join(os.tmpdir(), `nb-safeunlink-missing-${process.pid}-${Date.now()}`);
+  assert.doesNotThrow(() => safeUnlink(missing));
+});
+
+test("safeUnlink: removes an existing file", () => {
+  const p = path.join(os.tmpdir(), `nb-safeunlink-${process.pid}-${Date.now()}`);
+  fs.writeFileSync(p, "x");
+  safeUnlink(p);
+  assert.strictEqual(fs.existsSync(p), false);
+});
 
 test("parseSHA256Line: returns hash for matching filename in single-line content", () => {
   const content = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789  nano-brain-linux-amd64\n";
