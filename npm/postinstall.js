@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 
 const VERSION = require("../package.json").version;
 const REPO = "nano-step/nano-brain";
@@ -24,9 +24,10 @@ function getPlatformKey() {
   const platform = PLATFORM_MAP[os.platform()];
   const arch = ARCH_MAP[os.arch()];
   if (!platform || !arch) {
-    console.error(`Unsupported platform: ${os.platform()}-${os.arch()}`);
-    console.error("Build from source: CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain");
-    process.exit(0);
+    // Throw (do not process.exit) so ensureBinary's "throws, never exits"
+    // contract holds: main() turns this into a non-fatal install exit(0),
+    // run.js reports it and exits 1 (#594).
+    throw new Error(`Unsupported platform: ${os.platform()}-${os.arch()}`);
   }
   return `${platform}-${arch}`;
 }
@@ -267,84 +268,106 @@ function tryAutoLink(srcBinPath, platform) {
   }
 }
 
-async function main() {
-  const platformKey = getPlatformKey();
+function binaryPath() {
   const binName = os.platform() === "win32" ? "nano-brain.exe" : "nano-brain";
-  const binPath = path.join(__dirname, binName);
+  return path.join(__dirname, binName);
+}
+
+// Download-and-verify the platform binary to binaryPath() and return that path.
+// THROWS on failure (never calls process.exit) so both the install-time caller
+// (main) and the run-time caller (run.js) can choose their own exit behavior.
+// A "SECURITY:"-prefixed error signals an integrity failure that must hard-fail.
+// Progress goes to stderr so it never pollutes a command's stdout when run.js
+// downloads lazily on first invocation (#594).
+async function ensureBinary() {
+  const platformKey = getPlatformKey();
+  const binPath = binaryPath();
 
   const skipVerify = !!process.env.NANO_BRAIN_SKIP_SHA_VERIFY;
   if (skipVerify) {
-    console.warn("⚠ NANO_BRAIN_SKIP_SHA_VERIFY is set; binary integrity check will be skipped.");
+    console.error("⚠ NANO_BRAIN_SKIP_SHA_VERIFY is set; binary integrity check will be skipped.");
   }
 
   if (fs.existsSync(binPath)) {
     try {
-      const output = execSync(`"${binPath}" version --json`, { timeout: 5000 }).toString();
+      const output = execFileSync(binPath, ["version", "--json"], { timeout: 5000 }).toString();
       if (output.includes(VERSION)) {
-        console.log(`nano-brain v${VERSION} already installed.`);
-        return;
+        return binPath;
       }
-    } catch {
-      // Wrong version or can't run — redownload
+      console.error("Existing nano-brain binary is a different version; re-downloading.");
+    } catch (err) {
+      console.error(`Existing nano-brain binary failed verification (${err.message}); re-downloading.`);
     }
+    // Reached only when the existing binary is stale/broken. Unlink before
+    // overwriting: a running process keeps its handle to the old inode, so
+    // this avoids ETXTBSY on re-download (Linux/macOS).
+    safeUnlink(binPath);
   }
 
-  console.log(`Downloading nano-brain v${VERSION} for ${platformKey}...`);
+  console.error(`Downloading nano-brain v${VERSION} for ${platformKey}...`);
 
   const assetName = `nano-brain-${platformKey}`;
   let lastErr;
-  for (const tag of candidateTagsForVersion(VERSION)) {
+
+  const attempt = async (tag, suffix) => {
     const url = `https://github.com/${REPO}/releases/download/${tag}/${assetName}`;
+    if (skipVerify) {
+      await download(url, binPath);
+    } else {
+      const computedHex = await downloadWithHash(url, binPath);
+      await verifySHA256(tag, assetName, binPath, computedHex);
+    }
+    fs.chmodSync(binPath, 0o755);
+    console.error(`nano-brain v${VERSION} installed successfully from ${tag}${suffix || ""}.`);
+    return binPath;
+  };
+
+  for (const tag of candidateTagsForVersion(VERSION)) {
     try {
-      if (skipVerify) {
-        await download(url, binPath);
-      } else {
-        const computedHex = await downloadWithHash(url, binPath);
-        await verifySHA256(tag, assetName, binPath, computedHex);
-      }
-      fs.chmodSync(binPath, 0o755);
-      console.log(`nano-brain v${VERSION} installed successfully from ${tag}.`);
-      tryAutoLink(binPath);
-      return;
+      return await attempt(tag);
     } catch (err) {
-      if (err && typeof err.message === "string" && err.message.startsWith("SECURITY:")) {
-        console.error(err.message);
-        process.exit(1);
-      }
+      if (err && typeof err.message === "string" && err.message.startsWith("SECURITY:")) throw err;
       lastErr = err;
     }
   }
 
+  let apiTag;
   try {
-    const tag = await resolveTagFromAPI(VERSION, assetName);
-    if (tag) {
-      const url = `https://github.com/${REPO}/releases/download/${tag}/${assetName}`;
-      if (skipVerify) {
-        await download(url, binPath);
-      } else {
-        const computedHex = await downloadWithHash(url, binPath);
-        await verifySHA256(tag, assetName, binPath, computedHex);
-      }
-      fs.chmodSync(binPath, 0o755);
-      console.log(`nano-brain v${VERSION} installed successfully from ${tag} (API fallback).`);
-      tryAutoLink(binPath);
-      return;
-    }
+    apiTag = await resolveTagFromAPI(VERSION, assetName);
   } catch (err) {
-    if (err && typeof err.message === "string" && err.message.startsWith("SECURITY:")) {
-      console.error(err.message);
-      process.exit(1);
-    }
     lastErr = err;
   }
+  if (apiTag) {
+    // Not wrapped: a SECURITY error from the API-fallback attempt must propagate.
+    return await attempt(apiTag, " (API fallback)");
+  }
 
-  console.error(`Failed to download binary: ${lastErr && lastErr.message}`);
-  console.error("Build from source: CGO_ENABLED=0 go build -o npm/nano-brain ./cmd/nano-brain");
-  process.exit(0);
+  throw new Error(`Failed to download binary: ${lastErr && lastErr.message}`);
+}
+
+async function main() {
+  try {
+    const bin = await ensureBinary();
+    // Auto-link only at install time — never from run.js's lazy path, so its
+    // console.log chatter can't pollute a command's stdout (#594).
+    tryAutoLink(bin);
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    if (msg.startsWith("SECURITY:")) {
+      console.error(msg);
+      process.exit(1); // integrity failure — never leave a bad binary
+    }
+    // Non-fatal at install time: don't fail `npm install`. run.js retries the
+    // download on first invocation, which also covers toolchains that don't
+    // persist postinstall-created files (#594).
+    console.error(msg);
+    console.error("Build from source: CGO_ENABLED=0 go build -o npm/nano-brain ./cmd/nano-brain");
+    process.exit(0);
+  }
 }
 
 if (require.main === module) {
   main();
 }
 
-module.exports = { parseSHA256Line, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink };
+module.exports = { parseSHA256Line, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink, ensureBinary, binaryPath };
