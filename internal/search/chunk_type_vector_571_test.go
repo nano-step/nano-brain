@@ -55,7 +55,7 @@ func TestHybridSearch_ForwardsChunkTypeToVectorLeg(t *testing.T) {
 			q := &chunkTypeCapturingQuerier{mockQuerier: &mockQuerier{}, got: map[string]sql.NullString{}}
 			svc := NewSearchService(q, &mockEmbedder{}, config.SearchConfig{RrfK: 60, Limit: 20}, zerolog.Nop())
 
-			_, err := svc.HybridSearch(context.Background(), "deposit error handling", tc.workspace, 10, tc.tags, nil, "symbol")
+			_, err := svc.HybridSearch(context.Background(), "deposit error handling", tc.workspace, 10, tc.tags, nil, "symbol", "")
 			if err != nil {
 				t.Fatalf("HybridSearch: %v", err)
 			}
