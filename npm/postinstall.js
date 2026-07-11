@@ -31,27 +31,61 @@ function getPlatformKey() {
   return `${platform}-${arch}`;
 }
 
+// Remove a partial download without throwing. A socket error can fire before
+// createWriteStream has opened the file, or after a redirect branch already
+// removed it — an unguarded fs.unlinkSync then throws ENOENT *inside* the
+// event callback, which is uncaught and crashes the whole postinstall (#592).
+function safeUnlink(p) {
+  // No existsSync pre-check: the try/catch already swallows ENOENT, and a
+  // check-then-unlink is a TOCTOU race. Best-effort cleanup.
+  try {
+    fs.unlinkSync(p);
+  } catch (_) {
+    /* best-effort cleanup */
+  }
+}
+
+// file.close() is asynchronous; the fd is only released when its callback
+// fires. Every unlink / recursive-redirect / reject is therefore deferred into
+// file.close(() => …) so the partial file is gone (and not re-opened by a
+// racing redirect) before we act — otherwise Windows unlink fails with EPERM
+// while the fd is open, and a raw request error would leak the write stream.
 function download(url, dest) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
     https.get(url, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302) {
-        file.close();
-        fs.unlinkSync(dest);
-        return download(res.headers.location, dest).then(resolve).catch(reject);
+        file.close(() => {
+          safeUnlink(dest);
+          download(res.headers.location, dest).then(resolve).catch(reject);
+        });
+        return;
       }
       if (res.statusCode !== 200) {
-        file.close();
-        fs.unlinkSync(dest);
-        return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        file.close(() => {
+          safeUnlink(dest);
+          reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        });
+        return;
       }
       res.pipe(file);
+      // pipe() does NOT forward source 'error' events; without this a socket
+      // reset mid-transfer emits an unhandled 'error' on res and crashes the
+      // postinstall (#592) — mirror downloadWithHash's handler.
+      res.on("error", (err) => {
+        file.close(() => {
+          safeUnlink(dest);
+          reject(err);
+        });
+      });
       file.on("finish", () => {
         file.close(resolve);
       });
     }).on("error", (err) => {
-      fs.unlinkSync(dest);
-      reject(err);
+      file.close(() => {
+        safeUnlink(dest);
+        reject(err);
+      });
     });
   });
 }
@@ -62,14 +96,18 @@ function downloadWithHash(url, dest) {
     const hash = crypto.createHash("sha256");
     https.get(url, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302) {
-        file.close();
-        fs.unlinkSync(dest);
-        return downloadWithHash(res.headers.location, dest).then(resolve).catch(reject);
+        file.close(() => {
+          safeUnlink(dest);
+          downloadWithHash(res.headers.location, dest).then(resolve).catch(reject);
+        });
+        return;
       }
       if (res.statusCode !== 200) {
-        file.close();
-        fs.unlinkSync(dest);
-        return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        file.close(() => {
+          safeUnlink(dest);
+          reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        });
+        return;
       }
       res.on("data", (chunk) => hash.update(chunk));
       res.pipe(file);
@@ -77,13 +115,16 @@ function downloadWithHash(url, dest) {
         file.close(() => resolve(hash.digest("hex")));
       });
       res.on("error", (err) => {
-        file.close();
-        if (fs.existsSync(dest)) fs.unlinkSync(dest);
-        reject(err);
+        file.close(() => {
+          safeUnlink(dest);
+          reject(err);
+        });
       });
     }).on("error", (err) => {
-      if (fs.existsSync(dest)) fs.unlinkSync(dest);
-      reject(err);
+      file.close(() => {
+        safeUnlink(dest);
+        reject(err);
+      });
     });
   });
 }
@@ -110,9 +151,7 @@ async function verifySHA256(tag, assetName, binPath, computedHex) {
     console.warn(`⚠ SHA256SUMS not available for ${tag} (${err.message}); skipping integrity verification.`);
     return;
   } finally {
-    if (fs.existsSync(sumsPath)) {
-      try { fs.unlinkSync(sumsPath); } catch (_) {}
-    }
+    safeUnlink(sumsPath);
   }
 
   const expectedHex = parseSHA256Line(sumsContent, assetName);
@@ -122,7 +161,10 @@ async function verifySHA256(tag, assetName, binPath, computedHex) {
   }
 
   if (expectedHex.toLowerCase() !== computedHex.toLowerCase()) {
-    if (fs.existsSync(binPath)) fs.unlinkSync(binPath);
+    // safeUnlink so an unrelated fs error (e.g. EACCES) can't turn a SHA
+    // mismatch into a non-"SECURITY:" rejection that main() would treat as a
+    // retryable download failure, bypassing the hard-fail fail-safe.
+    safeUnlink(binPath);
     throw new Error(
       `SECURITY: SHA-256 mismatch for ${assetName}\n` +
       `  expected: ${expectedHex}\n` +
@@ -305,4 +347,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parseSHA256Line, downloadWithHash, verifySHA256, tryAutoLink };
+module.exports = { parseSHA256Line, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink };
