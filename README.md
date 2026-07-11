@@ -8,6 +8,7 @@ Agent-oriented memory and code intelligence over MCP. AI agents don't read docs 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-nano--step%2Fnano--brain-181717?logo=github)](https://github.com/nano-step/nano-brain)
 [![npm](https://img.shields.io/badge/npm-@nano--step%2Fnano--brain-CC3533?logo=npm)](https://www.npmjs.com/package/@nano-step/nano-brain)
+[![npm downloads](https://img.shields.io/npm/dw/@nano-step/nano-brain?logo=npm&label=downloads)](https://www.npmjs.com/package/@nano-step/nano-brain)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/nano-step/nano-brain)
 [![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/nano-brain)
 
