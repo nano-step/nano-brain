@@ -146,6 +146,107 @@ func TestPipeline_MapReduceMultiChunk(t *testing.T) {
 	}
 }
 
+// #550: a chatty summarizer model echoes its own reduce instructions, a
+// first draft, and the output-format template before the real summary. The
+// pipeline must keep only the final "## Goal" block onward.
+func TestPipeline_ReduceEchoStripped(t *testing.T) {
+	echoed := `Merge two chunk summaries into a final summary with 5 specific sections.
+    * Chunk 1: did some work on auth
+    * Chunk 2: fixed a bug
+    * Goal: draft goal  * Decisions: draft decision
+    * Goal: One paragraph.
+    * Decisions Made: Bullet list.
+    * Files Touched: Bullet list, grouped.
+    * Problems Encountered: Bullet list.
+    * Key Learnings: Bullet list.## Goal
+## Goal
+Fixed the real auth bug.
+
+## Decisions Made
+- Used JWT.
+
+## Files Touched
+- auth.go
+
+## Problems Encountered
+- None.
+
+## Key Learnings
+- Validate tokens early.`
+
+	llm := &fakeLLM{handler: func(idx int, system, user string) (string, TokenUsage, error) {
+		if system == MapSystemPrompt {
+			return fmt.Sprintf("ACTIVITIES: chunk %d work\nDECISIONS: (none)\nFILES: file%d.go\nPROBLEMS: (none)\nLEARNINGS: (none)", idx, idx), TokenUsage{}, nil
+		}
+		return echoed, TokenUsage{}, nil
+	}}
+	p := newTestPipeline(llm, nil, 3)
+	meta := baseMeta()
+	content := longContent(20000)
+
+	result, err := p.Summarize(context.Background(), content, meta)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, scaffolding := range []string{"Merge two chunk summaries", "Bullet list.", "draft goal", "Chunk 1:", "Chunk 2:"} {
+		if strings.Contains(result, scaffolding) {
+			t.Errorf("result still contains echoed scaffolding %q:\n%s", scaffolding, result)
+		}
+	}
+	if !strings.Contains(result, "## Goal\nFixed the real auth bug.") {
+		t.Errorf("result should contain the clean Goal block immediately after its heading:\n%s", result)
+	}
+	if strings.Count(result, "## Goal") != 1 {
+		t.Errorf("result should contain exactly one Goal heading (the echoed draft must be gone), got %d:\n%s", strings.Count(result, "## Goal"), result)
+	}
+	for _, section := range []string{"## Goal", "## Decisions Made", "## Files Touched", "## Problems Encountered", "## Key Learnings"} {
+		if !strings.Contains(result, section) {
+			t.Errorf("result missing section %q:\n%s", section, result)
+		}
+	}
+}
+
+// A single-shot summary (short session, no map/reduce) could echo the same
+// way; the same extraction must apply there too.
+func TestPipeline_SingleShotEchoStripped(t *testing.T) {
+	llm := &fakeLLM{handler: func(idx int, system, user string) (string, TokenUsage, error) {
+		return "Summarize this AI coding session into the 5-section markdown format:\n\n## Goal\nFix auth bug.", TokenUsage{}, nil
+	}}
+	p := newTestPipeline(llm, nil, 1)
+	meta := baseMeta()
+
+	result, err := p.Summarize(context.Background(), shortContent(), meta)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(result, "Summarize this AI coding session") {
+		t.Errorf("result still contains echoed prompt:\n%s", result)
+	}
+}
+
+// If the model never produces a "## Goal" heading at all (unexpected wording,
+// truncation, etc.), the raw completion is kept unchanged rather than risking
+// an empty summary from a blind truncation.
+func TestPipeline_ReduceNoGoalHeading_KeptUnchanged(t *testing.T) {
+	llm := &fakeLLM{handler: func(idx int, system, user string) (string, TokenUsage, error) {
+		if system == MapSystemPrompt {
+			return "ACTIVITIES: did stuff", TokenUsage{}, nil
+		}
+		return "Summary without the expected heading at all.", TokenUsage{}, nil
+	}}
+	p := newTestPipeline(llm, nil, 3)
+	meta := baseMeta()
+	content := longContent(20000)
+
+	result, err := p.Summarize(context.Background(), content, meta)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "Summary without the expected heading at all.") {
+		t.Errorf("result should keep the completion unchanged when no heading is found:\n%s", result)
+	}
+}
+
 func TestPipeline_MapFailureSkipped(t *testing.T) {
 	llm := &fakeLLM{handler: func(idx int, system, user string) (string, TokenUsage, error) {
 		if system == MapSystemPrompt && idx == 1 {
