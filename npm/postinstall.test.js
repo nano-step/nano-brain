@@ -6,7 +6,60 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
-const { parseSHA256Line, tryAutoLink, safeUnlink, download, downloadWithHash } = require("./postinstall");
+const { spawnSync } = require("node:child_process");
+const { parseSHA256Line, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath } = require("./postinstall");
+const VERSION = require("../package.json").version;
+const isWin = os.platform() === "win32";
+
+// #594: when a valid binary is already at binaryPath(), ensureBinary() must
+// return it WITHOUT any network download. Stub the binary with a tiny script
+// that echoes the expected `version --json` payload. Any real binary already
+// there is moved aside and restored so the assertion always runs (not skipped).
+test("ensureBinary: returns existing binary without downloading", { skip: isWin }, async () => {
+  const bin = binaryPath();
+  const backup = `${bin}.itest.bak`;
+  const hadReal = fs.existsSync(bin);
+  if (hadReal) fs.renameSync(bin, backup);
+  fs.writeFileSync(bin, `#!/bin/sh\necho '{"version":"${VERSION}"}'\n`);
+  fs.chmodSync(bin, 0o755);
+  try {
+    const resolved = await ensureBinary();
+    assert.strictEqual(resolved, bin);
+  } finally {
+    safeUnlink(bin);
+    if (hadReal) fs.renameSync(backup, bin);
+  }
+});
+
+// #594 BLOCKER regression: an unsupported platform must REJECT (not process.exit),
+// so run.js can report it and exit 1. getPlatformKey throws; ensureBinary propagates.
+test("ensureBinary: rejects (does not exit) on unsupported platform", async () => {
+  const realPlatform = os.platform;
+  os.platform = () => "freebsd";
+  try {
+    await assert.rejects(() => ensureBinary(), /Unsupported platform/);
+  } finally {
+    os.platform = realPlatform;
+  }
+});
+
+// #594: run.js executes the binary NANO_BRAIN_BIN points to (override path),
+// end-to-end via a subprocess — proves the wrapper's exec path works.
+test("run.js: runs NANO_BRAIN_BIN target and exits 0", { skip: isWin }, () => {
+  const stub = path.join(os.tmpdir(), `nb-runjs-stub-${process.pid}-${Date.now()}`);
+  fs.writeFileSync(stub, `#!/bin/sh\necho NB_STUB_OK\n`);
+  fs.chmodSync(stub, 0o755);
+  try {
+    const r = spawnSync(process.execPath, [path.join(__dirname, "run.js"), "anyarg"], {
+      env: { ...process.env, NANO_BRAIN_BIN: stub },
+      encoding: "utf8",
+    });
+    assert.strictEqual(r.status, 0);
+    assert.match(r.stdout, /NB_STUB_OK/);
+  } finally {
+    safeUnlink(stub);
+  }
+});
 
 // #592 regression: a request/socket error must REJECT the promise (so main()'s
 // per-tag retry loop continues), never throw synchronously or crash the
