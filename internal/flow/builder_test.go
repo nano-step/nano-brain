@@ -254,6 +254,74 @@ func TestFanoutCap(t *testing.T) {
 	}
 }
 
+// TestFanoutCapKeepsIntegrationEdges covers #585: the calls fanout cap must not
+// drop integration/reconcile edges that appear AFTER the cap is reached. With a
+// `break` the whole out-edge scan stopped early, silently losing the pub/sub
+// (integration) edge; with `continue` the cap only limits calls edges.
+func TestFanoutCapKeepsIntegrationEdges(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "GET /wide", TargetNode: "Wide", Kind: graph.EdgeHTTP},
+		{SourceNode: "pkg/wide.go::Wide", TargetNode: "T1", Kind: graph.EdgeCalls, SourceFile: "pkg/wide.go"},
+		{SourceNode: "pkg/wide.go::Wide", TargetNode: "T2", Kind: graph.EdgeCalls, SourceFile: "pkg/wide.go"},
+		{SourceNode: "pkg/wide.go::Wide", TargetNode: "T3", Kind: graph.EdgeCalls, SourceFile: "pkg/wide.go"},
+		// Integration edge AFTER the calls edges — must survive the fanout cap.
+		{SourceNode: "pkg/wide.go::Wide", TargetNode: "publish:orders.created", Kind: graph.EdgeIntegration, SourceFile: "pkg/wide.go"},
+	}
+
+	f := flow.BuildFlow(edges, "GET /wide", 10, 2) // maxFanout=2 → caps calls at 2
+
+	calls := 0
+	integrationPresent := false
+	for _, n := range f.Nodes {
+		switch n.ID {
+		case "T1", "T2", "T3":
+			calls++
+		case "publish:orders.created":
+			integrationPresent = true
+		}
+	}
+	if calls != 2 {
+		t.Errorf("expected exactly 2 calls (fanout cap), got %d", calls)
+	}
+	if !integrationPresent {
+		t.Error("integration edge after the fanout cap was dropped (#585 regression)")
+	}
+}
+
+// TestFanoutCapKeepsIntegrationEdgesReconcile covers the symmetric fix inside the
+// EdgeReconcile inner loop: a reconcile hop whose target has >maxFanout calls
+// edges followed by an integration edge must still emit the integration edge.
+func TestFanoutCapKeepsIntegrationEdgesReconcile(t *testing.T) {
+	edges := []graph.Edge{
+		{SourceNode: "GET /reconcile", TargetNode: "HandleReconcile", Kind: graph.EdgeHTTP},
+		{SourceNode: "handlers/reconcile.go::HandleReconcile", TargetNode: "svc/target.go::TargetService", Kind: graph.EdgeReconcile, SourceFile: "handlers/reconcile.go"},
+		{SourceNode: "svc/target.go::TargetService", TargetNode: "T1", Kind: graph.EdgeCalls, SourceFile: "svc/target.go"},
+		{SourceNode: "svc/target.go::TargetService", TargetNode: "T2", Kind: graph.EdgeCalls, SourceFile: "svc/target.go"},
+		{SourceNode: "svc/target.go::TargetService", TargetNode: "T3", Kind: graph.EdgeCalls, SourceFile: "svc/target.go"},
+		// Integration edge AFTER the calls edges on the reconciled target — must survive.
+		{SourceNode: "svc/target.go::TargetService", TargetNode: "publish:orders.created", Kind: graph.EdgeIntegration, SourceFile: "svc/target.go"},
+	}
+
+	f := flow.BuildFlow(edges, "GET /reconcile", 10, 2) // maxFanout=2 → caps calls at 2
+
+	calls := 0
+	integrationPresent := false
+	for _, n := range f.Nodes {
+		switch n.ID {
+		case "T1", "T2", "T3":
+			calls++
+		case "publish:orders.created":
+			integrationPresent = true
+		}
+	}
+	if calls != 2 {
+		t.Errorf("expected exactly 2 calls (fanout cap) via reconcile hop, got %d", calls)
+	}
+	if !integrationPresent {
+		t.Error("integration edge after the fanout cap (reconcile inner loop) was dropped (#585 regression)")
+	}
+}
+
 // TestEntryParsing verifies method and path are parsed from the entry string.
 func TestEntryParsing(t *testing.T) {
 	edges := []graph.Edge{
