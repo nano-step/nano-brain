@@ -15,8 +15,8 @@ const (
 )
 
 var (
-	transientRegex = regexp.MustCompile(`\b(429|408|500|502|503|504)\b`)
-	permanentRegex = regexp.MustCompile(`\b(400|401|403)\b`)
+	transientRegex = regexp.MustCompile(`\b(429|408|500|502|503|504|524)\b`)
+	permanentRegex = regexp.MustCompile(`\b(400|401|403|404)\b`)
 )
 
 func ClassifyError(err error) ErrorClass {

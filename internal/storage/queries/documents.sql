@@ -170,6 +170,15 @@ WHERE workspace_hash = $1
   AND mod_time IS NOT NULL
   AND file_size IS NOT NULL;
 
+-- name: DeleteLegacySummaryDocsForSymbol :execrows
+-- Removes pre-D1 summary docs whose source_path embedded a content hash
+-- (`...&hash=<hex>&summary=true`). starts_with (NOT LIKE) is required
+-- because symbol/file names can contain '_' and '%', which are LIKE
+-- wildcards. Chunks cascade via documents(id) ON DELETE CASCADE.
+DELETE FROM documents
+WHERE workspace_hash = @workspace_hash
+  AND starts_with(source_path, @path_prefix);
+
 -- name: UpdateDocumentFileState :exec
 -- Backfills the mtime+size fingerprint on the content-hash-match (dedup) path so
 -- the DB-warmed fast-path can skip this file on the next restart (999.1 Fix B
