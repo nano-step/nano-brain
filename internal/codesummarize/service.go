@@ -24,6 +24,7 @@ type ServiceQuerier interface {
 	GetUnsummarizedSymbols(ctx context.Context, arg sqlc.GetUnsummarizedSymbolsParams) ([]sqlc.GetUnsummarizedSymbolsRow, error)
 	UpsertDocument(ctx context.Context, arg sqlc.UpsertDocumentParams) (sqlc.UpsertDocumentRow, error)
 	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
+	DeleteChunksByDocumentID(ctx context.Context, arg sqlc.DeleteChunksByDocumentIDParams) error
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 	UpsertCodeSummarizationFailure(ctx context.Context, arg sqlc.UpsertCodeSummarizationFailureParams) error
 	BulkGetCallerContext(ctx context.Context, arg sqlc.BulkGetCallerContextParams) ([]sqlc.BulkGetCallerContextRow, error)
@@ -31,6 +32,7 @@ type ServiceQuerier interface {
 	UpdateChunkGraphContextHash(ctx context.Context, arg sqlc.UpdateChunkGraphContextHashParams) error
 	GetSymbolChunksByGraphContextStale(ctx context.Context, arg sqlc.GetSymbolChunksByGraphContextStaleParams) ([]sqlc.GetSymbolChunksByGraphContextStaleRow, error)
 	NullifyGraphContextHashBySymbols(ctx context.Context, arg sqlc.NullifyGraphContextHashBySymbolsParams) error
+	DeleteLegacySummaryDocsForSymbol(ctx context.Context, arg sqlc.DeleteLegacySummaryDocsForSymbolParams) (int64, error)
 }
 
 type WorkspaceLister interface {
@@ -429,16 +431,10 @@ func (s *Service) processGraphContextStale(ctx context.Context, workspaceHash st
 }
 
 func (s *Service) upsertSummaryDocument(ctx context.Context, workspaceHash string, symbol *SymbolForSummary, summary string) error {
-	shortHash := symbol.ContentHash
-	if len(shortHash) > 8 {
-		shortHash = shortHash[:8]
-	}
-
-	sourcePath := fmt.Sprintf("%s?symbol=%s&kind=%s&hash=%s&summary=true",
+	sourcePath := fmt.Sprintf("%s?symbol=%s&kind=%s&summary=true",
 		symbol.File,
 		symbol.Name,
 		symbol.Kind,
-		shortHash,
 	)
 
 	title := fmt.Sprintf("Summary: %s (%s)", symbol.Name, symbol.Kind)
@@ -471,6 +467,17 @@ func (s *Service) upsertSummaryDocument(ctx context.Context, workspaceHash strin
 		return fmt.Errorf("upsert document: %w", err)
 	}
 
+	// Drop any prior chunks for this document before inserting the fresh one.
+	// UpsertChunk conflicts on (content_hash, workspace_hash, document_id), so a
+	// changed summary produces a NEW chunk row and the stale chunk would linger
+	// under the same (now-deduped) document — polluting chunk-level search (#552).
+	if err := s.queries.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
+		DocumentID:    result.ID,
+		WorkspaceHash: workspaceHash,
+	}); err != nil {
+		return fmt.Errorf("delete stale summary chunks: %w", err)
+	}
+
 	chunkID, err := s.queries.UpsertChunk(ctx, sqlc.UpsertChunkParams{
 		DocumentID:        result.ID,
 		WorkspaceHash:     workspaceHash,
@@ -494,6 +501,20 @@ func (s *Service) upsertSummaryDocument(ctx context.Context, workspaceHash strin
 
 	if s.embedQ != nil {
 		s.embedQ.Enqueue(chunkID)
+	}
+
+	// D3: clean up legacy hash-in-path summary docs for this symbol now that
+	// the canonical no-hash doc has been upserted above. Never runs before
+	// the upsert succeeds, so the symbol is never left with zero summary docs.
+	legacyPrefix := fmt.Sprintf("%s?symbol=%s&kind=%s&hash=", symbol.File, symbol.Name, symbol.Kind)
+	deleted, err := s.queries.DeleteLegacySummaryDocsForSymbol(ctx, sqlc.DeleteLegacySummaryDocsForSymbolParams{
+		WorkspaceHash: workspaceHash,
+		PathPrefix:    legacyPrefix,
+	})
+	if err != nil {
+		s.logger.Warn().Err(err).Str("symbol", symbol.Name).Msg("failed to delete legacy summary doc variants")
+	} else if deleted > 0 {
+		s.logger.Debug().Str("symbol", symbol.Name).Int64("deleted", deleted).Msg("deleted legacy summary doc variants")
 	}
 
 	return nil
