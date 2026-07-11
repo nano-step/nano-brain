@@ -106,7 +106,13 @@ func (x *PythonIntegrationExtractor) ExtractEdges(filePath string, content []byt
 		line := lineForByte(content, callNode.StartByte())
 		source := enclosingFunc(callNode.StartByte())
 		if source == "" {
-			return
+			// Top-level call, outside any named function. Attribute it to a
+			// synthetic module symbol and, on the way out, keep only the
+			// pub/sub coupling edges (#586). The defer fires on every return
+			// path below, including branches that return early.
+			source = relFile + moduleSourceSuffix
+			before := len(edges)
+			defer func() { edges = keepTopLevelCoupling(edges, before) }()
 		}
 
 		switch fnNode.Type(lang) {
