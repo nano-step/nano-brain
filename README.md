@@ -65,6 +65,8 @@ Add to your MCP client config:
 
 Bind a default workspace by appending `?workspace=<name-or-hash>` to the URL (e.g. `…/mcp?workspace=my-project`) so tool calls can omit the `workspace` argument. An explicit `workspace` argument always overrides it; the value must be a name or full hash (not `"all"`). Run `nano-brain workspaces list` to see registered names/hashes.
 
+For OpenCode, you can bootstrap the current workspace with `npx @nano-step/nano-brain init -- opencode`. It installs a `/nano-brain` slash command that keeps the workspace config local at `.nanobrain/config.yml`.
+
 ---
 
 ## The agent workflow

@@ -262,7 +262,14 @@ Add to `~/.claude.json` under `mcpServers`:
 ```
 
 #### OpenCode
-Add to OpenCode config:
+In the workspace, run:
+```bash
+npx @nano-step/nano-brain init -- opencode
+```
+
+That installs a `/nano-brain` slash command for the current project and keeps the active config workspace-local at `.nanobrain/config.yml`.
+
+If you need the manual config shape instead, add to OpenCode config:
 ```json
 {
   "mcp": {

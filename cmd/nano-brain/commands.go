@@ -14,13 +14,39 @@ func runInitCmd(args []string, configPath string) {
 	cliLog.Info().Str("cmd", "init").Msg("cli command started")
 	hasRoot := false
 	hasYes := false
-	for _, a := range args {
-		switch a {
+	installTarget := ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "-- requires an agent target")
+				os.Exit(1)
+			}
+			i++
+			installTarget = args[i]
 		case "--root":
 			hasRoot = true
 		case "--yes":
 			hasYes = true
+		default:
+			if strings.HasPrefix(args[i], "--") {
+				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
+				os.Exit(1)
+			}
+			fmt.Fprintf(os.Stderr, "unexpected argument: %s\n", args[i])
+			os.Exit(1)
 		}
+	}
+
+	if installTarget != "" {
+		if hasRoot || hasYes {
+			fmt.Fprintln(os.Stderr, "Error: init -- <agent> cannot be combined with --root or --yes")
+			os.Exit(1)
+		}
+		runInitInstallCmd(installTarget)
+		cliLog.Info().Str("cmd", "init").Str("target", installTarget).Msg("cli command completed")
+		return
 	}
 
 	// D-08: --yes takes the fully non-interactive path (zero prompts) even
