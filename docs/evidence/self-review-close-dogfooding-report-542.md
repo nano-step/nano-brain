@@ -14,6 +14,7 @@ files, dependencies, schema, or API contracts changed.
 | F2 is not falsely marked fixed | F2 is marked “Mitigated and handed off”; #575/#576 and #609 are linked | Pass |
 | F10 records the decision rationale | F10 identifies the product-owned vocabulary/ranking boundary | Pass |
 | No behavior change is implied | Proposal, design, and closure record explicitly state docs-only scope | Pass |
+| OpenSpec scope matches the implementation | Capability and requirements are limited to issue #542 | Pass |
 
 ## Validation Evidence
 

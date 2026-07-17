@@ -21,9 +21,9 @@ remaining work and the won't-fix decision hard to discover.
 
 ### New Capabilities
 
-- `dogfooding-report-disposition`: Preserve the final disposition of every
-  finding in a completed dogfooding tracker, including shipped fixes, deferred
-  follow-ups, and by-design decisions.
+- `issue-542-dogfooding-report-disposition`: Preserve the final disposition of
+  every finding in issue #542, including shipped fixes, deferred follow-ups,
+  and by-design decisions.
 
 ### Modified Capabilities
 

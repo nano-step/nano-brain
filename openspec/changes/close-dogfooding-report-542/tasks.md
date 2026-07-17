@@ -1,6 +1,6 @@
 ## 1. Validate the tracker handoff
 
-- [x] 1.1 Verify the shipped issue and pull-request records for F1–F9.
+- [x] 1.1 Verify F1 and F3–F9 delivery records plus F2's mitigation record.
 - [x] 1.2 Create #609 for the remaining high-risk F2 root-cause work.
 
 ## 2. Publish the final disposition
