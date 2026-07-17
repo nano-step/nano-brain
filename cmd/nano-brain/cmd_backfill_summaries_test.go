@@ -97,7 +97,7 @@ func bfInsertDoc(t *testing.T, q *sqlc.Queries, wsHash, sessionID, title, conten
 		Title:         "Summary: " + title,
 		Content:       content,
 		SourcePath:    sourcePath,
-		Collection:    "session-summary",
+		Collection:    "sessions",
 		Tags:          []string{"summary", source},
 		Metadata:      pqtype.NullRawMessage{RawMessage: []byte(metaJSON), Valid: true},
 	})

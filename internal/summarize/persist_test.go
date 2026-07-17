@@ -133,8 +133,8 @@ func TestPersister_Save_UsesWorkspaceHashFromMeta(t *testing.T) {
 		t.Fatalf("doc not found with workspace_hash=test-ws-hash-abc: %v", err)
 	}
 
-	if doc.Collection != "session-summary" {
-		t.Errorf("collection = %q, want %q", doc.Collection, "session-summary")
+	if doc.Collection != "sessions" {
+		t.Errorf("collection = %q, want %q", doc.Collection, "sessions")
 	}
 	if doc.ContentHash == "" {
 		t.Error("content_hash should not be empty")

@@ -63,7 +63,7 @@ func TestDeleteStaleRawOpenCodeDocs(t *testing.T) {
 			Title:         s.title,
 			Content:       "summary content for " + s.sourcePath,
 			SourcePath:    s.sourcePath,
-			Collection:    "session-summary",
+			Collection:    "sessions",
 		}); err != nil {
 			t.Fatalf("upsert summary %s: %v", s.sourcePath, err)
 		}

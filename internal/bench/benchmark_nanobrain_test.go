@@ -1,4 +1,7 @@
-//go:build integration
+//go:build integration && benchmark
+
+// Run this live benchmark only after provisioning the isolated server on :3199:
+// go test -tags='integration benchmark' -run TestBenchmarkNanoBrain ./internal/bench
 
 package bench
 

@@ -17,7 +17,6 @@ import (
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/migrations"
 	"github.com/pressly/goose/v3"
-	"github.com/sqlc-dev/pqtype"
 )
 
 func testDSNValue() string {
@@ -87,19 +86,20 @@ func setupCleanupTestPG(t *testing.T) *sql.DB {
 
 func insertOrphanDoc(t *testing.T, pgDB *sql.DB, wsHash, sourcePath string) {
 	t.Helper()
-	q := sqlc.New(pgDB)
-	_, err := q.UpsertDocumentBySourcePath(context.Background(), sqlc.UpsertDocumentBySourcePathParams{
-		WorkspaceHash: wsHash,
-		ContentHash:   hex.EncodeToString(sha256.New().Sum([]byte(sourcePath))),
-		Title:         "orphan-" + sourcePath,
-		Content:       "orphan content for " + sourcePath,
-		SourcePath:    sourcePath,
-		Collection:    "session-summary",
-		Tags:          []string{"orphan-test"},
-		Metadata:      pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true},
-	})
+	insertLegacySchemaDoc(t, pgDB, wsHash, sourcePath, "orphan-"+sourcePath,
+		"orphan content for "+sourcePath, "session-summary", "orphan-test")
+}
+
+func insertLegacySchemaDoc(t *testing.T, pgDB *sql.DB, wsHash, sourcePath, title, content, collection, tag string) {
+	t.Helper()
+	contentHash := sha256.Sum256([]byte(sourcePath))
+	_, err := pgDB.Exec(
+		`INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata)
+		 VALUES ($1, $2, $3, $4, $5, $6, ARRAY[$7], '{}'::jsonb)`,
+		wsHash, hex.EncodeToString(contentHash[:]), title, content, sourcePath, collection, tag,
+	)
 	if err != nil {
-		t.Fatalf("insert orphan doc: %v", err)
+		t.Fatalf("insert legacy-schema doc: %v", err)
 	}
 }
 
@@ -172,18 +172,8 @@ func TestCleanupOrphanWorkspaces_DeletesOnlyOrphans(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := q.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
-		WorkspaceHash: registeredHash,
-		ContentHash:   "keep-hash",
-		Title:         "keep-me",
-		Content:       "I should not be deleted",
-		SourcePath:    "/keep/me.md",
-		Collection:    "memory",
-		Tags:          []string{"keep"},
-		Metadata:      pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true},
-	}); err != nil {
-		t.Fatalf("insert registered doc: %v", err)
-	}
+	insertLegacySchemaDoc(t, pgDB, registeredHash, "/keep/me.md", "keep-me",
+		"I should not be deleted", "memory", "keep")
 
 	insertOrphanDoc(t, pgDB, "orphan-hash-1", "/orphan/1.md")
 	insertOrphanDoc(t, pgDB, "orphan-hash-1", "/orphan/2.md")
