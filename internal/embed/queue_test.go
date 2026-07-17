@@ -512,6 +512,35 @@ func TestQueue_PendingDecrementsOnInsertEmbeddingError(t *testing.T) {
 	}
 }
 
+func TestQueue_ProcessChunk_skipsStaleEmbeddingResult(t *testing.T) {
+	// Given
+	chunkID := uuid.New()
+	mq := &mockQuerier{
+		insertEmbeddingFn: func(_ context.Context, _ sqlc.InsertEmbeddingParams) (sqlc.Embedding, error) {
+			return sqlc.Embedding{}, sql.ErrNoRows
+		},
+	}
+	q := newTestQueue(&mockEmbedder{}, mq)
+	q.pending.Store(1)
+	q.retries[chunkID] = 2
+
+	// When
+	q.processChunk(context.Background(), chunkID)
+
+	// Then
+	if got := q.pending.Load(); got != 0 {
+		t.Fatalf("pending = %d, want 0", got)
+	}
+	if _, ok := q.retries[chunkID]; ok {
+		t.Fatalf("stale chunk retry state was not cleared")
+	}
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+	if mq.markChunkEmbeddedCalls != 0 {
+		t.Fatalf("MarkChunkEmbedded calls = %d, want 0", mq.markChunkEmbeddedCalls)
+	}
+}
+
 func TestQueue_Depth(t *testing.T) {
 	eq := newTestQueue(&mockEmbedder{}, &mockQuerier{})
 	if eq.Depth() != 0 {

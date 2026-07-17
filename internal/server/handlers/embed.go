@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"time"
 	"unicode/utf8"
@@ -86,6 +88,7 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model strin
 		defer loopCancel()
 
 		embedded := 0
+		skippedStale := 0
 		for _, chunk := range chunks {
 			embedCtx, cancel := context.WithTimeout(loopCtx, 30*time.Second)
 			content := truncateToMaxChars(chunk.Content, maxChars)
@@ -110,6 +113,11 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model strin
 				Model:         model,
 				Embedding:     pgvector.NewVector(vec),
 			}); insertErr != nil {
+				if errors.Is(insertErr, sql.ErrNoRows) {
+					logger.Debug().Str("chunk_id", chunk.ID.String()).Msg("chunk deleted before embedding insert, skipping stale chunk")
+					skippedStale++
+					continue
+				}
 				logger.Error().Err(insertErr).Str("chunk_id", chunk.ID.String()).Msg("insert embedding failed")
 				break
 			}
@@ -133,7 +141,7 @@ func TriggerEmbed(q EmbedQuerier, embedder embed.Embedder, provider, model strin
 				logger.Error().Err(countErr).Msg("failed to count remaining pending chunks")
 			}
 		} else {
-			remaining = int64(len(chunks) - embedded)
+			remaining = int64(len(chunks) - embedded - skippedStale)
 			if remaining < 0 {
 				remaining = 0
 			}

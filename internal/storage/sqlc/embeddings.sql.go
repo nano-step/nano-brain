@@ -249,8 +249,19 @@ func (q *Queries) GetPendingChunksAllWorkspaces(ctx context.Context, limit int32
 }
 
 const insertEmbedding = `-- name: InsertEmbedding :one
+WITH live_chunk AS (
+    SELECT c.id, c.workspace_hash
+    FROM chunks c
+    WHERE c.id = $4 AND c.workspace_hash = $5
+    FOR KEY SHARE
+)
 INSERT INTO embeddings (chunk_id, workspace_hash, provider, model, embedding)
-VALUES ($1, $2, $3, $4, $5)
+SELECT live_chunk.id,
+       live_chunk.workspace_hash,
+       $1,
+       $2,
+       $3
+FROM live_chunk
 ON CONFLICT (chunk_id) DO UPDATE SET
     embedding = EXCLUDED.embedding,
     provider = EXCLUDED.provider,
@@ -260,20 +271,20 @@ RETURNING id, chunk_id, workspace_hash, provider, model, embedding, created_at, 
 `
 
 type InsertEmbeddingParams struct {
-	ChunkID       uuid.UUID
-	WorkspaceHash string
 	Provider      string
 	Model         string
 	Embedding     interface{}
+	ChunkID       uuid.UUID
+	WorkspaceHash string
 }
 
 func (q *Queries) InsertEmbedding(ctx context.Context, arg InsertEmbeddingParams) (Embedding, error) {
 	row := q.db.QueryRowContext(ctx, insertEmbedding,
-		arg.ChunkID,
-		arg.WorkspaceHash,
 		arg.Provider,
 		arg.Model,
 		arg.Embedding,
+		arg.ChunkID,
+		arg.WorkspaceHash,
 	)
 	var i Embedding
 	err := row.Scan(
