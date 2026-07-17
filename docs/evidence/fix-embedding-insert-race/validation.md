@@ -12,6 +12,8 @@ go test -race -tags=integration ./internal/storage \
 
 All database-backed checks used `nanobrain_test`; the focused storage test uses an isolated schema. The API smoke is recorded in `smoke-e2e-fix-embedding-insert-race.md`.
 
+The deterministic concurrent-ordering regression passed five consecutive race-enabled runs (`2.345s`). It pauses the insert after the CTE has acquired `FOR KEY SHARE`, observes the concurrent delete waiting on a PostgreSQL lock, then proves the insert has no `23503` error and the delete cascade leaves zero embeddings.
+
 ## Full integration sweep
 
 `go test -race -tags=integration ./...` was run twice: once without a test server and once with an isolated `:3199` test server. The second run removed the server-dependent benchmark failure, but both runs still failed in unrelated existing areas:
