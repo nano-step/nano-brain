@@ -12,5 +12,5 @@
 ## 3. Validate and close
 
 - [x] 3.1 Run strict OpenSpec validation and documentation checks.
-- [ ] 3.2 Obtain an independent review verdict and address findings.
+- [x] 3.2 Obtain an independent review verdict and address findings.
 - [ ] 3.3 Publish the documentation change, comment on #542, and close it.
