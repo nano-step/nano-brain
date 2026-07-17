@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
@@ -20,6 +21,14 @@ type mockEmbedder struct {
 	mu       sync.Mutex
 	embedFn  func(ctx context.Context, text string) ([]float32, error)
 	calls    int
+}
+
+type mockPublisher struct {
+	events []eventbus.Event
+}
+
+func (m *mockPublisher) Publish(event eventbus.Event) {
+	m.events = append(m.events, event)
 }
 
 func (m *mockEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
@@ -509,6 +518,40 @@ func TestQueue_PendingDecrementsOnInsertEmbeddingError(t *testing.T) {
 
 	if eq.pending.Load() != 0 {
 		t.Errorf("pending = %d, want 0 after InsertEmbedding error", eq.pending.Load())
+	}
+}
+
+func TestQueue_ProcessChunk_skipsStaleEmbeddingResult(t *testing.T) {
+	// Given
+	chunkID := uuid.New()
+	mq := &mockQuerier{
+		insertEmbeddingFn: func(_ context.Context, _ sqlc.InsertEmbeddingParams) (sqlc.Embedding, error) {
+			return sqlc.Embedding{}, sql.ErrNoRows
+		},
+	}
+	q := newTestQueue(&mockEmbedder{}, mq)
+	pub := &mockPublisher{}
+	q.WithPublisher(pub)
+	q.pending.Store(1)
+	q.retries[chunkID] = 2
+
+	// When
+	q.processChunk(context.Background(), chunkID)
+
+	// Then
+	if got := q.pending.Load(); got != 0 {
+		t.Fatalf("pending = %d, want 0", got)
+	}
+	if _, ok := q.retries[chunkID]; ok {
+		t.Fatalf("stale chunk retry state was not cleared")
+	}
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+	if mq.markChunkEmbeddedCalls != 0 {
+		t.Fatalf("MarkChunkEmbedded calls = %d, want 0", mq.markChunkEmbeddedCalls)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("published status events = %d, want 1", len(pub.events))
 	}
 }
 

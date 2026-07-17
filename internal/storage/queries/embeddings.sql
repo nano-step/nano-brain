@@ -1,6 +1,17 @@
 -- name: InsertEmbedding :one
+WITH live_chunk AS (
+    SELECT c.id, c.workspace_hash
+    FROM chunks c
+    WHERE c.id = sqlc.arg(chunk_id) AND c.workspace_hash = sqlc.arg(workspace_hash)
+    FOR KEY SHARE
+)
 INSERT INTO embeddings (chunk_id, workspace_hash, provider, model, embedding)
-VALUES ($1, $2, $3, $4, $5)
+SELECT live_chunk.id,
+       live_chunk.workspace_hash,
+       sqlc.arg(provider),
+       sqlc.arg(model),
+       sqlc.arg(embedding)
+FROM live_chunk
 ON CONFLICT (chunk_id) DO UPDATE SET
     embedding = EXCLUDED.embedding,
     provider = EXCLUDED.provider,

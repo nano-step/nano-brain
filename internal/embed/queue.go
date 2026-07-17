@@ -351,6 +351,13 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		Embedding:     pgvector.NewVector(vec),
 	})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("chunk deleted before embedding insert, skipping stale chunk")
+			q.pending.Add(-1)
+			q.clearRetries(chunkID)
+			q.publishStatus()
+			return
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 			q.logger.Warn().Str("chunk_id", chunkID.String()).Msg("chunk deleted before embedding insert, skipping stale chunk")

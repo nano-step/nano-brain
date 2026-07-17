@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -239,6 +240,56 @@ func TestTriggerEmbed_PartialFailure(t *testing.T) {
 	}
 	if resp.Remaining != 2 {
 		t.Errorf("remaining = %d, want 2", resp.Remaining)
+	}
+}
+
+func TestTriggerEmbed_continuesAfterStaleEmbeddingResult(t *testing.T) {
+	// Given
+	chunks := makeChunks(2, "ws1")
+	var insertedIDs []uuid.UUID
+	var markedIDs []uuid.UUID
+	q := &mockEmbedQuerier{
+		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+			return chunks, nil
+		},
+		insertEmbeddingFn: func(_ context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error) {
+			insertedIDs = append(insertedIDs, arg.ChunkID)
+			if arg.ChunkID == chunks[0].ID {
+				return sqlc.Embedding{}, sql.ErrNoRows
+			}
+			return sqlc.Embedding{}, nil
+		},
+		markChunkEmbeddedFn: func(_ context.Context, arg sqlc.MarkChunkEmbeddedParams) error {
+			markedIDs = append(markedIDs, arg.ID)
+			return nil
+		},
+	}
+	emb := &mockEmbedder{
+		embedFn:   func(_ context.Context, _ string) ([]float32, error) { return testVector(), nil },
+		dimension: 3,
+	}
+	e := echo.New()
+	c, rec := newEmbedContext(e, `{"workspace":"ws1"}`, "ws1")
+
+	// When
+	err := handlers.TriggerEmbed(q, emb, "p", "m", 3000, zerolog.Nop())(c)
+
+	// Then
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	var response handlers.EmbedResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Embedded != 1 || response.Remaining != 0 {
+		t.Fatalf("response = %+v, want embedded=1 remaining=0", response)
+	}
+	if len(insertedIDs) != 2 {
+		t.Fatalf("InsertEmbedding calls = %d, want 2", len(insertedIDs))
+	}
+	if len(markedIDs) != 1 || markedIDs[0] != chunks[1].ID {
+		t.Fatalf("marked chunk IDs = %v, want [%s]", markedIDs, chunks[1].ID)
 	}
 }
 
