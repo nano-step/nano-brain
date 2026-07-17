@@ -11,4 +11,4 @@
 ## 3. Verification
 
 - [x] 3.1 Run focused unit and integration tests, including the controlled stale-chunk scenario.
-- [ ] 3.2 Run the normal-lane validation, smoke test, and independent review; record evidence.
+- [x] 3.2 Run the normal-lane validation, smoke test, and independent review; record evidence.
