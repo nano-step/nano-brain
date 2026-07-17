@@ -355,6 +355,7 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 			q.logger.Debug().Str("chunk_id", chunkID.String()).Msg("chunk deleted before embedding insert, skipping stale chunk")
 			q.pending.Add(-1)
 			q.clearRetries(chunkID)
+			q.publishStatus()
 			return
 		}
 		var pgErr *pgconn.PgError

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
@@ -20,6 +21,14 @@ type mockEmbedder struct {
 	mu       sync.Mutex
 	embedFn  func(ctx context.Context, text string) ([]float32, error)
 	calls    int
+}
+
+type mockPublisher struct {
+	events []eventbus.Event
+}
+
+func (m *mockPublisher) Publish(event eventbus.Event) {
+	m.events = append(m.events, event)
 }
 
 func (m *mockEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
@@ -521,6 +530,8 @@ func TestQueue_ProcessChunk_skipsStaleEmbeddingResult(t *testing.T) {
 		},
 	}
 	q := newTestQueue(&mockEmbedder{}, mq)
+	pub := &mockPublisher{}
+	q.WithPublisher(pub)
 	q.pending.Store(1)
 	q.retries[chunkID] = 2
 
@@ -538,6 +549,9 @@ func TestQueue_ProcessChunk_skipsStaleEmbeddingResult(t *testing.T) {
 	defer mq.mu.Unlock()
 	if mq.markChunkEmbeddedCalls != 0 {
 		t.Fatalf("MarkChunkEmbedded calls = %d, want 0", mq.markChunkEmbeddedCalls)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("published status events = %d, want 1", len(pub.events))
 	}
 }
 

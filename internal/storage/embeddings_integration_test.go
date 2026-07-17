@@ -134,6 +134,12 @@ func TestInsertEmbedding_preventsForeignKeyRace_when_deleteStartsDuringPersisten
 	`); err != nil {
 		t.Fatalf("create insert blocker: %v", err)
 	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `
+			DROP TRIGGER IF EXISTS block_embedding_insert ON embeddings;
+			DROP FUNCTION IF EXISTS block_embedding_insert();
+		`)
+	})
 	holder, err := pool.Acquire(ctx)
 	if err != nil {
 		t.Fatalf("acquire advisory-lock holder: %v", err)
