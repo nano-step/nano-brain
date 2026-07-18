@@ -334,7 +334,7 @@ func (x *JSIntegrationExtractor) handleIdentifier(bt *gotreesitter.BoundTree, ca
 			SourceFile: relFile,
 			Line:       line,
 			Language:   langLabel,
-			Metadata:   map[string]any{"kind": "queue_publish", "method": funcName, "topic": topic},
+			Metadata:   map[string]any{"kind": "queue_publish", "event_role": "publish", "method": funcName, "topic": topic},
 		})
 		return
 	}
@@ -350,7 +350,7 @@ func (x *JSIntegrationExtractor) handleIdentifier(bt *gotreesitter.BoundTree, ca
 			SourceFile: relFile,
 			Line:       line,
 			Language:   langLabel,
-			Metadata:   map[string]any{"kind": "queue_consumer", "method": funcName, "topic": topic},
+			Metadata:   map[string]any{"kind": "queue_consumer", "event_role": "subscribe", "method": funcName, "topic": topic},
 		})
 	}
 }
@@ -391,7 +391,7 @@ func (x *JSIntegrationExtractor) handleRedisCall(bt *gotreesitter.BoundTree, cal
 				SourceFile: relFile,
 				Line:       line,
 				Language:   langLabel,
-				Metadata:   map[string]any{"kind": "queue_consumer", "method": methodName, "topic": topic},
+				Metadata:   map[string]any{"kind": "queue_consumer", "event_role": "subscribe", "method": methodName, "topic": topic},
 			})
 			return consumeNode
 		}
@@ -403,7 +403,7 @@ func (x *JSIntegrationExtractor) handleRedisCall(bt *gotreesitter.BoundTree, cal
 			SourceFile: relFile,
 			Line:       line,
 			Language:   langLabel,
-			Metadata:   map[string]any{"kind": kind, "method": methodName, "receiver": receiverName, "topic": topic},
+			Metadata:   map[string]any{"kind": kind, "event_role": "publish", "method": methodName, "receiver": receiverName, "topic": topic},
 		})
 		return target
 	}
@@ -458,7 +458,7 @@ func (x *JSIntegrationExtractor) handleMemberExpression(bt *gotreesitter.BoundTr
 						SourceFile: relFile,
 						Line:       line,
 						Language:   langLabel,
-						Metadata:   map[string]any{"kind": "queue_publish", "method": methodName, "receiver": receiverName, "topic": jobName},
+						Metadata:   map[string]any{"kind": "queue_publish", "event_role": "publish", "method": methodName, "receiver": receiverName, "topic": jobName},
 					})
 				} else {
 					consumeNode := "CONSUME " + jobName
@@ -469,7 +469,7 @@ func (x *JSIntegrationExtractor) handleMemberExpression(bt *gotreesitter.BoundTr
 						SourceFile: relFile,
 						Line:       line,
 						Language:   langLabel,
-						Metadata:   map[string]any{"kind": "queue_consumer", "method": methodName, "receiver": receiverName, "topic": jobName},
+						Metadata:   map[string]any{"kind": "queue_consumer", "event_role": "subscribe", "method": methodName, "receiver": receiverName, "topic": jobName},
 					})
 				}
 				return
@@ -534,7 +534,7 @@ func (x *JSIntegrationExtractor) handleMemberExpression(bt *gotreesitter.BoundTr
 			SourceFile: relFile,
 			Line:       line,
 			Language:   langLabel,
-			Metadata:   map[string]any{"kind": "queue_publish", "method": methodName, "receiver": receiverName, "topic": topic},
+			Metadata:   map[string]any{"kind": "queue_publish", "event_role": eventRole(methodName), "method": methodName, "receiver": receiverName, "topic": topic},
 		})
 		return
 	}
@@ -550,7 +550,7 @@ func (x *JSIntegrationExtractor) handleMemberExpression(bt *gotreesitter.BoundTr
 			SourceFile: relFile,
 			Line:       line,
 			Language:   langLabel,
-			Metadata:   map[string]any{"kind": "queue_consumer", "method": methodName, "receiver": receiverName, "topic": topic},
+			Metadata:   map[string]any{"kind": "queue_consumer", "event_role": "subscribe", "method": methodName, "receiver": receiverName, "topic": topic},
 		})
 	}
 }
@@ -566,6 +566,13 @@ func jsReceiverText(bt *gotreesitter.BoundTree, node *gotreesitter.Node, lang *g
 	default:
 		return bt.NodeText(node)
 	}
+}
+
+func eventRole(method string) string {
+	if method == "emit" || method == "broadcast" || method == "notify" {
+		return "emit"
+	}
+	return "publish"
 }
 
 // jsStringArgOrVar returns the string value of the nth argument if it is a string
