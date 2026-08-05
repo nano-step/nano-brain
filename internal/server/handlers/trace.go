@@ -112,6 +112,9 @@ func traceCallChain(ctx context.Context, q TraceQuerier, workspace, entry string
 		}
 
 		for _, e := range edges {
+			if e.TargetNode == "<unresolved>" {
+				continue
+			}
 			if seen[e.TargetNode] {
 				continue
 			}

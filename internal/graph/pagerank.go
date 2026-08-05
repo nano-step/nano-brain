@@ -7,6 +7,9 @@ func ComputePageRank(edges []Edge, dampingFactor float64, maxIterations int, tol
 	nodes := make(map[string]struct{})
 
 	for _, e := range edges {
+		if e.TargetNode == "<unresolved>" || e.SourceNode == "<unresolved>" {
+			continue
+		}
 		outLinks[e.SourceNode] = append(outLinks[e.SourceNode], e.TargetNode)
 		nodes[e.SourceNode] = struct{}{}
 		nodes[e.TargetNode] = struct{}{}

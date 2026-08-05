@@ -24,3 +24,17 @@ Gate-completion additions:
 
 No product code, tests, database, server, GitHub issue, GitHub pull request, or
 stale #501 artifact was changed by this task.
+
+## Implementation and delivery evidence (2026-08-05)
+
+| Check | Result |
+| --- | --- |
+| `CGO_ENABLED=0 go build ./... && go test -race -short ./...` | PASS. |
+| Targeted source-scoped storage integration (`TestSourceScopedReaderQueriesKeepCanonicalExactAndDropUnresolved`, `TestGraphImpactQueriesMatchSymbolPart`) | PASS against `nanobrain_test`; canonical exact lookups, legacy bare fallback, source-scope isolation, unresolved filtering, and graph counts are covered. |
+| Focused graph, flow, symbol, codesummary, handler, watcher, and storage controls | PASS, including canonical collision isolation, exact reader matching, unresolved exclusion, Ruby compatibility, source replacement, and the AST import-name `from` regression. |
+| `go test -race -count=1 -tags=integration ./internal/graph ./internal/storage ./internal/watcher ./internal/flow ./internal/codesummarize` | PASS. |
+| Streamable HTTP MCP integration and server route/health controls | PASS through `nanobrain_test`-backed test fixtures. |
+| Full repository integration suite | FAIL from pre-existing/unrelated workspace-resolution read-only assertions, harvest/summary compatibility assertions, and the benchmark package's absent live `:3199` server. The issue-related graph/storage/watcher/flow/codesummary integration packages passed. |
+| Live REST/MCP `:3199` probe | BLOCKED: `http://127.0.0.1:3199/api/status` had no listener; repository policy prohibits starting the server in this environment. Port 3100 was not touched. |
+| Applicable capability benchmark | SKIP with exit 0 because the required isolated `:3199` server was unreachable. |
+| `graphify update .` | PASS; code graph refreshed locally. Generated `graphify-out/` is excluded from the change. |

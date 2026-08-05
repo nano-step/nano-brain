@@ -11,7 +11,10 @@ import (
 
 const countCallEdges = `-- name: CountCallEdges :one
 SELECT count(*)::bigint FROM graph_edges
-WHERE workspace_hash = $1 AND edge_type = 'calls'
+WHERE workspace_hash = $1
+  AND edge_type = 'calls'
+  AND source_node <> '<unresolved>'
+  AND target_node <> '<unresolved>'
 `
 
 func (q *Queries) CountCallEdges(ctx context.Context, workspaceHash string) (int64, error) {
@@ -67,7 +70,10 @@ func (q *Queries) GetPageRankScores(ctx context.Context, workspaceHash string) (
 const listCallEdges = `-- name: ListCallEdges :many
 SELECT source_node, target_node
 FROM graph_edges
-WHERE workspace_hash = $1 AND edge_type = 'calls'
+WHERE workspace_hash = $1
+  AND edge_type = 'calls'
+  AND source_node <> '<unresolved>'
+  AND target_node <> '<unresolved>'
 `
 
 type ListCallEdgesRow struct {

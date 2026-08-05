@@ -194,6 +194,9 @@ func buildIndex(edges []graph.Edge) edgeIndex {
 		bySymbol: make(map[string][]graph.Edge),
 	}
 	for _, e := range edges {
+		if e.TargetNode == "<unresolved>" {
+			continue
+		}
 		idx.bySource[e.SourceNode] = append(idx.bySource[e.SourceNode], e)
 		sym := symbolPart(e.SourceNode)
 		idx.bySymbol[sym] = append(idx.bySymbol[sym], e)
@@ -206,6 +209,12 @@ func buildIndex(edges []graph.Edge) edgeIndex {
 // maxFanout caps the number of outgoing calls edges explored per node.
 func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 	idx := buildIndex(edges)
+	lookupTarget := func(target string) []graph.Edge {
+		if graph.IsCanonicalJSCallTarget(target) {
+			return idx.bySource[target]
+		}
+		return idx.bySymbol[target]
+	}
 
 	flow := Flow{
 		Entry: entry,
@@ -300,7 +309,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 		}
 
 		// Reconcile bare name to source nodes.
-		sourceNodes := idx.bySymbol[item.bareName]
+		sourceNodes := lookupTarget(item.bareName)
 
 		if len(sourceNodes) == 0 {
 			if exact, ok := idx.bySource[item.bareName]; ok {
@@ -404,7 +413,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 							continue
 						}
 						target := out.TargetNode
-						targetSources := idx.bySymbol[target]
+						targetSources := lookupTarget(target)
 						if isLoggingName(target) || (len(targetSources) == 0 && isNoiseExternal(target)) {
 							continue
 						}
@@ -452,7 +461,7 @@ func BuildFlow(edges []graph.Edge, entry string, maxDepth, maxFanout int) Flow {
 				target := e.TargetNode
 
 				// Determine if target is external (no source node with that symbol).
-				targetSources := idx.bySymbol[target]
+				targetSources := lookupTarget(target)
 
 				// Skip logging noise before the fanout check so it doesn't consume
 				// budget. Bare logging names (log/info/warn/error/debug) are hidden

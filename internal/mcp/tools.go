@@ -2078,6 +2078,9 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 					return errResult(fmt.Sprintf("trace query failed: %v", err)), nil
 				}
 				for _, e := range edges {
+					if e.SourceNode == "<unresolved>" || e.TargetNode == "<unresolved>" {
+						continue
+					}
 					// calls-edge targets are stored as bare identifiers (e.g.
 					// "applyCredit"); requalify each one as "file::symbol" so the
 					// chain stays feedable into memory_get/memory_graph and two
@@ -2254,6 +2257,9 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 					}
 					var next []string
 					for _, r := range rows {
+						if r.SourceNode == "<unresolved>" || r.TargetNode == "<unresolved>" {
+							continue
+						}
 						if seen[r.TargetNode] {
 							continue
 						}

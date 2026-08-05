@@ -1,7 +1,10 @@
 -- name: ListCallEdges :many
 SELECT source_node, target_node
 FROM graph_edges
-WHERE workspace_hash = $1 AND edge_type = 'calls';
+WHERE workspace_hash = $1
+  AND edge_type = 'calls'
+  AND source_node <> '<unresolved>'
+  AND target_node <> '<unresolved>';
 
 -- name: UpsertPageRankScore :exec
 INSERT INTO pagerank_scores (workspace_hash, node_name, score, computed_at)
@@ -19,4 +22,7 @@ DELETE FROM pagerank_scores WHERE workspace_hash = $1;
 
 -- name: CountCallEdges :one
 SELECT count(*)::bigint FROM graph_edges
-WHERE workspace_hash = $1 AND edge_type = 'calls';
+WHERE workspace_hash = $1
+  AND edge_type = 'calls'
+  AND source_node <> '<unresolved>'
+  AND target_node <> '<unresolved>';

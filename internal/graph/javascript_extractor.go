@@ -67,7 +67,7 @@ func NewJavaScriptGraphExtractor() (*JavaScriptGraphExtractor, error) {
 }
 
 func (e *JavaScriptGraphExtractor) Supports(ext string) bool {
-	return ext == ".js" || ext == ".jsx"
+	return ext == ".js" || ext == ".jsx" || ext == ".mjs" || ext == ".cjs"
 }
 
 var _ ImportResolvingExtractor = (*JavaScriptGraphExtractor)(nil)
@@ -85,6 +85,7 @@ func (e *JavaScriptGraphExtractor) ExtractEdges(filePath string, content []byte)
 
 	var edges []Edge
 	edges = append(edges, e.extractContains(bt, tree, content, relFile)...)
+	edges = append(edges, extractJSDeclarationIdentities(bt, tree, content, relFile, e.lang)...)
 	edges = append(edges, e.extractImports(bt, tree, content, relFile)...)
 	edges = append(edges, e.extractCalls(bt, tree, content, relFile)...)
 	return edges, nil
@@ -106,8 +107,9 @@ func (e *JavaScriptGraphExtractor) ExtractEdgesWithImportContext(filePath string
 
 	var edges []Edge
 	edges = append(edges, e.extractContains(bt, tree, content, relFile)...)
+	edges = append(edges, extractJSDeclarationIdentities(bt, tree, content, relFile, e.lang)...)
 	edges = append(edges, e.extractImportsResolved(bt, tree, content, relFile, ic)...)
-	edges = append(edges, e.extractCalls(bt, tree, content, relFile)...)
+	edges = append(edges, e.extractContextualCalls(bt, tree, content, relFile, ic)...)
 	return edges, nil
 }
 

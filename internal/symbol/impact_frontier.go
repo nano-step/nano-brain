@@ -1,6 +1,10 @@
 package symbol
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/nano-brain/nano-brain/internal/graph"
+)
 
 // ExpandImpactFrontier expands a memory_impact "in"/impactors frontier with the bare
 // symbol suffix of any qualified "file::symbol" entries, so GetImpactorsByTargets's
@@ -29,6 +33,9 @@ func ExpandImpactFrontier(nodes []string) []string {
 			expanded = append(expanded, n)
 		}
 		idx := strings.Index(n, "::")
+		if graph.IsCanonicalJSCallTarget(n) {
+			continue
+		}
 		if idx < 0 {
 			continue
 		}

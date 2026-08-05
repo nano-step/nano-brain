@@ -118,6 +118,44 @@ func newTestWatcher(mq *mockQuerier, debounceMs, pollSec int) *Watcher {
 	return New(nil, mq, testLogger(), cfg)
 }
 
+func TestContextualSourceEventsQueueWorkspaceReextract(t *testing.T) {
+	dir := t.TempDir()
+	w := newTestWatcher(newMockQuerier(), 100, 3600)
+	if err := w.Watch("code", dir, "workspace", "*"); err != nil {
+		t.Fatalf("Watch: %v", err)
+	}
+	debounce := time.NewTimer(time.Hour)
+	defer debounce.Stop()
+
+	for _, operation := range []fsnotify.Op{fsnotify.Write, fsnotify.Create, fsnotify.Rename, fsnotify.Remove} {
+		w.handleFSEvent(fsnotify.Event{
+			Name: filepath.Join(dir, "lib", "exporter.ts"),
+			Op:   operation,
+		}, debounce)
+		w.mu.Lock()
+		queued := w.contextualReextract["workspace"]
+		w.mu.Unlock()
+		if !queued {
+			t.Fatalf("%s event did not queue workspace re-extraction", operation)
+		}
+	}
+	w.processDirty(context.Background())
+	w.mu.Lock()
+	queuedAfterDrain := w.contextualReextract["workspace"]
+	w.mu.Unlock()
+	if queuedAfterDrain {
+		t.Fatal("contextual workspace re-extraction queue was not drained")
+	}
+
+	w.handleFSEvent(fsnotify.Event{Name: filepath.Join(dir, "notes.md"), Op: fsnotify.Write}, debounce)
+	w.mu.Lock()
+	queued := w.contextualReextract["workspace"]
+	w.mu.Unlock()
+	if queued {
+		t.Fatal("non-JS/TS event queued contextual workspace re-extraction")
+	}
+}
+
 func TestDebounce_RapidEventsFireOnce(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping timing-sensitive test in short mode")

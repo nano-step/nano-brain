@@ -161,6 +161,9 @@ func GraphNeighborhood(q NeighborhoodQuerier, logger zerolog.Logger) echo.Handle
 				}
 
 				for _, e := range edges {
+					if e.SourceNode == "<unresolved>" || e.TargetNode == "<unresolved>" {
+						continue
+					}
 					if len(edgeTypes) > 1 && !containsStr(edgeTypes, e.EdgeType) {
 						continue
 					}
