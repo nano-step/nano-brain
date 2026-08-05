@@ -64,5 +64,5 @@
   termination.
 - [x] Run strict OpenSpec validation, privacy scan, diff self-review, and an
   independent review. Resolve review findings before archive or delivery.
-- [ ] Confirm only #609 behavior is staged, archive only after all high-risk
+- [x] Confirm only #609 behavior is staged, archive only after all high-risk
   gates pass, and open the #609 pull request from the feature branch.
