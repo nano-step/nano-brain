@@ -86,7 +86,7 @@ func setupIntegrationSQLite(t *testing.T) *sql.DB {
 
 	_, err = db.Exec(`
 		CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT NOT NULL);
-		CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, title TEXT, time_created INTEGER, time_updated INTEGER);
+		CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, parent_id TEXT, title TEXT, time_created INTEGER, time_updated INTEGER);
 		CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT);
 		CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, time_created INTEGER, data TEXT);
 	`)
@@ -143,7 +143,7 @@ func TestOpenCodeSQLite_Integration_RealPostgres(t *testing.T) {
 			Title:         "Summary: " + meta.Title,
 			Content:       "# Integration Summary\n\nSummarized.",
 			SourcePath:    "summary://opencode/" + meta.SessionID,
-			Collection:    "session-summary",
+			Collection:    "sessions",
 			Tags:          []string{"summary", "opencode"},
 			Metadata:      pqtype.NullRawMessage{RawMessage: []byte(`{"summary":true}`), Valid: true},
 		})
@@ -173,8 +173,8 @@ func TestOpenCodeSQLite_Integration_RealPostgres(t *testing.T) {
 	if lookupErr != nil {
 		t.Fatalf("summary doc not found: %v", lookupErr)
 	}
-	if doc.Collection != "session-summary" {
-		t.Errorf("collection = %q, want %q", doc.Collection, "session-summary")
+	if doc.Collection != "sessions" {
+		t.Errorf("collection = %q, want %q", doc.Collection, "sessions")
 	}
 	if doc.WorkspaceHash != wsHash {
 		t.Errorf("workspace_hash = %q, want %q", doc.WorkspaceHash, wsHash)

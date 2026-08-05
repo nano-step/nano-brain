@@ -43,7 +43,7 @@ func TestPersist_WritesToDisk_WhenEnabled(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	expectedPath := filepath.Join(outputDir, "test-disk-workspace", "opencode_my-test-session_2026-05-30.md")
+	expectedPath := filepath.Join(outputDir, "test-disk-workspace", "2026-05-30--opencode-my-test-session.md")
 	content, err := os.ReadFile(expectedPath)
 	if err != nil {
 		t.Fatalf("file not created at %s: %v", expectedPath, err)
@@ -110,8 +110,8 @@ func TestPersist_DBSucceeds_WhenDiskFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DB row not found after disk failure: %v", err)
 	}
-	if doc.Collection != "session-summary" {
-		t.Errorf("collection = %q, want session-summary", doc.Collection)
+	if doc.Collection != "sessions" {
+		t.Errorf("collection = %q, want sessions", doc.Collection)
 	}
 }
 
@@ -140,7 +140,7 @@ func TestPersist_Idempotent_SamePathOverwrite(t *testing.T) {
 		t.Fatalf("second Save: %v", err)
 	}
 
-	expectedPath := filepath.Join(outputDir, "idempotent-workspace", "opencode_idempotent-session_2026-05-30.md")
+	expectedPath := filepath.Join(outputDir, "idempotent-workspace", "2026-05-30--opencode-idempotent-session.md")
 	entries, err := filepath.Glob(filepath.Join(outputDir, "idempotent-workspace", "*.md"))
 	if err != nil {
 		t.Fatalf("glob: %v", err)
@@ -198,13 +198,13 @@ func TestPersist_CollisionDifferentContent(t *testing.T) {
 		t.Fatalf("expected 2 files (original + collision suffix), found %d: %v", len(entries), entries)
 	}
 
-	basePath := filepath.Join(outputDir, "collision-workspace", "opencode_collision-title_2026-05-30.md")
+	basePath := filepath.Join(outputDir, "collision-workspace", "2026-05-30--opencode-collision-title.md")
 	hasBase := false
 	hasSuffix := false
 	for _, e := range entries {
 		if e == basePath {
 			hasBase = true
-		} else if strings.Contains(filepath.Base(e), "opencode_collision-title_2026-05-30_") {
+		} else if strings.Contains(filepath.Base(e), "2026-05-30--opencode-collision-title_") {
 			hasSuffix = true
 		}
 	}

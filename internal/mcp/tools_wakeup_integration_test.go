@@ -5,8 +5,8 @@ package mcp_test
 import (
 	"context"
 	"crypto/sha256"
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -21,9 +21,9 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// Regression for #356 — MCP memory_wake_up must filter recent_memories to
-// memory + session-summary collections (HTTP handler already did this since #338).
-func TestMemoryWakeUp_OnlyReturnsMemoryAndSessionSummaryDocs(t *testing.T) {
+// Regression for #356: MCP memory_wake_up must filter recent memories to
+// memory and sessions collections, matching the existing HTTP handler contract.
+func TestMemoryWakeUp_OnlyReturnsMemoryAndSessionDocs(t *testing.T) {
 	pool := testutil.SetupTestDB(t)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
@@ -53,7 +53,7 @@ func TestMemoryWakeUp_OnlyReturnsMemoryAndSessionSummaryDocs(t *testing.T) {
 
 	insertDoc(t, "memory", "memory-doc-1")
 	insertDoc(t, "memory", "memory-doc-2")
-	insertDoc(t, "session-summary", "summary-doc-1")
+	insertDoc(t, "sessions", "summary-doc-1")
 	insertDoc(t, "code", "code-doc-1")
 	insertDoc(t, "code", "code-doc-2")
 	insertDoc(t, "code", "code-doc-3")

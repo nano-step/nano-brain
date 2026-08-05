@@ -31,7 +31,7 @@ func createOnDiskSQLite(t *testing.T, dir, worktree string) string {
 	defer db.Close()
 	_, err = db.Exec(`
 		CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT NOT NULL);
-		CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, title TEXT, time_created INTEGER, time_updated INTEGER);
+		CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, parent_id TEXT, title TEXT, time_created INTEGER, time_updated INTEGER);
 		CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT);
 		CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, time_created INTEGER, data TEXT);
 	`)
