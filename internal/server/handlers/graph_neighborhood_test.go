@@ -130,6 +130,51 @@ func TestGraphNeighborhood_UnknownFocusEmpty(t *testing.T) {
 	}
 }
 
+func TestGraphNeighborhood_DropsUnresolvedDerivedEdge(t *testing.T) {
+	q := &mockNeighborhoodQuerier{outEdges: []sqlc.GraphEdge{
+		{SourceNode: "repo-a/consumer.ts::caller", TargetNode: "<unresolved>", EdgeType: "calls"},
+		{SourceNode: "repo-a/consumer.ts::caller", TargetNode: "repo-a/lib/api.ts::run", EdgeType: "calls"},
+	}}
+
+	e := echo.New()
+	h := handlers.GraphNeighborhood(q, nopLogger())
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/graph/neighborhood", strings.NewReader(`{"focus":"repo-a/consumer.ts::caller","depth":1,"direction":"out","workspace":"w1"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("workspace", "w1")
+
+	if err := h(c); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp struct {
+		Nodes []struct {
+			ID string `json:"id"`
+		} `json:"nodes"`
+		Edges []struct {
+			Source string `json:"source"`
+			Target string `json:"target"`
+		} `json:"edges"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	for _, node := range resp.Nodes {
+		if node.ID == "<unresolved>" {
+			t.Fatal("unresolved sentinel entered neighborhood nodes")
+		}
+	}
+	for _, edge := range resp.Edges {
+		if edge.Source == "<unresolved>" || edge.Target == "<unresolved>" {
+			t.Fatal("unresolved sentinel entered neighborhood edges")
+		}
+	}
+	if len(resp.Edges) != 1 || resp.Edges[0].Target != "repo-a/lib/api.ts::run" {
+		t.Fatalf("neighborhood edges = %#v, want only canonical target", resp.Edges)
+	}
+}
+
 type docModeNeighborhoodQuerier struct {
 	outEdges    []sqlc.GraphEdge
 	inEdges     []sqlc.GraphEdge

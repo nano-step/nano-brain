@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -106,6 +107,10 @@ type Watcher struct {
 	mu          sync.Mutex
 	collections map[string]watchedCollection
 	dirty       map[string]bool
+	// contextualReextract records workspaces whose JS/TS export surface changed.
+	// It is drained with the debounce batch, so a removed or unparsable event
+	// still re-extracts every source file in the owning workspace.
+	contextualReextract map[string]bool
 	// watchedDirs tracks every directory currently registered with fsnotify.
 	// fsnotify is non-recursive, so each subdirectory must be added individually
 	// for edits inside it to fire events (issue #497). Guarded by mu.
@@ -147,19 +152,20 @@ func (w *Watcher) CollectionsWatched() int {
 
 func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.Config) *Watcher {
 	return &Watcher{
-		db:            db,
-		queries:       queries,
-		logger:        logger.With().Str("component", "watcher").Logger(),
-		debounceMs:    cfg.Watcher.DebounceMs,
-		pollInterval:  cfg.Watcher.ReindexInterval,
-		maxFileSize:   cfg.Storage.MaxFileSize,
-		chunkOverlap:  cfg.Watcher.ChunkOverlap,
-		collections:   make(map[string]watchedCollection),
-		dirty:         make(map[string]bool),
-		watchedDirs:   make(map[string]bool),
-		hotRegisterCh: make(chan struct{}, 1),
-		fileCache:     make(map[string]fileState),
-		warmed:        make(map[string]bool),
+		db:                  db,
+		queries:             queries,
+		logger:              logger.With().Str("component", "watcher").Logger(),
+		debounceMs:          cfg.Watcher.DebounceMs,
+		pollInterval:        cfg.Watcher.ReindexInterval,
+		maxFileSize:         cfg.Storage.MaxFileSize,
+		chunkOverlap:        cfg.Watcher.ChunkOverlap,
+		collections:         make(map[string]watchedCollection),
+		dirty:               make(map[string]bool),
+		contextualReextract: make(map[string]bool),
+		watchedDirs:         make(map[string]bool),
+		hotRegisterCh:       make(chan struct{}, 1),
+		fileCache:           make(map[string]fileState),
+		warmed:              make(map[string]bool),
 	}
 }
 
@@ -411,6 +417,9 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 	for root, col := range w.collections {
 		if event.Name == root || strings.HasPrefix(event.Name, col.dirPath+string(os.PathSeparator)) {
 			w.dirty[root] = true
+			if isContextualSourcePath(event.Name) {
+				w.contextualReextract[col.workspaceHash] = true
+			}
 		}
 	}
 	w.mu.Unlock()
@@ -441,7 +450,14 @@ func (w *Watcher) processDirty(ctx context.Context) {
 		dirs = append(dirs, d)
 	}
 	w.dirty = make(map[string]bool)
+	workspaces := make([]string, 0, len(w.contextualReextract))
+	for workspace := range w.contextualReextract {
+		workspaces = append(workspaces, workspace)
+	}
+	w.contextualReextract = make(map[string]bool)
 	w.mu.Unlock()
+	sort.Strings(dirs)
+	sort.Strings(workspaces)
 
 	for _, d := range dirs {
 		w.mu.Lock()
@@ -451,6 +467,18 @@ func (w *Watcher) processDirty(ctx context.Context) {
 			continue
 		}
 		w.scanCollection(ctx, col)
+	}
+	for _, workspace := range workspaces {
+		w.ReextractEdgesForWorkspace(ctx, workspace)
+	}
+}
+
+func isContextualSourcePath(filePath string) bool {
+	switch strings.ToLower(filepath.Ext(filePath)) {
+	case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -1057,6 +1085,9 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 	ic := graph.ImportContext{
 		AliasMap: w.aliasIndexFor(col.dirPath).AliasMapFor(relFile),
 		Exists:   graph.DiskExistsChecker(col.dirPath),
+		ReadFile: func(workspaceRelPath string) ([]byte, error) {
+			return os.ReadFile(filepath.Join(col.dirPath, filepath.FromSlash(workspaceRelPath)))
+		},
 	}
 	edges, err := w.graphRegistry.ExtractEdgesForFrameworksWithImports(relFile, content, col.detectedFrameworks, ic)
 	if err != nil {

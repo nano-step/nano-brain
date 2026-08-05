@@ -27,6 +27,10 @@ type ImportContext struct {
 	// corresponds to an admitted file. Nil disables the existence/suffix
 	// probe (a resolved candidate is accepted as-is, unverified).
 	Exists func(workspaceRelPath string) bool
+	// ReadFile reads an admitted workspace-relative file for contextual
+	// direct-export cataloging. Nil keeps contextual import calls unresolved;
+	// the legacy import-edge path does not use it.
+	ReadFile func(workspaceRelPath string) ([]byte, error)
 }
 
 // ImportResolvingExtractor is implemented by extractors that can resolve
@@ -43,7 +47,7 @@ type ImportResolvingExtractor interface {
 // importSuffixCandidates are tried, in order, against ImportContext.Exists
 // when a resolved candidate doesn't exist verbatim — covers extension-omitted
 // specifiers and directory-index imports (e.g. `~/components` -> `components/index.ts`).
-var importSuffixCandidates = []string{"", ".ts", ".tsx", ".js", ".jsx", ".vue", "/index.ts", "/index.tsx", "/index.js", "/index.jsx", "/index.vue"}
+var importSuffixCandidates = []string{"", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".vue", "/index.ts", "/index.tsx", "/index.mts", "/index.cts", "/index.js", "/index.jsx", "/index.mjs", "/index.cjs", "/index.vue"}
 
 // ResolveImportTarget resolves rawSpecifier (exactly as written in an
 // import/require statement) to the workspace-relative path format used for

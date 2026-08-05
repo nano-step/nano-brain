@@ -129,6 +129,26 @@ func TestResolveImportTarget_UnresolvedFallsBackToRaw(t *testing.T) {
 	}
 }
 
+func TestResolveImportTarget_SupportsCanonicalModuleExtensions(t *testing.T) {
+	files := map[string]bool{
+		"src/api.mts":    true,
+		"src/legacy.cjs": true,
+	}
+	exists := func(path string) bool { return files[path] }
+
+	cases := map[string]string{
+		"./api":    "src/api.mts",
+		"./legacy": "src/legacy.cjs",
+	}
+	for raw, want := range cases {
+		t.Run(raw, func(t *testing.T) {
+			if got := graph.ResolveImportTarget(raw, "src/consumer.ts", nil, exists); got != want {
+				t.Fatalf("ResolveImportTarget(%q) = %q, want %q", raw, got, want)
+			}
+		})
+	}
+}
+
 func TestResolveImportTarget_PathEscapeClamp(t *testing.T) {
 	raw := "../../../outside"
 	got := graph.ResolveImportTarget(raw, "consumer.ts", nil, func(string) bool { return true })

@@ -34,6 +34,9 @@ func FetchGraphContext(ctx context.Context, q GraphContextQuerier, workspaceHash
 	}
 
 	result := make(map[string]*SymbolGraphContext, len(symbolNodes))
+	for _, node := range symbolNodes {
+		result[node] = &SymbolGraphContext{}
+	}
 
 	callerRows, err := q.BulkGetCallerContext(ctx, sqlc.BulkGetCallerContextParams{
 		WorkspaceHash: workspaceHash,
@@ -64,6 +67,9 @@ func FetchGraphContext(ctx context.Context, q GraphContextQuerier, workspaceHash
 	}
 
 	for _, row := range calleeRows {
+		if row.TargetNode == "<unresolved>" {
+			continue
+		}
 		gc, ok := result[row.SourceNode]
 		if !ok {
 			gc = &SymbolGraphContext{}

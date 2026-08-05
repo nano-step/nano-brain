@@ -18,7 +18,11 @@ ORDER BY edge_type, target_node;
 SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
 FROM graph_edges
 WHERE workspace_hash = $1
-  AND (source_node = $2 OR split_part(source_node, '::', 2) = $2)
+  AND source_node <> '<unresolved>'
+  AND target_node <> '<unresolved>'
+  AND (source_node = $2
+       OR (NOT ($2 ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')
+           AND split_part(source_node, '::', 2) = $2))
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, target_node;
 
@@ -26,9 +30,14 @@ ORDER BY edge_type, target_node;
 SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
 FROM graph_edges
 WHERE workspace_hash = $1
+  AND target_node <> '<unresolved>'
   AND (target_node = $2
-       OR split_part(target_node, '::', 2) = $2
-       OR (strpos($2::text, '::') > 0 AND target_node = split_part($2::text, '::', 2)))
+       OR (NOT ($2 ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')
+           AND NOT (target_node ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')
+           AND split_part(target_node, '::', 2) = $2)
+       OR (strpos($2::text, '::') > 0
+           AND NOT ($2 ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')
+           AND target_node = split_part($2::text, '::', 2)))
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, source_node;
 
@@ -37,26 +46,40 @@ SELECT
     COUNT(*) FILTER (WHERE edge_type = 'contains') AS contains_count,
     COUNT(*) FILTER (WHERE edge_type = 'imports')  AS imports_count,
     COUNT(*) FILTER (WHERE edge_type = 'calls')    AS calls_count
-FROM graph_edges WHERE workspace_hash = $1;
+FROM graph_edges
+WHERE workspace_hash = $1
+  AND (edge_type <> 'calls' OR (source_node <> '<unresolved>' AND target_node <> '<unresolved>'));
 
 -- name: GetImpactors :many
 SELECT DISTINCT source_node, edge_type
 FROM graph_edges
-WHERE workspace_hash = $1 AND (target_node = $2 OR split_part(target_node, '::', 2) = $2)
+WHERE workspace_hash = $1 AND (target_node = $2 OR (NOT ($2 ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')
+       AND NOT (target_node ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')
+       AND split_part(target_node, '::', 2) = $2))
+  AND target_node <> '<unresolved>'
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, source_node;
 
 -- name: GetImpactorsByTargets :many
 SELECT DISTINCT source_node, target_node, edge_type
 FROM graph_edges
-WHERE workspace_hash = $1 AND (target_node = ANY($2::text[]) OR split_part(target_node, '::', 2) = ANY($2::text[]))
+WHERE workspace_hash = $1
+  AND (target_node = ANY($2::text[])
+       OR (split_part(target_node, '::', 2) = ANY(
+               ARRAY(SELECT n FROM unnest($2::text[]) AS n
+                     WHERE NOT (n ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')))
+           AND NOT (target_node ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')))
+  AND target_node <> '<unresolved>'
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, source_node;
 
 -- name: GetOutgoingEdgesBySources :many
 SELECT DISTINCT source_node, target_node, edge_type
 FROM graph_edges
-WHERE workspace_hash = $1 AND source_node = ANY($2::text[])
+WHERE workspace_hash = $1
+  AND source_node = ANY($2::text[])
+  AND source_node <> '<unresolved>'
+  AND target_node <> '<unresolved>'
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, target_node;
 
@@ -86,10 +109,12 @@ WITH degrees AS (
     SELECT ge.source_node AS node
     FROM graph_edges ge
     WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+      AND ge.target_node <> '<unresolved>' AND ge.source_node <> '<unresolved>'
     UNION ALL
     SELECT ge.target_node AS node
     FROM graph_edges ge
     WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+      AND ge.target_node <> '<unresolved>' AND ge.source_node <> '<unresolved>'
 )
 SELECT degrees.node, count(*)::bigint AS degree
 FROM degrees
@@ -102,10 +127,12 @@ WITH degrees AS (
     SELECT ge.source_node AS node
     FROM graph_edges ge
     WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+      AND ge.target_node <> '<unresolved>' AND ge.source_node <> '<unresolved>'
     UNION
     SELECT ge.target_node AS node
     FROM graph_edges ge
     WHERE ge.workspace_hash = $1 AND ge.edge_type = ANY($2::text[])
+      AND ge.target_node <> '<unresolved>' AND ge.source_node <> '<unresolved>'
 )
 SELECT count(*)::bigint FROM degrees;
 
@@ -113,6 +140,7 @@ SELECT count(*)::bigint FROM degrees;
 SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
 FROM graph_edges
 WHERE workspace_hash = $1
+  AND target_node <> '<unresolved>' AND source_node <> '<unresolved>'
   AND edge_type = ANY($2::text[])
   AND source_node = ANY($3::text[])
   AND target_node = ANY($3::text[]);
@@ -121,6 +149,7 @@ WHERE workspace_hash = $1
 SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
 FROM graph_edges
 WHERE workspace_hash = $1
+  AND target_node <> '<unresolved>' AND source_node <> '<unresolved>'
   AND edge_type = ANY($2::text[])
   AND (source_node = ANY($3::text[]) OR target_node = ANY($3::text[]))
 LIMIT $4;

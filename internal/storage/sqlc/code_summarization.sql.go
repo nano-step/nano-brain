@@ -19,6 +19,7 @@ SELECT DISTINCT source_node, target_node
 FROM graph_edges
 WHERE workspace_hash = $1
   AND source_node = ANY($2::text[])
+  AND target_node <> '<unresolved>'
   AND edge_type = 'calls'
 `
 
@@ -60,6 +61,7 @@ SELECT target_node, source_node, COUNT(*)::int AS frequency
 FROM graph_edges
 WHERE workspace_hash = $1
   AND target_node = ANY($2::text[])
+  AND target_node <> '<unresolved>'
   AND edge_type = 'calls'
 GROUP BY target_node, source_node
 ORDER BY target_node, frequency DESC
@@ -122,6 +124,7 @@ SELECT DISTINCT target_node
 FROM graph_edges
 WHERE workspace_hash = $1
   AND source_node = $2
+  AND target_node <> '<unresolved>'
   AND edge_type = 'calls'
 `
 

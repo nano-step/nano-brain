@@ -102,6 +102,7 @@ func (q *Queries) CountDocsByCollectionGrouped(ctx context.Context, workspaceHas
 const countGraphEdgesByType = `-- name: CountGraphEdgesByType :many
 SELECT edge_type, COUNT(*) AS edge_count FROM graph_edges
 WHERE workspace_hash = $1
+  AND (edge_type <> 'calls' OR (source_node <> '<unresolved>' AND target_node <> '<unresolved>'))
 GROUP BY edge_type
 `
 
@@ -136,7 +137,10 @@ func (q *Queries) CountGraphEdgesByType(ctx context.Context, workspaceHash strin
 const getEdgesByNodes = `-- name: GetEdgesByNodes :many
 SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
 FROM graph_edges
-WHERE workspace_hash = $1 AND source_node = ANY($2::text[])
+WHERE workspace_hash = $1
+  AND source_node = ANY($2::text[])
+  AND source_node <> '<unresolved>'
+  AND target_node <> '<unresolved>'
   AND ($3::text[] IS NULL OR edge_type = ANY($3::text[]))
 ORDER BY source_node, edge_type, target_node
 `

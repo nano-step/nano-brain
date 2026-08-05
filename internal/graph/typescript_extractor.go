@@ -98,7 +98,7 @@ func NewTypeScriptGraphExtractor() (*TypeScriptGraphExtractor, error) {
 }
 
 func (e *TypeScriptGraphExtractor) Supports(ext string) bool {
-	return ext == ".ts" || ext == ".tsx"
+	return ext == ".ts" || ext == ".tsx" || ext == ".mts" || ext == ".cts"
 }
 
 var _ ImportResolvingExtractor = (*TypeScriptGraphExtractor)(nil)
@@ -121,6 +121,7 @@ func (e *TypeScriptGraphExtractor) ExtractEdges(filePath string, content []byte)
 
 	var edges []Edge
 	edges = append(edges, e.extractContains(bt, tree, content, relFile, containsQ)...)
+	edges = append(edges, extractTSDeclarationIdentities(bt, tree, content, relFile, lang)...)
 	edges = append(edges, e.extractImports(bt, tree, content, relFile, lang, importQ)...)
 	edges = append(edges, e.extractCalls(bt, tree, content, relFile, callFuncQ, callExprQ)...)
 	return edges, nil
@@ -130,9 +131,9 @@ func (e *TypeScriptGraphExtractor) ExtractEdges(filePath string, content []byte)
 // edges are resolved via ic (see ImportResolvingExtractor). ExtractEdges
 // itself is untouched so existing callers/tests keep seeing raw specifiers.
 func (e *TypeScriptGraphExtractor) ExtractEdgesWithImportContext(filePath string, content []byte, ic ImportContext) ([]Edge, error) {
-	lang, importQ, containsQ, callFuncQ, callExprQ := e.lang, e.importQuery, e.containsQuery, e.callFuncQuery, e.callExprQuery
+	lang, importQ, containsQ := e.lang, e.importQuery, e.containsQuery
 	if filepath.Ext(filePath) == ".tsx" {
-		lang, importQ, containsQ, callFuncQ, callExprQ = e.tsxLang, e.tsxImportQ, e.tsxContainsQ, e.tsxCallFuncQ, e.tsxCallExprQ
+		lang, importQ, containsQ = e.tsxLang, e.tsxImportQ, e.tsxContainsQ
 	}
 
 	parser := gotreesitter.NewParser(lang)
@@ -147,8 +148,9 @@ func (e *TypeScriptGraphExtractor) ExtractEdgesWithImportContext(filePath string
 
 	var edges []Edge
 	edges = append(edges, e.extractContains(bt, tree, content, relFile, containsQ)...)
+	edges = append(edges, extractTSDeclarationIdentities(bt, tree, content, relFile, lang)...)
 	edges = append(edges, e.extractImportsResolved(bt, tree, content, relFile, lang, importQ, ic)...)
-	edges = append(edges, e.extractCalls(bt, tree, content, relFile, callFuncQ, callExprQ)...)
+	edges = append(edges, e.extractContextualCalls(bt, tree, content, relFile, lang, ic)...)
 	return edges, nil
 }
 
@@ -407,4 +409,3 @@ func firstChildOfType(node *gotreesitter.Node, lang *gotreesitter.Language, node
 	}
 	return nil
 }
-
