@@ -83,6 +83,9 @@ func main() {
 		case "restart":
 			runRestartCmd(args[1:], configPath)
 			return
+		case "service":
+			runServiceCmd(args[1:], configPath)
+			return
 		case "collection":
 			runCollectionCmd(args[1:])
 			return
