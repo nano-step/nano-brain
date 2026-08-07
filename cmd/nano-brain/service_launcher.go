@@ -126,7 +126,7 @@ func buildServiceSpec(platform servicePlatform, configPath string) (serviceSpec,
 	if _, err := config.Load(absConfig); err != nil {
 		return serviceSpec{}, fmt.Errorf("selected config %s does not load: %w", absConfig, err)
 	}
-	if pid, err := readPID(); err == nil && isRunning(pid) {
+	if running, pid := legacyDaemonRunning(); running {
 		return serviceSpec{}, fmt.Errorf("a legacy daemon is already running (PID %d). Stop it with 'nano-brain stop' before registering the managed service", pid)
 	}
 	return serviceSpec{

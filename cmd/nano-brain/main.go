@@ -240,11 +240,6 @@ func applyVerbose(cfg *config.LoggingConfig) {
 
 // startServer runs the nano-brain HTTP server (blocking).
 func startServer(configPath string) {
-	if err := guardBeforeStart(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		os.Exit(1)
-	}
-
 	var configWarning string
 	configPath, configWarning = config.ResolveConfigPathStrict(configPath)
 	if configWarning != "" {
@@ -260,6 +255,14 @@ func startServer(configPath string) {
 
 	if serveOnlyFlag {
 		cfg.Server.ServeOnly = true
+	}
+
+	// The guard probes the *configured* port so a managed service on a
+	// non-default port is neither blocked by an unrelated server on the
+	// default port nor blind to a duplicate on its own port.
+	if err := guardBeforeStartPort(cfg.Server.Port); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
 	}
 
 	if err := checkBindSafety(cfg.Server.Host, cfg.Server.Auth.Enabled); err != nil {

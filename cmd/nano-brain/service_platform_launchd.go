@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // launchdPlatform implements servicePlatform for macOS LaunchAgent
@@ -63,13 +64,30 @@ func (p *launchdPlatform) renderDefinition(spec serviceSpec) ([]byte, error) {
 }
 
 // register loads the written plist and starts the service. bootout is best
-// effort (the service may not be loaded yet); bootstrap surfaces real
-// failures and kickstart force-restarts onto the new definition.
+// effort (the service may not be loaded yet); bootstrap retries with a short
+// backoff because launchd fails with "Input/output error" when it is still
+// tearing down the previous job (state = SIGTERMed); kickstart force-restarts
+// onto the new definition.
 func (p *launchdPlatform) register(ctx context.Context) error {
 	_, _, _ = p.runner.run(ctx, []string{"launchctl", "bootout", p.target()})
 	domain := fmt.Sprintf("gui/%d", p.uid)
-	if _, stderr, err := p.runner.run(ctx, []string{"launchctl", "bootstrap", domain, p.definitionPath()}); err != nil {
-		return fmt.Errorf("launchctl bootstrap failed: %w: %s", err, strings.TrimSpace(stderr))
+	def := p.definitionPath()
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if _, stderr, err := p.runner.run(ctx, []string{"launchctl", "bootstrap", domain, def}); err != nil {
+			lastErr = fmt.Errorf("launchctl bootstrap failed: %w: %s", err, strings.TrimSpace(stderr))
+			select {
+			case <-ctx.Done():
+				return lastErr
+			case <-time.After(700 * time.Millisecond):
+			}
+			continue
+		}
+		lastErr = nil
+		break
+	}
+	if lastErr != nil {
+		return lastErr
 	}
 	if _, stderr, err := p.runner.run(ctx, []string{"launchctl", "kickstart", "-k", p.target()}); err != nil {
 		return fmt.Errorf("launchctl kickstart failed: %w: %s", err, strings.TrimSpace(stderr))

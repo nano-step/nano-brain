@@ -67,6 +67,40 @@ Bind a default workspace by appending `?workspace=<name-or-hash>` to the URL (e.
 
 For OpenCode, you can bootstrap the current workspace with `npx @nano-step/nano-brain init -- opencode`. It installs a `/nano-brain` slash command that keeps the workspace config local at `.nanobrain/config.yml`.
 
+### Run it as a supervised service (macOS / Linux)
+
+Install the daemon as an OS-managed service so it starts at login, restarts
+after crashes, and survives temporary PostgreSQL outages:
+
+```bash
+nano-brain service install   # registers launchd (macOS) or systemd --user (Linux)
+nano-brain service status    # definition + supervisor state + /health readiness
+nano-brain service restart   # restart through the supervisor
+nano-brain service update    # refresh the definition after an npm upgrade
+nano-brain service uninstall # stop and remove the registration
+```
+
+- The service runs **foreground `serve`** under the native supervisor
+  (`RunAtLoad`/`KeepAlive` on macOS, `Restart=always` on Linux) — the
+  supervisor owns lifecycle, and server startup retries PostgreSQL
+  connection failures with bounded backoff instead of exiting.
+- A **stable launcher** is pinned into the definition: a validated
+  `NANO_BRAIN_BIN`, a **global npm install** (`[node, run.js]` pair, which
+  survives `npm update -g`), or a direct binary. npx/local launchers are
+  rejected with a migration message.
+- The **absolute config path** is recorded at install time; durable
+  non-default settings (including the database URL) must live in that file —
+  no shell environment or secrets are copied into the service definition.
+- Client commands and `init` auto-start a **registered** service through its
+  supervisor (never a competing PID daemon).
+- **Linux boot-time start:** `loginctl enable-linger "$USER"`; otherwise the
+  user service starts at login.
+- Logs: launchd writes to `~/.nano-brain/logs/service*.log`; systemd uses the
+  journal (`journalctl --user -u nano-brain`). The legacy `serve -d`/`stop`/
+  `restart` PID-file commands remain available when no service is registered.
+- Windows, containers, and root installs are rejected with an actionable
+  error (`service install` exit code 3).
+
 ---
 
 ## The agent workflow

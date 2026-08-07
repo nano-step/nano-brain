@@ -226,6 +226,48 @@ curl -s http://localhost:3100/health
 
 > **Windows:** `nano-brain init`'s automatic server auto-start is not available yet — run this step manually after `init` prints the instruction to do so.
 
+#### Step 7b — Run the daemon as a supervised service (macOS / Linux)
+
+For a persistent memory daemon that starts at login, restarts after crashes,
+and survives a temporarily unavailable PostgreSQL, register it with the OS
+supervisor instead of `serve -d`:
+
+```bash
+nano-brain service install   # launchd (macOS) or systemd --user (Linux)
+nano-brain service status    # registration + supervisor state + /health
+nano-brain service restart
+nano-brain service update    # refresh definition after npm update -g
+nano-brain service uninstall
+```
+
+**Requirements**
+
+- A **stable launcher**: a direct binary (e.g. the one-line installer or
+  `NANO_BRAIN_BIN`), or a **global** npm install (`npm install -g
+  @nano-step/nano-brain`). npx/local launches are rejected for persistent
+  registration.
+- The **absolute config path** recorded at install must carry your durable
+  settings — the service does **not** copy shell environment variables or
+  credentials (`DATABASE_URL`, API keys) into the definition. Keep
+  `NANO_BRAIN_CONFIG` (or the `--config` flag) stable between install and run.
+
+**Linux boot-time start:** user services start at login; for boot time run
+`loginctl enable-linger "$USER"`. If `service install` reports no user
+manager, log in with a graphical/linger session and retry.
+
+**Logs & status**
+
+- macOS launchd: `~/.nano-brain/logs/service.log` / `service.err.log`
+- Linux systemd: `journalctl --user -u nano-brain`
+- `nano-brain service status --json` prints `platform`, `registered`,
+  `supervisor_state`, `health_reachable`, `ready`, `endpoint`, `version`,
+  `error`; exit codes are `0` (ready), `1` (degraded), `2` (not registered),
+  `3` (unsupported).
+
+**Migrating from `serve -d`:** stop the legacy daemon first
+(`nano-brain stop`), then `nano-brain service install`. The legacy PID-file
+commands remain supported when no service is registered.
+
 ---
 
 ### Step 8 — Register the workspace
