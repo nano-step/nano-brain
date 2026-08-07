@@ -115,7 +115,7 @@ func TestUnsupportedPlatform(t *testing.T) {
 	if _, err := p.renderDefinition(serviceSpec{}); err == nil {
 		t.Error("renderDefinition should fail on unsupported platform")
 	}
-	if err := p.register(context.Background(), serviceSpec{}); err == nil {
+	if err := p.register(context.Background()); err == nil {
 		t.Error("register should fail on unsupported platform")
 	}
 	if err := p.unregister(context.Background()); err == nil {

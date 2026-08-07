@@ -202,7 +202,7 @@ func installDefinition(ctx context.Context, platform servicePlatform, spec servi
 	if err := writeFileAtomic(path, data, 0o644); err != nil {
 		return fmt.Errorf("write definition: %w", err)
 	}
-	if err := platform.register(ctx, spec); err != nil {
+	if err := platform.register(ctx); err != nil {
 		if prevErr == nil {
 			_ = writeFileAtomic(path, prev, 0o644)
 		} else {

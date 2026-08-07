@@ -57,7 +57,7 @@ func (p *systemdPlatform) renderDefinition(spec serviceSpec) ([]byte, error) {
 	return renderSystemdUnit(spec.label, launcherServeArgv(spec)), nil
 }
 
-func (p *systemdPlatform) register(ctx context.Context, spec serviceSpec) error {
+func (p *systemdPlatform) register(ctx context.Context) error {
 	if _, stderr, err := p.runner.run(ctx, []string{"systemctl", "--user", "daemon-reload"}); err != nil {
 		return fmt.Errorf("systemctl daemon-reload failed: %w: %s", err, strings.TrimSpace(stderr))
 	}

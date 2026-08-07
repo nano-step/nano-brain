@@ -24,9 +24,8 @@ func TestLaunchdRegisterSequence(t *testing.T) {
 	withHome(t, home)
 	runner := &fakeRunner{}
 	p := newLaunchdPlatform(runner)
-	spec := serviceSpec{label: p.serviceID(), launcher: []string{"/bin/echo"}, configPath: "/home/user/.nano-brain/config.yml"}
 
-	if err := p.register(context.Background(), spec); err != nil {
+	if err := p.register(context.Background()); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	cmds := runner.commandList()
@@ -57,7 +56,7 @@ func TestLaunchdRegisterBootstrapFailure(t *testing.T) {
 		return "", "", nil
 	}}
 	p := newLaunchdPlatform(runner)
-	err := p.register(context.Background(), serviceSpec{label: p.serviceID(), launcher: []string{"/bin/echo"}, configPath: "/c.yml"})
+	err := p.register(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "bootstrap") {
 		t.Fatalf("register err = %v, want bootstrap failure with stderr", err)
 	}
@@ -115,7 +114,7 @@ func TestSystemdRegisterSequence(t *testing.T) {
 	withHome(t, home)
 	runner := &fakeRunner{}
 	p := newSystemdPlatform(runner)
-	if err := p.register(context.Background(), serviceSpec{label: "nano-brain", launcher: []string{"/bin/echo"}, configPath: "/c.yml"}); err != nil {
+	if err := p.register(context.Background()); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	cmds := runner.commandList()

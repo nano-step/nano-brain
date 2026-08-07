@@ -65,7 +65,7 @@ func (p *launchdPlatform) renderDefinition(spec serviceSpec) ([]byte, error) {
 // register loads the written plist and starts the service. bootout is best
 // effort (the service may not be loaded yet); bootstrap surfaces real
 // failures and kickstart force-restarts onto the new definition.
-func (p *launchdPlatform) register(ctx context.Context, spec serviceSpec) error {
+func (p *launchdPlatform) register(ctx context.Context) error {
 	_, _, _ = p.runner.run(ctx, []string{"launchctl", "bootout", p.target()})
 	domain := fmt.Sprintf("gui/%d", p.uid)
 	if _, stderr, err := p.runner.run(ctx, []string{"launchctl", "bootstrap", domain, p.definitionPath()}); err != nil {

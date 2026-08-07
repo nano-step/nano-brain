@@ -164,6 +164,15 @@ func recoverFromConnectionRefused(host string, port int) bool {
 		return false
 	}
 
+	// A registered managed service is (re)started through its native
+	// supervisor; only unregistered flows retain the legacy serve -d path.
+	// When a managed definition exists but fails to start, we must NOT fall
+	// back to the legacy daemon (issue #615 — it would compete with the
+	// supervised process).
+	if managed, started := startManagedServiceIfRegistered(); managed {
+		return started
+	}
+
 	runServeDaemonFn(config.ResolveConfigPath(""))
 
 	if err := waitForServerHealthy(serverHealthTimeout); err != nil {

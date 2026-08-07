@@ -45,8 +45,9 @@ type servicePlatform interface {
 	definitionPath() string
 	// renderDefinition serializes the native definition for a spec.
 	renderDefinition(spec serviceSpec) ([]byte, error)
-	// register loads/enables/starts the written definition (idempotent).
-	register(ctx context.Context, spec serviceSpec) error
+	// register loads/enables/starts the written definition (idempotent);
+	// also used by client recovery to (re)start a registered service.
+	register(ctx context.Context) error
 	// unregister stops/disables/boots out the registered service.
 	unregister(ctx context.Context) error
 	// restartService restarts the registered service through the manager.
@@ -79,7 +80,7 @@ func (unsupportedPlatform) renderDefinition(spec serviceSpec) ([]byte, error) {
 	return nil, fmt.Errorf("managed services are not supported on %s", runtime.GOOS)
 }
 
-func (unsupportedPlatform) register(ctx context.Context, spec serviceSpec) error {
+func (unsupportedPlatform) register(ctx context.Context) error {
 	return fmt.Errorf("managed services are not supported on %s", runtime.GOOS)
 }
 
