@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-const { execFileSync } = require("child_process");
+const { spawn, execFileSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -9,20 +9,63 @@ const os = require("os");
 const binName = os.platform() === "win32" ? "nano-brain.exe" : "nano-brain";
 const binPath = path.join(__dirname, binName);
 
-function runBinary(bin) {
-  try {
-    execFileSync(bin, process.argv.slice(2), { stdio: "inherit" });
-  } catch (e) {
-    // A numeric status means the binary ran and chose that exit code (it has
-    // already produced its own output). A non-numeric status means we could
-    // not spawn it at all (arch mismatch, missing libc, ETXTBSY, perms) —
-    // surface that, since stdio:"inherit" shows nothing for a spawn failure.
-    if (typeof e.status !== "number") {
-      process.stderr.write(`Error: failed to execute binary at ${bin}: ${e.message}\n`);
+// Launcher metadata for `nano-brain service install|update`. The Go CLI
+// reads these env vars to pin a stable [node, run.js] argv pair into the
+// native service definition instead of an ephemeral npx cache path.
+function launcherEnv() {
+  const env = Object.assign({}, process.env);
+  env.NANO_BRAIN_NPM_LAUNCHED = "true";
+  env.NANO_BRAIN_NPM_RUNJS = path.resolve(__filename);
+  env.NANO_BRAIN_NPM_NODE = process.execPath;
+  // Only mark the invocation as global when this package resolves from a
+  // global npm root; npx/local invocations leave the marker unset so the Go
+  // side can reject pinning a persistent service to an ephemeral cache.
+  const argv = process.argv.slice(2);
+  if (argv[0] === "service" && (argv[1] === "install" || argv[1] === "update")) {
+    try {
+      const globalRoot = execFileSync("npm", ["root", "-g"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      const pkgDir = path.dirname(require.resolve("../package.json"));
+      const rel = path.relative(globalRoot, pkgDir);
+      if (rel === "" || !rel.startsWith("..")) {
+        env.NANO_BRAIN_NPM_GLOBAL = "true";
+      }
+    } catch (e) {
+      // npm unavailable — leave the marker unset; the Go CLI falls back to
+      // the direct os.Executable() path.
     }
-    process.exit(e.status || 1);
   }
-  process.exit(0);
+  return env;
+}
+
+// runBinary spawns the Go binary as a foreground child, forwards
+// SIGTERM/SIGINT to it so a managed service never leaves an orphaned
+// process, and exits with the child's status or signal.
+function runBinary(bin) {
+  const child = spawn(bin, process.argv.slice(2), { stdio: "inherit", env: launcherEnv() });
+  const forward = (signal) => {
+    if (child.exitCode === null && child.signalCode === null) {
+      try {
+        child.kill(signal);
+      } catch (e) {
+        // already gone
+      }
+    }
+  };
+  process.on("SIGTERM", () => forward("SIGTERM"));
+  process.on("SIGINT", () => forward("SIGINT"));
+  child.on("error", (err) => {
+    // A spawn error (arch mismatch, missing libc, ETXTBSY, perms) would
+    // otherwise be invisible under stdio:"inherit" — surface it.
+    process.stderr.write(`Error: failed to execute binary at ${bin}: ${err.message}\n`);
+    process.exit(1);
+  });
+  child.on("exit", (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+    } else {
+      process.exit(code === null ? 1 : code);
+    }
+  });
 }
 
 // Explicit override wins and skips any download.

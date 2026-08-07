@@ -289,7 +289,7 @@ func startServer(configPath string) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := storage.NewPool(ctx, cfg.Database, logger)
+	pool, err := storage.NewPoolWithRetry(ctx, cfg.Database, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to connect to database")
 	}
