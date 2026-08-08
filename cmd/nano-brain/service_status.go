@@ -132,7 +132,7 @@ func runServiceStatusCmd(platform servicePlatform, opts serviceOptions, configPa
 	}
 	var probeErr string
 	st.HealthReachable, st.Ready, st.Version, probeErr = probeServiceHealth(host, port)
-	if probeErr != "" {
+	if probeErr != "" && st.Error == "" {
 		st.Error = probeErr
 	}
 
@@ -201,6 +201,7 @@ func runServiceLifecycleCmd(platform servicePlatform, op serviceOperation, opts 
 		}
 	case serviceOpUninstall:
 		if !registered(platform) {
+			removeServiceConfigMarker()
 			if opts.jsonOutput {
 				fmt.Println(`{"operation":"uninstall","registered":false}`)
 			} else {
@@ -256,7 +257,11 @@ func installDefinition(ctx context.Context, platform servicePlatform, spec servi
 	}
 	if err := platform.register(ctx); err != nil {
 		if prevErr == nil {
-			_ = writeFileAtomic(path, prev, 0o600)
+			if writeErr := writeFileAtomic(path, prev, 0o600); writeErr != nil {
+				return fmt.Errorf("%w; rollback write of the previous definition failed: %v", err, writeErr)
+			}
+			// Best-effort re-registration of the previous definition so the
+			// rollback does not leave a previously-running service stopped.
 			if reErr := platform.register(ctx); reErr != nil {
 				return fmt.Errorf("%w; previous definition was restored but could not be re-registered: %v", err, reErr)
 			}

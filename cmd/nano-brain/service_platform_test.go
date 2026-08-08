@@ -220,3 +220,33 @@ func TestPlatformUsableRootAndContainer(t *testing.T) {
 		t.Fatalf("usable on a normal mac session should pass or fail on launchctl presence only: %v", err)
 	}
 }
+
+func TestLaunchdUnregisterNoSuchProcessIsIdempotent(t *testing.T) {
+	home := t.TempDir()
+	withHome(t, home)
+	runner := &fakeRunner{fn: func(argv []string) (string, string, error) {
+		if argv[1] == "bootout" {
+			return "", "Boot-out failed: 3: No such process", errors.New("exit status 3")
+		}
+		return "", "", nil
+	}}
+	p := newLaunchdPlatform(runner)
+	if err := p.unregister(context.Background()); err != nil {
+		t.Fatalf("unregister on an absent job should be idempotent: %v", err)
+	}
+}
+
+func TestSystemdUnregisterNotLoadedIsIdempotent(t *testing.T) {
+	home := t.TempDir()
+	withHome(t, home)
+	runner := &fakeRunner{fn: func(argv []string) (string, string, error) {
+		if argv[2] == "stop" {
+			return "", "Unit nano-brain.service not loaded.", errors.New("exit status 5")
+		}
+		return "", "", nil
+	}}
+	p := newSystemdPlatform(runner)
+	if err := p.unregister(context.Background()); err != nil {
+		t.Fatalf("unregister on a not-loaded unit should be idempotent: %v", err)
+	}
+}
