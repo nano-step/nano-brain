@@ -3,11 +3,11 @@ package main
 import (
 	"bytes"
 	"errors"
-	"time"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestStartManagedServiceIfRegistered(t *testing.T) {
@@ -110,25 +110,20 @@ func TestStartManagedServiceIfRegistered(t *testing.T) {
 }
 
 func TestRecoverFromConnectionRefusedManagedPath(t *testing.T) {
-	// The managed path must be taken before the legacy daemon launcher.
+	// The managed path must be taken BEFORE any TTY/prompt gate: a registered
+	// service restarts through its supervisor without an interactive prompt.
 	origPlatform := newServicePlatformFn
 	origHealthy := serviceHealthyWaitFn
 	origDaemon := runServeDaemonFn
 	origIsTTY := isTTYFn
-	origReader := promptReader
-	origWriter := promptWriter
 	t.Cleanup(func() {
 		newServicePlatformFn = origPlatform
 		serviceHealthyWaitFn = origHealthy
 		runServeDaemonFn = origDaemon
 		isTTYFn = origIsTTY
-		promptReader = origReader
-		promptWriter = origWriter
 	})
 	serviceHealthyWaitFn = func(time.Duration) error { return nil }
-	isTTYFn = func() bool { return true }
-	promptReader = bytes.NewBufferString("Y\n")
-	promptWriter = &bytes.Buffer{}
+	isTTYFn = func() bool { return false } // non-TTY must still restart a managed service
 	runServeDaemonFn = func(string) { t.Fatal("legacy daemon must not launch when a managed service is registered") }
 
 	home := t.TempDir()

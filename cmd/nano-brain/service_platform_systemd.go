@@ -64,8 +64,12 @@ func (p *systemdPlatform) register(ctx context.Context) error {
 	if _, stderr, err := p.runner.run(ctx, []string{"systemctl", "--user", "enable", p.serviceID() + ".service"}); err != nil {
 		return fmt.Errorf("systemctl enable failed: %w: %s", err, strings.TrimSpace(stderr))
 	}
-	if _, stderr, err := p.runner.run(ctx, []string{"systemctl", "--user", "start", p.serviceID() + ".service"}); err != nil {
-		return fmt.Errorf("systemctl start failed: %w: %s", err, strings.TrimSpace(stderr))
+	// restart (not start): on install it starts an inactive unit, and on
+	// update it reloads a running service onto the rewritten unit — a plain
+	// `start` is a no-op on an already-active unit, which would leave the
+	// old binary running after an upgrade.
+	if _, stderr, err := p.runner.run(ctx, []string{"systemctl", "--user", "restart", p.serviceID() + ".service"}); err != nil {
+		return fmt.Errorf("systemctl restart failed: %w: %s", err, strings.TrimSpace(stderr))
 	}
 	return nil
 }
@@ -73,8 +77,8 @@ func (p *systemdPlatform) register(ctx context.Context) error {
 func (p *systemdPlatform) unregister(ctx context.Context) error {
 	unit := p.serviceID() + ".service"
 	if _, stderr, err := p.runner.run(ctx, []string{"systemctl", "--user", "stop", unit}); err != nil {
-		if strings.Contains(stderr, "could not be found") {
-			// Unit file already absent — nothing registered.
+		if strings.Contains(stderr, "could not be found") || strings.Contains(stderr, "not loaded") {
+			// Unit file already absent or never loaded — nothing registered.
 			return nil
 		}
 		return fmt.Errorf("systemctl stop failed: %w: %s", err, strings.TrimSpace(stderr))

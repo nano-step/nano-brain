@@ -120,3 +120,48 @@ test("service install exposes npm launcher metadata", { skip: isWin }, () => {
   // the Go CLI then rejects pinning an npx/local launcher.
   assert.strictEqual(env.NANO_BRAIN_NPM_GLOBAL, undefined);
 });
+
+test("child dying from SIGTERM yields a signal exit status (128+15)", { skip: isWin }, () => {
+  // A child that does NOT trap TERM dies from the signal; the wrapper must
+  // re-raise so its own exit status reflects the signal (exit code 143).
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nb-sigdeath-"));
+  const started = path.join(dir, "child-started");
+  const bin = path.join(dir, "node-child.js");
+  fs.writeFileSync(bin, `#!/usr/bin/env node\n` +
+    `const fs = require("fs");\n` +
+    `fs.writeFileSync(process.env.CHILD_STARTED, "started");\n` +
+    `setInterval(() => {}, 1000);\n`);
+  fs.chmodSync(bin, 0o755);
+
+  const child = spawn(process.execPath, [runJs], {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: Object.assign({}, process.env, { NANO_BRAIN_BIN: bin, CHILD_STARTED: started }),
+  });
+  child.stdout.on("data", () => {});
+  child.stderr.on("data", () => {});
+
+  const ready = setInterval(() => {
+    if (fs.existsSync(started)) {
+      clearInterval(ready);
+      setTimeout(() => child.kill("SIGTERM"), 100);
+    }
+  }, 15);
+
+  return new Promise((resolve, reject) => {
+    const deadline = setTimeout(() => reject(new Error("wrapper did not exit in time")), 10000);
+    child.on("close", (code, signal) => {
+      clearTimeout(deadline);
+      clearInterval(ready);
+      try {
+        // Node reports a signal-killed child as code=null, signal="SIGTERM";
+        // the wrapper re-raised the child's signal, which is the contract
+        // ("exit with the child's status or signal").
+        assert.strictEqual(signal, "SIGTERM", `wrapper signal = ${signal}, want SIGTERM`);
+        assert.strictEqual(code, null, `wrapper code = ${code}, want null`);
+        resolve();
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+});

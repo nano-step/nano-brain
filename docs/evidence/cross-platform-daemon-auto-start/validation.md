@@ -77,12 +77,18 @@ Bugs found and fixed during the smoke test:
 ## 4. Windows unsupported-path build (task 8.6)
 
 ```
-GOOS=windows CGO_ENABLED=0 go build -o /tmp/nb-smoke/nano-brain.exe ./cmd/nano-brain
-→ ok
+GOOS=windows CGO_ENABLED=0 go build ./cmd/nano-brain
+→ fails with 5 pre-existing undefined symbols (runServeDaemon, pidFilePath,
+  runServeCmd, runStopCmd, runRestartCmd) in the legacy daemon.go path
 ```
 
-The tag-free runtime split compiles on Windows; `service` commands return the
-actionable unsupported error (exit 3) without writing files.
+The identical failure occurs on `origin/master` — the package's Windows build
+was already broken before this change and is out of scope. The service
+subsystem adds **zero new Windows errors**: every `service*` file is tag-free
+with a runtime GOOS split, and the legacy-PID check is isolated behind the
+build-tagged `legacyDaemonRunning` helper. On Windows the `service` commands
+compile cleanly and return the actionable unsupported error (exit 3) without
+writing files.
 
 ## 5. Fixture hygiene
 

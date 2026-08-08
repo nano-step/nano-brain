@@ -146,12 +146,17 @@ func isConnectionRefused(err error) bool {
 	return strings.Contains(msg, "connection refused") || strings.Contains(msg, "dial tcp")
 }
 
-// recoverFromConnectionRefused implements the connect-error recovery flow:
-// print formatted error, optionally prompt to auto-start the daemon, wait
-// for health, and signal whether the caller should retry the original
-// request. Returns true ONLY when the daemon was started and reported
+// recoverFromConnectionRefused implements the connect-error recovery flow.
+// A registered managed service is (re)started through its native supervisor
+// without any interactive gate — it is designed to run and the user already
+// opted in at `service install` time. Only unregistered flows keep the
+// legacy prompt + serve -d path. Returns true ONLY when the server reported
 // healthy within serverHealthTimeout.
 func recoverFromConnectionRefused(host string, port int) bool {
+	if managed, started := startManagedServiceIfRegistered(); managed {
+		return started
+	}
+
 	msg := formatConnectError(host, port)
 
 	if os.Getenv("NANO_BRAIN_NO_AUTO_START") == "1" || !isTTYFn() {
@@ -162,15 +167,6 @@ func recoverFromConnectionRefused(host string, port int) bool {
 	fmt.Fprintln(os.Stderr, msg)
 	if !promptStartServer(promptReader, promptWriter) {
 		return false
-	}
-
-	// A registered managed service is (re)started through its native
-	// supervisor; only unregistered flows retain the legacy serve -d path.
-	// When a managed definition exists but fails to start, we must NOT fall
-	// back to the legacy daemon (issue #615 — it would compete with the
-	// supervised process).
-	if managed, started := startManagedServiceIfRegistered(); managed {
-		return started
 	}
 
 	runServeDaemonFn(config.ResolveConfigPath(""))

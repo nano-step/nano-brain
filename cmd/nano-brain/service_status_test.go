@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -89,4 +91,60 @@ func splitHostPort(t *testing.T, url string) (string, int) {
 		t.Fatalf("port %q: %v", parts[1], err)
 	}
 	return parts[0], port
+}
+
+func TestServiceConfigMarkerRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	withHome(t, home)
+	marker := serviceConfigMarker()
+	if marker == "" {
+		t.Fatal("marker path must resolve")
+	}
+	if !strings.Contains(marker, filepath.Join(".nano-brain", "service", "config-path")) {
+		t.Errorf("marker = %q, want under ~/.nano-brain/service/", marker)
+	}
+	writeServiceConfigMarker("/abs/config.yml")
+	if got := readServiceConfigMarker(); got != "/abs/config.yml" {
+		t.Errorf("readServiceConfigMarker = %q, want /abs/config.yml", got)
+	}
+	removeServiceConfigMarker()
+	if got := readServiceConfigMarker(); got != "" {
+		t.Errorf("marker should be empty after removal, got %q", got)
+	}
+}
+
+func TestResolveStatusConfigPrefersMarker(t *testing.T) {
+	home := t.TempDir()
+	withHome(t, home)
+	// A config with a distinctive port, referenced only via the marker.
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config.yml")
+	if err := os.WriteFile(cfgPath, []byte("server:\n  host: \"localhost\"\n  port: 3999\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeServiceConfigMarker(cfgPath)
+	host, port := resolveStatusConfig("")
+	if port != 3999 {
+		t.Errorf("resolveStatusConfig port = %d, want 3999 (from marker)", port)
+	}
+	if host != "localhost" {
+		t.Errorf("host = %q, want localhost", host)
+	}
+}
+
+func TestUnregisteredStatusContractFields(t *testing.T) {
+	// The status object an unregistered service must report (fields set by
+	// runServiceStatusCmd before emit; the exit code stays 2).
+	st := serviceStatus{
+		Platform:        "darwin",
+		Registered:      false,
+		SupervisorState: "inactive",
+		Error:           "not registered — run 'nano-brain service install'",
+	}
+	if code := statusExitCode(st); code != serviceExitNotRegistered {
+		t.Errorf("statusExitCode = %d, want %d", code, serviceExitNotRegistered)
+	}
+	if st.SupervisorState != "inactive" {
+		t.Errorf("SupervisorState = %q, want inactive", st.SupervisorState)
+	}
 }

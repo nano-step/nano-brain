@@ -34,17 +34,18 @@ func NewPoolWithRetry(ctx context.Context, cfg config.DatabaseConfig, logger zer
 			return pool, nil
 		}
 
+		logger.Warn().
+			Err(err).
+			Int("attempt", attempt).
+			Dur("next_retry", backoff).
+			Msg("database connection failed; PostgreSQL may still be starting")
+
 		select {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("database connection retry cancelled: %w", ctx.Err())
 		case <-time.After(backoff):
 		}
 
-		logger.Warn().
-			Err(err).
-			Int("attempt", attempt).
-			Dur("next_retry", backoff).
-			Msg("database connection failed; PostgreSQL may still be starting")
 		backoff *= 2
 		if backoff > maxBackoff {
 			backoff = maxBackoff

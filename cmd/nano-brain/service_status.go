@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -49,13 +51,55 @@ func statusEndpoint(host string, port int) string {
 	return fmt.Sprintf("http://%s:%d/health", host, port)
 }
 
-// resolveStatusConfig loads the recorded config for status output without
-// triggering any client auto-start recovery. A missing file degrades
-// gracefully to the default endpoint values.
-func resolveStatusConfig(configPath string) (host string, port int) {
-	path, err := resolveInstalledConfig(configPath)
+// serviceConfigMarker is the sidecar file recording the absolute config
+// path pinned into the installed definition, so `service status` keeps
+// probing the pinned endpoint even when the interactive env differs.
+func serviceConfigMarker() string {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return "localhost", resolvePort()
+		return ""
+	}
+	return filepath.Join(home, ".nano-brain", "service", "config-path")
+}
+
+func writeServiceConfigMarker(path string) {
+	marker := serviceConfigMarker()
+	if marker == "" {
+		return
+	}
+	_ = writeFileAtomic(marker, []byte(path+"\n"), 0o600)
+}
+
+func removeServiceConfigMarker() {
+	if marker := serviceConfigMarker(); marker != "" {
+		_ = os.Remove(marker)
+	}
+}
+
+func readServiceConfigMarker() string {
+	marker := serviceConfigMarker()
+	if marker == "" {
+		return ""
+	}
+	data, err := os.ReadFile(marker)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// resolveStatusConfig loads the recorded config for status output without
+// triggering any client auto-start recovery. The config path pinned at
+// install time wins; otherwise the flag/env/default resolution applies. A
+// missing file degrades gracefully to the default endpoint values.
+func resolveStatusConfig(configPath string) (host string, port int) {
+	path := readServiceConfigMarker()
+	if path == "" {
+		resolved, err := resolveInstalledConfig(configPath)
+		if err != nil {
+			return "localhost", resolvePort()
+		}
+		path = resolved
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
@@ -80,6 +124,11 @@ func runServiceStatusCmd(platform servicePlatform, opts serviceOptions, configPa
 		} else {
 			st.SupervisorState = state
 		}
+	} else {
+		// Contract: an unregistered service reports the inactive supervisor
+		// state and the install remediation.
+		st.SupervisorState = "inactive"
+		st.Error = "not registered — run 'nano-brain service install'"
 	}
 	var probeErr string
 	st.HealthReachable, st.Ready, st.Version, probeErr = probeServiceHealth(host, port)
@@ -144,6 +193,7 @@ func runServiceLifecycleCmd(platform servicePlatform, op serviceOperation, opts 
 			fmt.Fprintf(os.Stderr, "Error: nano-brain service %s failed: %s\n", op, err)
 			os.Exit(serviceExitDegraded)
 		}
+		writeServiceConfigMarker(spec.configPath)
 		if opts.jsonOutput {
 			fmt.Printf("{\"operation\":\"%s\",\"platform\":\"%s\",\"registered\":true}\n", op, platform.name())
 		} else {
@@ -166,6 +216,7 @@ func runServiceLifecycleCmd(platform servicePlatform, op serviceOperation, opts 
 			fmt.Fprintf(os.Stderr, "Error: definition removal failed: %s\n", err)
 			os.Exit(serviceExitDegraded)
 		}
+		removeServiceConfigMarker()
 		if opts.jsonOutput {
 			fmt.Println(`{"operation":"uninstall","registered":false}`)
 		} else {
@@ -190,8 +241,9 @@ func runServiceLifecycleCmd(platform servicePlatform, op serviceOperation, opts 
 
 // installDefinition writes the rendered definition atomically and registers
 // it with the native manager. On a manager failure it restores the previous
-// definition (or removes the new file when none existed) so the CLI never
-// claims success over a half-installed service.
+// definition (or removes the new file when none existed) and, when a previous
+// definition was restored, best-effort re-registers it so a previously-
+// running service is not left stopped by a failed update.
 func installDefinition(ctx context.Context, platform servicePlatform, spec serviceSpec) error {
 	path := platform.definitionPath()
 	prev, prevErr := os.ReadFile(path) // nil when absent; prevErr non-nil
@@ -199,12 +251,15 @@ func installDefinition(ctx context.Context, platform servicePlatform, spec servi
 	if err != nil {
 		return fmt.Errorf("render definition: %w", err)
 	}
-	if err := writeFileAtomic(path, data, 0o644); err != nil {
+	if err := writeFileAtomic(path, data, 0o600); err != nil {
 		return fmt.Errorf("write definition: %w", err)
 	}
 	if err := platform.register(ctx); err != nil {
 		if prevErr == nil {
-			_ = writeFileAtomic(path, prev, 0o644)
+			_ = writeFileAtomic(path, prev, 0o600)
+			if reErr := platform.register(ctx); reErr != nil {
+				return fmt.Errorf("%w; previous definition was restored but could not be re-registered: %v", err, reErr)
+			}
 		} else {
 			_ = os.Remove(path)
 		}

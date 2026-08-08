@@ -61,6 +61,14 @@ function runBinary(bin) {
   });
   child.on("exit", (code, signal) => {
     if (signal) {
+      // The child died from a signal (not a graceful exit). Re-raise on
+      // ourselves so the wrapper's own exit status reflects the signal —
+      // but drop our handlers first or the re-raise is swallowed.
+      try {
+        process.removeAllListeners(signal);
+      } catch (e) {
+        // ignore
+      }
       process.kill(process.pid, signal);
     } else {
       process.exit(code === null ? 1 : code);

@@ -50,7 +50,13 @@ func resolveLauncher() ([]string, string, error) {
 		if err := validateExecutable(bin); err != nil {
 			return nil, "", fmt.Errorf("NANO_BRAIN_BIN: %w", err)
 		}
-		return []string{bin}, "NANO_BRAIN_BIN", nil
+		// Canonicalize: the service definition must carry an absolute path
+		// because launchd/systemd spawn from /, not the install-time CWD.
+		abs, err := filepath.Abs(bin)
+		if err != nil {
+			return nil, "", fmt.Errorf("NANO_BRAIN_BIN: cannot resolve absolute path: %w", err)
+		}
+		return []string{abs}, "NANO_BRAIN_BIN", nil
 	}
 
 	runjs := os.Getenv("NANO_BRAIN_NPM_RUNJS")

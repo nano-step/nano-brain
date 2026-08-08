@@ -67,8 +67,13 @@ func (p *launchdPlatform) renderDefinition(spec serviceSpec) ([]byte, error) {
 // effort (the service may not be loaded yet); bootstrap retries with a short
 // backoff because launchd fails with "Input/output error" when it is still
 // tearing down the previous job (state = SIGTERMed); kickstart force-restarts
-// onto the new definition.
+// onto the new definition. The log directory is created first because the
+// plist references StandardOut/ErrorPath under it and launchd will not start
+// a job whose log paths cannot be opened.
 func (p *launchdPlatform) register(ctx context.Context) error {
+	if err := os.MkdirAll(p.logDir(), 0o700); err != nil {
+		return fmt.Errorf("create service log directory: %w", err)
+	}
 	_, _, _ = p.runner.run(ctx, []string{"launchctl", "bootout", p.target()})
 	domain := fmt.Sprintf("gui/%d", p.uid)
 	def := p.definitionPath()
@@ -97,7 +102,7 @@ func (p *launchdPlatform) register(ctx context.Context) error {
 
 func (p *launchdPlatform) unregister(ctx context.Context) error {
 	if _, stderr, err := p.runner.run(ctx, []string{"launchctl", "bootout", p.target()}); err != nil {
-		if strings.Contains(stderr, "Could not find service") {
+		if strings.Contains(stderr, "Could not find service") || strings.Contains(stderr, "No such process") {
 			return nil // already unloaded
 		}
 		return fmt.Errorf("launchctl bootout failed: %w: %s", err, strings.TrimSpace(stderr))

@@ -121,7 +121,7 @@ func TestSystemdRegisterSequence(t *testing.T) {
 	want := []string{
 		"systemctl --user daemon-reload",
 		"systemctl --user enable nano-brain.service",
-		"systemctl --user start nano-brain.service",
+		"systemctl --user restart nano-brain.service",
 	}
 	if len(cmds) != len(want) {
 		t.Fatalf("register calls = %v, want %v", cmds, want)
