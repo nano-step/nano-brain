@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -208,8 +209,37 @@ func TestSystemdRenderDefinition(t *testing.T) {
 	}
 }
 
+func TestPlatformUsablePlatformGate(t *testing.T) {
+	home := t.TempDir()
+	withHome(t, home)
+
+	// The adapters must reject non-native GOOS (CI runs Linux; dev runs
+	// macOS), regardless of root/container state.
+	if runtime.GOOS != "darwin" {
+		p := newLaunchdPlatform(&fakeRunner{})
+		if err := p.usable(); err == nil || !strings.Contains(err.Error(), "requires macOS") {
+			t.Errorf("launchd usable() on %s = %v, want macOS-required error", runtime.GOOS, err)
+		}
+	}
+	if runtime.GOOS != "linux" {
+		p := newSystemdPlatform(&fakeRunner{})
+		if err := p.usable(); err == nil || !strings.Contains(err.Error(), "requires Linux") {
+			t.Errorf("systemd usable() on %s = %v, want Linux-required error", runtime.GOOS, err)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		if _, _, err := resolveLauncher(); err == nil {
+			t.Error("unsupported GOOS should not resolve a launcher")
+		}
+	}
+}
+
 func TestPlatformUsableRootAndContainer(t *testing.T) {
-	// Root check: only meaningful when euid==0; skip otherwise.
+	// Root/container rejection can only be exercised where the platform gate
+	// already passed; skip otherwise (CI runs Linux, so launchd is gated out).
+	if runtime.GOOS != "darwin" {
+		t.Skip("launchd usable gate requires macOS")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("running as root")
 	}

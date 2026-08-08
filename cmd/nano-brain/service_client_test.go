@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+// testPlatform embeds a real adapter but neutralizes the GOOS/root/container
+// gate so the same tests run on any CI host (Linux) and locally (macOS).
+type testPlatform struct {
+	servicePlatform
+}
+
+func (testPlatform) usable() error { return nil }
+
 func TestStartManagedServiceIfRegistered(t *testing.T) {
 	origPlatform := newServicePlatformFn
 	origHealthy := serviceHealthyWaitFn
@@ -20,10 +28,9 @@ func TestStartManagedServiceIfRegistered(t *testing.T) {
 	serviceHealthyWaitFn = func(time.Duration) error { return nil }
 
 	t.Run("no definition falls back to legacy", func(t *testing.T) {
-		home := t.TempDir()
-		withHome(t, home)
+		withHome(t, t.TempDir())
 		runner := &fakeRunner{}
-		newServicePlatformFn = func() servicePlatform { return newLaunchdPlatform(runner) }
+		newServicePlatformFn = func() servicePlatform { return testPlatform{newLaunchdPlatform(runner)} }
 		managed, started := startManagedServiceIfRegistered()
 		if managed || started {
 			t.Errorf("got (%v, %v), want (false, false)", managed, started)
@@ -37,7 +44,7 @@ func TestStartManagedServiceIfRegistered(t *testing.T) {
 		home := t.TempDir()
 		withHome(t, home)
 		runner := &fakeRunner{}
-		newServicePlatformFn = func() servicePlatform { return newLaunchdPlatform(runner) }
+		newServicePlatformFn = func() servicePlatform { return testPlatform{newLaunchdPlatform(runner)} }
 		defPath := newLaunchdPlatform(runner).definitionPath()
 		if err := os.MkdirAll(filepath.Dir(defPath), 0o755); err != nil {
 			t.Fatal(err)
@@ -65,7 +72,7 @@ func TestStartManagedServiceIfRegistered(t *testing.T) {
 			}
 			return "", "", nil
 		}}
-		newServicePlatformFn = func() servicePlatform { return newLaunchdPlatform(runner) }
+		newServicePlatformFn = func() servicePlatform { return testPlatform{newLaunchdPlatform(runner)} }
 		defPath := newLaunchdPlatform(runner).definitionPath()
 		if err := os.MkdirAll(filepath.Dir(defPath), 0o755); err != nil {
 			t.Fatal(err)
@@ -84,7 +91,7 @@ func TestStartManagedServiceIfRegistered(t *testing.T) {
 		home := t.TempDir()
 		withHome(t, home)
 		runner := &fakeRunner{}
-		newServicePlatformFn = func() servicePlatform { return newLaunchdPlatform(runner) }
+		newServicePlatformFn = func() servicePlatform { return testPlatform{newLaunchdPlatform(runner)} }
 		serviceHealthyWaitFn = func(time.Duration) error { return errors.New("not healthy") }
 		defPath := newLaunchdPlatform(runner).definitionPath()
 		if err := os.MkdirAll(filepath.Dir(defPath), 0o755); err != nil {
@@ -129,7 +136,7 @@ func TestRecoverFromConnectionRefusedManagedPath(t *testing.T) {
 	home := t.TempDir()
 	withHome(t, home)
 	runner := &fakeRunner{}
-	newServicePlatformFn = func() servicePlatform { return newLaunchdPlatform(runner) }
+	newServicePlatformFn = func() servicePlatform { return testPlatform{newLaunchdPlatform(runner)} }
 	defPath := newLaunchdPlatform(runner).definitionPath()
 	if err := os.MkdirAll(filepath.Dir(defPath), 0o755); err != nil {
 		t.Fatal(err)
@@ -167,7 +174,7 @@ func TestRecoverFromConnectionRefusedLegacyFallback(t *testing.T) {
 	promptReader = bytes.NewBufferString("Y\n")
 	promptWriter = &bytes.Buffer{}
 	runServeDaemonFn = func(string) {}
-	newServicePlatformFn = func() servicePlatform { return newLaunchdPlatform(&fakeRunner{}) }
+	newServicePlatformFn = func() servicePlatform { return testPlatform{newLaunchdPlatform(&fakeRunner{})} }
 
 	withHome(t, t.TempDir()) // no definition file → legacy path
 	if got := recoverFromConnectionRefused("localhost", 3100); !got {
