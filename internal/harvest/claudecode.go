@@ -112,21 +112,12 @@ func (h *ClaudeCodeHarvester) HarvestAll(ctx context.Context, enqueuer ChunkEnqu
 }
 
 func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile string, enqueuer ChunkEnqueuer) (harvestResult, error) {
-	msgs, err := parseJSONLFile(sessionFile)
-	if err != nil {
-		return harvestSkipped, fmt.Errorf("parse JSONL: %w", err)
-	}
-
-	if len(msgs) == 0 {
-		return harvestSkipped, nil
-	}
-
+	// The session's identity comes from its filename, so the presence check that
+	// decides whether this file needs any work is answerable without reading it.
+	// It runs first for that reason: the parse, render and hash below are pure
+	// waste on the skip path, which is every already-harvested session on every
+	// cycle. Ordering matches OpenCodeSQLiteHarvester.HarvestAll.
 	sessionID := strings.TrimSuffix(filepath.Base(sessionFile), ".jsonl")
-	md := renderClaudeCodeMarkdown(sessionID, msgs)
-
-	sum := sha256.Sum256([]byte(md))
-	contentHash := hex.EncodeToString(sum[:])
-
 	sourcePath := "summary://claude/" + sessionID
 
 	queries := sqlc.New(h.db)
@@ -164,6 +155,21 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 		}
 		return harvestSkipped, nil
 	}
+
+	// Only now is the file's content needed.
+	msgs, parseErr := parseJSONLFile(sessionFile)
+	if parseErr != nil {
+		return harvestSkipped, fmt.Errorf("parse JSONL: %w", parseErr)
+	}
+
+	if len(msgs) == 0 {
+		return harvestSkipped, nil
+	}
+
+	md := renderClaudeCodeMarkdown(sessionID, msgs)
+
+	sum := sha256.Sum256([]byte(md))
+	contentHash := hex.EncodeToString(sum[:])
 
 	// Find createdAt from the first message that actually carries a timestamp.
 	// Leading records (type=="mode", "file-history-snapshot", etc.) have no
