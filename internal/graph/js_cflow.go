@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -44,7 +45,7 @@ func (x *JSControlFlowExtractor) ExtractCFGs(filePath string, content []byte) ([
 	ext := filepath.Ext(filePath)
 	lang, _ := x.langForExt(ext)
 
-	parser := gotreesitter.NewParser(lang)
+	parser := tsparse.NewParser(lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)

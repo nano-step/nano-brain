@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -68,7 +69,7 @@ func (e *RubyGraphExtractor) RequiresFrameworks() []string {
 }
 
 func (e *RubyGraphExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
-	parser := gotreesitter.NewParser(e.lang)
+	parser := tsparse.NewParser(e.lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)

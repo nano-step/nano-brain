@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -85,7 +86,7 @@ func parseDirectExports(filePath string, content []byte) map[string]directExport
 	if lang == nil {
 		return nil
 	}
-	parser := gotreesitter.NewParser(lang)
+	parser := tsparse.NewParser(lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil

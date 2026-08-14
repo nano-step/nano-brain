@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -73,7 +74,7 @@ func (e *JavaScriptGraphExtractor) Supports(ext string) bool {
 var _ ImportResolvingExtractor = (*JavaScriptGraphExtractor)(nil)
 
 func (e *JavaScriptGraphExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
-	parser := gotreesitter.NewParser(e.lang)
+	parser := tsparse.NewParser(e.lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)
@@ -95,7 +96,7 @@ func (e *JavaScriptGraphExtractor) ExtractEdges(filePath string, content []byte)
 // edges are resolved via ic (see ImportResolvingExtractor). ExtractEdges
 // itself is untouched so existing callers/tests keep seeing raw specifiers.
 func (e *JavaScriptGraphExtractor) ExtractEdgesWithImportContext(filePath string, content []byte, ic ImportContext) ([]Edge, error) {
-	parser := gotreesitter.NewParser(e.lang)
+	parser := tsparse.NewParser(e.lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)

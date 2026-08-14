@@ -3,6 +3,7 @@ package graph
 import (
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 	zerolog "github.com/rs/zerolog"
@@ -58,7 +59,7 @@ func (r *RubyCrossFileResolver) ResolveEdges(edges []Edge, fileContents map[stri
 }
 
 func (r *RubyCrossFileResolver) resolveFileAST(filePath string, content []byte) []Edge {
-	parser := gotreesitter.NewParser(r.lang)
+	parser := tsparse.NewParser(r.lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil

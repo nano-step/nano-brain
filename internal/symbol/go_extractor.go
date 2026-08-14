@@ -3,6 +3,7 @@ package symbol
 import (
 	"fmt"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -34,7 +35,7 @@ func (e *GoExtractor) Supports(ext string) bool {
 }
 
 func (e *GoExtractor) Extract(filePath string, content []byte) ([]Symbol, error) {
-	parser := gotreesitter.NewParser(e.lang)
+	parser := tsparse.NewParser(e.lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)
