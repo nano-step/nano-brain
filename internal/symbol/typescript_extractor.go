@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -48,7 +49,7 @@ func (e *TypeScriptExtractor) Extract(filePath string, content []byte) ([]Symbol
 		lang, q = e.tsxLang, e.tsxQ
 	}
 
-	parser := gotreesitter.NewParser(lang)
+	parser := tsparse.NewParser(lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)

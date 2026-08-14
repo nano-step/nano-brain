@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -72,11 +73,19 @@ func (s *SymbolAwareChunker) Chunk(content string, sourcePath string) []Chunk {
 	}
 
 	contentBytes := []byte(content)
-	parser := gotreesitter.NewParser(pl.lang)
+	parser := tsparse.NewParser(pl.lang)
 	tree, err := parser.Parse(contentBytes)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("file", sourcePath).Msg("tree-sitter parse failed, using fallback")
 		return s.fallback.Chunk(content, sourcePath)
+	}
+	// An early stop yields a partial tree with a nil error, so without this the
+	// file would be chunked from incomplete syntax with nothing to show for it.
+	if tree.ParseStoppedEarly() {
+		s.logger.Warn().
+			Str("file", sourcePath).
+			Str("reason", string(tree.ParseStopReason())).
+			Msg("tree-sitter stopped early, chunking a partial tree")
 	}
 	bt := gotreesitter.Bind(tree)
 	defer bt.Release()

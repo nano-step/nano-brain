@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 	zerolog "github.com/rs/zerolog"
@@ -51,7 +52,7 @@ func (e *RailsExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, 
 	relFile := filepath.ToSlash(filePath)
 	lang := grammars.RubyLanguage()
 
-	parser := gotreesitter.NewParser(lang)
+	parser := tsparse.NewParser(lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("rails parse %s: %w", filePath, err)

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -109,7 +110,7 @@ func (e *TypeScriptGraphExtractor) ExtractEdges(filePath string, content []byte)
 		lang, importQ, containsQ, callFuncQ, callExprQ = e.tsxLang, e.tsxImportQ, e.tsxContainsQ, e.tsxCallFuncQ, e.tsxCallExprQ
 	}
 
-	parser := gotreesitter.NewParser(lang)
+	parser := tsparse.NewParser(lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)
@@ -136,7 +137,7 @@ func (e *TypeScriptGraphExtractor) ExtractEdgesWithImportContext(filePath string
 		lang, importQ, containsQ = e.tsxLang, e.tsxImportQ, e.tsxContainsQ
 	}
 
-	parser := gotreesitter.NewParser(lang)
+	parser := tsparse.NewParser(lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -38,7 +39,7 @@ func (e *EchoRouteExtractor) RequiresFrameworks() []string {
 // ExtractEdges parses content as Go source and returns http + middleware edges
 // for any Echo route/group/Use registrations found.
 func (e *EchoRouteExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
-	parser := gotreesitter.NewParser(e.lang)
+	parser := tsparse.NewParser(e.lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)

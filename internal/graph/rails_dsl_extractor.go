@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -69,7 +70,7 @@ func (x *RailsDSLEdgeExtractor) Language() string {
 }
 
 func (x *RailsDSLEdgeExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
-	parser := gotreesitter.NewParser(x.lang)
+	parser := tsparse.NewParser(x.lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("rails_dsl parse %s: %w", filePath, err)

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 	"github.com/rs/zerolog"
@@ -29,7 +30,7 @@ func (x *RubyControlFlowExtractor) SupportsCFG(ext string) bool {
 }
 
 func (x *RubyControlFlowExtractor) ExtractCFGs(filePath string, content []byte) ([]CFG, error) {
-	parser := gotreesitter.NewParser(x.lang)
+	parser := tsparse.NewParser(x.lang)
 	tree, err := parser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)
