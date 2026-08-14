@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,6 +28,10 @@ type OpenCodeSQLiteHarvester struct {
 	dbPath     string
 	logger     zerolog.Logger
 	summarizer SessionSummarizer
+	// lastStamp is the "mtime-size" of dbPath as of the last cycle that opened
+	// it without error. Guarded by Runner.RunOnce's mutex, which serializes
+	// every HarvestAll call.
+	lastStamp string
 }
 
 func (h *OpenCodeSQLiteHarvester) setSummarizer(s SessionSummarizer) { h.summarizer = s }
@@ -94,6 +99,20 @@ func (h *OpenCodeSQLiteHarvester) RenderSession(ctx context.Context, sessionID, 
 }
 
 func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harvested, skipped, errCount int) {
+	// New sessions and messages can only appear by writing to the SQLite file, so
+	// an unchanged file has nothing to harvest. Checking that first matters
+	// because the alternative is not a cheap query: the driver is pure Go, so
+	// opening and scanning these DBs (hundreds of MB each, one per project)
+	// allocates their page cache on the Go heap every cycle, for files that
+	// typically have not been touched in weeks.
+	//
+	// The stamp lives in memory only. A restart re-opens each DB once, which is
+	// the correct cost — it is one cycle, not every cycle.
+	stamp := h.dbStamp()
+	if stamp != "" && stamp == h.lastStamp {
+		return 0, 0, 0
+	}
+
 	h.logger.Info().Str("db", h.dbPath).Msg("opening opencode sqlite db")
 
 	sqdb, owned, err := h.openSQLite(ctx)
@@ -252,6 +271,11 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 	}
 
 	harvested = summarySuccess + summaryFallback
+	// Only a clean cycle is recorded. Leaving the stamp unchanged after an error
+	// means the next cycle retries this DB rather than assuming it was handled.
+	if errCount == 0 {
+		h.lastStamp = stamp
+	}
 	h.logger.Info().
 		Str("source", "opencode").
 		Int("summary_success", summarySuccess).
@@ -261,6 +285,21 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 		Int("errors", errCount).
 		Msg("harvest cycle complete")
 	return
+}
+
+// dbStamp returns a change token for the SQLite file, or "" when there is
+// nothing to stamp — an injected connection (dbPath is then meaningless) or a
+// file that cannot be stat'd. An empty stamp disables the skip, so an
+// unstattable DB still gets opened and reports a real error.
+func (h *OpenCodeSQLiteHarvester) dbStamp() string {
+	if h.sqdb != nil || h.dbPath == "" {
+		return ""
+	}
+	info, err := os.Stat(h.dbPath)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d-%d", info.ModTime().UnixNano(), info.Size())
 }
 
 type SqSession struct {
