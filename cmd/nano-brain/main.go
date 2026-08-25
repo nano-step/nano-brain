@@ -655,6 +655,25 @@ func startServer(configPath string) {
 			}
 		}
 
+		if phs, piErr := initPiHarvesters(ctx, cfg.Harvester.Pi, db, logger); piErr != nil {
+			logger.Error().Err(piErr).Msg("pi harvester init failed")
+		} else {
+			for _, ph := range phs {
+				if hr == nil {
+					hr = harvest.NewRunner(ph, eq, interval, logger)
+				} else {
+					hr.AddHarvester(ph)
+				}
+			}
+			if len(phs) > 0 {
+				logger.Info().
+					Str("session_dir", cfg.Harvester.Pi.SessionDir).
+					Int("workspace_count", len(phs)).
+					Dur("interval", interval).
+					Msg("pi session harvesters started")
+			}
+		}
+
 		if hr != nil {
 			hr.WithPublisher(bus)
 			if harvestSummarizer != nil {

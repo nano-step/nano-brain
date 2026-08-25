@@ -142,6 +142,13 @@ Source resolution priority at daemon startup (first non-empty wins):
 | `harvester.claudecode.enabled` | bool | `false` | Enable Claude Code session harvesting |
 | `harvester.claudecode.session_dir` | string | `""` | Claude Code JSONL sessions directory |
 
+### harvester.pi
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `harvester.pi.enabled` | bool | `false` | Enable Pi CLI agent session harvesting |
+| `harvester.pi.session_dir` | string | `""` | Pi JSONL sessions directory (e.g. `$HOME/.pi/agent/sessions`) — set as an absolute path; nano-brain does not expand `~` for this key |
+
 ### harvester.git
 
 | Key | Type | Default | Description |
@@ -436,6 +443,9 @@ harvester:
     db_path: ""
     db_root: ""
   claudecode:
+    enabled: false
+    session_dir: ""
+  pi:
     enabled: false
     session_dir: ""
   git:

@@ -164,6 +164,23 @@ func bfSlugify(s string) string {
 	return out
 }
 
+func TestExtractBackfillSource(t *testing.T) {
+	cases := []struct {
+		tags []string
+		want string
+	}{
+		{[]string{"summary", "opencode"}, "opencode"},
+		{[]string{"summary", "claude"}, "claude"},
+		{[]string{"summary", "pi"}, "pi"},
+		{[]string{"summary", "unrelated-tag"}, "opencode"},
+	}
+	for _, c := range cases {
+		if got := extractBackfillSource(c.tags); got != c.want {
+			t.Errorf("extractBackfillSource(%v) = %q, want %q", c.tags, got, c.want)
+		}
+	}
+}
+
 func TestBackfill_EmptyDB(t *testing.T) {
 	q := setupBackfillTestPG(t)
 	ctx := context.Background()
