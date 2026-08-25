@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -74,7 +75,7 @@ func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath 
 
 	if _, err := q.UpsertCollection(ctx, sqlc.UpsertCollectionParams{
 		WorkspaceHash: ws.Hash,
-		Name:          "memory",
+		Name:          collectionNameMemory,
 		Path:          memoryPath,
 		GlobPattern:   "**/*",
 		UpdateMode:    "auto",
@@ -84,7 +85,7 @@ func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath 
 
 	if _, err := q.UpsertCollection(ctx, sqlc.UpsertCollectionParams{
 		WorkspaceHash: ws.Hash,
-		Name:          "sessions",
+		Name:          collectionNameSessions,
 		Path:          sessionsPath,
 		GlobPattern:   "**/*",
 		UpdateMode:    "auto",
@@ -103,6 +104,32 @@ func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath 
 	}
 
 	return ws, nil
+}
+
+// validateRootPath rejects a root_path that the daemon cannot walk. The
+// watcher and walkCollectionFiles both stat col.Path on the daemon's own
+// filesystem, so a path the daemon cannot read can never be indexed —
+// registering it anyway would only create a permanently-empty collection.
+func validateRootPath(path string) error {
+	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+		return fmt.Errorf("root_path does not exist: %s", path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("root_path cannot be read: %s", path)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("root_path cannot be read: %s", path)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("root_path is not a directory: %s", path)
+	}
+	if _, err := f.Readdirnames(1); err != nil && err != io.EOF {
+		return fmt.Errorf("root_path cannot be read: %s", path)
+	}
+	return nil
 }
 
 // InitWorkspace godoc
@@ -129,6 +156,10 @@ func InitWorkspace(q WorkspaceQuerier, db *sql.DB, fw *watcher.Watcher, watcherC
 		absPath, err := filepath.Abs(req.RootPath)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid root_path")
+		}
+
+		if err := validateRootPath(absPath); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 
 		hash, err := storage.WorkspaceHash(absPath)
@@ -163,22 +194,13 @@ func InitWorkspace(q WorkspaceQuerier, db *sql.DB, fw *watcher.Watcher, watcherC
 		}
 
 		if fw != nil {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				logger.Warn().Err(err).Msg("failed to get home directory for watcher paths")
-				home = "~"
-			}
-			type colSpec struct{ name, path, glob string }
-			cols := []colSpec{
-				{"memory", filepath.Join(home, ".nano-brain", "memory"), "**/*"},
-				{"sessions", filepath.Join(home, ".nano-brain", "sessions"), "**/*"},
-				{"code", absPath, "**/*"},
-			}
+			// Only disk-backed collections are watched. memory and sessions are
+			// DB-backed; attaching them here made init-time behaviour disagree
+			// with daemon startup, which already skips a collection whose path
+			// does not exist.
 			cfgExclude, cfgExtensions := watcherCfg.ResolveFilterForPath(absPath)
-			for _, col := range cols {
-				if err := fw.WatchWithFilter(col.name, col.path, hash, col.glob, cfgExclude, cfgExtensions); err != nil {
-					logger.Warn().Err(err).Str("collection", col.name).Msg("failed to attach watcher after init")
-				}
+			if err := fw.WatchWithFilter("code", absPath, hash, "**/*", cfgExclude, cfgExtensions); err != nil {
+				logger.Warn().Err(err).Str("collection", "code").Msg("failed to attach watcher after init")
 			}
 		}
 

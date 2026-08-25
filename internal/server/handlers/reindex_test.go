@@ -269,6 +269,118 @@ func TestIncrementalReindex_DeletedFile(t *testing.T) {
 	}
 }
 
+func TestIncrementalReindex_LogicalCollectionSkipsOrphanDeletion(t *testing.T) {
+	dir := t.TempDir()
+	// A non-empty root so the "disk walk returned empty" guard would not be
+	// what saves this collection — the logical-collection skip must be what
+	// keeps it out of the orphan loop entirely.
+	if err := os.WriteFile(filepath.Join(dir, "unrelated.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := echo.New()
+	body := `{"workspace":"ws123"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/reindex", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("workspace", "ws123")
+
+	mq := &mockReindexQuerier{
+		collections: []sqlc.Collection{{Name: "sessions", Path: dir}},
+		indexedDocs: map[string][]sqlc.ListDocumentSourcePathsAndHashesRow{
+			"sessions": {
+				{ID: uuid.New(), SourcePath: "summary://claude/session-1", ContentHash: "h1"},
+				{ID: uuid.New(), SourcePath: "summary://claude/session-2", ContentHash: "h2"},
+			},
+		},
+	}
+	w := newTestWatcherForHandler()
+
+	h := handlers.TriggerReindex(mq, w, nil, nil, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["deleted"] != float64(0) {
+		t.Errorf("expected deleted=0, got %v", resp["deleted"])
+	}
+	if mq.deleteChunksCalled != 0 {
+		t.Errorf("expected no DeleteChunks calls, got %d", mq.deleteChunksCalled)
+	}
+	if mq.deleteDocCalled != 0 {
+		t.Errorf("expected no DeleteDoc calls, got %d", mq.deleteDocCalled)
+	}
+}
+
+func TestIncrementalReindex_MissingSessionsRootLogsNoWarning(t *testing.T) {
+	var logBuf strings.Builder
+	logger := zerolog.New(&logBuf)
+
+	e := echo.New()
+	body := `{"workspace":"ws123"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/reindex", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("workspace", "ws123")
+
+	mq := &mockReindexQuerier{
+		collections: []sqlc.Collection{
+			{Name: "sessions", Path: filepath.Join(t.TempDir(), "does-not-exist")},
+		},
+		indexedDocs: map[string][]sqlc.ListDocumentSourcePathsAndHashesRow{
+			"sessions": {
+				{ID: uuid.New(), SourcePath: "summary://claude/session-1", ContentHash: "h1"},
+			},
+		},
+	}
+	w := newTestWatcherForHandler()
+
+	h := handlers.TriggerReindex(mq, w, nil, nil, logger)
+	if err := h(c); err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+
+	logs := logBuf.String()
+	if strings.Contains(logs, "root path inaccessible") {
+		t.Errorf("expected no root-path-inaccessible warning, got logs: %s", logs)
+	}
+	if strings.Contains(logs, "disk walk returned empty for non-empty collection") {
+		t.Errorf("expected no empty-disk-walk warning, got logs: %s", logs)
+	}
+}
+
+func TestTriggerReindex_ForceWipeIncludesSessions(t *testing.T) {
+	e := echo.New()
+	body := `{"workspace":"ws123","force_wipe":true}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/reindex", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("workspace", "ws123")
+
+	mq := &mockReindexQuerier{
+		collections: []sqlc.Collection{{Name: "sessions", Path: "/nonexistent"}},
+	}
+	w := newTestWatcherForHandler()
+
+	h := handlers.TriggerReindex(mq, w, nil, nil, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if !mq.forceWipeCalled {
+		t.Fatal("expected ResetAndReturnChunkIDsByCollection to be called for force-wipe")
+	}
+	if mq.forceWipeLastParams.Collection != "sessions" {
+		t.Errorf("expected force-wipe to target sessions, got %q", mq.forceWipeLastParams.Collection)
+	}
+}
+
 func TestTriggerReindex_ForceWipe(t *testing.T) {
 	dir := t.TempDir()
 	fakeIDs := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()}
