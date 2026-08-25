@@ -4,6 +4,14 @@ All notable changes to nano-brain are documented here.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Data-loss trap in incremental reindex.** `memory` and `sessions` are DB-backed collections whose documents carry synthetic (`summary://…`) or empty source paths, never real files. Reindex previously walked their nominal, normally-nonexistent filesystem roots (`~/.nano-brain/memory`, `~/.nano-brain/sessions`) as if they held real files; if either root existed and contained even one file (e.g. Finder's `.DS_Store`, or an operator running `mkdir -p` to silence the recurring `root path inaccessible` warning), the orphan-deletion pass would delete every indexed document in that collection. `memory` and `sessions` are now skipped by the walk and are unreachable from orphan deletion — **operators must still not create `~/.nano-brain/memory` or `~/.nano-brain/sessions`, or otherwise make those paths walkable**, since that is what triggered the bug, not the fix for it.
+
+### Breaking
+- **`POST /api/v1/init` now validates `root_path`.** A path that does not exist, is not a directory, or cannot be read is rejected with `400` instead of being registered as a permanently-empty collection. Registrations against a *remote* daemon must use a path resolvable on the daemon's own filesystem — a local-only path is now rejected rather than silently accepted.
+
 ## [2026.6.22] — 2026-06-22
 
 ### Added

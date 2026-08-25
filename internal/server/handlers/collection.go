@@ -102,6 +102,9 @@ func AddCollection(q CollectionQuerier, fw *watcher.Watcher, watcherCfg config.W
 		if !validCollectionName.MatchString(req.Name) {
 			return echo.NewHTTPError(http.StatusBadRequest, "name must be 1-128 characters: letters, digits, underscores, hyphens only")
 		}
+		if isLogicalCollection(req.Name) {
+			return echo.NewHTTPError(http.StatusBadRequest, "name is reserved for an internal collection")
+		}
 		if req.Path == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "path is required")
 		}
@@ -245,6 +248,9 @@ func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, watcherCf
 		}
 	if !validCollectionName.MatchString(req.NewName) {
 		return echo.NewHTTPError(http.StatusBadRequest, "new_name must be 1-128 characters: letters, digits, underscores, hyphens only")
+	}
+	if isLogicalCollection(req.NewName) {
+		return echo.NewHTTPError(http.StatusBadRequest, "new_name is reserved for an internal collection")
 	}
 
 	if err := q.UpdateDocumentsCollection(c.Request().Context(), sqlc.UpdateDocumentsCollectionParams{

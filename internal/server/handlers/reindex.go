@@ -152,6 +152,15 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 	var watcherTriggered bool
 
 	for _, col := range targets {
+		// Logical collections hold documents whose source_path is an identifier
+		// (summary://…) or empty, never a file. Walking them would put every one
+		// of those documents into the orphan loop below, where os.Stat can never
+		// succeed — deleting the whole corpus. Skipping the walk closes that path
+		// structurally; force-wipe still targets these collections by name.
+		if isLogicalCollection(col.Name) {
+			continue
+		}
+
 		diskFiles, err := walkCollectionFiles(col)
 		if err != nil {
 			reqLog := LoggerFromCtx(c, logger)
@@ -284,6 +293,21 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 		DurationMs:       time.Since(start).Milliseconds(),
 		Message:          fmt.Sprintf("Incremental reindex queued for workspace %s", workspace),
 	})
+}
+
+// Logical (DB-backed) collection names, shared with initWorkspace so the two
+// places that need to know "memory" and "sessions" are logical stay in sync.
+const (
+	collectionNameMemory   = "memory"
+	collectionNameSessions = "sessions"
+)
+
+// isLogicalCollection reports whether a collection is DB-backed rather than
+// disk-backed. Its nominal path is vestigial: no code path creates
+// ~/.nano-brain/{memory,sessions}, and both watcher attach points already skip
+// collections whose path does not exist.
+func isLogicalCollection(name string) bool {
+	return name == collectionNameMemory || name == collectionNameSessions
 }
 
 func walkCollectionFiles(col sqlc.Collection) (map[string]string, error) {

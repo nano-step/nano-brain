@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -154,6 +155,28 @@ func TestAddCollection_MissingName(t *testing.T) {
 	}
 }
 
+func TestAddCollection_ReservedName(t *testing.T) {
+	for _, name := range []string{"memory", "sessions"} {
+		q := &mockCollectionQuerier{}
+		e := echo.New()
+		body := fmt.Sprintf(`{"workspace":"ws-test","name":%q,"path":"/tmp"}`, name)
+		c, _ := newCollectionContext(e, http.MethodPost, "/api/v1/collections", body, "ws-test")
+
+		h := handlers.AddCollection(q, nil, config.WatcherConfig{}, zerolog.Nop())
+		err := h(c)
+		if err == nil {
+			t.Fatalf("expected error for reserved name %q", name)
+		}
+		he, ok := err.(*echo.HTTPError)
+		if !ok {
+			t.Fatalf("expected echo.HTTPError, got %T", err)
+		}
+		if he.Code != http.StatusBadRequest {
+			t.Errorf("name %q: expected 400, got %d", name, he.Code)
+		}
+	}
+}
+
 func TestListCollections_Success(t *testing.T) {
 	col := fixedCollection("codebase", "/tmp")
 	q := &mockCollectionQuerier{
@@ -222,6 +245,30 @@ func TestRenameCollection_Success(t *testing.T) {
 	}
 	if resp.Name != "renamed" {
 		t.Errorf("expected name=renamed, got %s", resp.Name)
+	}
+}
+
+func TestRenameCollection_ReservedNewName(t *testing.T) {
+	for _, name := range []string{"memory", "sessions"} {
+		q := &mockCollectionQuerier{}
+		e := echo.New()
+		body := fmt.Sprintf(`{"workspace":"ws-test","new_name":%q}`, name)
+		c, _ := newCollectionContext(e, http.MethodPut, "/api/v1/collections/old-name", body, "ws-test")
+		c.SetParamNames("name")
+		c.SetParamValues("old-name")
+
+		h := handlers.RenameCollectionHandler(q, nil, config.WatcherConfig{}, zerolog.Nop())
+		err := h(c)
+		if err == nil {
+			t.Fatalf("expected error renaming to reserved name %q", name)
+		}
+		he, ok := err.(*echo.HTTPError)
+		if !ok {
+			t.Fatalf("expected echo.HTTPError, got %T", err)
+		}
+		if he.Code != http.StatusBadRequest {
+			t.Errorf("name %q: expected 400, got %d", name, he.Code)
+		}
 	}
 }
 

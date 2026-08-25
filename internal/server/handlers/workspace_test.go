@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,6 +22,18 @@ import (
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
+
+// ensureTestDir makes path exist for the duration of the test. InitWorkspace
+// now validates root_path against the filesystem, so fixture paths used only
+// to exercise registration mechanics (not path validation itself) must be
+// real directories.
+func ensureTestDir(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+	t.Cleanup(func() { os.RemoveAll(path) })
+}
 
 type mockQuerier struct {
 	upsertWorkspaceFn          func(ctx context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error)
@@ -67,6 +82,7 @@ func TestWorkspaceHashDifferentPaths(t *testing.T) {
 }
 
 func TestInitWorkspaceHandler(t *testing.T) {
+	ensureTestDir(t, "/tmp/test-project")
 	fixedHash, err := storage.WorkspaceHash("/tmp/test-project")
 	if err != nil {
 		t.Fatalf("WorkspaceHash: %v", err)
@@ -154,6 +170,159 @@ func TestInitWorkspaceHandlerMissingRootPath(t *testing.T) {
 	}
 }
 
+func TestInitWorkspaceHandlerNonexistentRootPath(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	q := &mockQuerier{}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/init", strings.NewReader(fmt.Sprintf(`{"root_path":%q}`, missing)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
+	err := h(c)
+	if err == nil {
+		t.Fatal("expected error for nonexistent root_path")
+	}
+	he, ok := err.(*echo.HTTPError)
+	if !ok {
+		t.Fatalf("expected echo.HTTPError, got %T", err)
+	}
+	if he.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", he.Code)
+	}
+	if msg, _ := he.Message.(string); !strings.Contains(msg, "does not exist") {
+		t.Errorf("expected message to mention 'does not exist', got %v", he.Message)
+	}
+}
+
+func TestInitWorkspaceHandlerRootPathIsFile(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "not-a-dir.txt")
+	if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	q := &mockQuerier{}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/init", strings.NewReader(fmt.Sprintf(`{"root_path":%q}`, filePath)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
+	err := h(c)
+	if err == nil {
+		t.Fatal("expected error for a root_path that is a regular file")
+	}
+	he, ok := err.(*echo.HTTPError)
+	if !ok {
+		t.Fatalf("expected echo.HTTPError, got %T", err)
+	}
+	if he.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", he.Code)
+	}
+	if msg, _ := he.Message.(string); !strings.Contains(msg, "not a directory") {
+		t.Errorf("expected message to mention 'not a directory', got %v", he.Message)
+	}
+}
+
+func TestInitWorkspaceHandlerRootPathUnreadable(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: directory permissions are not enforced")
+	}
+	dir := filepath.Join(t.TempDir(), "unreadable")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+
+	q := &mockQuerier{}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/init", strings.NewReader(fmt.Sprintf(`{"root_path":%q}`, dir)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
+	err := h(c)
+	if err == nil {
+		t.Fatal("expected error for an unreadable root_path")
+	}
+	he, ok := err.(*echo.HTTPError)
+	if !ok {
+		t.Fatalf("expected echo.HTTPError, got %T", err)
+	}
+	if he.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", he.Code)
+	}
+	if msg, _ := he.Message.(string); !strings.Contains(msg, "cannot be read") {
+		t.Errorf("expected message to mention 'cannot be read', got %v", he.Message)
+	}
+}
+
+func TestInitWorkspaceHandlerRelativeRootPathStoredAbsolute(t *testing.T) {
+	base := t.TempDir()
+	relDir := "relative-project"
+	if err := os.Mkdir(filepath.Join(base, relDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(base); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origWd) })
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := &mockQuerier{
+		upsertWorkspaceFn: func(_ context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error) {
+			return sqlc.Workspace{
+				ID: uuid.New(), Hash: arg.Hash, Name: arg.Name, Path: arg.Path,
+				CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+		upsertCollectionFn: func(_ context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error) {
+			return sqlc.Collection{
+				ID: uuid.New(), WorkspaceHash: arg.WorkspaceHash,
+				Name: arg.Name, Path: arg.Path, GlobPattern: arg.GlobPattern,
+				UpdateMode: arg.UpdateMode, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/init", strings.NewReader(fmt.Sprintf(`{"root_path":%q}`, relDir)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := handlers.InitWorkspace(q, nil, nil, config.WatcherConfig{}, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	wantAbs := filepath.Join(cwd, relDir)
+	gotPath, _ := resp["root_path"].(string)
+	if gotPath != wantAbs {
+		t.Errorf("expected root_path %q, got %q", wantAbs, gotPath)
+	}
+	if !filepath.IsAbs(gotPath) {
+		t.Errorf("expected root_path to be absolute, got %q", gotPath)
+	}
+}
+
 func TestListWorkspacesHandler(t *testing.T) {
 	now := time.Now()
 	q := &mockQuerier{
@@ -213,6 +382,7 @@ func mapKeys(m map[string]interface{}) []string {
 }
 
 func TestInitWorkspaceCreatesCodeCollection(t *testing.T) {
+	ensureTestDir(t, "/tmp/test-project")
 	var collectionNames []string
 	q := &mockQuerier{
 		upsertWorkspaceFn: func(_ context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error) {
@@ -261,6 +431,7 @@ func TestInitWorkspaceCreatesCodeCollection(t *testing.T) {
 }
 
 func TestInitWorkspaceCodeCollectionIdempotent(t *testing.T) {
+	ensureTestDir(t, "/tmp/test-project")
 	var callCount atomic.Int32
 	q := &mockQuerier{
 		upsertWorkspaceFn: func(_ context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error) {
@@ -300,6 +471,7 @@ func TestInitWorkspaceCodeCollectionIdempotent(t *testing.T) {
 }
 
 func TestInitWorkspaceCodeCollectionErrorRollback(t *testing.T) {
+	ensureTestDir(t, "/tmp/test-project")
 	var collectionCallCount int
 	q := &mockQuerier{
 		upsertWorkspaceFn: func(_ context.Context, arg sqlc.UpsertWorkspaceParams) (sqlc.Workspace, error) {
