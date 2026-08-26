@@ -43,6 +43,20 @@ func checkBindSafety(host string, authEnabled bool) error {
 	if unsafeNoAuth {
 		return nil
 	}
+	// An empty or bracket-pair host is a wildcard bind, but saying it "binds
+	// to a non-loopback address" reads as nonsense next to an empty value.
+	// config.Load normalizes "" away, so this is the defense-in-depth path --
+	// which is exactly where a clear message matters, since by definition
+	// something unexpected produced the value.
+	if strings.TrimSpace(strings.Trim(host, "[]")) == "" {
+		return fmt.Errorf(
+			"server.host=%q names no host, so it binds every network interface. "+
+				"This exposes your memory to anyone on the network. Either set "+
+				"localhost/127.0.0.1/::1, configure auth, OR pass --unsafe-no-auth "+
+				"to acknowledge the risk",
+			host,
+		)
+	}
 	return fmt.Errorf(
 		"server.host=%q binds to a non-loopback address without authentication. "+
 			"This exposes your memory to anyone on the network. Either bind to "+

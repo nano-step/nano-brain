@@ -404,7 +404,13 @@ func Load(configPath string) (*Config, error) {
 	// is what an operator writing a bare `host:` intends. checkBindSafety
 	// independently refuses to treat "" as loopback, so the control is still
 	// correct for any value that reaches it by another path.
-	if strings.TrimSpace(cfg.Server.Host) == "" {
+	//
+	// Trimming the value (not just testing it) keeps one notion of "host"
+	// here: otherwise a padded but non-empty ` 127.0.0.1 ` would survive,
+	// fail net.ParseIP, and be refused as non-loopback. Trimming can only
+	// newly-admit literal loopback strings — " 0.0.0.0 " is still rejected.
+	cfg.Server.Host = strings.TrimSpace(cfg.Server.Host)
+	if cfg.Server.Host == "" {
 		cfg.Server.Host = getDefaults().Server.Host
 	}
 

@@ -1040,3 +1040,18 @@ func TestLoadKeepsExplicitHost(t *testing.T) {
 		t.Errorf("Server.Host = %q, want %q", cfg.Server.Host, "0.0.0.0")
 	}
 }
+
+// A padded but non-empty host must be usable, not refused as non-loopback.
+func TestLoadTrimsHostWhitespace(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(p, []byte("server:\n  host: \"  127.0.0.1  \"\n  port: 3100\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.Host != "127.0.0.1" {
+		t.Errorf("Server.Host = %q, want %q", cfg.Server.Host, "127.0.0.1")
+	}
+}

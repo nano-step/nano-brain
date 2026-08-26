@@ -20,6 +20,16 @@ func TestIsLoopback(t *testing.T) {
 		// specification. See #635.
 		{"", false},
 		{"   ", false},
+		// A bare bracket pair is a third spelling of the same wildcard, and
+		// the one config.Load does NOT normalize (TrimSpace("[]") != ""), so
+		// this layer is its only defense. strings.Trim strips it to "", which
+		// pre-fix made isLoopback report true — while
+		// net.SplitHostPort("[]:3199") yields host "" with no error, i.e. a
+		// bind on every interface. Unauthenticated wildcard bind, different
+		// spelling.
+		{"[]", false},
+		{"[::]", false},
+		{"::", false},
 		{"LOCALHOST", true},
 		{"0.0.0.0", false},
 		{"192.168.1.1", false},
@@ -67,9 +77,12 @@ func TestCheckBindSafety_RejectsEmptyHost(t *testing.T) {
 	unsafeNoAuth = false
 	defer func() { unsafeNoAuth = old }()
 
-	for _, host := range []string{"", "   "} {
+	// "[]" is included because it is the spelling config.Load does not
+	// normalize — this check is the only thing standing between it and an
+	// unauthenticated bind on every interface.
+	for _, host := range []string{"", "   ", "[]", "[::]"} {
 		if err := checkBindSafety(host, false); err == nil {
-			t.Errorf("checkBindSafety(%q, authEnabled=false) returned nil; empty host is a wildcard bind and must require auth", host)
+			t.Errorf("checkBindSafety(%q, authEnabled=false) returned nil; this is a wildcard bind and must require auth", host)
 		}
 		// The documented escapes must still work, so an operator who really
 		// wants a wildcard bind is not stuck.
