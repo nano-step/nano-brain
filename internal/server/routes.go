@@ -132,16 +132,21 @@ func registerRoutes(s *Server) {
 	sseHandler := mcp.NewSSEHandler(s.mcpServer)
 	streamableHandler := mcp.NewStreamableHTTPHandler(s.mcpServer)
 
-	s.echo.GET("/sse", echo.WrapHandler(sseHandler))
-	s.echo.POST("/sse", echo.WrapHandler(sseHandler))
+	// HostGuard replaces the SDK's built-in DNS-rebinding check, which is
+	// binary (loopback bind => reject every non-loopback Host) and therefore
+	// rejects host.docker.internal — the URL `nano-brain mcp-url` prints for
+	// itself inside a container. See internal/mcp/hostguard.go.
+	allowedHosts := s.fullCfg.Server.AllowedHosts
+	guardedSSE := mcp.HostGuard(allowedHosts, sseHandler)
+	s.echo.GET("/sse", echo.WrapHandler(guardedSSE))
+	s.echo.POST("/sse", echo.WrapHandler(guardedSSE))
 
 	// Wrap streamableHandler with the default-workspace middleware BEFORE
 	// echo.WrapHandler, not as an echo.MiddlewareFunc — the SDK reads
 	// req.Context() directly, and Echo's c.Set values never reach it.
-	wrappedStreamable := mcp.WrapStreamableHandler(streamableHandler)
+	wrappedStreamable := mcp.HostGuard(allowedHosts, mcp.WrapStreamableHandler(streamableHandler))
 	s.echo.GET("/mcp", echo.WrapHandler(wrappedStreamable))
 	s.echo.POST("/mcp", echo.WrapHandler(wrappedStreamable))
-	s.echo.DELETE("/mcp", echo.WrapHandler(wrappedStreamable))
 
 	s.echo.GET("/ui", func(c echo.Context) error {
 		return c.HTML(200, `<!DOCTYPE html>

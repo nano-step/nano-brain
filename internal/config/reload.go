@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // ReloadResult describes which settings changed and how.
 type ReloadResult struct {
@@ -28,6 +31,10 @@ func Reload(configPath string, current *Config) (*Config, *ReloadResult, error) 
 	fields := []field{
 		{"server.host", false, newCfg.Server.Host != current.Server.Host},
 		{"server.port", false, newCfg.Server.Port != current.Server.Port},
+		// Routes wire HostGuard once at startup, so a change here needs a
+		// restart — and the operator must be told so, not left wondering why
+		// their new allowed host still 403s.
+		{"server.allowed_hosts", false, !slices.Equal(newCfg.Server.AllowedHosts, current.Server.AllowedHosts)},
 		{"database.url", false, newCfg.Database.URL != current.Database.URL},
 		{"embedding.provider", false, newCfg.Embedding.Provider != current.Embedding.Provider},
 		{"embedding.url", false, newCfg.Embedding.URL != current.Embedding.URL},
