@@ -13,9 +13,20 @@ var unsafeNoAuth bool
 // overrides cfg.Server.ServeOnly at startup. See issue #282.
 var serveOnlyFlag bool
 
+// isLoopback reports whether host names a loopback address.
+//
+// An empty host is NOT loopback. Server.Start builds its listen address with
+// fmt.Sprintf("%s:%d", host, port), so an empty host produces ":<port>", which
+// binds every interface — the same exposure as "0.0.0.0", which this function
+// correctly rejects. Treating "" as localhost made the safety check model the
+// bind as safer than it actually was, and a security control that fails open
+// on a plausible typo is worse than no control.
 func isLoopback(host string) bool {
 	h := strings.ToLower(strings.Trim(host, "[]"))
-	if h == "" || h == "localhost" || h == "127.0.0.1" || h == "::1" {
+	if h == "" {
+		return false
+	}
+	if h == "localhost" || h == "127.0.0.1" || h == "::1" {
 		return true
 	}
 	ip := net.ParseIP(h)
@@ -23,9 +34,6 @@ func isLoopback(host string) bool {
 }
 
 func checkBindSafety(host string, authEnabled bool) error {
-	if host == "" {
-		host = "localhost"
-	}
 	if isLoopback(host) {
 		return nil
 	}
