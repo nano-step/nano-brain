@@ -995,3 +995,63 @@ func TestServeOnlyConfigFlag(t *testing.T) {
 		}
 	})
 }
+
+// TestLoadRestoresDefaultForEmptyHost pins #635. koanf applies a default only
+// when the key is absent, so an explicitly empty host survived as "" — and
+// Server.Start renders that as ":<port>", a wildcard bind on every interface.
+// The empty and omitted forms must mean the same safe thing, because a bare
+// `host:` in YAML is what commenting out the value produces.
+func TestLoadRestoresDefaultForEmptyHost(t *testing.T) {
+	want := getDefaults().Server.Host
+
+	for name, body := range map[string]string{
+		"omitted":      "server:\n  port: 3100\n",
+		"empty string": "server:\n  host: \"\"\n  port: 3100\n",
+		"yaml null":    "server:\n  host:\n  port: 3100\n",
+		"whitespace":   "server:\n  host: \"   \"\n  port: 3100\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "config.yml")
+			if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			cfg, err := Load(p)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.Server.Host != want {
+				t.Errorf("Server.Host = %q, want %q — an empty host binds every interface", cfg.Server.Host, want)
+			}
+		})
+	}
+}
+
+// An explicit host must still win; the normalization must not clobber it.
+func TestLoadKeepsExplicitHost(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(p, []byte("server:\n  host: \"0.0.0.0\"\n  port: 3100\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.Host != "0.0.0.0" {
+		t.Errorf("Server.Host = %q, want %q", cfg.Server.Host, "0.0.0.0")
+	}
+}
+
+// A padded but non-empty host must be usable, not refused as non-loopback.
+func TestLoadTrimsHostWhitespace(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(p, []byte("server:\n  host: \"  127.0.0.1  \"\n  port: 3100\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.Host != "127.0.0.1" {
+		t.Errorf("Server.Host = %q, want %q", cfg.Server.Host, "127.0.0.1")
+	}
+}
