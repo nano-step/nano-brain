@@ -154,6 +154,9 @@ func sourceFromTags(tags []string) string {
 		if t == "opencode" {
 			return "opencode"
 		}
+		if t == "pi" {
+			return "pi"
+		}
 	}
 	return "opencode"
 }

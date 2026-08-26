@@ -90,6 +90,36 @@ func longContent(chars int) string {
 	return b.String()
 }
 
+// TestPipeline_Summarize_PiSourceUsesStripClaude proves SourcePi is routed
+// through StripClaude, not StripOpenCode's default fallback — a Pi transcript
+// rendered with Claude-style "Result: <text>" lines (see internal/harvest/pi.go)
+// must have long results compacted the same way a Claude Code transcript
+// would. Before this dispatch case existed, SourcePi fell into pipeline.go's
+// `default` branch and was run through StripOpenCode instead.
+func TestPipeline_Summarize_PiSourceUsesStripClaude(t *testing.T) {
+	longOutput := strings.Repeat("output line with various content data\n", 8)
+	content := "## assistant (2026-05-26T10:00:00Z)\n\nResult: " + longOutput + "\n## human (2026-05-26T10:01:00Z)\n\nok\n"
+
+	llm := &fakeLLM{}
+	p := newTestPipeline(llm, nil, 1)
+	meta := baseMeta()
+	meta.Source = SourcePi
+
+	if _, err := p.Summarize(context.Background(), content, meta); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if llm.callCount() == 0 {
+		t.Fatal("expected at least one LLM call")
+	}
+	got := llm.calls[0].user
+	if strings.Contains(got, "output line with various") {
+		t.Errorf("SourcePi content should be stripped via StripClaude (long Result body compacted), got:\n%s", got)
+	}
+	if !strings.Contains(got, "Result: [") {
+		t.Errorf("expected StripClaude's 'Result: [N lines]' placeholder for SourcePi, got:\n%s", got)
+	}
+}
+
 func TestPipeline_SingleShotShortcut(t *testing.T) {
 	llm := &fakeLLM{handler: func(idx int, system, user string) (string, TokenUsage, error) {
 		return "## Goal\nFix auth bug.", TokenUsage{PromptTokens: 10, CompletionTokens: 5}, nil

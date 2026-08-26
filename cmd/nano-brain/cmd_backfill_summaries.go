@@ -213,7 +213,7 @@ func extractBackfillSessionID(metaJSON []byte, sourcePath string) string {
 
 func extractBackfillSource(tags []string) string {
 	for _, t := range tags {
-		if t == "opencode" || t == "claude" {
+		if t == "opencode" || t == "claude" || t == "pi" {
 			return t
 		}
 	}

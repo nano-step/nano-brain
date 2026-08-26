@@ -4,6 +4,11 @@ All notable changes to nano-brain are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Pi CLI agent session harvesting** (opt-in, disabled by default). A new `PiHarvester` ingests session transcripts from the Pi CLI coding agent (`~/.pi/agent/sessions/<encoded-cwd>/*.jsonl`), following the existing `Harvester` extension point alongside Claude Code and OpenCode. Enable with `harvester.pi.enabled: true` and `harvester.pi.session_dir` set to your Pi sessions directory.
+
 ## [2026.6.22] — 2026-06-22
 
 ### Added

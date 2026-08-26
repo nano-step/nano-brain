@@ -44,6 +44,7 @@ type Source string
 const (
 	SourceOpenCode Source = "opencode"
 	SourceClaude   Source = "claude"
+	SourcePi       Source = "pi"
 )
 
 // SessionMetadata is supplied by the harvester for the metadata header.
@@ -102,7 +103,11 @@ func NewPipeline(llm LLMClient, lookup RelationshipLookup, concurrency int, logg
 func (p *Pipeline) Summarize(ctx context.Context, sessionContent string, meta SessionMetadata) (string, error) {
 	var stripped string
 	switch meta.Source {
-	case SourceClaude:
+	case SourceClaude, SourcePi:
+		// Pi's renderer emits Claude-Code-style markdown conventions
+		// ("Tool: <name>" / "Result: <text>" lines) specifically so this
+		// strip step applies unchanged — see internal/harvest/pi.go and
+		// openspec/changes/pi-session-harvesting/design.md Decision 5.
 		stripped = StripClaude(sessionContent)
 	default:
 		stripped = StripOpenCode(sessionContent)

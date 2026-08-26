@@ -105,6 +105,9 @@ harvester:
     enabled: false
     session_dir: ""
     # ticket_patterns: []  # custom regexes for ticket-ID extraction
+  pi:
+    enabled: false
+    session_dir: ""
   git:
     enabled: false
 

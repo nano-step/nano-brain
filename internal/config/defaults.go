@@ -43,6 +43,10 @@ func getDefaults() *Config {
 				Enabled:    false,
 				SessionDir: "",
 			},
+			Pi: PiHarvesterConfig{
+				Enabled:    false,
+				SessionDir: "",
+			},
 			Git: GitHarvesterConfig{
 				Enabled: false,
 			},

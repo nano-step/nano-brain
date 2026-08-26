@@ -104,6 +104,7 @@ type EmbeddingConfig struct {
 type HarvesterConfig struct {
 	OpenCode   OpenCodeHarvesterConfig   `koanf:"opencode" json:"opencode"`
 	ClaudeCode ClaudeCodeHarvesterConfig `koanf:"claudecode" json:"claudecode"`
+	Pi         PiHarvesterConfig         `koanf:"pi" json:"pi"`
 	Git        GitHarvesterConfig        `koanf:"git" json:"git"`
 }
 
@@ -127,6 +128,18 @@ type ClaudeCodeHarvesterConfig struct {
 	// to identify ticket IDs in session content and branch names. Zero value
 	// means the extractor uses its built-in defaults ([A-Z]+-\d+ and #\d+).
 	TicketPatterns []string `koanf:"ticket_patterns" json:"ticket_patterns"`
+}
+
+// PiHarvesterConfig holds Pi CLI agent harvester configuration. SessionDir has
+// no default and no tilde-expansion — matching ClaudeCodeHarvesterConfig's
+// actual behavior exactly (operator sets an absolute path, e.g.
+// "$HOME/.pi/agent/sessions", expanded by the shell/config value itself).
+// TicketPatterns is deliberately omitted: it is dead configuration on the
+// existing ClaudeCodeHarvesterConfig too (read by no production code), so it
+// is not propagated to a third harvester.
+type PiHarvesterConfig struct {
+	Enabled    bool   `koanf:"enabled" json:"enabled"`
+	SessionDir string `koanf:"session_dir" json:"session_dir"`
 }
 
 // GitHarvesterConfig holds Git history harvesting configuration.

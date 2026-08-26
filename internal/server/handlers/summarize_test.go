@@ -235,6 +235,38 @@ func TestSummarize_SourceFilter_Claude(t *testing.T) {
 	}
 }
 
+// TestSummarize_PiTaggedDocument_CorrectDedupPath proves sourceFromTags
+// recognizes a "pi" tag and classifies the document as "pi", not the
+// "opencode" default. existingByPath only has an entry at the WRONG
+// (opencode) dedup path — if sourceFromTags regressed to defaulting "pi" to
+// "opencode", that wrong-path entry would be found and the summarizer would
+// be skipped as already-summarized. The correct behavior looks up
+// summary://pi/<id>, finds nothing, and calls the summarizer.
+func TestSummarize_PiTaggedDocument_CorrectDedupPath(t *testing.T) {
+	q := &mockSummarizeQuerier{
+		listDocs: []sqlc.ListSessionDocumentsByWorkspaceRow{
+			makeSumDoc("pi://sessions/ses-pi-001", []string{"pi"}),
+		},
+		existingByPath: map[string]sqlc.Document{
+			"summary://opencode/ses-pi-001": existingDoc(uuid.New()),
+		},
+	}
+	sum := &mockSummarizeSummarizer{}
+
+	c, _ := newSummarizeCtx(t, http.MethodPost, `{"workspace":"ws1"}`, "ws1")
+
+	h := handlers.TriggerSummarize(func() handlers.SummarizeSummarizer { return sum }, q, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sum.called != 1 {
+		t.Fatalf("summarizer called %d times, want 1 (a regression to the opencode default would find the wrong-path stub and skip)", sum.called)
+	}
+	if sum.capturedMeta.Source != "pi" {
+		t.Errorf("meta.Source = %q, want %q", sum.capturedMeta.Source, "pi")
+	}
+}
+
 func TestSummarize_SummarizeError(t *testing.T) {
 	q := &mockSummarizeQuerier{
 		listDocs: []sqlc.ListSessionDocumentsByWorkspaceRow{
