@@ -72,7 +72,11 @@ func localAddrIsLoopback(r *http.Request) bool {
 	if ip == nil {
 		return true
 	}
-	return ip.IsLoopback()
+	// An unspecified address (0.0.0.0, ::) is as unknowable as a missing one.
+	// net/http reports the concrete accepted address rather than the wildcard,
+	// so this should not arise — but guarding costs nothing and removes a case
+	// that would otherwise have to be reasoned about.
+	return ip.IsLoopback() || ip.IsUnspecified()
 }
 
 // hostAllowed reports whether host (a Host header value, with or without a

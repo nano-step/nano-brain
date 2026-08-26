@@ -71,6 +71,8 @@ func TestHostGuard_OnlyGuardsLoopbackConnections(t *testing.T) {
 		{"lan connection does not guard", &net.TCPAddr{IP: net.ParseIP("192.168.1.10"), Port: 3100}, http.StatusOK},
 		// Fail closed when the local address is unknowable.
 		{"absent local addr guards", nil, http.StatusForbidden},
+		{"unspecified v4 guards", &net.TCPAddr{IP: net.IPv4zero, Port: 3100}, http.StatusForbidden},
+		{"unspecified v6 guards", &net.TCPAddr{IP: net.IPv6zero, Port: 3100}, http.StatusForbidden},
 	}
 
 	for _, tt := range tests {
