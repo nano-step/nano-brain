@@ -146,12 +146,17 @@ func isConnectionRefused(err error) bool {
 	return strings.Contains(msg, "connection refused") || strings.Contains(msg, "dial tcp")
 }
 
-// recoverFromConnectionRefused implements the connect-error recovery flow:
-// print formatted error, optionally prompt to auto-start the daemon, wait
-// for health, and signal whether the caller should retry the original
-// request. Returns true ONLY when the daemon was started and reported
+// recoverFromConnectionRefused implements the connect-error recovery flow.
+// A registered managed service is (re)started through its native supervisor
+// without any interactive gate — it is designed to run and the user already
+// opted in at `service install` time. Only unregistered flows keep the
+// legacy prompt + serve -d path. Returns true ONLY when the server reported
 // healthy within serverHealthTimeout.
 func recoverFromConnectionRefused(host string, port int) bool {
+	if managed, started := startManagedServiceIfRegistered(); managed {
+		return started
+	}
+
 	msg := formatConnectError(host, port)
 
 	if os.Getenv("NANO_BRAIN_NO_AUTO_START") == "1" || !isTTYFn() {
@@ -166,7 +171,7 @@ func recoverFromConnectionRefused(host string, port int) bool {
 
 	runServeDaemonFn(config.ResolveConfigPath(""))
 
-	if err := waitForServerHealthy(serverHealthTimeout); err != nil {
+	if err := serviceHealthyWaitFn(serverHealthTimeout); err != nil {
 		fmt.Fprintln(os.Stderr, "Server started but did not become healthy in 10s. Check logs: ~/.nano-brain/logs/nano-brain.log")
 		return false
 	}
