@@ -2,6 +2,7 @@ package flow
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/graph"
@@ -10,6 +11,10 @@ import (
 
 type StitchQuerier interface {
 	ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
+}
+
+type allEdgesQuerier interface {
+	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
 }
 
 type consumerEntry struct {
@@ -33,6 +38,7 @@ func Stitch(ctx context.Context, publishEdges []graph.Edge, targetWorkspaces []s
 	}
 
 	consumers := make(map[string][]consumerEntry)
+	emitters := make(map[string][]graph.Edge)
 	for _, ws := range unique {
 		edges, err := querier.ListConsumerEntryNodesByWorkspace(ctx, ws)
 		if err != nil {
@@ -49,6 +55,19 @@ func Stitch(ctx context.Context, publishEdges []graph.Edge, targetWorkspaces []s
 					workspaceHash: wsID,
 					sourceNode:    e.SourceNode,
 				})
+				continue
+			}
+		}
+		if aq, ok := querier.(allEdgesQuerier); ok {
+			all, err := aq.ListAllEdgesByWorkspace(ctx, ws)
+			if err == nil {
+				for _, e := range all {
+					var metadata map[string]any
+					_ = json.Unmarshal(e.Metadata, &metadata)
+					if topic, ok := metadata["topic"].(string); ok && topic != "" && metadata["event_role"] == "emit" {
+						emitters[topic] = append(emitters[topic], graph.Edge{SourceNode: e.SourceNode, TargetNode: e.TargetNode, Kind: graph.EdgeKind(e.EdgeType), SourceFile: e.SourceFile})
+					}
+				}
 			}
 		}
 	}
@@ -71,6 +90,12 @@ func Stitch(ctx context.Context, publishEdges []graph.Edge, targetWorkspaces []s
 					Kind:                  "cross_service",
 					CrossServiceWorkspace: t.workspaceHash,
 				})
+				for _, emitter := range emitters[topic] {
+					if emitter.SourceNode != t.sourceNode {
+						continue
+					}
+					result = append(result, FlowEdge{From: t.sourceNode, To: emitter.TargetNode, Kind: "event_emit", CrossServiceWorkspace: t.workspaceHash})
+				}
 			}
 		}
 	}

@@ -19,17 +19,17 @@ const vueInjectionQuery = `
 var _ Extractor = (*VueSFCExtractor)(nil)
 
 type VueSFCExtractor struct {
-	ip            *gotreesitter.InjectionParser
-	tsImportQ     *gotreesitter.Query
-	tsContainsQ   *gotreesitter.Query
-	tsCallFuncQ   *gotreesitter.Query
-	tsCallExprQ   *gotreesitter.Query
-	jsImportQ     *gotreesitter.Query
-	jsContainsQ   *gotreesitter.Query
-	jsCallFuncQ   *gotreesitter.Query
-	jsCallExprQ   *gotreesitter.Query
-	tsLang        *gotreesitter.Language
-	jsLang        *gotreesitter.Language
+	ip          *gotreesitter.InjectionParser
+	tsImportQ   *gotreesitter.Query
+	tsContainsQ *gotreesitter.Query
+	tsCallFuncQ *gotreesitter.Query
+	tsCallExprQ *gotreesitter.Query
+	jsImportQ   *gotreesitter.Query
+	jsContainsQ *gotreesitter.Query
+	jsCallFuncQ *gotreesitter.Query
+	jsCallExprQ *gotreesitter.Query
+	tsLang      *gotreesitter.Language
+	jsLang      *gotreesitter.Language
 }
 
 func NewVueSFCExtractor() (*VueSFCExtractor, error) {
@@ -132,6 +132,7 @@ func (e *VueSFCExtractor) ExtractEdges(filePath string, content []byte) ([]Edge,
 
 		bt.Release()
 	}
+	edges = append(edges, e.extractIntegrationEdges(relFile, content)...)
 
 	return edges, nil
 }
@@ -171,8 +172,49 @@ func (e *VueSFCExtractor) ExtractEdgesWithImportContext(filePath string, content
 
 		bt.Release()
 	}
+	edges = append(edges, e.extractIntegrationEdges(relFile, content)...)
 
 	return edges, nil
+}
+
+func (e *VueSFCExtractor) extractIntegrationEdges(filePath string, content []byte) []Edge {
+	extractor, err := NewJSIntegrationExtractor()
+	if err != nil {
+		return nil
+	}
+	virtualPath := filePath + ".js"
+	script := vueScriptContent(content)
+	if len(script) == 0 {
+		return nil
+	}
+	edges, err := extractor.ExtractEdges(virtualPath, script)
+	if err != nil {
+		return nil
+	}
+	for i := range edges {
+		edges[i].SourceFile = filePath
+		edges[i].SourceNode = strings.TrimPrefix(edges[i].SourceNode, virtualPath)
+		edges[i].SourceNode = filePath + edges[i].SourceNode
+	}
+	return edges
+}
+
+func vueScriptContent(content []byte) []byte {
+	text := string(content)
+	start := strings.Index(text, "<script")
+	if start < 0 {
+		return nil
+	}
+	openEnd := strings.IndexByte(text[start:], '>')
+	if openEnd < 0 {
+		return nil
+	}
+	start += openEnd + 1
+	end := strings.Index(text[start:], "</script>")
+	if end < 0 {
+		return nil
+	}
+	return []byte(text[start : start+end])
 }
 
 func (e *VueSFCExtractor) resolveLang(langName string) (*gotreesitter.Language, *gotreesitter.Query, *gotreesitter.Query, *gotreesitter.Query, *gotreesitter.Query) {
