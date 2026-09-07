@@ -1,0 +1,59 @@
+name: Manual npm publish
+
+# One-off workflow to publish a specific git tag to npm. Used when the
+# automatic release.yml npm-publish job fails (npm 11.x OIDC 404 against
+# classic NPM_TOKEN — see #213 and PR #639 follow-up).
+#
+# Trigger: Actions tab → "Manual npm publish" → Run workflow →
+#   tag: v{YYYY}.{M}.{DDNN} (e.g. v2026.9.0702)
+#
+# This workflow:
+#  - Pins Node 22 (npm 10.x) to avoid the npm 11 OIDC auto-detect 404
+#  - Bumps package.json to the requested tag's version
+#  - Publishes @nano-step/nano-brain (scoped) and nano-brain (unscoped alias)
+#  - Never auto-runs — `workflow_dispatch` only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to publish (e.g. v2026.9.0702)"
+        required: true
+        type: string
+        default: "v2026.9.0702"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Resolve the workflow input tag to its commit, otherwise the
+          # checkout wouldn't include it (workflow_dispatch runs from a
+          # ref, not the tag).
+          ref: ${{ inputs.tag }}
+
+      # Pin Node 22 (npm 10.x) to avoid the npm 11.x OIDC auto-detect 404
+      # bug that breaks classic NPM_TOKEN publish (#213, actions/setup-node
+      # #1551, npm/cli#8730).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish @nano-step/nano-brain
+        run: npm publish --tag latest --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish nano-brain (unscoped alias)
+        run: |
+          node -e "const p=require('./package.json'); p.name='nano-brain'; delete p.publishConfig; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+          npm publish --tag latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
