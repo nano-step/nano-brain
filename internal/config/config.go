@@ -57,10 +57,15 @@ type Config struct {
 // containers that share a DB with a primary host instance running the
 // workers — prevents duplicate work and races. See issue #282.
 type ServerConfig struct {
-	Host      string     `koanf:"host" json:"host"`
-	Port      int        `koanf:"port" json:"port"`
-	Auth      AuthConfig `koanf:"auth" json:"auth"`
-	ServeOnly bool       `koanf:"serve_only" json:"serve_only"`
+	Host string     `koanf:"host" json:"host"`
+	Port int        `koanf:"port" json:"port"`
+	Auth AuthConfig `koanf:"auth" json:"auth"`
+	// AllowedHosts is the Host-header allowlist for the MCP endpoints
+	// (/mcp, /sse), guarding against DNS rebinding. Empty means the built-in
+	// set: localhost, 127.0.0.1, ::1, host.docker.internal. Extend it for
+	// reverse-proxy or VPS deployments that terminate on a different hostname.
+	AllowedHosts []string `koanf:"allowed_hosts" json:"allowed_hosts"`
+	ServeOnly    bool     `koanf:"serve_only" json:"serve_only"`
 }
 
 // AuthConfig holds authentication configuration for VPS/remote deployments.

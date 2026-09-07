@@ -6,7 +6,18 @@ All notable changes to nano-brain are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **MCP SDK upgraded to `go-sdk` v1.7.0**, adding support for MCP protocol revision `2026-07-28` (#630). nano-brain previously implemented `2025-06-18`, which modern clients refuse to talk to. All five revisions (`2024-11-05` → `2026-07-28`) are now supported with backward negotiation, so existing clients keep working.
+
+  Three behavior changes come from the SDK and are worth knowing about:
+  - `Content-Type: application/json` is now **required** on MCP requests; a request without it gets `415`.
+  - `GET`/`DELETE /mcp` now return `405` in stateless mode. The `DELETE /mcp` route was removed, since the SDK can no longer serve it.
+  - Request bodies are capped. nano-brain sets this explicitly to 32 MiB rather than inheriting the SDK's 4 MiB default, which would have rejected large `memory_write` calls.
+
 ### Added
+- **`server.allowed_hosts`** — Host-header allowlist for the MCP endpoints, guarding against DNS rebinding. Defaults to `localhost`, `127.0.0.1`, `::1`, and `host.docker.internal`. Like `server.host` and `server.port`, changing it requires a restart.
+
+  The guard applies only to connections accepted on a loopback address, which is where DNS rebinding lands — a daemon bound to `0.0.0.0` and reached remotely is unaffected, so existing VPS and reverse-proxy deployments keep working without config changes.
 - **Pi CLI agent session harvesting** (opt-in, disabled by default). A new `PiHarvester` ingests session transcripts from the Pi CLI coding agent (`~/.pi/agent/sessions/<encoded-cwd>/*.jsonl`), following the existing `Harvester` extension point alongside Claude Code and OpenCode. Enable with `harvester.pi.enabled: true` and `harvester.pi.session_dir` set to your Pi sessions directory.
 
 ## [2026.6.22] — 2026-06-22
