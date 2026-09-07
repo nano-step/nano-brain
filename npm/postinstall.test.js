@@ -7,7 +7,7 @@ const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
-const { parseSHA256Line, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath } = require("./postinstall");
+const { parseSHA256Line, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath, getPlatformKey, platformExtension } = require("./postinstall");
 const VERSION = require("../package.json").version;
 const isWin = os.platform() === "win32";
 
@@ -40,6 +40,72 @@ test("ensureBinary: rejects (does not exit) on unsupported platform", async () =
     await assert.rejects(() => ensureBinary(), /Unsupported platform/);
   } finally {
     os.platform = realPlatform;
+  }
+});
+
+// #637: Windows was partially implemented (binaryPath, tryAutoLink, run.js all
+// special-case win32) but PLATFORM_MAP never included it — postinstall threw
+// "Unsupported platform: win32-x64". These guard that gap from regressing.
+test("getPlatformKey: returns windows-amd64 on win32+x64", () => {
+  const realPlatform = os.platform;
+  const realArch = os.arch;
+  os.platform = () => "win32";
+  os.arch = () => "x64";
+  try {
+    assert.strictEqual(getPlatformKey(), "windows-amd64");
+  } finally {
+    os.platform = realPlatform;
+    os.arch = realArch;
+  }
+});
+
+test("getPlatformKey: returns windows-arm64 on win32+arm64", () => {
+  const realPlatform = os.platform;
+  const realArch = os.arch;
+  os.platform = () => "win32";
+  os.arch = () => "arm64";
+  try {
+    assert.strictEqual(getPlatformKey(), "windows-arm64");
+  } finally {
+    os.platform = realPlatform;
+    os.arch = realArch;
+  }
+});
+
+test("platformExtension: returns .exe on win32, '' elsewhere", () => {
+  assert.strictEqual(platformExtension("win32"), ".exe");
+  assert.strictEqual(platformExtension("darwin"), "");
+  assert.strictEqual(platformExtension("linux"), "");
+});
+
+test("platformExtension: defaults to current os.platform() when called with no arg", () => {
+  const expected = os.platform() === "win32" ? ".exe" : "";
+  assert.strictEqual(platformExtension(), expected);
+});
+
+test("ensureBinary: accepts win32+x64 without 'Unsupported platform' (#637 regression)", async () => {
+  const realPlatform = os.platform;
+  const realArch = os.arch;
+  const realExists = fs.existsSync;
+  os.platform = () => "win32";
+  os.arch = () => "x64";
+  // No existing binary at binaryPath() — force ensureBinary into the download
+  // path so getPlatformKey() runs end-to-end. ECONNREFUSED is acceptable; the
+  // assertion is that the failure is NOT the "Unsupported platform" branch.
+  fs.existsSync = () => false;
+  try {
+    await assert.rejects(() => ensureBinary(), (err) => {
+      assert.ok(err instanceof Error);
+      assert.ok(
+        !/Unsupported platform/.test(err.message),
+        `should not throw Unsupported platform on win32+x64, got: ${err.message}`,
+      );
+      return true;
+    });
+  } finally {
+    os.platform = realPlatform;
+    os.arch = realArch;
+    fs.existsSync = realExists;
   }
 });
 

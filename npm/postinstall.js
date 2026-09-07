@@ -14,6 +14,12 @@ const REPO = "nano-step/nano-brain";
 const PLATFORM_MAP = {
   darwin: "darwin",
   linux: "linux",
+  // Windows was partially implemented (binaryPath() + tryAutoLink() + run.js
+  // already handle win32 / .exe) but PLATFORM_MAP was never extended, so the
+  // postinstall threw "Unsupported platform: win32-x64" before any of that
+  // code could run. Map win32 → "windows" so the release asset is named
+  // nano-brain-windows-amd64(.exe) (#637).
+  win32: "windows",
 };
 const ARCH_MAP = {
   arm64: "arm64",
@@ -30,6 +36,14 @@ function getPlatformKey() {
     throw new Error(`Unsupported platform: ${os.platform()}-${os.arch()}`);
   }
   return `${platform}-${arch}`;
+}
+
+// Windows binaries are .exe — both the Go build output and the GitHub release
+// asset. Match the local binaryPath() convention so the downloaded file lands
+// at binaryPath() after the safeUnlink+download (#637).
+function platformExtension(platform) {
+  platform = platform || os.platform();
+  return platform === "win32" ? ".exe" : "";
 }
 
 // Remove a partial download without throwing. A socket error can fire before
@@ -306,7 +320,7 @@ async function ensureBinary() {
 
   console.error(`Downloading nano-brain v${VERSION} for ${platformKey}...`);
 
-  const assetName = `nano-brain-${platformKey}`;
+  const assetName = `nano-brain-${platformKey}${platformExtension()}`;
   let lastErr;
 
   const attempt = async (tag, suffix) => {
@@ -370,4 +384,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parseSHA256Line, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink, ensureBinary, binaryPath };
+module.exports = { parseSHA256Line, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink, ensureBinary, binaryPath, getPlatformKey, platformExtension };
