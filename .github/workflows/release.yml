@@ -46,7 +46,18 @@ jobs:
           go-version: "1.23"
 
       - name: Build
-        run: CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/nano-brain
+        # Env vars live in `env:` (not as command-prefix `VAR=value`) so the
+        # step works on every runner shell — bash/zsh on Linux/macOS and
+        # PowerShell 7 on windows-latest. PowerShell doesn't recognize
+        # bash-style `FOO=bar command` syntax and rejects the prefix
+        # (`The term 'CGO_ENABLED=0' is not recognized…`), which made the
+        # matrix windows entries added in #638 fail with exit 1 (#638
+        # follow-up).
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/nano-brain
 
       - uses: actions/upload-artifact@v4
         with:
