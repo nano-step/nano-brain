@@ -24,6 +24,17 @@ jobs:
           - os: macos-latest
             goos: darwin
             goarch: arm64
+          # Windows binaries carry the .exe extension so the GitHub release
+          # asset filename matches what npm/postinstall.js downloads into
+          # binaryPath()'s nano-brain.exe slot (#637).
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            ext: .exe
+          - os: windows-latest
+            goos: windows
+            goarch: arm64
+            ext: .exe
 
     runs-on: ${{ matrix.os }}
 
@@ -35,12 +46,12 @@ jobs:
           go-version: "1.23"
 
       - name: Build
-        run: CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o nano-brain-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/nano-brain
+        run: CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/nano-brain
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          path: nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build

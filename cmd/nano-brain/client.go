@@ -15,8 +15,11 @@ import (
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-// runServeDaemonFn is the daemon launcher hook. Tests override it.
-var runServeDaemonFn = runServeDaemon
+// runServeDaemonFn is the daemon launcher hook. Tests override it. The
+// default is platform-specific (see client_hook_unix.go /
+// client_hook_windows.go) so the package compiles on both Unix and
+// Windows; on Unix the default delegates to daemon.go's runServeDaemon,
+// on Windows the default prints a "not supported" message and exits.
 
 // promptReader / promptWriter are the I/O streams used by the prompt.
 // Tests override them.
