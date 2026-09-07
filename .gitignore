@@ -58,3 +58,9 @@ docs/docs.go
 .claude/hooks/gsd-*
 .claude/hooks/lib/
 .claude/hooks/managed-hooks-registry.cjs
+
+# Local tool artifacts (agent harnesses, graphify, omo — never committed)
+.codegraph
+.omo/
+.pi-subagents/
+graphify-out/

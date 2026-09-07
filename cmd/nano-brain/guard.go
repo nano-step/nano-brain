@@ -70,3 +70,16 @@ func guardBeforeStart() error {
 	}
 	return checkExistingServer(resolvePort())
 }
+
+// guardBeforeStartPort is the config-aware variant used by the managed
+// service flow: it probes the configured server port instead of the env/
+// default port, so a service registered on a non-default port is neither
+// blocked by an unrelated server on :3100 nor blind to a server already
+// bound to its own configured port.
+func guardBeforeStartPort(port int) error {
+	autoConfigContainer()
+	if os.Getenv("NANO_BRAIN_ALLOW_DUPLICATE_SERVER") == "1" {
+		return nil
+	}
+	return checkExistingServer(port)
+}
