@@ -83,6 +83,18 @@ func stepServe(scanner *bufio.Scanner, checks []doctor.Check, configPath string)
 		return serveSkipped
 	}
 
+	// Registered managed services are restarted through their native
+	// supervisor; otherwise the legacy PID-file daemon is launched (issue
+	// #615 completes the install-UX story).
+	if managed, started := startManagedServiceIfRegistered(); managed {
+		if !started {
+			fmt.Println("  Managed service did not become healthy in time. Check 'nano-brain service status' and the service logs.")
+			return serveSkipped
+		}
+		fmt.Println("  nano-brain service restarted.")
+		return serveStarted
+	}
+
 	launchServeDaemonFn(configPath)
 
 	if !serverHealthyFn() {
