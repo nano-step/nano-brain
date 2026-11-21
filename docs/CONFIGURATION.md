@@ -88,9 +88,9 @@ Server binding and authentication.
 | `server.auth.enabled` | bool | `false` | Enable authentication |
 | `server.auth.realm` | string | `nano-brain` | HTTP Basic Auth realm. Letters, digits, spaces, `.`, `_` and `-` only |
 | `server.auth.tokens` | []string | `[]` | Bearer tokens for API auth. Empty tokens are rejected |
-| `server.auth.users` | []object | `[]` | Basic Auth users (username + bcrypt hash) |
-| `server.auth.users[].username` | string | — | Username |
-| `server.auth.users[].password_hash` | string | — | bcrypt hash of password |
+| `server.auth.users` | []object | `[]` | Basic Auth users (username + bcrypt hash). When auth is enabled, startup fails on an invalid entry |
+| `server.auth.users[].username` | string | — | Username. Must be non-empty, unique, without leading or trailing whitespace, and must not contain `:` |
+| `server.auth.users[].password_hash` | string | — | bcrypt hash of password. Must be a complete bcrypt hash, and every user must use the same bcrypt cost; generate one with `nano-brain auth hash <password>` |
 | `server.auth.bypass_paths` | []string | `["/health"]` | Paths that skip auth |
 
 ---
@@ -177,6 +177,35 @@ File system watcher for auto-reindexing.
 | `watcher.chunk_overlap` | int | `600` | Character overlap between chunks |
 | `watcher.exclude_patterns` | []string | `[]` | Global glob patterns to exclude |
 | `watcher.allowed_extensions` | []string | `[]` | Global allowed file extensions (empty = all) |
+
+### Built-in safety filters
+
+These always apply. There is no opt-out: `exclude_patterns`, `allowed_extensions`, `.gitignore` and `.nano-brainignore` (including `!` negations) cannot turn them off.
+
+**Symlinks.** A symlinked file is read only if its real path (all symlinks resolved) lies inside the real path of the collection root *and* the file it resolves to would itself be indexed:
+
+- A symlink that leaves the root is not indexed. It is logged at `warn` the first time it is seen in a process and at `debug` afterwards. To index shared files that live elsewhere, register their directory as its own collection.
+- A symlink to a file on the credential deny list below is not indexed, whatever the link is called (`docs/setup.md -> ../.env`).
+- A symlink to a file excluded by the built-in directory/lockfile excludes, the global or root-level `.nano-brainignore`, the root `.gitignore`, `exclude_patterns` or `allowed_extensions` is not indexed either (`readme2.md -> tok.txt` with `tok.txt` gitignored). `.gitignore` and `.nano-brainignore` files in subdirectories are not consulted for the link's target.
+- A symlink to another indexable file inside the root is indexed as usual.
+- A broken symlink is skipped. Symlinked directories are not followed.
+
+A document indexed by an earlier version for a symlink in one of the skipped cases is removed on the next scan of its collection.
+
+**Credential files.** Not indexed, matched on the file's base name, case-insensitively, at any depth:
+
+| Denied | Still indexed |
+|--------|---------------|
+| `.env`, `.env.*`, `*.env` (`prod.env`), `.envrc` | names marked `example`, `sample`, `template` or `dist`: `.env.example`, `.env.production.sample`, `example.env`, `app.example.env` |
+| any name starting with `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519` (`id_rsa`, `id_rsa.bak`, `id_rsa_github`, `id_ed25519_sk`) | the same names ending in `.pub` (`id_ed25519.pub`) |
+| `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.ppk`, `*.kdbx`, `*.ovpn` | |
+| `.npmrc`, `.netrc`, `.pgpass`, `.htpasswd`, `.git-credentials`, `.pypirc`, `.dockercfg`, `.vault-token`, `.my.cnf`, `.s3cfg`, `.boto`, `kubeconfig` | `kubeconfig.md`, … (exact names only) |
+| `credentials`, `credentials.json`, `secrets.yml`, `secrets.yaml`, `secrets.json` | `credentials.md`, `secrets.md`, … (exact names only) |
+| `*.tfstate`, `*.tfstate.backup`, `*.tfvars` | `terraform.tfvars.example` |
+
+The match is by name only, so it also excludes files that are not secrets: public certificates and CA bundles (`*.pem`), Keynote presentations (`*.key`), an `.npmrc` holding only registry settings, and source files whose name starts with an SSH key name (`id_rsa_test.go`). Rename such a file if it must be searchable.
+
+A document indexed for a denied file by an earlier version is removed on the next scan of its collection.
 
 ### Per-workspace overrides
 
@@ -400,6 +429,12 @@ nano-brain validates config on startup. Invalid config → startup fails with er
 | `telemetry.retention_days` < 1 | `telemetry.retention_days must be >= 1` |
 | `logging.level` invalid | `logging.level "X" is not valid` |
 | `auth.enabled` but no users/tokens | `auth enabled but no users or tokens configured` |
+| `auth.enabled` and a user with an empty or whitespace-only username | `server.auth.users[N].username must not be empty` |
+| `auth.enabled` and a username containing `:` | `server.auth.users[N].username must not contain ':'` |
+| `auth.enabled` and a repeated username | `server.auth.users[N].username "X" is a duplicate` |
+| `auth.enabled` and a username with leading or trailing whitespace | `server.auth.users[N].username must not start or end with whitespace` |
+| `auth.enabled` and an incomplete or unparsable `password_hash` | `server.auth.users[N].password_hash is not a valid bcrypt hash` |
+| `auth.enabled` and users hashed at different bcrypt costs | `server.auth.users[N].password_hash has bcrypt cost X but an earlier user has cost Y` |
 | `summarization.enabled` but no provider_url | `summarization.provider_url is required when enabled` |
 | `summarization.enabled` but concurrency < 1 | `summarization.concurrency must be >= 1 when enabled` |
 | `code_summarization.enabled` but no provider_url | `code_summarization.provider_url is required when enabled` |

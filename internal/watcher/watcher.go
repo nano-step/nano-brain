@@ -61,6 +61,19 @@ type watchedCollection struct {
 	allowedExtensions  []string
 	filter             *FileFilter
 	detectedFrameworks []string
+	// realRoot is dirPath with symlinks resolved. Set on the per-walk copy by
+	// withRealRoot so containment checks resolve the root once per walk, not
+	// once per file; empty means "resolve on demand".
+	realRoot string
+}
+
+// withRealRoot returns col with realRoot resolved. On failure it is left empty
+// and each containment check retries (and reports) the resolution itself.
+func (col watchedCollection) withRealRoot() watchedCollection {
+	if realRoot, err := filepath.EvalSymlinks(col.dirPath); err == nil {
+		col.realRoot = realRoot
+	}
+	return col
 }
 
 type fileState struct {
@@ -132,6 +145,11 @@ type Watcher struct {
 	hasNewEvents atomic.Bool
 
 	warmed map[string]bool
+
+	// symlinkWarned holds the paths already reported at Warn as symlinks leaving
+	// their workspace root, so repeat scans log them at Debug (issue #655).
+	symlinkWarned   map[string]bool
+	symlinkWarnedMu sync.Mutex
 }
 
 // SetGlobalIgnore configures the watcher to apply a global gitignore-style
@@ -581,6 +599,7 @@ func (w *Watcher) warmFileCacheFromDB(ctx context.Context, col watchedCollection
 
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 	w.warmFileCacheFromDB(ctx, col)
+	col = col.withRealRoot()
 
 	adm := newWalkAdmitter(col.filter)
 
@@ -811,10 +830,35 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		return
 	}
 
-	info, err := os.Stat(filePath)
+	// Lstat first so a symlink is seen as one: its target must resolve inside
+	// the collection root before anything about it is stat'ed or read (#655).
+	info, err := os.Lstat(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("stat failed, skipping")
 		return
+	}
+	containmentChecked := false
+	if info.Mode()&os.ModeSymlink != 0 {
+		// A symlink to a directory (bazel-*, Nix result, …) was never indexed:
+		// WalkDir does not descend into it. Skip it before the containment gate
+		// so it costs neither a Warn nor a purge round trip on every scan.
+		target, statErr := os.Stat(filePath)
+		if statErr == nil && target.IsDir() {
+			w.logger.Debug().Str("file", filePath).Msg("skipping symlink to directory")
+			return
+		}
+		if skip, purge := w.skipResolved(col, filePath); skip {
+			if purge {
+				w.cleanupIgnoredDocument(ctx, col, filePath)
+			}
+			return
+		}
+		containmentChecked = true
+		if statErr != nil {
+			w.logger.Warn().Err(statErr).Str("file", filePath).Msg("stat failed, skipping")
+			return
+		}
+		info = target
 	}
 
 	if info.IsDir() {
@@ -852,6 +896,22 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 			Int64("max", w.maxFileSize).
 			Msg("file exceeds max size, skipping")
 		return
+	}
+
+	// Defence in depth for a leaf that is not itself a symlink. scanCollection,
+	// the only caller today, cannot hand over a file beneath a symlinked
+	// directory (WalkDir never descends into one), so this only fires if a
+	// directory is swapped for a symlink between the walk listing it and this
+	// read, or if a future caller passes a path that did not come from the walk.
+	// It sits after the unchanged-file fast path, so a steady scan never pays
+	// for it.
+	if !containmentChecked {
+		if skip, purge := w.skipResolved(col, filePath); skip {
+			if purge {
+				w.cleanupIgnoredDocument(ctx, col, filePath)
+			}
+			return
+		}
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -1086,7 +1146,11 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		AliasMap: w.aliasIndexFor(col.dirPath).AliasMapFor(relFile),
 		Exists:   graph.DiskExistsChecker(col.dirPath),
 		ReadFile: func(workspaceRelPath string) ([]byte, error) {
-			return os.ReadFile(filepath.Join(col.dirPath, filepath.FromSlash(workspaceRelPath)))
+			p := filepath.Join(col.dirPath, filepath.FromSlash(workspaceRelPath))
+			if skip, _ := w.skipResolved(col, p); skip {
+				return nil, fmt.Errorf("%s is not readable for indexing", workspaceRelPath)
+			}
+			return os.ReadFile(p)
 		},
 	}
 	edges, err := w.graphRegistry.ExtractEdgesForFrameworksWithImports(relFile, content, col.detectedFrameworks, ic)
@@ -1223,6 +1287,7 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 
 	var count int
 	for _, col := range cols {
+		col = col.withRealRoot()
 		adm := newWalkAdmitter(col.filter)
 		_ = filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
 			if ctx.Err() != nil {
@@ -1242,6 +1307,11 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 			}
 			if info, ierr := d.Info(); ierr == nil && info.Size() > w.maxFileSize {
 				return nil
+			}
+			if d.Type()&fs.ModeSymlink != 0 {
+				if skip, _ := w.skipResolved(col, path); skip {
+					return nil
+				}
 			}
 			content, err := os.ReadFile(path)
 			if err != nil {
@@ -1283,6 +1353,7 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 	admitted := make(map[string]bool)
 	sweepSafe := true
 	for _, col := range cols {
+		col = col.withRealRoot()
 		adm := newWalkAdmitter(col.filter)
 		walkErr := filepath.WalkDir(col.dirPath, func(path string, d fs.DirEntry, err error) error {
 			if ctx.Err() != nil {
@@ -1307,6 +1378,14 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 			}
 			if info, ierr := d.Info(); ierr == nil && info.Size() > w.maxFileSize {
 				return nil
+			}
+			// A symlink that leaves the collection root or resolves to an excluded
+			// file is not admitted (#655), so the sweep below also removes graph
+			// rows a previous run extracted from it.
+			if d.Type()&fs.ModeSymlink != 0 {
+				if skip, _ := w.skipResolved(col, path); skip {
+					return nil
+				}
 			}
 			// Record every admitted file (in both stored forms — workspace-relative
 			// as written by extractAndUpsertEdges, and absolute) as soon as it passes
@@ -1647,11 +1726,18 @@ func (w *Watcher) resolveRubyCrossFileCalls(ctx context.Context, col watchedColl
 
 func collectRubyContents(dirPath string) map[string][]byte {
 	contents := make(map[string][]byte)
+	realRoot, err := filepath.EvalSymlinks(dirPath)
+	if err != nil {
+		return contents
+	}
 	_ = filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
 		if filepath.Ext(path) != ".rb" {
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 && checkResolvedPath(dirPath, realRoot, nil, path) != nil {
 			return nil
 		}
 		data, err := os.ReadFile(path)

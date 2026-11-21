@@ -1101,3 +1101,53 @@ func TestUnwatchTree_ClearsNestedAndAllowsRewatch(t *testing.T) {
 		t.Fatal("recreated subdirectory was not re-watched (stale watchedDirs entry)")
 	}
 }
+
+// TestScanCollection_CredentialFilesNotIndexed checks the built-in credential
+// deny list end to end (issue #655): denied files never reach an upsert, and a
+// document indexed for one before the deny list existed is removed by the
+// scan's existing ignored-file cleanup.
+func TestScanCollection_CredentialFilesNotIndexed(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		".env":                    "API_KEY=not-a-real-key",
+		"config/.env.production":  "DB_PASSWORD=not-a-real-password",
+		"deploy/certs/server.key": "not a real key",
+		"aws/credentials":         "[default]\naws_access_key_id = not-a-real-id",
+		".env.example":            "API_KEY=",
+		"README.md":               "# readme",
+	}
+	for rel, content := range files {
+		fp := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(fp), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fp, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mq := newMockQuerier()
+	// Simulate a .env indexed by an earlier version.
+	mq.sourcePathHash[filepath.Join(root, ".env")] = "stale-hash"
+	w := newTestWatcher(mq, 2000, 300)
+	col := watchedCollection{name: "c", dirPath: root, workspaceHash: "ws", globPattern: "*"}
+	filter, err := NewFileFilter(root, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	col.filter = filter
+
+	w.scanCollection(context.Background(), col)
+
+	if got := mq.upsertDocCalls.Load(); got != 2 {
+		t.Fatalf("upserts = %d, want 2 (.env.example and README.md): %v", got, mq.sourcePathHash)
+	}
+	for _, rel := range []string{"config/.env.production", "deploy/certs/server.key", "aws/credentials"} {
+		if _, ok := mq.sourcePathHash[filepath.Join(root, filepath.FromSlash(rel))]; ok {
+			t.Errorf("%s must not be indexed", rel)
+		}
+	}
+	if got := mq.deleteDocCalls.Load(); got != 1 {
+		t.Errorf("document deletes = %d, want 1 (the previously indexed .env)", got)
+	}
+}

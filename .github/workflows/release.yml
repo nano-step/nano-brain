@@ -52,7 +52,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.26.11"
 
       - name: Build
         # Env vars live in `env:` (not as command-prefix `VAR=value`) so the

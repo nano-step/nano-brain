@@ -173,6 +173,87 @@ var defaultExcludeFiles = map[string]bool{
 	"composer.lock":        true, // PHP (also .lock)
 }
 
+// Built-in credential deny list (issue #655). A file whose base name matches is
+// never indexed, whatever exclude_patterns / allowed_extensions / ignore files
+// say: the check runs before all of them and nothing after it can re-admit a
+// file. Names are compared lower-cased. The same list is applied to the
+// resolved target of a symlink (see checkResolvedPath).
+//
+// credentialFileNames are exact base names.
+var credentialFileNames = map[string]bool{
+	".env":             true,
+	".envrc":           true,
+	".npmrc":           true,
+	".netrc":           true,
+	".pgpass":          true,
+	".htpasswd":        true,
+	".git-credentials": true,
+	".pypirc":          true,
+	".dockercfg":       true,
+	".vault-token":     true,
+	".my.cnf":          true,
+	".s3cfg":           true,
+	".boto":            true,
+	"kubeconfig":       true,
+	"credentials":      true, // as in ~/.aws/credentials
+	"credentials.json": true,
+	"secrets.yml":      true,
+	"secrets.yaml":     true,
+	"secrets.json":     true,
+}
+
+// credentialFileSuffixes deny any base name ending in one of them (*.pem, …).
+var credentialFileSuffixes = []string{
+	".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".ppk", ".kdbx", ".ovpn",
+	".tfstate", ".tfstate.backup", ".tfvars",
+}
+
+// sshKeyPrefixes deny any base name starting with one of them (id_rsa,
+// id_rsa.bak, id_rsa_github, id_ed25519_sk) except "*.pub" public keys.
+var sshKeyPrefixes = []string{"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
+
+// envDocWords mark an env file as documentation rather than secrets:
+// ".env.<word>" / ".env.production.<word>" and "<word>.env" / "app.<word>.env".
+var envDocWords = []string{"example", "sample", "template", "dist"}
+
+// isCredentialFile reports whether base (a file's base name) is on the built-in
+// credential deny list.
+func isCredentialFile(base string) bool {
+	name := strings.ToLower(base)
+	if credentialFileNames[name] {
+		return true
+	}
+	for _, suffix := range credentialFileSuffixes {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+	for _, prefix := range sshKeyPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return !strings.HasSuffix(name, ".pub")
+		}
+	}
+	// .env.* (.env.local, .env.production)
+	if strings.HasPrefix(name, ".env.") {
+		for _, word := range envDocWords {
+			if strings.HasSuffix(name, "."+word) {
+				return false
+			}
+		}
+		return true
+	}
+	// *.env (prod.env, app.env)
+	if stem, ok := strings.CutSuffix(name, ".env"); ok {
+		for _, word := range envDocWords {
+			if stem == word || strings.HasSuffix(stem, "."+word) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 type FileFilter struct {
 	gitignoreMatcher  *gitignore.GitIgnore
 	globalIgnore      *gitignore.GitIgnore
@@ -241,6 +322,9 @@ func (f *FileFilter) shouldSkip(absPath string, isDir bool) bool {
 	if !isDir && len(parts) > 0 {
 		base := parts[len(parts)-1]
 		if defaultExcludeFiles[base] || strings.HasSuffix(base, ".lock") {
+			return true
+		}
+		if isCredentialFile(base) {
 			return true
 		}
 	}

@@ -156,7 +156,7 @@ func incrementalExtract(ctx context.Context, workspace, codeRoot string, docs []
 			continue
 		}
 		filesProcessed++
-		if err := processFile(ctx, workspace, doc.SourcePath, codeRoot, graphReg, queries); err != nil {
+		if err := processFile(ctx, workspace, doc.SourcePath, codeRoot, filter, graphReg, queries); err != nil {
 			reqLog.Warn().Err(err).Str("file", doc.SourcePath).Msg("reindex-cfg: failed")
 		} else {
 			cfgsExtracted++
@@ -221,7 +221,7 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 			if cfgExts[ext] {
 				filesProcessed++
 				reqLog.Debug().Str("file", path).Int("processed", filesProcessed).Msg("reindex-cfg: processing file")
-				if err := processFile(ctx, workspace, path, codeRoot, graphReg, queries); err != nil {
+				if err := processFile(ctx, workspace, path, codeRoot, filter, graphReg, queries); err != nil {
 					reqLog.Warn().Err(err).Str("file", path).Msg("reindex-cfg: failed")
 				} else {
 					cfgsExtracted++
@@ -243,7 +243,16 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 	return
 }
 
-func processFile(ctx context.Context, workspace, absPath, codeRoot string, graphReg *graph.Registry, queries ReindexCFGQuerier) error {
+func processFile(ctx context.Context, workspace, absPath, codeRoot string, filter *watcher.FileFilter, graphReg *graph.Registry, queries ReindexCFGQuerier) error {
+	// Same rule as the watcher: a file is read only if it resolves inside the
+	// code root, to a file the filter admits (issue #655). Every path is
+	// checked, not only symlink leaves: the incremental run takes paths from
+	// stored documents, so one can sit under a directory that has since become
+	// a symlink leaving the root. The returned error says which case applied.
+	if cerr := watcher.CheckResolvedPath(codeRoot, filter, absPath); cerr != nil {
+		return fmt.Errorf("skipped: %w", cerr)
+	}
+
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		return fmt.Errorf("read: %w", err)
