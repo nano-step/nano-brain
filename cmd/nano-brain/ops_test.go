@@ -38,6 +38,60 @@ func TestResolveHostPort_EnvOverride(t *testing.T) {
 	}
 }
 
+// A wildcard server.host is an address to listen on, not one to dial: the
+// client must connect to localhost so its Host header is in the server's
+// default allowlist. Explicit NANO_BRAIN_HOST values and non-wildcard hosts
+// are used as given.
+func TestResolveHostPort_WildcardConfigHostDialsLocalhost(t *testing.T) {
+	tests := []struct {
+		name       string
+		configHost string
+		envHost    string
+		want       string
+	}{
+		{"ipv4 wildcard", "0.0.0.0", "", "localhost"},
+		{"ipv6 wildcard", "::", "", "localhost"},
+		{"bracketed ipv6 wildcard", "[::]", "", "localhost"},
+		{"loopback name unchanged", "localhost", "", "localhost"},
+		{"loopback address unchanged", "127.0.0.1", "", "127.0.0.1"},
+		{"lan address unchanged", "192.168.1.50", "", "192.168.1.50"},
+		{"hostname unchanged", "brain.example.com", "", "brain.example.com"},
+		{"explicit env wildcard is not rewritten", "localhost", "0.0.0.0", "0.0.0.0"},
+		{"explicit env host wins over wildcard config", "0.0.0.0", "myhost", "myhost"},
+	}
+
+	orig := isContainerFn
+	isContainerFn = func() bool { return false }
+	t.Cleanup(func() { isContainerFn = orig })
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgPath := filepath.Join(t.TempDir(), "config.yml")
+			if err := os.WriteFile(cfgPath, []byte(fmt.Sprintf("server:\n  host: %q\n  port: 3199\n", tt.configHost)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("NANO_BRAIN_CONFIG", cfgPath)
+			// An empty NANO_BRAIN_SERVER_HOST still overrides the file, so
+			// it has to be absent; t.Setenv first so it is restored after.
+			t.Setenv("NANO_BRAIN_SERVER_HOST", "")
+			os.Unsetenv("NANO_BRAIN_SERVER_HOST")
+			t.Setenv("NANO_BRAIN_HOST", tt.envHost)
+			t.Setenv("NANO_BRAIN_PORT", "")
+
+			host, port := resolveHostPort()
+			if host != tt.want {
+				t.Errorf("server.host %q NANO_BRAIN_HOST %q: host = %q, want %q", tt.configHost, tt.envHost, host, tt.want)
+			}
+			if port != 3199 {
+				t.Errorf("port = %d, want 3199 (config not loaded?)", port)
+			}
+			if got, want := getBaseURL(), fmt.Sprintf("http://%s:3199", tt.want); got != want {
+				t.Errorf("getBaseURL() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestResolveHostPort_InvalidPort(t *testing.T) {
 	t.Setenv("NANO_BRAIN_HOST", "")
 	t.Setenv("NANO_BRAIN_PORT", "notanumber")

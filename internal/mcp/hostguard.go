@@ -20,8 +20,10 @@ var defaultAllowedHosts = []string{
 	"host.docker.internal",
 }
 
-// HostGuard rejects requests whose Host header is not in allowed, replacing
-// the SDK's built-in DNS-rebinding check.
+// HostGuard rejects requests whose Host header is not in allowed. It is
+// registered server-wide (internal/server/middleware.go), so it covers every
+// route — REST API, /health, /mcp and /sse — and replaces the SDK's built-in
+// DNS-rebinding check on the MCP endpoints.
 //
 // The SDK check (mcp.StreamableHTTPOptions.DisableLocalhostProtection) is
 // binary: when the connection lands on a loopback address it rejects every
@@ -36,19 +38,25 @@ var defaultAllowedHosts = []string{
 // An empty allowed slice falls back to defaultAllowedHosts. A configured
 // server.allowed_hosts REPLACES the defaults rather than adding to them, so a
 // reverse-proxy deployment that still needs localhost must list it too.
-// The guard fires only when the connection landed on a loopback local
-// address, mirroring the SDK check it replaces. That is not a weakening: DNS
-// rebinding is a browser attack, and a browser attacking this daemon resolves
-// the attacker's hostname to 127.0.0.1 and connects there — so the local
-// address IS loopback and the guard fires. A remote client reaching a
-// 0.0.0.0-bound daemon on its public address lands on a non-loopback local
-// address, where the SDK never guarded either. Firing unconditionally would
-// 403 those VPS/reverse-proxy deployments, which AuthConfig explicitly
-// supports and which worked before this upgrade.
-func HostGuard(allowed []string, next http.Handler) http.Handler {
+//
+// The guard fires when the connection landed on a loopback local address, or
+// on any address while authentication is disabled (authEnabled false). DNS
+// rebinding is a browser attack: the browser resolves the attacker's hostname
+// to an address the daemon listens on and connects there. On a host install
+// that address is loopback. In the Docker deployment the daemon binds 0.0.0.0
+// inside the container with the port published to the host, so a browser
+// rebinding to 127.0.0.1 arrives on the container IP — a non-loopback local
+// address — and with auth disabled nothing else stands between the page and
+// the API, so the guard must fire there too.
+//
+// With auth enabled and a non-loopback local address the guard is skipped: a
+// rebinding page holds no credentials, and firing would 403 the
+// VPS/reverse-proxy deployments AuthConfig explicitly supports, which are
+// reached under their own public hostname.
+func HostGuard(allowed []string, authEnabled bool, next http.Handler) http.Handler {
 	set := buildHostSet(allowed)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if localAddrIsLoopback(r) && !hostAllowed(r.Host, set) {
+		if (!authEnabled || localAddrIsLoopback(r)) && !hostAllowed(r.Host, set) {
 			http.Error(w, "Forbidden: Host header "+r.Host+" is not in server.allowed_hosts", http.StatusForbidden)
 			return
 		}

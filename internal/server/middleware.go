@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/middleware"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
@@ -28,6 +29,15 @@ const (
 func registerMiddleware(s *Server) {
 	s.echo.Use(requestLoggingMiddleware(s.logger))
 	s.echo.Use(versionHeaderMiddleware(s.version))
+	// Host guard, then CSRF, both ahead of auth: a DNS-rebinding or
+	// cross-origin request from a web page is refused with 403 on every route
+	// before anything else looks at it. See internal/mcp/hostguard.go.
+	allowedHosts := s.fullCfg.Server.AllowedHosts
+	authEnabled := s.fullCfg.Server.Auth.Enabled
+	s.echo.Use(echo.WrapMiddleware(func(next http.Handler) http.Handler {
+		return mcp.HostGuard(allowedHosts, authEnabled, next)
+	}))
+	s.echo.Use(middleware.CSRF(fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)))
 	s.echo.Use(middleware.Auth(authSnapshotFromConfig(s.fullCfg.Server.Auth), s.logger))
 	s.echo.HTTPErrorHandler = httpErrorHandler(s)
 }

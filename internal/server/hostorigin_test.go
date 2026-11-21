@@ -1,0 +1,260 @@
+package server_test
+
+import (
+	"context"
+	"database/sql"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/server"
+	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
+	"github.com/rs/zerolog"
+)
+
+// newGuardTestServer builds a server whose queries are backed by a closed
+// *sql.DB: sql.Open never dials, and every query on a closed DB returns an
+// error, so handlers that get past the middleware answer 500 instead of
+// dereferencing the nil queries newTestServer wires. No database is contacted.
+func newGuardTestServer(t *testing.T, auth config.AuthConfig) *server.Server {
+	t.Helper()
+	return newGuardTestServerOn(t, "127.0.0.1", auth)
+}
+
+// newGuardTestServerOn is newGuardTestServer with a chosen server.host. The
+// server is never started, so the address is configuration only — nothing
+// binds it.
+func newGuardTestServerOn(t *testing.T, host string, auth config.AuthConfig) *server.Server {
+	t.Helper()
+	db, err := sql.Open("pgx", "postgres://unused.invalid/unused")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("db.Close: %v", err)
+	}
+	fullCfg := &config.Config{
+		Server: config.ServerConfig{Host: host, Port: 3100, Auth: auth},
+	}
+	return server.New(fullCfg, "", &mockPool{}, nil, sqlc.New(db), nil, nil, nil, nil, zerolog.Nop(), "test-v1", 0, nil)
+}
+
+// route is one method+path pair exercised by the guard wiring tests below.
+type route struct {
+	method, path string
+}
+
+func (r route) String() string { return r.method + " " + r.path }
+
+// The Host guard is server-wide middleware, not an MCP-only wrap: a
+// DNS-rebinding page is same-origin with every route, so every route —
+// including /health — must refuse a Host outside the allowlist (#652).
+func TestAllRoutesRejectForeignHost(t *testing.T) {
+	s := newGuardTestServer(t, config.AuthConfig{})
+
+	routes := []route{
+		{http.MethodGet, "/api/status"},
+		{http.MethodGet, "/api/v1/config"},
+		{http.MethodGet, "/api/v1/workspaces"},
+		{http.MethodPost, "/api/v1/init"},
+		{http.MethodPost, "/api/v1/config"},
+		{http.MethodPost, "/api/reload-config"},
+		{http.MethodPost, "/api/harvest"},
+		{http.MethodGet, "/health"},
+	}
+	hosts := []struct {
+		host          string
+		wantForbidden bool
+	}{
+		{"evil.example:3100", true},
+		{"evil.example", true},
+		{"localhost:3100", false},
+		{"127.0.0.1:3100", false},
+		{"host.docker.internal:3100", false},
+	}
+
+	for _, rt := range routes {
+		for _, h := range hosts {
+			t.Run(rt.String()+" Host "+h.host, func(t *testing.T) {
+				req := httptest.NewRequest(rt.method, rt.path, nil)
+				req.Host = h.host
+				rec := httptest.NewRecorder()
+				s.ServeHTTP(rec, req)
+
+				if got := rec.Code == http.StatusForbidden; got != h.wantForbidden {
+					t.Errorf("%s with Host %q: status %d, want forbidden=%v", rt, h.host, rec.Code, h.wantForbidden)
+				}
+			})
+		}
+	}
+}
+
+// The CSRF origin check is server-wide too: every state-changing route, not
+// only the write subgroup, must refuse a cross-origin browser request while
+// still admitting clients that send no Origin (CLI, curl, MCP) and pages on
+// a loopback origin (the dashboard dev server) (#652).
+func TestStateChangingRoutesRejectForeignOrigin(t *testing.T) {
+	s := newGuardTestServer(t, config.AuthConfig{})
+
+	routes := []route{
+		{http.MethodPost, "/api/v1/init"},
+		{http.MethodPost, "/api/v1/config"},
+		{http.MethodPost, "/api/v1/reset-workspace"},
+		{http.MethodDelete, "/api/v1/workspaces/abc"},
+		{http.MethodPost, "/api/v1/collections"},
+		{http.MethodPut, "/api/v1/collections/abc"},
+		{http.MethodDelete, "/api/v1/collections/abc"},
+		{http.MethodDelete, "/api/v1/documents/abc"},
+		{http.MethodPost, "/api/reload-config"},
+		{http.MethodPost, "/api/harvest"},
+		{http.MethodPost, "/mcp"},
+		{http.MethodPost, "/sse"},
+		// No route registers PATCH today; the check must still run ahead of
+		// routing so one added later is covered from the start.
+		{http.MethodPatch, "/api/v1/config"},
+	}
+	origins := []struct {
+		name          string
+		header, value string
+		wantForbidden bool
+	}{
+		{"foreign origin", "Origin", "http://evil.example", true},
+		{"null origin", "Origin", "null", true},
+		{"foreign referer", "Referer", "http://evil.example/page", true},
+		{"no origin", "", "", false},
+		{"loopback origin other port", "Origin", "http://localhost:5173", false},
+	}
+
+	for _, rt := range routes {
+		for _, o := range origins {
+			t.Run(rt.String()+" "+o.name, func(t *testing.T) {
+				// "{" is invalid JSON, so handlers that read a body stop at 400.
+				req := httptest.NewRequest(rt.method, rt.path, strings.NewReader("{"))
+				req.Host = "localhost:3100"
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Accept", "application/json, text/event-stream")
+				if o.header != "" {
+					req.Header.Set(o.header, o.value)
+				}
+				rec := httptest.NewRecorder()
+				s.ServeHTTP(rec, req)
+
+				if got := rec.Code == http.StatusForbidden; got != o.wantForbidden {
+					t.Errorf("%s with %s %q: status %d, want forbidden=%v", rt, o.header, o.value, rec.Code, o.wantForbidden)
+				}
+			})
+		}
+	}
+}
+
+// On a non-loopback connection the Host guard is enforced only while auth is
+// disabled. Docker binds 0.0.0.0 with auth off, so a rebinding browser lands
+// on the container IP and must be refused; with auth on, the request is let
+// through to the auth middleware, which answers 401 (#652).
+func TestHostGuardOnNonLoopbackConnectionDependsOnAuth(t *testing.T) {
+	tests := []struct {
+		name string
+		auth config.AuthConfig
+		want int
+	}{
+		{"auth disabled guards", config.AuthConfig{}, http.StatusForbidden},
+		{"auth enabled defers to auth", config.AuthConfig{Enabled: true, Tokens: []string{"test-token"}}, http.StatusUnauthorized},
+	}
+	containerAddr := &net.TCPAddr{IP: net.ParseIP("172.17.0.2"), Port: 3100}
+
+	for _, tt := range tests {
+		for _, rt := range []route{
+			{http.MethodGet, "/api/v1/config"},
+			{http.MethodPost, "/api/v1/init"},
+			{http.MethodPost, "/mcp"},
+		} {
+			t.Run(tt.name+" "+rt.String(), func(t *testing.T) {
+				s := newGuardTestServer(t, tt.auth)
+
+				req := httptest.NewRequest(rt.method, rt.path, nil)
+				req.Host = "evil.example:3100"
+				req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, containerAddr))
+				rec := httptest.NewRecorder()
+				s.ServeHTTP(rec, req)
+
+				if rec.Code != tt.want {
+					t.Errorf("%s with foreign Host on %v: status %d, want %d", rt, containerAddr, rec.Code, tt.want)
+				}
+			})
+		}
+	}
+}
+
+// The CSRF check accepts an Origin that matches the request's own Host, so on
+// its own it would admit a DNS-rebinding page (Host and Origin both the
+// attacker's name). The Host guard ahead of it is what refuses that request;
+// this pins the pair, on a wildcard bind as well as a loopback one (#652).
+func TestRebindingSameOriginRejectedByChain(t *testing.T) {
+	routes := []route{
+		{http.MethodPost, "/api/v1/init"},
+		{http.MethodPost, "/api/v1/config"},
+		{http.MethodDelete, "/api/v1/workspaces/abc"},
+		{http.MethodPost, "/api/reload-config"},
+		{http.MethodPost, "/mcp"},
+	}
+	for _, bind := range []string{"127.0.0.1", "0.0.0.0"} {
+		s := newGuardTestServerOn(t, bind, config.AuthConfig{})
+		for _, rt := range routes {
+			t.Run("bind "+bind+" "+rt.String(), func(t *testing.T) {
+				req := httptest.NewRequest(rt.method, rt.path, strings.NewReader("{"))
+				req.Host = "evil.example"
+				req.Header.Set("Origin", "http://evil.example")
+				req.Header.Set("Content-Type", "application/json")
+				rec := httptest.NewRecorder()
+				s.ServeHTTP(rec, req)
+
+				if rec.Code != http.StatusForbidden {
+					t.Errorf("%s with Host and Origin evil.example: status %d, want 403", rt, rec.Code)
+				}
+			})
+		}
+	}
+}
+
+// A same-origin page must keep working when the daemon is bound to a wildcard
+// address (the Docker deployment), where the bound address names no host a
+// browser can be on; a foreign Origin must still be refused there (#652).
+func TestWildcardBindSameOriginAllowed(t *testing.T) {
+	s := newGuardTestServerOn(t, "0.0.0.0", config.AuthConfig{})
+
+	tests := []struct {
+		name          string
+		host, origin  string
+		wantForbidden bool
+	}{
+		{"same origin", "localhost:3100", "http://localhost:3100", false},
+		{"loopback origin other port", "localhost:3100", "http://localhost:5173", false},
+		{"container host same origin", "host.docker.internal:3100", "http://host.docker.internal:3100", false},
+		{"foreign origin", "localhost:3100", "http://evil.example", true},
+	}
+	for _, tt := range tests {
+		for _, rt := range []route{
+			{http.MethodPost, "/api/v1/init"},
+			{http.MethodPost, "/api/v1/config"},
+			{http.MethodPost, "/mcp"},
+		} {
+			t.Run(tt.name+" "+rt.String(), func(t *testing.T) {
+				req := httptest.NewRequest(rt.method, rt.path, strings.NewReader("{"))
+				req.Host = tt.host
+				req.Header.Set("Origin", tt.origin)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Accept", "application/json, text/event-stream")
+				rec := httptest.NewRecorder()
+				s.ServeHTTP(rec, req)
+
+				if got := rec.Code == http.StatusForbidden; got != tt.wantForbidden {
+					t.Errorf("%s Host %q Origin %q: status %d, want forbidden=%v", rt, tt.host, tt.origin, rec.Code, tt.wantForbidden)
+				}
+			})
+		}
+	}
+}
