@@ -26,6 +26,10 @@ type AuthSnapshot struct {
 
 var zeroToken = make([]byte, 32)
 
+// compareHash is bcrypt.CompareHashAndPassword, replaceable so tests can count
+// comparisons instead of timing them.
+var compareHash = bcrypt.CompareHashAndPassword
+
 func Auth(cfg AuthSnapshot, logger zerolog.Logger) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -89,7 +93,7 @@ func validateBasic(encoded string, users []AuthUser) (string, bool) {
 			matched = true
 		}
 	}
-	passwordOK := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+	passwordOK := compareHash([]byte(hash), []byte(password)) == nil
 	if matched && passwordOK {
 		return username, true
 	}

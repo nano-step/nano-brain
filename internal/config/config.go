@@ -380,18 +380,14 @@ func Load(configPath string) (*Config, error) {
 		"NANO_BRAIN_CODE_SUMMARIZE_API_KEY":  "code_summarization.api_key",
 		"NANO_BRAIN_AUTH_ENABLED":            "server.auth.enabled",
 		"NANO_BRAIN_AUTH_REALM":              "server.auth.realm",
-		"NANO_BRAIN_AUTH_TOKENS":             "server.auth.tokens",
 	}
 	for envVar, key := range specialEnvVars {
-		value, exists := os.LookupEnv(envVar)
-		if !exists {
-			continue
+		if value, exists := os.LookupEnv(envVar); exists {
+			_ = k.Set(key, value)
 		}
-		if envVar == "NANO_BRAIN_AUTH_TOKENS" {
-			_ = k.Set(key, splitTokens(value))
-			continue
-		}
-		_ = k.Set(key, value)
+	}
+	if value, exists := os.LookupEnv("NANO_BRAIN_AUTH_TOKENS"); exists {
+		_ = k.Set("server.auth.tokens", splitTokens(value))
 	}
 
 	// Unmarshal into Config struct with type conversion

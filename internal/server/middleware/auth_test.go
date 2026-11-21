@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
@@ -215,7 +214,7 @@ func cheapHash(t *testing.T, pw string) string {
 	return string(h)
 }
 
-func TestValidateBasic_UnknownUserRejected(t *testing.T) {
+func TestValidateBasic_Credentials(t *testing.T) {
 	users := []AuthUser{{Username: "admin", PasswordHash: cheapHash(t, "secret")}}
 	tests := []struct {
 		name, user, pass string
@@ -240,26 +239,36 @@ func TestValidateBasic_UnknownUserRejected(t *testing.T) {
 	}
 }
 
-// An unknown username must cost a bcrypt comparison, like a wrong password
+// An unknown username must cost one bcrypt comparison, like a wrong password
 // does, so response time does not reveal which usernames exist (#271).
-func TestValidateBasic_UnknownUserPaysBcryptCost(t *testing.T) {
-	users := []AuthUser{{Username: "admin", PasswordHash: cheapHash(t, "secret")}}
-	fastest := func(user string) time.Duration {
-		encoded := base64.StdEncoding.EncodeToString([]byte(user + ":wrong"))
-		best := time.Duration(0)
-		for i := 0; i < 3; i++ {
-			start := time.Now()
-			validateBasic(encoded, users)
-			if d := time.Since(start); best == 0 || d < best {
-				best = d
-			}
-		}
-		return best
+func TestValidateBasic_AlwaysOneBcryptComparison(t *testing.T) {
+	users := []AuthUser{
+		{Username: "admin", PasswordHash: cheapHash(t, "secret")},
+		{Username: "second", PasswordHash: cheapHash(t, "other")},
 	}
+	tests := []struct {
+		name, user, pass string
+		wantHash         string
+	}{
+		{"valid credentials", "admin", "secret", users[0].PasswordHash},
+		{"wrong password", "second", "wrong", users[1].PasswordHash},
+		{"unknown user", "nobody", "wrong", users[0].PasswordHash},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var compared []string
+			original := compareHash
+			compareHash = func(hash, password []byte) error {
+				compared = append(compared, string(hash))
+				return original(hash, password)
+			}
+			t.Cleanup(func() { compareHash = original })
 
-	wrongPassword := fastest("admin")
-	unknownUser := fastest("nobody")
-	if unknownUser < wrongPassword/2 {
-		t.Errorf("unknown user took %v, wrong password took %v: timing reveals valid usernames", unknownUser, wrongPassword)
+			validateBasic(base64.StdEncoding.EncodeToString([]byte(tt.user+":"+tt.pass)), users)
+
+			if len(compared) != 1 || compared[0] != tt.wantHash {
+				t.Errorf("bcrypt comparisons = %d %q, want exactly one against %q", len(compared), compared, tt.wantHash)
+			}
+		})
 	}
 }
