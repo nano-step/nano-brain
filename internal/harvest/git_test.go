@@ -310,7 +310,38 @@ func TestGitLogIgnoresSinceThatIsNotACommitID(t *testing.T) {
 			}
 		})
 	}
-	if _, err := os.Stat(filepath.Join(tmpDir, "written-by-git")); err == nil {
-		t.Error("git log wrote the file named in the since marker")
+	if written, _ := filepath.Glob(filepath.Join(tmpDir, "written-by-git*")); len(written) > 0 {
+		t.Errorf("git log wrote %v, the file named in the since marker", written)
+	}
+}
+
+// Runs under -short (no git needed), so CI pins which markers reach git.
+func TestGitObjectID(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"abbreviated id", "abc1234", true},
+		{"sha-1", strings.Repeat("a1", 20), true},
+		{"sha-256", strings.Repeat("a1", 32), true},
+		{"empty", "", false},
+		{"six characters", "abc123", false},
+		{"sixty-five characters", strings.Repeat("a", 65), false},
+		{"uppercase", "ABCDEF1", false},
+		{"option", "--output=/tmp/x", false},
+		{"short option", "-p", false},
+		{"relative revision", "HEAD~1", false},
+		{"range", "abc1234..def5678", false},
+		{"trailing newline", "abc1234\n", false},
+		{"embedded NUL then option", "abc1234\x00--all", false},
+		{"leading space", " abc1234", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := gitObjectID.MatchString(tt.value); got != tt.want {
+				t.Errorf("gitObjectID.MatchString(%q) = %v, want %v", tt.value, got, tt.want)
+			}
+		})
 	}
 }
