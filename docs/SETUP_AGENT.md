@@ -144,7 +144,7 @@ pg_isready -h localhost -p 5432 2>/dev/null
 ```bash
 docker run -d --name nanobrain-pg \
   --restart unless-stopped \
-  -p 5432:5432 \
+  -p 127.0.0.1:5432:5432 \
   -e POSTGRES_USER=nanobrain \
   -e POSTGRES_PASSWORD=nanobrain \
   -e POSTGRES_DB=nanobrain_dev \

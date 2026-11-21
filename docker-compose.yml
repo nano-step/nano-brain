@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: nanobrain
       POSTGRES_DB: nanobrain_dev
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - nanobrain-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: ollama/ollama:latest
     container_name: nanobrain-ollama
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - nanobrain-ollama:/root/.ollama
     healthcheck:
@@ -32,8 +32,21 @@ services:
   nano-brain:
     build: .
     container_name: nanobrain
+    # The daemon must listen on 0.0.0.0 inside the container to be reachable
+    # through the published port, and it runs without auth. The port is
+    # published on the host's loopback only, so the API is reachable by
+    # processes on this machine and by containers on this compose network,
+    # and by nothing else. To expose nano-brain beyond this machine, configure
+    # server.auth and remove --unsafe-no-auth instead of widening the binding.
+    #
+    # Linux: a container outside this compose network cannot reach a
+    # loopback-published port through host.docker.internal (it resolves to the
+    # bridge gateway). Attach that container to this network and use the
+    # service name, or add a second publish on the bridge gateway address in a
+    # docker-compose.override.yml together with server.auth.
+    command: ["serve", "--unsafe-no-auth"]
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     depends_on:
       postgres:
         condition: service_healthy

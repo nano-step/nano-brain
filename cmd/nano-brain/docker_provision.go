@@ -86,7 +86,7 @@ func provisionPostgres(ctx context.Context) (string, error) {
 		"run", "-d",
 		"--name", dockerPGContainerName,
 		"--restart", "unless-stopped",
-		"-p", "5432:5432",
+		"-p", "127.0.0.1:5432:5432",
 		"-e", "POSTGRES_USER=nanobrain",
 		"-e", "POSTGRES_PASSWORD=nanobrain",
 		"-e", "POSTGRES_DB=nanobrain_dev",
@@ -134,7 +134,7 @@ func provisionPostgres(ctx context.Context) (string, error) {
 			"--restart", "unless-stopped",
 			// Host 5433 → container 5432: postgres inside the image always
 			// listens on 5432 (review CR-03).
-			"-p", "5433:5432",
+			"-p", "127.0.0.1:5433:5432",
 			"-e", "POSTGRES_USER=nanobrain",
 			"-e", "POSTGRES_PASSWORD=nanobrain",
 			"-e", "POSTGRES_DB=nanobrain_dev",
