@@ -6,6 +6,9 @@ All notable changes to nano-brain are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **An empty `server.host` no longer binds every network interface without requiring auth** (#635). `server.host: "0.0.0.0"` was correctly refused unless auth was configured, but an empty value — or a bare `host:`, which is what commenting out the value produces — took a different path: it rendered as `":<port>"`, a wildcard bind, while the safety check treated it as `localhost` and let it through. An empty host now resolves to the `localhost` default at config load, and the bind-safety check no longer treats an empty host as loopback, so the control is correct regardless of how the value arrives.
+
 ### Added
 - **Pi CLI agent session harvesting** (opt-in, disabled by default). A new `PiHarvester` ingests session transcripts from the Pi CLI coding agent (`~/.pi/agent/sessions/<encoded-cwd>/*.jsonl`), following the existing `Harvester` extension point alongside Claude Code and OpenCode. Enable with `harvester.pi.enabled: true` and `harvester.pi.session_dir` set to your Pi sessions directory.
 

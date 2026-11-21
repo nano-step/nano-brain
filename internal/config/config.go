@@ -395,6 +395,25 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// koanf only applies the default when the key is absent, so an explicitly
+	// empty host ("" or a bare `host:`, which is what commenting out the value
+	// produces) survives as "". That is not harmless: Server.Start builds the
+	// listen address with fmt.Sprintf("%s:%d", host, port), so "" yields
+	// ":<port>" — a wildcard bind on every interface. Restoring the default
+	// here makes the empty and omitted forms mean the same safe thing, which
+	// is what an operator writing a bare `host:` intends. checkBindSafety
+	// independently refuses to treat "" as loopback, so the control is still
+	// correct for any value that reaches it by another path.
+	//
+	// Trimming the value (not just testing it) keeps one notion of "host"
+	// here: otherwise a padded but non-empty ` 127.0.0.1 ` would survive,
+	// fail net.ParseIP, and be refused as non-loopback. Trimming can only
+	// newly-admit literal loopback strings — " 0.0.0.0 " is still rejected.
+	cfg.Server.Host = strings.TrimSpace(cfg.Server.Host)
+	if cfg.Server.Host == "" {
+		cfg.Server.Host = getDefaults().Server.Host
+	}
+
 	if err := expandPaths(cfg); err != nil {
 		return nil, err
 	}
