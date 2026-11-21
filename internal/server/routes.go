@@ -1,14 +1,11 @@
 package server
 
 import (
-	"fmt"
-
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
-	"github.com/nano-brain/nano-brain/internal/server/middleware"
 )
 
 func registerRoutes(s *Server) {
@@ -56,16 +53,13 @@ func registerRoutes(s *Server) {
 		enqueuer = s.embedQueue
 	}
 
-	boundAddr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
-	csrfMW := middleware.CSRF(boundAddr)
-
 	data := api.Group("", workspaceMiddleware(s.db))
 
 	if s.eventBus != nil {
 		data.GET("/events", handlers.EventsHandler(s.eventBus, s.logger))
 	}
 
-	write := data.Group("", workspaceRegisteredMiddleware(s.db), csrfMW)
+	write := data.Group("", workspaceRegisteredMiddleware(s.db))
 	write.POST("/write", handlers.WriteDocument(s.queries, s.db, enqueuer, s.logger, defaultMaxFileSize, s.linkResolver, s.linkExtractor))
 	write.POST("/embed", handlers.TriggerEmbed(s.queries, s.embedder, s.embedCfg.Provider, s.embedCfg.Model, s.embedCfg.MaxChars, s.logger))
 	var reindexPub eventbus.Publisher
@@ -132,19 +126,16 @@ func registerRoutes(s *Server) {
 	sseHandler := mcp.NewSSEHandler(s.mcpServer)
 	streamableHandler := mcp.NewStreamableHTTPHandler(s.mcpServer)
 
-	// HostGuard replaces the SDK's built-in DNS-rebinding check, which is
-	// binary (loopback bind => reject every non-loopback Host) and therefore
-	// rejects host.docker.internal — the URL `nano-brain mcp-url` prints for
-	// itself inside a container. See internal/mcp/hostguard.go.
-	allowedHosts := s.fullCfg.Server.AllowedHosts
-	guardedSSE := mcp.HostGuard(allowedHosts, sseHandler)
-	s.echo.GET("/sse", echo.WrapHandler(guardedSSE))
-	s.echo.POST("/sse", echo.WrapHandler(guardedSSE))
+	// The SDK's built-in DNS-rebinding check is disabled on both handlers; the
+	// server-wide mcp.HostGuard and CSRF middleware (registerMiddleware) cover
+	// these routes along with every other one.
+	s.echo.GET("/sse", echo.WrapHandler(sseHandler))
+	s.echo.POST("/sse", echo.WrapHandler(sseHandler))
 
 	// Wrap streamableHandler with the default-workspace middleware BEFORE
 	// echo.WrapHandler, not as an echo.MiddlewareFunc — the SDK reads
 	// req.Context() directly, and Echo's c.Set values never reach it.
-	wrappedStreamable := mcp.HostGuard(allowedHosts, mcp.WrapStreamableHandler(streamableHandler))
+	wrappedStreamable := mcp.WrapStreamableHandler(streamableHandler)
 	s.echo.GET("/mcp", echo.WrapHandler(wrappedStreamable))
 	s.echo.POST("/mcp", echo.WrapHandler(wrappedStreamable))
 

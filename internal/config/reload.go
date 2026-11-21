@@ -31,7 +31,7 @@ func Reload(configPath string, current *Config) (*Config, *ReloadResult, error) 
 	fields := []field{
 		{"server.host", false, newCfg.Server.Host != current.Server.Host},
 		{"server.port", false, newCfg.Server.Port != current.Server.Port},
-		// Routes wire HostGuard once at startup, so a change here needs a
+		// HostGuard is wired once at startup, so a change here needs a
 		// restart — and the operator must be told so, not left wondering why
 		// their new allowed host still 403s.
 		{"server.allowed_hosts", false, !slices.Equal(newCfg.Server.AllowedHosts, current.Server.AllowedHosts)},

@@ -22,6 +22,10 @@ services:
     environment:
       DATABASE_URL: "postgres://nanobrain:nanobrain@postgres:5432/nanobrain_dev?sslmode=disable"
       NANO_BRAIN_SERVER_HOST: "0.0.0.0"
+      # Names this container answers to. Without auth the daemon rejects any
+      # other Host header, so a container reaching it by service or container
+      # name must be listed here.
+      NANO_BRAIN_SERVER_ALLOWED_HOSTS: "localhost,127.0.0.1,::1,host.docker.internal,nano-brain,nanobrain-app"
       NANO_BRAIN_SERVER_PORT: "3100"
     depends_on:
       postgres:
