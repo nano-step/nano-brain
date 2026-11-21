@@ -119,9 +119,10 @@ func requestLoggingMiddleware(logger zerolog.Logger) echo.MiddlewareFunc {
 	}
 }
 
-// maxRequestBodyBytes bounds every request body. It matches the cap the MCP
-// transport sets for itself, and is far above the largest REST payload (a
-// document write is limited to defaultMaxFileSize of content).
+// maxRequestBodyBytes bounds every request body. The middleware is global, so
+// it also fronts /mcp and must not be lower than the cap the MCP transport
+// sets for itself (memory_write accepts 5 MB of content). It is far above the
+// largest REST payload (a document write is limited to defaultMaxFileSize).
 const maxRequestBodyBytes = 32 << 20 // 32 MiB
 
 // bodyLimitMiddleware refuses a body larger than limit before any handler or
@@ -134,7 +135,7 @@ func bodyLimitMiddleware(limit int64) echo.MiddlewareFunc {
 			if req.ContentLength > limit {
 				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "request body too large")
 			}
-			req.Body = http.MaxBytesReader(c.Response(), req.Body, limit)
+			req.Body = http.MaxBytesReader(c.Response().Writer, req.Body, limit)
 			return next(c)
 		}
 	}
