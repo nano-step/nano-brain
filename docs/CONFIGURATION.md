@@ -178,6 +178,23 @@ File system watcher for auto-reindexing.
 | `watcher.exclude_patterns` | []string | `[]` | Global glob patterns to exclude |
 | `watcher.allowed_extensions` | []string | `[]` | Global allowed file extensions (empty = all) |
 
+### Built-in safety filters
+
+These always apply and cannot be turned off by `exclude_patterns`, `allowed_extensions`, `.gitignore` or `.nano-brainignore` (including `!` negations):
+
+- **Symlinks leaving the workspace root are not indexed.** A file is read only if its real path (all symlinks resolved) lies inside the real path of the collection root. A symlink whose target is inside the same root is indexed as usual; a broken symlink is skipped. Symlinked directories are not followed. A document indexed by an earlier version for a symlink that leaves the root, or that can no longer be resolved, is removed on the next scan of its collection.
+- **Credential files are not indexed.** Matched on the file's base name, case-insensitively, at any depth:
+
+| Denied | Still indexed |
+|--------|---------------|
+| `.env`, `.env.*` | `.env.example`, `.env.sample`, `.env.template`, `.env.dist` (any `.env.*` ending in one of these) |
+| `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, and `<name>.*` of each | `*.pub` public keys (e.g. `id_ed25519.pub`) |
+| `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore` | |
+| `.npmrc`, `.netrc`, `.pgpass`, `.htpasswd`, `credentials` (exact name) | `credentials.md`, `credentials.go`, … |
+| `*.tfstate`, `*.tfstate.backup` | |
+
+A document indexed for a denied credential file by an earlier version is removed on the next scan of its collection.
+
 ### Per-workspace overrides
 
 Override filters per workspace directory:

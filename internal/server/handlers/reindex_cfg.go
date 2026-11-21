@@ -244,6 +244,14 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 }
 
 func processFile(ctx context.Context, workspace, absPath, codeRoot string, graphReg *graph.Registry, queries ReindexCFGQuerier) error {
+	// Same containment rule as the watcher: a symlink resolving outside the
+	// code root is not read (issue #655).
+	if codeRoot != "" {
+		if inside, _ := watcher.PathInsideRoot(codeRoot, absPath); !inside {
+			return fmt.Errorf("path resolves outside workspace root")
+		}
+	}
+
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		return fmt.Errorf("read: %w", err)

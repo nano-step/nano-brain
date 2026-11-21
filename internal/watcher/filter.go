@@ -173,6 +173,66 @@ var defaultExcludeFiles = map[string]bool{
 	"composer.lock":        true, // PHP (also .lock)
 }
 
+// Built-in credential deny list (issue #655). A file whose base name matches is
+// never indexed, whatever exclude_patterns / allowed_extensions / ignore files
+// say: the check runs before all of them and nothing after it can re-admit a
+// file. Names are compared lower-cased.
+//
+// credentialFileNames are exact base names.
+var credentialFileNames = map[string]bool{
+	".env":        true,
+	".npmrc":      true,
+	".netrc":      true,
+	".pgpass":     true,
+	".htpasswd":   true,
+	"credentials": true, // as in ~/.aws/credentials
+	"id_rsa":      true,
+	"id_dsa":      true,
+	"id_ecdsa":    true,
+	"id_ed25519":  true,
+}
+
+// credentialFileSuffixes deny any base name ending in one of them (*.pem, …).
+var credentialFileSuffixes = []string{
+	".pem", ".key", ".p12", ".pfx", ".jks", ".keystore",
+	".tfstate", ".tfstate.backup",
+}
+
+// sshKeyPrefixes deny "<name>.<anything>" (id_rsa.bak, id_rsa.old) except
+// "*.pub" public keys.
+var sshKeyPrefixes = []string{"id_rsa.", "id_dsa.", "id_ecdsa.", "id_ed25519."}
+
+// envDocSuffixes are the ".env.*" variants that are documentation, not secrets.
+var envDocSuffixes = []string{".example", ".sample", ".template", ".dist"}
+
+// isCredentialFile reports whether base (a file's base name) is on the built-in
+// credential deny list.
+func isCredentialFile(base string) bool {
+	name := strings.ToLower(base)
+	if credentialFileNames[name] {
+		return true
+	}
+	for _, suffix := range credentialFileSuffixes {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+	if strings.HasPrefix(name, ".env.") {
+		for _, suffix := range envDocSuffixes {
+			if strings.HasSuffix(name, suffix) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, prefix := range sshKeyPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return !strings.HasSuffix(name, ".pub")
+		}
+	}
+	return false
+}
+
 type FileFilter struct {
 	gitignoreMatcher  *gitignore.GitIgnore
 	globalIgnore      *gitignore.GitIgnore
@@ -241,6 +301,9 @@ func (f *FileFilter) shouldSkip(absPath string, isDir bool) bool {
 	if !isDir && len(parts) > 0 {
 		base := parts[len(parts)-1]
 		if defaultExcludeFiles[base] || strings.HasSuffix(base, ".lock") {
+			return true
+		}
+		if isCredentialFile(base) {
 			return true
 		}
 	}

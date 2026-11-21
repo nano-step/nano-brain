@@ -589,3 +589,127 @@ func mustWrite(t *testing.T, path, content string) {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
+
+// TestShouldSkip_CredentialDenyList covers the built-in credential deny list
+// (issue #655): matched on the base name, at any depth, case-insensitively.
+func TestShouldSkip_CredentialDenyList(t *testing.T) {
+	root := t.TempDir()
+	f, _ := NewFileFilter(root, nil, nil, nil)
+
+	cases := []struct {
+		rel  string
+		skip bool
+	}{
+		// .env, .env.*
+		{".env", true},
+		{".ENV", true},
+		{"services/api/.env", true},
+		{".env.local", true},
+		{"config/.env.production", true},
+		{".env.development.local", true},
+		{".env.example.local", true},
+		// id_rsa / id_dsa / id_ecdsa / id_ed25519 and "<name>.*"
+		{"id_rsa", true},
+		{"keys/id_rsa.bak", true},
+		{"id_dsa", true},
+		{"id_dsa.old", true},
+		{"id_ecdsa", true},
+		{"id_ecdsa.backup", true},
+		{"id_ed25519", true},
+		{"deploy/id_ed25519.orig", true},
+		{"ID_RSA", true},
+		// key material by suffix
+		{"cert.pem", true},
+		{"deploy/certs/server.key", true},
+		{"deploy/certs/SERVER.KEY", true},
+		{"store.p12", true},
+		{"signing.pfx", true},
+		{"android/release.jks", true},
+		{"android/debug.keystore", true},
+		// tool credential files
+		{".npmrc", true},
+		{"packages/web/.npmrc", true},
+		{".netrc", true},
+		{".pgpass", true},
+		{"nginx/.htpasswd", true},
+		{"credentials", true},
+		{"aws/credentials", true},
+		{"aws/Credentials", true},
+		// terraform state
+		{"terraform.tfstate", true},
+		{"infra/prod.tfstate", true},
+		{"terraform.tfstate.backup", true},
+		{"infra/prod.tfstate.backup", true},
+
+		// documentation variants and look-alikes stay indexable
+		{".env.example", false},
+		{"config/.env.sample", false},
+		{".env.template", false},
+		{".env.dist", false},
+		{".env.production.example", false},
+		{"id_rsa.pub", false},
+		{"id_dsa.pub", false},
+		{"id_ecdsa.pub", false},
+		{"id_ed25519.pub", false},
+		{"environment.md", false},
+		{"docs/keys.md", false},
+		{"monkey.go", false},
+		{"pem_parser.go", false},
+		{"credentials.md", false},
+		{"aws/credentials.go", false},
+		{"env.go", false},
+		{"dotenv.md", false},
+		{"key.go", false},
+		{"id_rsa_test.go", false},
+		{"tfstate.md", false},
+		{"netrc.go", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.rel, func(t *testing.T) {
+			path := filepath.Join(root, filepath.FromSlash(tc.rel))
+			if got := f.ShouldSkip(path, false); got != tc.skip {
+				t.Errorf("ShouldSkip(%q) = %v, want %v", tc.rel, got, tc.skip)
+			}
+		})
+	}
+}
+
+// A directory is never matched by the deny list (a package named "credentials"
+// must still be walked), and no per-workspace setting can re-admit a denied file.
+func TestShouldSkip_CredentialDenyList_NotOverridable(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".nano-brainignore"), []byte("!.env\n!*.pem\n!*.key\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("!.env\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := NewFileFilter(root, nil, []string{".env", ".pem", ".key", ".production", ".md"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name  string
+		rel   string
+		isDir bool
+		skip  bool
+	}{
+		{"allowed extension does not re-admit .env", ".env", false, true},
+		{"allowed extension does not re-admit .env.production", "config/.env.production", false, true},
+		{"allowed extension does not re-admit *.pem", "cert.pem", false, true},
+		{"ignore-file negation does not re-admit *.key", "deploy/server.key", false, true},
+		{"directory named credentials is walked", "internal/credentials", true, false},
+		{"directory named .env is walked", ".env", true, false},
+		{"allowed extension still admits ordinary files", "README.md", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(root, filepath.FromSlash(tc.rel))
+			if got := f.ShouldSkip(path, tc.isDir); got != tc.skip {
+				t.Errorf("ShouldSkip(%q, isDir=%v) = %v, want %v", tc.rel, tc.isDir, got, tc.skip)
+			}
+		})
+	}
+}

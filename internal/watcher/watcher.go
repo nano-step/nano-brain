@@ -811,10 +811,25 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 		return
 	}
 
-	info, err := os.Stat(filePath)
+	// Lstat first so a symlink is seen as one: its target must resolve inside
+	// the collection root before anything about it is stat'ed or read (#655).
+	info, err := os.Lstat(filePath)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("stat failed, skipping")
 		return
+	}
+	containmentChecked := false
+	if info.Mode()&os.ModeSymlink != 0 {
+		if w.escapesRoot(col.dirPath, filePath) {
+			w.cleanupIgnoredDocument(ctx, col, filePath)
+			return
+		}
+		containmentChecked = true
+		info, err = os.Stat(filePath)
+		if err != nil {
+			w.logger.Warn().Err(err).Str("file", filePath).Msg("stat failed, skipping")
+			return
+		}
 	}
 
 	if info.IsDir() {
@@ -851,6 +866,14 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 			Int64("size", info.Size()).
 			Int64("max", w.maxFileSize).
 			Msg("file exceeds max size, skipping")
+		return
+	}
+
+	// A regular file can still sit beneath a symlinked directory when the path
+	// did not come from WalkDir (which never descends into one). Checked here,
+	// after the unchanged-file fast path, so it costs nothing on a steady scan.
+	if !containmentChecked && w.escapesRoot(col.dirPath, filePath) {
+		w.cleanupIgnoredDocument(ctx, col, filePath)
 		return
 	}
 
@@ -1086,7 +1109,11 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		AliasMap: w.aliasIndexFor(col.dirPath).AliasMapFor(relFile),
 		Exists:   graph.DiskExistsChecker(col.dirPath),
 		ReadFile: func(workspaceRelPath string) ([]byte, error) {
-			return os.ReadFile(filepath.Join(col.dirPath, filepath.FromSlash(workspaceRelPath)))
+			p := filepath.Join(col.dirPath, filepath.FromSlash(workspaceRelPath))
+			if w.escapesRoot(col.dirPath, p) {
+				return nil, fmt.Errorf("%s resolves outside workspace root", workspaceRelPath)
+			}
+			return os.ReadFile(p)
 		},
 	}
 	edges, err := w.graphRegistry.ExtractEdgesForFrameworksWithImports(relFile, content, col.detectedFrameworks, ic)
@@ -1243,6 +1270,9 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 			if info, ierr := d.Info(); ierr == nil && info.Size() > w.maxFileSize {
 				return nil
 			}
+			if d.Type()&fs.ModeSymlink != 0 && w.escapesRoot(col.dirPath, path) {
+				return nil
+			}
 			content, err := os.ReadFile(path)
 			if err != nil {
 				return nil
@@ -1306,6 +1336,11 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 				return nil
 			}
 			if info, ierr := d.Info(); ierr == nil && info.Size() > w.maxFileSize {
+				return nil
+			}
+			// A symlink leaving the collection root is not admitted (#655), so the
+			// sweep below also removes graph rows a previous run extracted from it.
+			if d.Type()&fs.ModeSymlink != 0 && w.escapesRoot(col.dirPath, path) {
 				return nil
 			}
 			// Record every admitted file (in both stored forms — workspace-relative
@@ -1653,6 +1688,11 @@ func collectRubyContents(dirPath string) map[string][]byte {
 		}
 		if filepath.Ext(path) != ".rb" {
 			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			if inside, _ := PathInsideRoot(dirPath, path); !inside {
+				return nil
+			}
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
