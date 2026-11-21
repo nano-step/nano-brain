@@ -38,6 +38,7 @@ func registerMiddleware(s *Server) {
 		return mcp.HostGuard(allowedHosts, authEnabled, next)
 	}))
 	s.echo.Use(middleware.CSRF(fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)))
+	s.echo.Use(bodyLimitMiddleware(maxRequestBodyBytes))
 	s.echo.Use(middleware.Auth(authSnapshotFromConfig(s.fullCfg.Server.Auth), s.logger))
 	s.echo.HTTPErrorHandler = httpErrorHandler(s)
 }
@@ -118,6 +119,27 @@ func requestLoggingMiddleware(logger zerolog.Logger) echo.MiddlewareFunc {
 	}
 }
 
+// maxRequestBodyBytes bounds every request body. It matches the cap the MCP
+// transport sets for itself, and is far above the largest REST payload (a
+// document write is limited to defaultMaxFileSize of content).
+const maxRequestBodyBytes = 32 << 20 // 32 MiB
+
+// bodyLimitMiddleware refuses a body larger than limit before any handler or
+// middleware buffers it. A declared Content-Length over the limit is answered
+// with 413 at once; a body without one is cut off at the limit as it is read.
+func bodyLimitMiddleware(limit int64) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			req := c.Request()
+			if req.ContentLength > limit {
+				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "request body too large")
+			}
+			req.Body = http.MaxBytesReader(c.Response(), req.Body, limit)
+			return next(c)
+		}
+	}
+}
+
 func versionHeaderMiddleware(version string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -136,6 +158,10 @@ func workspaceMiddleware(db *sql.DB) echo.MiddlewareFunc {
 			if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
 				body, err := io.ReadAll(c.Request().Body)
 				if err != nil {
+					var tooLarge *http.MaxBytesError
+					if errors.As(err, &tooLarge) {
+						return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "request body too large")
+					}
 					return echo.NewHTTPError(http.StatusBadRequest, "failed to read request body")
 				}
 				c.Request().Body = io.NopCloser(bytes.NewReader(body))
