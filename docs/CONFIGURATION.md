@@ -186,7 +186,7 @@ These always apply. There is no opt-out: `exclude_patterns`, `allowed_extensions
 
 - A symlink that leaves the root is not indexed. It is logged at `warn` the first time it is seen in a process and at `debug` afterwards. To index shared files that live elsewhere, register their directory as its own collection.
 - A symlink to a file on the credential deny list below is not indexed, whatever the link is called (`docs/setup.md -> ../.env`).
-- A symlink to a file excluded by the built-in directory/lockfile excludes, the global or root-level `.nano-brainignore`, the root `.gitignore`, `exclude_patterns` or `allowed_extensions` is not indexed either (`readme2.md -> tok.txt` with `tok.txt` gitignored). `.gitignore` files in subdirectories are not consulted for the link's target.
+- A symlink to a file excluded by the built-in directory/lockfile excludes, the global or root-level `.nano-brainignore`, the root `.gitignore`, `exclude_patterns` or `allowed_extensions` is not indexed either (`readme2.md -> tok.txt` with `tok.txt` gitignored). `.gitignore` and `.nano-brainignore` files in subdirectories are not consulted for the link's target.
 - A symlink to another indexable file inside the root is indexed as usual.
 - A broken symlink is skipped. Symlinked directories are not followed.
 

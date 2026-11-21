@@ -244,13 +244,13 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 }
 
 func processFile(ctx context.Context, workspace, absPath, codeRoot string, filter *watcher.FileFilter, graphReg *graph.Registry, queries ReindexCFGQuerier) error {
-	// Same rule as the watcher: a symlink is read only if it resolves inside
-	// the code root, to a file the filter admits (issue #655). The returned
-	// error says which: outside the root, excluded target, or unresolvable.
-	if info, lerr := os.Lstat(absPath); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
-		if cerr := watcher.CheckResolvedPath(codeRoot, filter, absPath); cerr != nil {
-			return fmt.Errorf("symlink skipped: %w", cerr)
-		}
+	// Same rule as the watcher: a file is read only if it resolves inside the
+	// code root, to a file the filter admits (issue #655). Every path is
+	// checked, not only symlink leaves: the incremental run takes paths from
+	// stored documents, so one can sit under a directory that has since become
+	// a symlink leaving the root. The returned error says which case applied.
+	if cerr := watcher.CheckResolvedPath(codeRoot, filter, absPath); cerr != nil {
+		return fmt.Errorf("skipped: %w", cerr)
 	}
 
 	content, err := os.ReadFile(absPath)

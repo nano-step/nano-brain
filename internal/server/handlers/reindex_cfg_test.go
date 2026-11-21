@@ -195,8 +195,18 @@ func TestReindexCFG_SkipsSymlinksNotResolvingToAdmittedFiles(t *testing.T) {
 				}
 			}
 
+			// A stored document whose directory has since become a symlink
+			// leaving the root: the leaf is a regular file, the path is not.
+			if err := os.MkdirAll(filepath.Join(outside, "lib"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			write(filepath.Join(outside, "lib", "deep.js"))
+			if err := os.Symlink(filepath.Join(outside, "lib"), filepath.Join(root, "lib")); err != nil {
+				t.Fatal(err)
+			}
+
 			mq := &mockReindexCFGQuerier{collections: []sqlc.Collection{{Name: "code", Path: root}}}
-			for _, name := range []string{"app.js", "leak.js", "env.js", "broken.js", "alias.js"} {
+			for _, name := range []string{"app.js", "leak.js", "env.js", "broken.js", "alias.js", filepath.Join("lib", "deep.js")} {
 				mq.documents = append(mq.documents, sqlc.ListDocumentsByWorkspaceRow{Collection: "code", SourcePath: filepath.Join(root, name)})
 			}
 
