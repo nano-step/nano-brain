@@ -7,7 +7,9 @@ import (
 )
 
 // Postgres TEXT rejects 0x00, so no renderer may let a NUL from tool output
-// through to the document that gets persisted (#648).
+// through to the document that gets persisted (#648). The engine and OpenCode
+// SQLite renderers already sanitized message content; they are listed so all
+// five stay covered.
 func TestRenderers_StripNULBytes(t *testing.T) {
 	const text = "before\x00after"
 

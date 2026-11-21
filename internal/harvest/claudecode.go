@@ -473,6 +473,6 @@ func renderClaudeCodeMarkdown(sessionID string, msgs []claudeCodeMessage) string
 		}
 	}
 
-	return stripNUL(b.String())
+	return sanitizeText(b.String())
 }
 
