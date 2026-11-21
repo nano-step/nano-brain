@@ -264,3 +264,53 @@ func contains(slice []string, item string) bool {
 func testLogger() zerolog.Logger {
 	return zerolog.New(os.Stdout).Level(zerolog.Disabled)
 }
+
+// The since marker is read from a stored document. A value that is not a
+// commit id must never reach git, where "--output=<path>" would make
+// git log write a file (#656).
+func TestGitLogIgnoresSinceThatIsNotACommitID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available in PATH")
+	}
+
+	tmpDir := t.TempDir()
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmpDir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test Author",
+			"GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=Test Author",
+			"GIT_COMMITTER_EMAIL=test@example.com",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init")
+	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("content1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "file1.txt")
+	runGit("commit", "-m", "first commit")
+
+	h := &GitHarvester{logger: testLogger()}
+	for _, since := range []string{"--output=" + filepath.Join(tmpDir, "written-by-git"), "-p", "--all", "HEAD~1", "abc", "ABCDEF1", "deadbeef;x"} {
+		t.Run(since, func(t *testing.T) {
+			commits, err := h.gitLog(tmpDir, since, 0)
+			if err != nil {
+				t.Fatalf("gitLog failed: %v", err)
+			}
+			if len(commits) != 1 {
+				t.Errorf("got %d commits, want the full history (1)", len(commits))
+			}
+		})
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "written-by-git")); err == nil {
+		t.Error("git log wrote the file named in the since marker")
+	}
+}
