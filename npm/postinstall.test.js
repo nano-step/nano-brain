@@ -7,7 +7,10 @@ const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
-const { parseSHA256Line, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion } = require("./postinstall");
+const https = require("node:https");
+const { EventEmitter } = require("node:events");
+const { Readable } = require("node:stream");
+const { parseSHA256Line, isAllowedDownloadHost, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion } = require("./postinstall");
 const VERSION = require("../package.json").version;
 const isWin = os.platform() === "win32";
 
@@ -495,4 +498,256 @@ test("TestAutoLink_MacOS_TargetPath", (t) => {
 
   assert.ok(calls.some((c) => c.fn === "copyFileSync" && c.dst === targetPath), "should copy to ~/Library/nano-brain/bin/nano-brain");
   assert.ok(calls.some((c) => c.fn === "mkdirSync" && c.dir === targetDir), "should mkdir ~/Library/nano-brain/bin");
+});
+
+// --- #659: checksum verification fails closed; redirects stay on GitHub ---
+
+// Replace https.get with an in-memory responder so these tests never touch the
+// network. `respond(url)` returns { status, headers, body } or { error }.
+// Returns the list of requested URLs.
+const REAL_HTTPS_GET = https.get;
+function stubHttps(t, respond) {
+  const requested = [];
+  https.get = (url, opts, cb) => {
+    if (typeof opts === "function") cb = opts;
+    requested.push(String(url));
+    const req = new EventEmitter();
+    const r = respond(String(url));
+    setImmediate(() => {
+      if (r.error) return req.emit("error", r.error);
+      const res = Readable.from(r.body === undefined ? [] : [Buffer.from(r.body)]);
+      res.statusCode = r.status;
+      res.headers = r.headers || {};
+      cb(res);
+    });
+    return req;
+  };
+  t.after(() => { https.get = REAL_HTTPS_GET; });
+  return requested;
+}
+
+// Force ensureBinary() down the download path: move any real binary aside and
+// restore it afterwards, removing whatever the test installed.
+function withoutInstalledBinary(t) {
+  const bin = binaryPath();
+  const backup = `${bin}.itest659.bak`;
+  const hadReal = fs.existsSync(bin);
+  if (hadReal) fs.renameSync(bin, backup);
+  t.after(() => {
+    safeUnlink(bin);
+    if (hadReal) fs.renameSync(backup, bin);
+  });
+  return bin;
+}
+
+function captureStderr(t) {
+  const lines = [];
+  const realError = console.error;
+  console.error = (...args) => lines.push(args.join(" "));
+  t.after(() => { console.error = realError; });
+  return lines;
+}
+
+// main() and ensureBinary() key off err.message starting with "SECURITY:", so
+// assert on the message itself (assert.rejects' regex form matches String(err)).
+function securityError(re) {
+  return (err) => {
+    assert.ok(err.message.startsWith("SECURITY:"), err.message);
+    assert.match(err.message, re);
+    return true;
+  };
+}
+
+// Redirect the first request only; anything requested after that is served,
+// so code that wrongly follows the redirect fails an assertion instead of
+// looping forever.
+function redirectOnce(location) {
+  let first = true;
+  return () => {
+    if (!first) return { status: 200, body: "followed" };
+    first = false;
+    return { status: 302, headers: { location } };
+  };
+}
+
+const FAKE_BINARY = "fake nano-brain binary for #659 tests\n";
+const FAKE_BINARY_SHA = crypto.createHash("sha256").update(FAKE_BINARY).digest("hex");
+const ASSET_NAME = `nano-brain-${getPlatformKey()}${platformExtension()}`;
+const isAssetURL = (url) => url.endsWith(`/${ASSET_NAME}`);
+const isSumsURL = (url) => url.endsWith("/SHA256SUMS");
+
+test("ensureBinary: missing SHA256SUMS is a SECURITY failure and leaves no binary (#659)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  stubHttps(t, (url) => (isAssetURL(url) ? { status: 200, body: FAKE_BINARY } : { status: 404 }));
+
+  await assert.rejects(() => ensureBinary(), (err) => {
+    assert.match(err.message, /^SECURITY: cannot verify /);
+    assert.match(err.message, /SHA256SUMS could not be downloaded \(Download failed: HTTP 404\)/);
+    assert.match(err.message, /NANO_BRAIN_SKIP_SHA_VERIFY=1/);
+    assert.match(err.message, /go build/);
+    return true;
+  });
+  assert.strictEqual(fs.existsSync(bin), false, "unverified binary must not stay installed");
+  assert.strictEqual(fs.existsSync(`${bin}.SHA256SUMS.tmp`), false);
+});
+
+test("ensureBinary: SHA256SUMS network error is a SECURITY failure and leaves no binary (#659)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  stubHttps(t, (url) => (isAssetURL(url) ? { status: 200, body: FAKE_BINARY } : { error: new Error("ECONNRESET") }));
+
+  await assert.rejects(() => ensureBinary(), securityError(/cannot verify .*ECONNRESET/));
+  assert.strictEqual(fs.existsSync(bin), false);
+});
+
+test("ensureBinary: asset not listed in SHA256SUMS is a SECURITY failure and leaves no binary (#659)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) return { status: 200, body: `${FAKE_BINARY_SHA}  nano-brain-some-other-platform\n` };
+    return { status: 404 };
+  });
+
+  await assert.rejects(() => ensureBinary(), (err) => {
+    assert.match(err.message, /^SECURITY: cannot verify /);
+    assert.ok(err.message.includes(`SHA256SUMS has no entry for ${ASSET_NAME}`), err.message);
+    return true;
+  });
+  assert.strictEqual(fs.existsSync(bin), false, "unverified binary must not stay installed");
+});
+
+test("ensureBinary: NANO_BRAIN_SKIP_SHA_VERIFY installs without SHA256SUMS and warns (#659)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  const stderr = captureStderr(t);
+  const prev = process.env.NANO_BRAIN_SKIP_SHA_VERIFY;
+  process.env.NANO_BRAIN_SKIP_SHA_VERIFY = "1";
+  t.after(() => {
+    if (prev === undefined) delete process.env.NANO_BRAIN_SKIP_SHA_VERIFY;
+    else process.env.NANO_BRAIN_SKIP_SHA_VERIFY = prev;
+  });
+  const requested = stubHttps(t, (url) => (isAssetURL(url) ? { status: 200, body: FAKE_BINARY } : { status: 404 }));
+
+  assert.strictEqual(await ensureBinary(), bin);
+  assert.strictEqual(fs.readFileSync(bin, "utf8"), FAKE_BINARY);
+  assert.ok(stderr.some((l) => l.includes("NANO_BRAIN_SKIP_SHA_VERIFY is set")), "must warn that verification is skipped");
+  assert.ok(!requested.some(isSumsURL), "opt-out must not fetch SHA256SUMS");
+});
+
+test("ensureBinary: verified install through a GitHub-only redirect chain (#659)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  const cdn = "https://release-assets.githubusercontent.com/github-production-release-asset/1/";
+  const requested = stubHttps(t, (url) => {
+    if (url.startsWith("https://github.com/") && isAssetURL(url)) {
+      return { status: 302, headers: { location: "https://objects.githubusercontent.com/hop/bin" } };
+    }
+    if (url === "https://objects.githubusercontent.com/hop/bin") return { status: 307, headers: { location: `${cdn}bin` } };
+    if (url === `${cdn}bin`) return { status: 200, body: FAKE_BINARY };
+    if (url.startsWith("https://github.com/") && isSumsURL(url)) return { status: 301, headers: { location: `${cdn}sums` } };
+    if (url === `${cdn}sums`) return { status: 200, body: `${FAKE_BINARY_SHA}  ${ASSET_NAME}\n` };
+    return { status: 404 };
+  });
+
+  assert.strictEqual(await ensureBinary(), bin);
+  assert.strictEqual(fs.readFileSync(bin, "utf8"), FAKE_BINARY);
+  assert.ok(requested.includes(`${cdn}bin`) && requested.includes(`${cdn}sums`));
+});
+
+test("ensureBinary: binary redirected off GitHub is a SECURITY failure, target never requested (#659)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  const requested = stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 302, headers: { location: "https://evil.example.com/nano-brain" } };
+    return { status: 200, body: FAKE_BINARY };
+  });
+
+  await assert.rejects(() => ensureBinary(), securityError(/refusing redirect .* to https:\/\/evil\.example\.com/));
+  assert.strictEqual(fs.existsSync(bin), false);
+  assert.ok(!requested.some((u) => u.includes("evil.example.com")), "must not contact the redirect target");
+});
+
+for (const fn of [download, downloadWithHash]) {
+  test(`${fn.name}: redirect to a non-GitHub host is a SECURITY failure (#659)`, async (t) => {
+    const dest = path.join(os.tmpdir(), `nb-redir-host-${fn.name}-${process.pid}-${Date.now()}`);
+    for (const location of [
+      "https://evil.example.com/x",
+      "https://githubusercontent.com.evil.example.com/x",
+      "https://evilgithubusercontent.com/x",
+      "https://github.com.evil.example.com/x",
+      "//evil.example.com/x",
+    ]) {
+      const requested = stubHttps(t, redirectOnce(location));
+      await assert.rejects(() => fn("https://github.com/o/r/releases/download/v1/x", dest), securityError(/refusing redirect/), location);
+      assert.strictEqual(requested.length, 1, `must not follow ${location}`);
+      assert.strictEqual(fs.existsSync(dest), false);
+    }
+  });
+
+  test(`${fn.name}: http:// redirect is a SECURITY failure even on a GitHub host (#659)`, async (t) => {
+    const dest = path.join(os.tmpdir(), `nb-redir-http-${fn.name}-${process.pid}-${Date.now()}`);
+    const requested = stubHttps(t, redirectOnce("http://objects.githubusercontent.com/x"));
+    await assert.rejects(() => fn("https://github.com/o/r/releases/download/v1/x", dest), securityError(/refusing redirect .* to http:\/\//));
+    assert.strictEqual(requested.length, 1);
+    assert.strictEqual(fs.existsSync(dest), false);
+  });
+
+  test(`${fn.name}: follows at most 5 redirects (#659)`, async (t) => {
+    const dest = path.join(os.tmpdir(), `nb-redir-cap-${fn.name}-${process.pid}-${Date.now()}`);
+    t.after(() => safeUnlink(dest));
+    const chain = (hops) => (url) => {
+      const n = Number(new URL(url).searchParams.get("n") || 0);
+      if (n < hops) return { status: 302, headers: { location: `https://objects.githubusercontent.com/x?n=${n + 1}` } };
+      return { status: 200, body: "ok" };
+    };
+
+    const tooMany = stubHttps(t, chain(6));
+    await assert.rejects(() => fn("https://github.com/x", dest), (err) => {
+      assert.match(err.message, /too many redirects/);
+      return true;
+    });
+    assert.strictEqual(tooMany.length, 6, "initial request + 5 followed redirects, the 6th is refused");
+    assert.strictEqual(fs.existsSync(dest), false);
+
+    stubHttps(t, chain(5));
+    await fn("https://github.com/x", dest);
+    assert.strictEqual(fs.readFileSync(dest, "utf8"), "ok");
+  });
+
+  test(`${fn.name}: follows 303/307/308 and resolves a relative Location (#659)`, async (t) => {
+    const dest = path.join(os.tmpdir(), `nb-redir-rel-${fn.name}-${process.pid}-${Date.now()}`);
+    t.after(() => safeUnlink(dest));
+    const requested = stubHttps(t, (url) => {
+      if (url === "https://github.com/a/b") return { status: 303, headers: { location: "/c/d" } };
+      if (url === "https://github.com/c/d") return { status: 308, headers: { location: "https://Objects.GitHubUserContent.com/e" } };
+      if (url === "https://objects.githubusercontent.com/e") return { status: 307, headers: { location: "f" } };
+      if (url === "https://objects.githubusercontent.com/f") return { status: 200, body: "ok" };
+      return { status: 404 };
+    });
+    await fn("https://github.com/a/b", dest);
+    assert.deepStrictEqual(requested, [
+      "https://github.com/a/b",
+      "https://github.com/c/d",
+      "https://objects.githubusercontent.com/e",
+      "https://objects.githubusercontent.com/f",
+    ]);
+    assert.strictEqual(fs.readFileSync(dest, "utf8"), "ok");
+  });
+
+  test(`${fn.name}: redirect without Location rejects (#659)`, async (t) => {
+    const dest = path.join(os.tmpdir(), `nb-redir-noloc-${fn.name}-${process.pid}-${Date.now()}`);
+    stubHttps(t, redirectOnce(undefined));
+    await assert.rejects(() => fn("https://github.com/x", dest), /redirect without a Location/);
+    assert.strictEqual(fs.existsSync(dest), false);
+  });
+}
+
+test("isAllowedDownloadHost: github.com and *.githubusercontent.com only (#659)", () => {
+  for (const h of ["github.com", "GitHub.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "raw.githubusercontent.com"]) {
+    assert.strictEqual(isAllowedDownloadHost(h), true, h);
+  }
+  for (const h of ["githubusercontent.com", "api.github.com", "evilgithub.com", "github.com.evil.example.com", "evilgithubusercontent.com", "example.com", ""]) {
+    assert.strictEqual(isAllowedDownloadHost(h), false, h);
+  }
 });

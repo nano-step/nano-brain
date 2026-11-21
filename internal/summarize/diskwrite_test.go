@@ -3,6 +3,7 @@ package summarize
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -214,5 +215,56 @@ func TestResolveCollision_DifferentSessionIDsProduceDifferentSuffixes(t *testing
 	// Both should be different from original
 	if got1 == filePath || got2 == filePath {
 		t.Errorf("ResolveCollision returned original path")
+	}
+}
+
+// #659: summaries can contain transcript content, so neither the files nor the
+// directories created for them may be readable by group or other. Assert on
+// the absence of those bits (not an exact mode) so a restrictive umask passes.
+func TestEnsureDir_NewDirsNotGroupOrWorldAccessible(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "ws", "nested", "file.md")
+
+	if err := EnsureDir(filePath); err != nil {
+		t.Fatalf("EnsureDir error: %v", err)
+	}
+
+	for _, created := range []string{filepath.Join(dir, "ws"), filepath.Join(dir, "ws", "nested")} {
+		info, err := os.Stat(created)
+		if err != nil {
+			t.Fatalf("stat %q: %v", created, err)
+		}
+		if perm := info.Mode().Perm(); perm&0o077 != 0 {
+			t.Errorf("dir %q mode = %o, want no group/other bits (0700)", created, perm)
+		}
+		if perm := info.Mode().Perm(); perm&0o700 != 0o700 {
+			t.Errorf("dir %q mode = %o, want owner rwx", created, perm)
+		}
+	}
+}
+
+func TestWriteFileAtomic_FileNotGroupOrWorldAccessible(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "summary.md")
+
+	if err := WriteFileAtomic(filePath, []byte("# transcript-derived summary\n")); err != nil {
+		t.Fatalf("WriteFileAtomic error: %v", err)
+	}
+
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm&0o077 != 0 {
+		t.Errorf("file mode = %o, want no group/other bits (0600)", perm)
+	}
+	if perm := info.Mode().Perm(); perm&0o600 != 0o600 {
+		t.Errorf("file mode = %o, want owner rw", perm)
 	}
 }
