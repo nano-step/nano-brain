@@ -74,13 +74,24 @@ func validateBasic(encoded string, users []AuthUser) (string, bool) {
 	}
 	username, password := parts[0], parts[1]
 
+	if len(users) == 0 {
+		return "", false
+	}
+
+	// Always pay for exactly one bcrypt comparison. An unknown username is
+	// checked against the first user's hash and the result discarded, so the
+	// response time does not reveal which usernames exist.
+	hash := users[0].PasswordHash
+	matched := false
 	for _, u := range users {
-		if subtle.ConstantTimeCompare([]byte(u.Username), []byte(username)) == 1 {
-			if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) == nil {
-				return username, true
-			}
-			return "", false
+		if !matched && subtle.ConstantTimeCompare([]byte(u.Username), []byte(username)) == 1 {
+			hash = u.PasswordHash
+			matched = true
 		}
+	}
+	passwordOK := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+	if matched && passwordOK {
+		return username, true
 	}
 	return "", false
 }

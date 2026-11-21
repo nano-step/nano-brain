@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
@@ -203,3 +204,62 @@ func TestAuth_MultipleUsers(t *testing.T) {
 	}
 }
 
+// cheapHash keeps the direct validateBasic tests fast under -race; the cost
+// only has to be large next to a code path that skips bcrypt entirely.
+func cheapHash(t *testing.T, pw string) string {
+	t.Helper()
+	h, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(h)
+}
+
+func TestValidateBasic_UnknownUserRejected(t *testing.T) {
+	users := []AuthUser{{Username: "admin", PasswordHash: cheapHash(t, "secret")}}
+	tests := []struct {
+		name, user, pass string
+		wantOK           bool
+	}{
+		{"valid credentials", "admin", "secret", true},
+		{"wrong password", "admin", "wrong", false},
+		{"unknown user", "nobody", "wrong", false},
+		{"unknown user with the first user's password", "nobody", "secret", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := base64.StdEncoding.EncodeToString([]byte(tt.user + ":" + tt.pass))
+			principal, ok := validateBasic(encoded, users)
+			if ok != tt.wantOK {
+				t.Fatalf("validateBasic ok = %v, want %v", ok, tt.wantOK)
+			}
+			if ok && principal != tt.user {
+				t.Errorf("principal = %q, want %q", principal, tt.user)
+			}
+		})
+	}
+}
+
+// An unknown username must cost a bcrypt comparison, like a wrong password
+// does, so response time does not reveal which usernames exist (#271).
+func TestValidateBasic_UnknownUserPaysBcryptCost(t *testing.T) {
+	users := []AuthUser{{Username: "admin", PasswordHash: cheapHash(t, "secret")}}
+	fastest := func(user string) time.Duration {
+		encoded := base64.StdEncoding.EncodeToString([]byte(user + ":wrong"))
+		best := time.Duration(0)
+		for i := 0; i < 3; i++ {
+			start := time.Now()
+			validateBasic(encoded, users)
+			if d := time.Since(start); best == 0 || d < best {
+				best = d
+			}
+		}
+		return best
+	}
+
+	wrongPassword := fastest("admin")
+	unknownUser := fastest("nobody")
+	if unknownUser < wrongPassword/2 {
+		t.Errorf("unknown user took %v, wrong password took %v: timing reveals valid usernames", unknownUser, wrongPassword)
+	}
+}
