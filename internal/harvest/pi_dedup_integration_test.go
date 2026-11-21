@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -87,5 +88,55 @@ func TestPiHarvester_PresenceBasedSkip(t *testing.T) {
 	}
 	if skipped < 1 {
 		t.Errorf("second cycle skipped=%d, want >=1", skipped)
+	}
+}
+
+// TestPiHarvester_NULByteInToolResult proves a session whose tool output
+// contains a NUL character is still persisted: Postgres TEXT rejects 0x00, so
+// before #648 the upsert failed and the whole session was lost on every cycle.
+func TestPiHarvester_NULByteInToolResult(t *testing.T) {
+	pool := testutil.SetupTestDB(t)
+	db := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() { _ = db.Close() })
+	q := sqlc.New(db)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	wsHash, err := storage.WorkspaceHash(dir)
+	if err != nil {
+		t.Fatalf("workspace hash: %v", err)
+	}
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{Hash: wsHash, Path: dir, Name: "pi-nul-test"}); err != nil {
+		t.Fatalf("register workspace: %v", err)
+	}
+
+	header, _ := json.Marshal(map[string]any{
+		"type": "session", "version": 3, "id": "pi-ses-nul", "timestamp": "2026-01-01T10:00:00Z", "cwd": dir,
+	})
+	msg, _ := json.Marshal(map[string]any{
+		"type": "message", "timestamp": "2026-01-01T10:00:01Z",
+		"message": map[string]any{"role": "toolResult", "content": []map[string]any{{"type": "text", "text": "binary\x00output"}}},
+	})
+	content := append(header, '\n')
+	content = append(content, msg...)
+	content = append(content, '\n')
+	if err := os.WriteFile(filepath.Join(dir, "2026-01-01T10-00-00_pi-ses-nul.jsonl"), content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewPiHarvester(db, zerolog.Nop(), dir, wsHash)
+	if _, _, errCount := h.HarvestAll(ctx, nil); errCount != 0 {
+		t.Fatalf("HarvestAll errCount = %d, want 0", errCount)
+	}
+
+	doc, err := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    piSourcePath("pi-ses-nul"),
+		WorkspaceHash: wsHash,
+	})
+	if err != nil {
+		t.Fatalf("session was not persisted: %v", err)
+	}
+	if !strings.Contains(doc.Content, "binaryoutput") {
+		t.Errorf("persisted content lost the text around the NUL byte: %q", doc.Content)
 	}
 }
