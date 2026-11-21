@@ -1,6 +1,11 @@
 package config
 
-import "testing"
+import (
+	"encoding/json"
+	"reflect"
+	"strings"
+	"testing"
+)
 
 func TestRedactSecrets_StripsAuthFields(t *testing.T) {
 	cfg := getDefaults()
@@ -39,5 +44,57 @@ func TestRedactSecrets_PreservesOriginal(t *testing.T) {
 	}
 	if len(cfg.Server.Auth.Tokens) != 1 {
 		t.Error("original Tokens should be unchanged")
+	}
+}
+
+// fillStrings sets every string field reachable from v to "SECRET:<dot.path>"
+// and returns the dot-paths whose key name looks like a credential.
+func fillStrings(v reflect.Value, prefix string, credentialPaths *[]string) {
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Type().Field(i)
+		name := field.Tag.Get("koanf")
+		if name == "" {
+			continue
+		}
+		path := strings.TrimPrefix(prefix+"."+name, ".")
+		switch f := v.Field(i); f.Kind() {
+		case reflect.Struct:
+			fillStrings(f, path, credentialPaths)
+		case reflect.String:
+			f.SetString("SECRET:" + path)
+			if strings.Contains(name, "api_key") || strings.Contains(name, "token") || strings.Contains(name, "password") || strings.Contains(name, "secret") {
+				*credentialPaths = append(*credentialPaths, path)
+			}
+		}
+	}
+}
+
+// Every credential-named string field in Config must be listed in
+// SecretFieldPaths and blanked by RedactSecrets. Walking the struct means a
+// new api_key field cannot be added without this test failing (#651).
+func TestRedactSecrets_CoversEveryCredentialField(t *testing.T) {
+	cfg := getDefaults()
+	var credentialPaths []string
+	fillStrings(reflect.ValueOf(cfg).Elem(), "", &credentialPaths)
+	if len(credentialPaths) < 7 {
+		t.Fatalf("found only %d credential fields %v; the struct walk is broken", len(credentialPaths), credentialPaths)
+	}
+
+	out, err := json.Marshal(RedactSecrets(cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range credentialPaths {
+		t.Run(path, func(t *testing.T) {
+			if !IsSecretFieldPath(path) {
+				t.Errorf("%s is not in SecretFieldPaths", path)
+			}
+			if strings.Contains(string(out), `"SECRET:`+path+`"`) {
+				t.Errorf("%s survives RedactSecrets", path)
+			}
+		})
+	}
+	if strings.Contains(string(out), `"SECRET:database.url"`) {
+		t.Error("database.url survives RedactSecrets")
 	}
 }
