@@ -10,18 +10,19 @@ import (
 )
 
 // ensureDir creates the parent directory of filePath (and all intermediate
-// dirs) with mode 0o755. Returns nil if the directory already exists.
+// dirs) with mode 0o700. Returns nil if the directory already exists.
 func EnsureDir(filePath string) error {
 	dir := filepath.Dir(filePath)
-	return os.MkdirAll(dir, 0o755)
+	return os.MkdirAll(dir, 0o700)
 }
 
-// writeFileAtomic writes content to path atomically: write to path+".tmp",
-// fsync the tmp file, then os.Rename to final path. Prevents partial files
-// on crash. Caller must ensure parent dir exists (call ensureDir first).
+// writeFileAtomic writes content to path atomically: write to path+".tmp"
+// (created with mode 0o600), fsync the tmp file, then os.Rename to final
+// path. Prevents partial files on crash. Caller must ensure parent dir exists
+// (call ensureDir first).
 func WriteFileAtomic(path string, content []byte) error {
 	tmpPath := path + ".tmp"
-	f, err := os.Create(tmpPath)
+	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("create tmp: %w", err)
 	}
