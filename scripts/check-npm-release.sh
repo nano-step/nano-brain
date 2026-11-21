@@ -164,37 +164,30 @@ run_gate() {
     add_check "PASS" "1.2 release.yml not in-progress"
 
     # --- Check 1.3: npm version matches GH tag ---
-    local npm_version=""
-    npm_version=$(npm view @nano-step/nano-brain version 2>/dev/null || true)
+    local npm_scoped_version=""
+    local npm_unscoped_version=""
+    npm_scoped_version=$(npm view @nano-step/nano-brain version 2>/dev/null || true)
+    npm_unscoped_version=$(npm view nano-brain version 2>/dev/null || true)
 
-    # Strip leading 'v' from tag for comparison
-    local tag_version="${gh_tag#v}"
+    # Normalize leading 'v' and leading zeros per dot-segment (e.g. v2026.9.0703 -> 2026.9.703)
+    local tag_version
+    tag_version=$(printf '%s' "${gh_tag#v}" | awk -F. '{for(i=1;i<=NF;i++){sub(/^0+/,"",$i); if($i=="")$i="0"} print}' OFS=.)
 
-    if [[ -z "$npm_version" ]]; then
+    if [[ -z "$npm_scoped_version" || -z "$npm_unscoped_version" ]]; then
         add_check "FAIL" "1.3 npm version matches GH tag"
         GATE_STATUS="FAIL"
-        INSTRUCTIONS="Could not fetch npm version for @nano-step/nano-brain. The release workflow may not have run yet or npm publish may have failed.
-
-Check release workflow status:
-  gh run list --workflow=release.yml
-
-If the workflow failed, check the logs:
-  gh run view --log-failed
-
-To re-trigger: re-push the tag or fix the release workflow and push a new tag.
+        INSTRUCTIONS="Could not fetch npm version (@nano-step/nano-brain='${npm_scoped_version}', nano-brain='${npm_unscoped_version}').
 Expected npm version: $tag_version (from GH tag: $gh_tag)"
         return
     fi
 
-    if [[ "$tag_version" == "$npm_version" ]]; then
+    if [[ "$tag_version" == "$npm_scoped_version" && "$tag_version" == "$npm_unscoped_version" ]]; then
         add_check "PASS" "1.3 npm version matches GH tag"
         GATE_STATUS="PASS"
     else
         add_check "FAIL" "1.3 npm version matches GH tag"
         GATE_STATUS="FAIL"
-        INSTRUCTIONS="npm version ($npm_version) does not match GH tag ($gh_tag / $tag_version).
-
-The release workflow may still be running or may have failed.
+        INSTRUCTIONS="npm versions (@nano-step/nano-brain=$npm_scoped_version, nano-brain=$npm_unscoped_version) do not match GH tag ($gh_tag -> $tag_version).
 
 Steps to diagnose:
 1. Check recent workflow runs:
@@ -202,9 +195,8 @@ Steps to diagnose:
 2. View logs for the latest run:
      gh run view --log-failed
 3. If in_progress: wait ~2 min and re-run this gate.
-4. If failed: check the release.yml logs, fix the issue, then either:
-   - Re-push the existing tag: git push origin $gh_tag
-   - Or push a new commit to master (auto-tag will create a new tag)"
+4. If failed: fix the issue or re-run npm publish via:
+     gh workflow run release.yml -f tag=$gh_tag"
     fi
 }
 

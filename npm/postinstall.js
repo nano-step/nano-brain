@@ -287,6 +287,19 @@ function binaryPath() {
   return path.join(__dirname, binName);
 }
 
+function binaryMatchesVersion(output, expectedVersion) {
+  if (typeof output !== "string" || typeof expectedVersion !== "string") return false;
+  try {
+    const parsed = JSON.parse(output.trim());
+    if (parsed && typeof parsed.version === "string") {
+      return normalizeVersion(parsed.version) === normalizeVersion(expectedVersion);
+    }
+  } catch (_) {
+    // Fall back to raw check when output is not JSON
+  }
+  return output.includes(expectedVersion);
+}
+
 // Download-and-verify the platform binary to binaryPath() and return that path.
 // THROWS on failure (never calls process.exit) so both the install-time caller
 // (main) and the run-time caller (run.js) can choose their own exit behavior.
@@ -305,7 +318,7 @@ async function ensureBinary() {
   if (fs.existsSync(binPath)) {
     try {
       const output = execFileSync(binPath, ["version", "--json"], { timeout: 5000 }).toString();
-      if (output.includes(VERSION)) {
+      if (binaryMatchesVersion(output, VERSION)) {
         return binPath;
       }
       console.error("Existing nano-brain binary is a different version; re-downloading.");
@@ -384,4 +397,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parseSHA256Line, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink, ensureBinary, binaryPath, getPlatformKey, platformExtension };
+module.exports = { parseSHA256Line, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion };
