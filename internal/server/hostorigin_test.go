@@ -258,3 +258,39 @@ func TestWildcardBindSameOriginAllowed(t *testing.T) {
 		}
 	}
 }
+
+// The order is guard, then CSRF, then auth. Each case sends a request that
+// two of them would reject and checks which one answered, so swapping any pair
+// in registerMiddleware fails here.
+func TestHostOriginMiddlewareOrder(t *testing.T) {
+	authOn := config.AuthConfig{Enabled: true, Tokens: []string{"test-token"}}
+	tests := []struct {
+		name       string
+		auth       config.AuthConfig
+		host       string
+		origin     string
+		wantStatus int
+		wantBody   string
+	}{
+		{"guard answers before CSRF", config.AuthConfig{}, "evil.example", "http://evil.example", http.StatusForbidden, "server.allowed_hosts"},
+		{"guard answers before auth", authOn, "evil.example", "", http.StatusForbidden, "server.allowed_hosts"},
+		{"CSRF answers before auth", authOn, "localhost:3100", "http://evil.example", http.StatusForbidden, "CSRF"},
+		{"auth answers last", authOn, "localhost:3100", "", http.StatusUnauthorized, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newGuardTestServer(t, tt.auth)
+			req := httptest.NewRequest(http.MethodPost, "/api/reload-config", nil)
+			req.Host = tt.host
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			rec := httptest.NewRecorder()
+			s.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus || !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Errorf("status %d body %q, want %d containing %q", rec.Code, rec.Body.String(), tt.wantStatus, tt.wantBody)
+			}
+		})
+	}
+}
