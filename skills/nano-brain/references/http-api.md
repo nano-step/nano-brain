@@ -208,4 +208,4 @@ If `vsearch` or `query` is slow, ollama is the bottleneck — check `embedding.u
 
 ## Auth
 
-There is no auth in v1. The daemon binds to `localhost` by default. For multi-user or remote setups, front it with a reverse proxy that adds auth (nginx, Caddy, Cloudflare Tunnel, etc.) — but the standard model is **one daemon per developer machine**, not shared.
+There is no auth in v1. The daemon binds to `localhost` by default. For multi-user or remote setups, front it with a reverse proxy that adds auth (nginx, Caddy, Cloudflare Tunnel, etc.) and add the public hostname to `server.allowed_hosts`, otherwise the daemon answers `403` to the forwarded `Host` header — but the standard model is **one daemon per developer machine**, not shared.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -119,6 +120,10 @@ func TestProvisionPostgres(t *testing.T) {
 		if (*calls)[0].args[0] != "run" {
 			t.Errorf("expected first call to be 'run', got %q", (*calls)[0].args[0])
 		}
+		// The default password is public, so the port must stay on loopback (#658).
+		if !slices.Contains((*calls)[0].args, "127.0.0.1:5432:5432") {
+			t.Errorf("run args %v do not publish Postgres on 127.0.0.1 only", (*calls)[0].args)
+		}
 	})
 
 	t.Run("name-conflict path - docker start recovers", func(t *testing.T) {
@@ -177,12 +182,12 @@ func TestProvisionPostgres(t *testing.T) {
 		// listens on 5432 inside the image — review CR-03).
 		found5433 := false
 		for _, a := range (*calls)[2].args {
-			if a == "5433:5432" {
+			if a == "127.0.0.1:5433:5432" {
 				found5433 = true
 			}
 		}
 		if !found5433 {
-			t.Errorf("retry run args %v do not contain -p 5433:5432", (*calls)[2].args)
+			t.Errorf("retry run args %v do not contain -p 127.0.0.1:5433:5432", (*calls)[2].args)
 		}
 	})
 

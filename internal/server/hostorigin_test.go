@@ -272,7 +272,7 @@ func TestHostOriginMiddlewareOrder(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		{"guard answers before CSRF", config.AuthConfig{}, "evil.example", "http://evil.example", http.StatusForbidden, "server.allowed_hosts"},
+		{"guard answers before CSRF", config.AuthConfig{}, "evil.example", "http://other.example", http.StatusForbidden, "server.allowed_hosts"},
 		{"guard answers before auth", authOn, "evil.example", "", http.StatusForbidden, "server.allowed_hosts"},
 		{"CSRF answers before auth", authOn, "localhost:3100", "http://evil.example", http.StatusForbidden, "CSRF"},
 		{"auth answers last", authOn, "localhost:3100", "", http.StatusUnauthorized, ""},
