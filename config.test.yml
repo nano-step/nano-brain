@@ -10,10 +10,12 @@ embedding:
   url: "http://host.docker.internal:11434"
   model: "nomic-embed-text"
 
+# Disabled so a test server does not call the provider without credentials.
+# To exercise code summarization, set enabled: true locally (do not commit it)
+# and export NANO_BRAIN_CODE_SUMMARIZE_API_KEY. Never put the key in this file.
 code_summarization:
-  enabled: true
+  enabled: false
   provider_url: "https://ai-proxy.thnkandgrow.com/v1"
-  api_key: "sk-3311e2b466e8b372-wftr7k-6f873ed9"
   model: "nano-brain"
   batch_size: 20
   concurrency: 2
