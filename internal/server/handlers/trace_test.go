@@ -17,28 +17,28 @@ import (
 // mockTraceQuerier implements handlers.TraceQuerier for unit tests.
 type mockTraceQuerier struct {
 	// outgoing maps exact source_node -> edges returned by GetOutgoingEdges
-	outgoing map[string][]sqlc.GraphEdge
+	outgoing map[string][]sqlc.GraphEdgeView
 	// bySymbol maps symbol (bare or exact) -> edges returned by GetOutgoingEdgesBySymbol
-	bySymbol map[string][]sqlc.GraphEdge
+	bySymbol map[string][]sqlc.GraphEdgeView
 }
 
-func (m *mockTraceQuerier) GetOutgoingEdges(_ context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdge, error) {
+func (m *mockTraceQuerier) GetOutgoingEdges(_ context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdgeView, error) {
 	return m.outgoing[arg.SourceNode], nil
 }
 
-func (m *mockTraceQuerier) GetOutgoingEdgesBySymbol(_ context.Context, arg sqlc.GetOutgoingEdgesBySymbolParams) ([]sqlc.GraphEdge, error) {
+func (m *mockTraceQuerier) GetOutgoingEdgesBySymbol(_ context.Context, arg sqlc.GetOutgoingEdgesBySymbolParams) ([]sqlc.GraphEdgeView, error) {
 	return m.bySymbol[arg.SourceNode], nil
 }
 
-func edge(src, tgt string) sqlc.GraphEdge {
-	return sqlc.GraphEdge{SourceNode: src, TargetNode: tgt, EdgeType: "calls"}
+func edge(src, tgt string) sqlc.GraphEdgeView {
+	return sqlc.GraphEdgeView{SourceNode: src, TargetNode: tgt, EdgeType: "calls"}
 }
 
 // TestTraceCallChain_SingleHop verifies that a qualified entry node ("file::Func")
 // uses GetOutgoingEdges and returns one hop.
 func TestTraceCallChain_SingleHop(t *testing.T) {
 	q := &mockTraceQuerier{
-		outgoing: map[string][]sqlc.GraphEdge{
+		outgoing: map[string][]sqlc.GraphEdgeView{
 			"search.go::SearchAll": {edge("search.go::SearchAll", "BM25SearchAll")},
 		},
 	}
@@ -63,11 +63,11 @@ func TestTraceCallChain_SingleHop(t *testing.T) {
 // After hop 1, cur.node = "Mid" (bare) → GetOutgoingEdgesBySymbol("Mid") → "Leaf"
 func TestTraceCallChain_MultiHop(t *testing.T) {
 	q := &mockTraceQuerier{
-		outgoing: map[string][]sqlc.GraphEdge{
+		outgoing: map[string][]sqlc.GraphEdgeView{
 			// Qualified entry — found via exact lookup
 			"pkg.go::EntryFunc": {edge("pkg.go::EntryFunc", "Mid")},
 		},
-		bySymbol: map[string][]sqlc.GraphEdge{
+		bySymbol: map[string][]sqlc.GraphEdgeView{
 			// Bare "Mid" — reconciled to its defining file::symbol form
 			"Mid": {edge("mid.go::Mid", "Leaf")},
 		},
@@ -95,7 +95,7 @@ func TestTraceCallChain_MultiHop(t *testing.T) {
 // TestTraceCallChain_CycleBreaking verifies cycles do not produce infinite loops.
 func TestTraceCallChain_CycleBreaking(t *testing.T) {
 	q := &mockTraceQuerier{
-		outgoing: map[string][]sqlc.GraphEdge{
+		outgoing: map[string][]sqlc.GraphEdgeView{
 			"a.go::A": {edge("a.go::A", "b.go::B")},
 			"b.go::B": {edge("b.go::B", "a.go::A")}, // cycle back
 		},
@@ -116,7 +116,7 @@ func TestTraceCallChain_CycleBreaking(t *testing.T) {
 func TestTraceCallChain_MaxDepth(t *testing.T) {
 	// Chain: A -> B -> C -> D (depth 3 would be D), but maxDepth=2
 	q := &mockTraceQuerier{
-		outgoing: map[string][]sqlc.GraphEdge{
+		outgoing: map[string][]sqlc.GraphEdgeView{
 			"f.go::A": {edge("f.go::A", "f.go::B")},
 			"f.go::B": {edge("f.go::B", "f.go::C")},
 			"f.go::C": {edge("f.go::C", "f.go::D")},

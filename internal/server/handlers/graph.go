@@ -10,8 +10,8 @@ import (
 )
 
 type GraphQuerier interface {
-	GetOutgoingEdges(ctx context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdge, error)
-	GetIncomingEdges(ctx context.Context, arg sqlc.GetIncomingEdgesParams) ([]sqlc.GraphEdge, error)
+	GetOutgoingEdges(ctx context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdgeView, error)
+	GetIncomingEdges(ctx context.Context, arg sqlc.GetIncomingEdgesParams) ([]sqlc.GraphEdgeView, error)
 }
 
 type graphQueryRequest struct {
@@ -59,7 +59,7 @@ func GraphQuery(q GraphQuerier, logger zerolog.Logger) echo.HandlerFunc {
 		}
 
 		ctx := c.Request().Context()
-		var rows []sqlc.GraphEdge
+		var rows []sqlc.GraphEdgeView
 		var err error
 
 		switch req.Direction {

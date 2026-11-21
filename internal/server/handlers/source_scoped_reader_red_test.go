@@ -16,9 +16,9 @@ import (
 
 type unresolvedTraceQuerier struct{}
 
-func (unresolvedTraceQuerier) GetOutgoingEdges(_ context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdge, error) {
+func (unresolvedTraceQuerier) GetOutgoingEdges(_ context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdgeView, error) {
 	if arg.SourceNode == "repo-a/consumer.ts::caller" {
-		return []sqlc.GraphEdge{{
+		return []sqlc.GraphEdgeView{{
 			SourceNode: arg.SourceNode,
 			TargetNode: "<unresolved>",
 			EdgeType:   "calls",
@@ -27,7 +27,7 @@ func (unresolvedTraceQuerier) GetOutgoingEdges(_ context.Context, arg sqlc.GetOu
 	return nil, nil
 }
 
-func (unresolvedTraceQuerier) GetOutgoingEdgesBySymbol(context.Context, sqlc.GetOutgoingEdgesBySymbolParams) ([]sqlc.GraphEdge, error) {
+func (unresolvedTraceQuerier) GetOutgoingEdgesBySymbol(context.Context, sqlc.GetOutgoingEdgesBySymbolParams) ([]sqlc.GraphEdgeView, error) {
 	return nil, nil
 }
 

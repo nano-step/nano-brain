@@ -83,7 +83,7 @@ func main() {
 			ratio = float64(w.chunks) / float64(w.docs)
 		}
 		nd := scalar(ctx, pool, noiseCountSQL("documents", "source_path"), w.hash, noiseDirs, noiseSuffixes)
-		ne := scalar(ctx, pool, noiseCountSQL("graph_edges", "source_file"), w.hash, noiseDirs, noiseSuffixes)
+		ne := scalar(ctx, pool, noiseCountSQL("graph_edge_views", "source_file"), w.hash, noiseDirs, noiseSuffixes)
 		flag := ""
 		if ratio >= 4 {
 			flag = "  ⚠ high ratio"
@@ -114,7 +114,7 @@ func main() {
 	// ---- Flows collection ----
 	section("Flow docs vs http entries")
 	fmt.Printf("  documents in collection 'flows':    %d\n", scalar(ctx, pool, `SELECT count(*) FROM documents WHERE collection='flows'`))
-	fmt.Printf("  distinct http entry nodes:          %d\n", scalar(ctx, pool, `SELECT count(DISTINCT source_node) FROM graph_edges WHERE edge_type='http'`))
+	fmt.Printf("  distinct http entry nodes:          %d\n", scalar(ctx, pool, `SELECT count(DISTINCT source_node_id) FROM graph_edges WHERE edge_type='http'`))
 
 	// ---- What are the 0-chunk documents? ----
 	section("Documents with 0 chunks, by collection (top 12)")

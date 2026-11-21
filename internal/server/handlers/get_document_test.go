@@ -20,20 +20,20 @@ import (
 )
 
 type mockGetDocQuerier struct {
-	getByID         func(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.Document, error)
-	getBySourcePath func(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
+	getByID         func(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error)
+	getBySourcePath func(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error)
 }
 
-func (m *mockGetDocQuerier) GetDocumentByID(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.Document, error) {
+func (m *mockGetDocQuerier) GetDocumentByID(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error) {
 	return m.getByID(ctx, arg)
 }
 
-func (m *mockGetDocQuerier) GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
+func (m *mockGetDocQuerier) GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error) {
 	return m.getBySourcePath(ctx, arg)
 }
 
-func sampleDoc(id uuid.UUID, sourcePath string) sqlc.Document {
-	return sqlc.Document{
+func sampleDoc(id uuid.UUID, sourcePath string) sqlc.DocumentView {
+	return sqlc.DocumentView{
 		ID:            id,
 		WorkspaceHash: "ws123",
 		ContentHash:   "hash",
@@ -51,7 +51,7 @@ func sampleDoc(id uuid.UUID, sourcePath string) sqlc.Document {
 func TestGetDocument_BySourcePath(t *testing.T) {
 	docID := uuid.New()
 	q := &mockGetDocQuerier{
-		getBySourcePath: func(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
+		getBySourcePath: func(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error) {
 			if arg.SourcePath != "memory://test.md" {
 				t.Errorf("expected source_path memory://test.md, got %s", arg.SourcePath)
 			}
@@ -93,7 +93,7 @@ func TestGetDocument_BySourcePath(t *testing.T) {
 func TestGetDocument_ByID(t *testing.T) {
 	docID := uuid.New()
 	q := &mockGetDocQuerier{
-		getByID: func(_ context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.Document, error) {
+		getByID: func(_ context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error) {
 			if arg.ID != docID {
 				t.Errorf("expected id %s, got %s", docID, arg.ID)
 			}
@@ -121,7 +121,7 @@ func TestGetDocument_ByID(t *testing.T) {
 func TestGetDocument_ByHashPrefix(t *testing.T) {
 	docID := uuid.New()
 	q := &mockGetDocQuerier{
-		getByID: func(_ context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.Document, error) {
+		getByID: func(_ context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error) {
 			if arg.ID != docID {
 				t.Errorf("expected id %s, got %s", docID, arg.ID)
 			}
@@ -148,8 +148,8 @@ func TestGetDocument_ByHashPrefix(t *testing.T) {
 
 func TestGetDocument_NotFound(t *testing.T) {
 	q := &mockGetDocQuerier{
-		getBySourcePath: func(_ context.Context, _ sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
-			return sqlc.Document{}, sql.ErrNoRows
+		getBySourcePath: func(_ context.Context, _ sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error) {
+			return sqlc.DocumentView{}, sql.ErrNoRows
 		},
 	}
 

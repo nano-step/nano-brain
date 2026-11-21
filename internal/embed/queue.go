@@ -305,6 +305,27 @@ func (q *Queue) processChunk(ctx context.Context, chunkID uuid.UUID) {
 		return
 	}
 
+	if cacher, ok := q.queries.(interface {
+		ReuseEmbeddingIfCached(ctx context.Context, arg sqlc.ReuseEmbeddingIfCachedParams) (uuid.UUID, error)
+	}); ok {
+		if _, cacheErr := cacher.ReuseEmbeddingIfCached(ctx, sqlc.ReuseEmbeddingIfCachedParams{
+			ChunkID:       chunkID,
+			WorkspaceHash: chunk.WorkspaceHash,
+			Provider:      q.provider,
+			Model:         q.model,
+		}); cacheErr == nil {
+			q.pending.Add(-1)
+			q.clearRetries(chunkID)
+			q.resetBackoff()
+			q.publishStatus()
+			q.logger.Debug().
+				Str("chunk_id", chunkID.String()).
+				Str("file", chunk.SourcePath).
+				Msg("reused cached blob embedding")
+			return
+		}
+	}
+
 	q.logger.Info().
 		Str("chunk_id", chunkID.String()).
 		Str("file", chunk.SourcePath).

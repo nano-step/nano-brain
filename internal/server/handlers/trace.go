@@ -11,8 +11,8 @@ import (
 )
 
 type TraceQuerier interface {
-	GetOutgoingEdges(ctx context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdge, error)
-	GetOutgoingEdgesBySymbol(ctx context.Context, arg sqlc.GetOutgoingEdgesBySymbolParams) ([]sqlc.GraphEdge, error)
+	GetOutgoingEdges(ctx context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdgeView, error)
+	GetOutgoingEdgesBySymbol(ctx context.Context, arg sqlc.GetOutgoingEdgesBySymbolParams) ([]sqlc.GraphEdgeView, error)
 }
 
 type traceRequest struct {
@@ -90,7 +90,7 @@ func traceCallChain(ctx context.Context, q TraceQuerier, workspace, entry string
 			continue
 		}
 
-		var edges []sqlc.GraphEdge
+		var edges []sqlc.GraphEdgeView
 		var err error
 		if strings.Contains(cur.node, "::") {
 			// Qualified name (e.g. "file.go::Func") — exact match, no cross-file noise.

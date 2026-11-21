@@ -18,7 +18,7 @@ type Chunk struct {
 	DocumentID        uuid.UUID
 	WorkspaceHash     string
 	ContentHash       string
-	Content           string
+	BlobID            int64
 	ChunkIndex        int32
 	StartLine         sql.NullInt32
 	EndLine           sql.NullInt32
@@ -39,10 +39,34 @@ type Chunk struct {
 }
 
 type ChunkEntity struct {
-	ChunkID       uuid.UUID
-	EntityName    string
-	EntityType    string
-	WorkspaceHash string
+	ChunkID     uuid.UUID
+	WorkspaceID int32
+	EntityID    int32
+}
+
+type ChunkView struct {
+	ID                uuid.UUID
+	DocumentID        uuid.UUID
+	WorkspaceHash     string
+	ContentHash       string
+	Content           string
+	ChunkIndex        int32
+	StartLine         sql.NullInt32
+	EndLine           sql.NullInt32
+	Metadata          pqtype.NullRawMessage
+	CreatedAt         time.Time
+	EmbedStatus       string
+	SearchVector      interface{}
+	SymbolName        sql.NullString
+	SymbolKind        sql.NullString
+	Language          sql.NullString
+	LineStart         sql.NullInt32
+	LineEnd           sql.NullInt32
+	ChunkType         string
+	EmbeddingStrategy string
+	Summary           sql.NullString
+	SummaryHash       sql.NullString
+	GraphContextHash  sql.NullString
 }
 
 type CodeSummarizationFailure struct {
@@ -79,7 +103,30 @@ type Collection struct {
 	AllowedExtensions []string
 }
 
+type ContentBlob struct {
+	ID          int64
+	Sha256Bytes []byte
+	Content     string
+}
+
 type Document struct {
+	ID            uuid.UUID
+	WorkspaceHash string
+	ContentHash   string
+	BlobID        int64
+	Title         string
+	SourcePath    string
+	Collection    string
+	Tags          []string
+	Metadata      pqtype.NullRawMessage
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	SupersedesID  uuid.NullUUID
+	ModTime       sql.NullTime
+	FileSize      sql.NullInt64
+}
+
+type DocumentView struct {
 	ID            uuid.UUID
 	WorkspaceHash string
 	ContentHash   string
@@ -97,14 +144,27 @@ type Document struct {
 }
 
 type Embedding struct {
-	ID            uuid.UUID
-	ChunkID       uuid.UUID
-	WorkspaceHash string
-	Provider      string
-	Model         string
-	Embedding     interface{}
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID          uuid.UUID
+	ChunkID     uuid.UUID
+	WorkspaceID int32
+	VectorID    int64
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type EmbeddingVector struct {
+	ID        int64
+	BlobID    int64
+	Provider  string
+	Model     string
+	Embedding interface{}
+	CreatedAt time.Time
+}
+
+type EntityDictionary struct {
+	ID         int32
+	EntityName string
+	EntityType string
 }
 
 type FunctionFlowchart struct {
@@ -121,6 +181,17 @@ type FunctionFlowchart struct {
 }
 
 type GraphEdge struct {
+	ID           uuid.UUID
+	WorkspaceID  int32
+	SourceNodeID int64
+	TargetNodeID int64
+	EdgeType     string
+	SourceFileID int64
+	Metadata     json.RawMessage
+	CreatedAt    time.Time
+}
+
+type GraphEdgeView struct {
 	ID            uuid.UUID
 	WorkspaceHash string
 	SourceNode    string
@@ -129,6 +200,13 @@ type GraphEdge struct {
 	SourceFile    string
 	Metadata      json.RawMessage
 	CreatedAt     time.Time
+}
+
+type GraphNode struct {
+	ID              int64
+	NodeKey         string
+	BareSymbol      sql.NullString
+	IsJsTsQualified sql.NullBool
 }
 
 type PagerankScore struct {
@@ -157,4 +235,9 @@ type Workspace struct {
 	Path      string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type WorkspaceID struct {
+	ShortID       int32
+	WorkspaceHash string
 }

@@ -11,13 +11,14 @@ WHERE workspace_hash = $1 AND usage_date = CURRENT_DATE;
 -- name: GetUnsummarizedSymbols :many
 SELECT 
     c.id,
-    c.content,
+    cb.content,
     c.symbol_name,
     c.symbol_kind,
     c.language,
     c.content_hash,
     COALESCE(d.source_path, '') AS source_path
 FROM chunks c
+JOIN content_blobs cb ON cb.id = c.blob_id
 LEFT JOIN documents d ON d.id = c.document_id
 WHERE c.workspace_hash = $1
   AND c.chunk_type = 'symbol'
@@ -77,7 +78,7 @@ DELETE FROM code_summarization_failures WHERE workspace_hash = $1;
 
 -- name: BulkGetCallerContext :many
 SELECT target_node, source_node, COUNT(*)::int AS frequency
-FROM graph_edges
+FROM graph_edge_views
 WHERE workspace_hash = $1
   AND target_node = ANY($2::text[])
   AND target_node <> '<unresolved>'
@@ -87,7 +88,7 @@ ORDER BY target_node, frequency DESC;
 
 -- name: GetCalleeNodes :many
 SELECT DISTINCT target_node
-FROM graph_edges
+FROM graph_edge_views
 WHERE workspace_hash = $1
   AND source_node = $2
   AND target_node <> '<unresolved>'
@@ -95,7 +96,7 @@ WHERE workspace_hash = $1
 
 -- name: BulkGetCalleeNodes :many
 SELECT DISTINCT source_node, target_node
-FROM graph_edges
+FROM graph_edge_views
 WHERE workspace_hash = $1
   AND source_node = ANY($2::text[])
   AND target_node <> '<unresolved>'
@@ -108,7 +109,7 @@ WHERE id = $1;
 -- name: GetSymbolChunksByGraphContextStale :many
 SELECT
     c.id,
-    c.content,
+    cb.content,
     c.symbol_name,
     c.symbol_kind,
     c.language,
@@ -116,6 +117,7 @@ SELECT
     c.graph_context_hash,
     COALESCE(d.source_path, '') AS source_path
 FROM chunks c
+JOIN content_blobs cb ON cb.id = c.blob_id
 LEFT JOIN documents d ON d.id = c.document_id
 WHERE c.workspace_hash = $1
   AND c.chunk_type = 'symbol'

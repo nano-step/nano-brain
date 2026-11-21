@@ -17,7 +17,7 @@ import (
 type mockOverviewQuerier struct {
 	topRows  []sqlc.ListTopGraphNodesByDegreeRow
 	count    int64
-	edgeRows []sqlc.GraphEdge
+	edgeRows []sqlc.GraphEdgeView
 	docRows  []sqlc.ListDocumentsByIDsRow
 	lastEdgeTypes []string
 	lastLimit     int32
@@ -34,7 +34,7 @@ func (m *mockOverviewQuerier) CountDistinctGraphNodes(_ context.Context, _ sqlc.
 	return m.count, nil
 }
 
-func (m *mockOverviewQuerier) ListEdgesTouchingNodes(_ context.Context, _ sqlc.ListEdgesTouchingNodesParams) ([]sqlc.GraphEdge, error) {
+func (m *mockOverviewQuerier) ListEdgesTouchingNodes(_ context.Context, _ sqlc.ListEdgesTouchingNodesParams) ([]sqlc.GraphEdgeView, error) {
 	return m.edgeRows, nil
 }
 
@@ -61,7 +61,7 @@ func TestGraphOverview_ResponseShape(t *testing.T) {
 			{Node: "func2", Degree: 5},
 		},
 		count: 2,
-		edgeRows: []sqlc.GraphEdge{
+		edgeRows: []sqlc.GraphEdgeView{
 			{SourceNode: "func1", TargetNode: "func2", EdgeType: "calls"},
 		},
 	}
@@ -259,7 +259,7 @@ func TestGraphOverview_IncludesImplicitEndpointNodes(t *testing.T) {
 			{Node: "hub", Degree: 100},
 		},
 		count: 50,
-		edgeRows: []sqlc.GraphEdge{
+		edgeRows: []sqlc.GraphEdgeView{
 			{SourceNode: "hub", TargetNode: "leaf1", EdgeType: "calls"},
 			{SourceNode: "hub", TargetNode: "leaf2", EdgeType: "calls"},
 			{SourceNode: "external", TargetNode: "hub", EdgeType: "imports"},

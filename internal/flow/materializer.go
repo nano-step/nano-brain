@@ -24,7 +24,7 @@ const flowCollection = "flows"
 // MaterializerQuerier is the minimal DB interface needed by Materializer.
 // Defined consumer-side so callers can inject any compatible implementation.
 type MaterializerQuerier interface {
-	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
+	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdgeView, error)
 	UpsertDocumentBySourcePath(ctx context.Context, arg sqlc.UpsertDocumentBySourcePathParams) (sqlc.UpsertDocumentBySourcePathRow, error)
 	ListDocumentSourcePathsAndHashes(ctx context.Context, arg sqlc.ListDocumentSourcePathsAndHashesParams) ([]sqlc.ListDocumentSourcePathsAndHashesRow, error)
 	DeleteDocumentByIDAndWorkspace(ctx context.Context, arg sqlc.DeleteDocumentByIDAndWorkspaceParams) (int64, error)

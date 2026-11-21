@@ -18,7 +18,7 @@ import (
 const embedBatchLimit = 50
 
 type EmbedQuerier interface {
-	GetPendingChunks(ctx context.Context, arg sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error)
+	GetPendingChunks(ctx context.Context, arg sqlc.GetPendingChunksParams) ([]sqlc.ChunkView, error)
 	InsertEmbedding(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	MarkChunkEmbedded(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	CountPendingChunks(ctx context.Context, workspaceHash string) (int64, error)

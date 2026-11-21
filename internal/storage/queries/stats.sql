@@ -10,7 +10,7 @@ WHERE d.workspace_hash = $1
 GROUP BY c.embed_status;
 
 -- name: CountGraphEdgesByType :many
-SELECT edge_type, COUNT(*) AS edge_count FROM graph_edges
+SELECT edge_type, COUNT(*) AS edge_count FROM graph_edge_views
 WHERE workspace_hash = $1
   AND (edge_type <> 'calls' OR (source_node <> '<unresolved>' AND target_node <> '<unresolved>'))
 GROUP BY edge_type;
@@ -32,8 +32,8 @@ WHERE workspace_hash = $1 AND event_type = 'search'
 ORDER BY created_at DESC LIMIT 20;
 
 -- name: GetEdgesByNodes :many
-SELECT id, workspace_hash, source_node, target_node, edge_type, source_file, metadata, created_at
-FROM graph_edges
+SELECT *
+FROM graph_edge_views
 WHERE workspace_hash = $1
   AND source_node = ANY($2::text[])
   AND source_node <> '<unresolved>'
@@ -48,13 +48,14 @@ ORDER BY updated_at DESC;
 
 -- name: ListBacklinksByTarget :many
 SELECT
-  d.id, d.title, d.collection, d.updated_at, d.tags, d.content
-FROM graph_edges ge
+  d.id, d.title, d.collection, d.updated_at, d.tags, cb.content
+FROM graph_edge_views ge
 INNER JOIN documents d ON d.id::text = ge.source_node AND d.workspace_hash = ge.workspace_hash
+INNER JOIN content_blobs cb ON cb.id = d.blob_id
 WHERE ge.workspace_hash = $1 AND ge.target_node = $2 AND ge.edge_type = 'references'
 ORDER BY d.updated_at DESC
 LIMIT $3 OFFSET $4;
 
 -- name: CountBacklinksByTarget :one
-SELECT COUNT(*) FROM graph_edges
+SELECT COUNT(*) FROM graph_edge_views
 WHERE workspace_hash = $1 AND target_node = $2 AND edge_type = 'references';

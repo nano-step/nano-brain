@@ -9,7 +9,7 @@ import (
 )
 
 type StitchQuerier interface {
-	ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
+	ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdgeView, error)
 }
 
 type consumerEntry struct {

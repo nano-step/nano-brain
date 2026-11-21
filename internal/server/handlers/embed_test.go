@@ -18,7 +18,7 @@ import (
 )
 
 type mockEmbedQuerier struct {
-	getPendingChunksFn  func(ctx context.Context, arg sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error)
+	getPendingChunksFn  func(ctx context.Context, arg sqlc.GetPendingChunksParams) ([]sqlc.ChunkView, error)
 	insertEmbeddingFn   func(ctx context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error)
 	markChunkEmbeddedFn func(ctx context.Context, arg sqlc.MarkChunkEmbeddedParams) error
 	countPendingFn      func(ctx context.Context, ws string) (int64, error)
@@ -26,7 +26,7 @@ type mockEmbedQuerier struct {
 	resetCalled         bool
 }
 
-func (m *mockEmbedQuerier) GetPendingChunks(ctx context.Context, arg sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+func (m *mockEmbedQuerier) GetPendingChunks(ctx context.Context, arg sqlc.GetPendingChunksParams) ([]sqlc.ChunkView, error) {
 	if m.getPendingChunksFn != nil {
 		return m.getPendingChunksFn(ctx, arg)
 	}
@@ -73,10 +73,10 @@ func newEmbedContext(e *echo.Echo, body, workspace string) (echo.Context, *httpt
 	return c, rec
 }
 
-func makeChunks(n int, ws string) []sqlc.Chunk {
-	chunks := make([]sqlc.Chunk, n)
+func makeChunks(n int, ws string) []sqlc.ChunkView {
+	chunks := make([]sqlc.ChunkView, n)
 	for i := range chunks {
-		chunks[i] = sqlc.Chunk{
+		chunks[i] = sqlc.ChunkView{
 			ID:            uuid.New(),
 			WorkspaceHash: ws,
 			Content:       fmt.Sprintf("content-%d", i),
@@ -88,7 +88,7 @@ func makeChunks(n int, ws string) []sqlc.Chunk {
 func TestTriggerEmbed_Success(t *testing.T) {
 	chunks := makeChunks(3, "ws1")
 	q := &mockEmbedQuerier{
-		getPendingChunksFn: func(_ context.Context, arg sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+		getPendingChunksFn: func(_ context.Context, arg sqlc.GetPendingChunksParams) ([]sqlc.ChunkView, error) {
 			return chunks, nil
 		},
 	}
@@ -169,7 +169,7 @@ func TestTriggerEmbed_NoEmbedder(t *testing.T) {
 
 func TestTriggerEmbed_Force(t *testing.T) {
 	q := &mockEmbedQuerier{
-		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.ChunkView, error) {
 			return makeChunks(2, "ws1"), nil
 		},
 	}
@@ -205,7 +205,7 @@ func TestTriggerEmbed_PartialFailure(t *testing.T) {
 	chunks := makeChunks(3, "ws1")
 	callCount := 0
 	q := &mockEmbedQuerier{
-		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.ChunkView, error) {
 			return chunks, nil
 		},
 	}
@@ -249,7 +249,7 @@ func TestTriggerEmbed_continuesAfterStaleEmbeddingResult(t *testing.T) {
 	var insertedIDs []uuid.UUID
 	var markedIDs []uuid.UUID
 	q := &mockEmbedQuerier{
-		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.ChunkView, error) {
 			return chunks, nil
 		},
 		insertEmbeddingFn: func(_ context.Context, arg sqlc.InsertEmbeddingParams) (sqlc.Embedding, error) {
@@ -296,7 +296,7 @@ func TestTriggerEmbed_continuesAfterStaleEmbeddingResult(t *testing.T) {
 func TestTriggerEmbed_HasMore(t *testing.T) {
 	chunks := makeChunks(51, "ws1")
 	q := &mockEmbedQuerier{
-		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.ChunkView, error) {
 			return chunks, nil
 		},
 		countPendingFn: func(_ context.Context, _ string) (int64, error) {
@@ -333,7 +333,7 @@ func TestTriggerEmbed_HasMore(t *testing.T) {
 
 func TestTriggerEmbed_Truncation(t *testing.T) {
 	longContent := "SELECT " + strings.Repeat("x,", 5000)
-	chunks := []sqlc.Chunk{
+	chunks := []sqlc.ChunkView{
 		{
 			ID:            uuid.New(),
 			WorkspaceHash: "ws1",
@@ -342,7 +342,7 @@ func TestTriggerEmbed_Truncation(t *testing.T) {
 	}
 	var receivedContent string
 	q := &mockEmbedQuerier{
-		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.Chunk, error) {
+		getPendingChunksFn: func(_ context.Context, _ sqlc.GetPendingChunksParams) ([]sqlc.ChunkView, error) {
 			return chunks, nil
 		},
 	}

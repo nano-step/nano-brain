@@ -17,7 +17,7 @@ import (
 
 // FlowchartQuerier is the storage interface used by GraphFlowchart.
 type FlowchartQuerier interface {
-	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
+	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdgeView, error)
 	GetFunctionFlowchartByHandler(ctx context.Context, arg sqlc.GetFunctionFlowchartByHandlerParams) (sqlc.FunctionFlowchart, error)
 }
 

@@ -136,7 +136,7 @@ func (q *Queries) DeleteSymbolDocumentsByCollection(ctx context.Context, arg Del
 }
 
 const getDocumentByHash = `-- name: GetDocumentByHash :one
-SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id, mod_time, file_size FROM documents WHERE content_hash = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id, mod_time, file_size FROM document_views WHERE content_hash = $1 AND workspace_hash = $2
 `
 
 type GetDocumentByHashParams struct {
@@ -144,9 +144,9 @@ type GetDocumentByHashParams struct {
 	WorkspaceHash string
 }
 
-func (q *Queries) GetDocumentByHash(ctx context.Context, arg GetDocumentByHashParams) (Document, error) {
+func (q *Queries) GetDocumentByHash(ctx context.Context, arg GetDocumentByHashParams) (DocumentView, error) {
 	row := q.db.QueryRowContext(ctx, getDocumentByHash, arg.ContentHash, arg.WorkspaceHash)
-	var i Document
+	var i DocumentView
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceHash,
@@ -167,7 +167,7 @@ func (q *Queries) GetDocumentByHash(ctx context.Context, arg GetDocumentByHashPa
 }
 
 const getDocumentByID = `-- name: GetDocumentByID :one
-SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id, mod_time, file_size FROM documents WHERE id = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id, mod_time, file_size FROM document_views WHERE id = $1 AND workspace_hash = $2
 `
 
 type GetDocumentByIDParams struct {
@@ -175,9 +175,9 @@ type GetDocumentByIDParams struct {
 	WorkspaceHash string
 }
 
-func (q *Queries) GetDocumentByID(ctx context.Context, arg GetDocumentByIDParams) (Document, error) {
+func (q *Queries) GetDocumentByID(ctx context.Context, arg GetDocumentByIDParams) (DocumentView, error) {
 	row := q.db.QueryRowContext(ctx, getDocumentByID, arg.ID, arg.WorkspaceHash)
-	var i Document
+	var i DocumentView
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceHash,
@@ -198,7 +198,7 @@ func (q *Queries) GetDocumentByID(ctx context.Context, arg GetDocumentByIDParams
 }
 
 const getDocumentBySourcePath = `-- name: GetDocumentBySourcePath :one
-SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id, mod_time, file_size FROM documents WHERE source_path = $1 AND workspace_hash = $2
+SELECT id, workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, created_at, updated_at, supersedes_id, mod_time, file_size FROM document_views WHERE source_path = $1 AND workspace_hash = $2
 `
 
 type GetDocumentBySourcePathParams struct {
@@ -206,9 +206,9 @@ type GetDocumentBySourcePathParams struct {
 	WorkspaceHash string
 }
 
-func (q *Queries) GetDocumentBySourcePath(ctx context.Context, arg GetDocumentBySourcePathParams) (Document, error) {
+func (q *Queries) GetDocumentBySourcePath(ctx context.Context, arg GetDocumentBySourcePathParams) (DocumentView, error) {
 	row := q.db.QueryRowContext(ctx, getDocumentBySourcePath, arg.SourcePath, arg.WorkspaceHash)
-	var i Document
+	var i DocumentView
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceHash,
@@ -272,11 +272,12 @@ func (q *Queries) ListDocumentSourcePathsAndHashes(ctx context.Context, arg List
 }
 
 const listDocumentsByTag = `-- name: ListDocumentsByTag :many
-SELECT id, workspace_hash, title, content, source_path, collection, tags, created_at, updated_at
-FROM documents
-WHERE $1::text = ANY(tags)
-  AND collection = $2
-ORDER BY updated_at DESC
+SELECT d.id, d.workspace_hash, d.title, cb.content, d.source_path, d.collection, d.tags, d.created_at, d.updated_at
+FROM documents d
+JOIN content_blobs cb ON cb.id = d.blob_id
+WHERE $1::text = ANY(d.tags)
+  AND d.collection = $2
+ORDER BY d.updated_at DESC
 LIMIT $3
 `
 
@@ -392,12 +393,13 @@ func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash st
 }
 
 const listSessionDocumentsByWorkspace = `-- name: ListSessionDocumentsByWorkspace :many
-SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, content, created_at, updated_at
-FROM documents
-WHERE workspace_hash = $1
-  AND collection = 'sessions'
-  AND ($2::text = '' OR $2::text = ANY(tags))
-ORDER BY created_at DESC
+SELECT d.id, d.workspace_hash, d.content_hash, d.title, d.source_path, d.collection, d.tags, cb.content, d.created_at, d.updated_at
+FROM documents d
+JOIN content_blobs cb ON cb.id = d.blob_id
+WHERE d.workspace_hash = $1
+  AND d.collection = 'sessions'
+  AND ($2::text = '' OR $2::text = ANY(d.tags))
+ORDER BY d.created_at DESC
 LIMIT $3
 `
 
@@ -455,13 +457,14 @@ func (q *Queries) ListSessionDocumentsByWorkspace(ctx context.Context, arg ListS
 }
 
 const listSummaryDocumentsForBackfill = `-- name: ListSummaryDocumentsForBackfill :many
-SELECT id, workspace_hash, content_hash, title, content, source_path, tags, metadata, created_at
-FROM documents
-WHERE collection = 'sessions'
-  AND source_path LIKE 'summary://%'
-  AND ($1::text = '' OR workspace_hash = $1)
-  AND ($2::timestamptz IS NULL OR created_at >= $2)
-ORDER BY created_at ASC
+SELECT d.id, d.workspace_hash, d.content_hash, d.title, cb.content, d.source_path, d.tags, d.metadata, d.created_at
+FROM documents d
+JOIN content_blobs cb ON cb.id = d.blob_id
+WHERE d.collection = 'sessions'
+  AND d.source_path LIKE 'summary://%'
+  AND ($1::text = '' OR d.workspace_hash = $1)
+  AND ($2::timestamptz IS NULL OR d.created_at >= $2)
+ORDER BY d.created_at ASC
 `
 
 type ListSummaryDocumentsForBackfillParams struct {
@@ -766,12 +769,22 @@ func (q *Queries) UpdateDocumentsCollection(ctx context.Context, arg UpdateDocum
 }
 
 const upsertDocument = `-- name: UpsertDocument :one
-INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO documents (workspace_hash, content_hash, blob_id, title, source_path, collection, tags, metadata, supersedes_id)
+VALUES (
+    $1,
+    $2,
+    intern_content_blob($3::text),
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9
+)
 ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     content_hash = EXCLUDED.content_hash,
+    blob_id = EXCLUDED.blob_id,
     title = EXCLUDED.title,
-    content = EXCLUDED.content,
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
@@ -783,8 +796,8 @@ RETURNING id, content_hash, collection, workspace_hash
 type UpsertDocumentParams struct {
 	WorkspaceHash string
 	ContentHash   string
-	Title         string
 	Content       string
+	Title         string
 	SourcePath    string
 	Collection    string
 	Tags          []string
@@ -803,8 +816,8 @@ func (q *Queries) UpsertDocument(ctx context.Context, arg UpsertDocumentParams) 
 	row := q.db.QueryRowContext(ctx, upsertDocument,
 		arg.WorkspaceHash,
 		arg.ContentHash,
-		arg.Title,
 		arg.Content,
+		arg.Title,
 		arg.SourcePath,
 		arg.Collection,
 		pq.Array(arg.Tags),
@@ -822,12 +835,24 @@ func (q *Queries) UpsertDocument(ctx context.Context, arg UpsertDocumentParams) 
 }
 
 const upsertDocumentBySourcePath = `-- name: UpsertDocumentBySourcePath :one
-INSERT INTO documents (workspace_hash, content_hash, title, content, source_path, collection, tags, metadata, supersedes_id, mod_time, file_size)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+INSERT INTO documents (workspace_hash, content_hash, blob_id, title, source_path, collection, tags, metadata, supersedes_id, mod_time, file_size)
+VALUES (
+    $1,
+    $2,
+    intern_content_blob($3::text),
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11
+)
 ON CONFLICT (source_path, workspace_hash) WHERE source_path != '' DO UPDATE SET
     content_hash = EXCLUDED.content_hash,
+    blob_id = EXCLUDED.blob_id,
     title = EXCLUDED.title,
-    content = EXCLUDED.content,
     collection = EXCLUDED.collection,
     tags = EXCLUDED.tags,
     metadata = EXCLUDED.metadata,
@@ -841,8 +866,8 @@ RETURNING id, content_hash, collection, workspace_hash
 type UpsertDocumentBySourcePathParams struct {
 	WorkspaceHash string
 	ContentHash   string
-	Title         string
 	Content       string
+	Title         string
 	SourcePath    string
 	Collection    string
 	Tags          []string
@@ -863,8 +888,8 @@ func (q *Queries) UpsertDocumentBySourcePath(ctx context.Context, arg UpsertDocu
 	row := q.db.QueryRowContext(ctx, upsertDocumentBySourcePath,
 		arg.WorkspaceHash,
 		arg.ContentHash,
-		arg.Title,
 		arg.Content,
+		arg.Title,
 		arg.SourcePath,
 		arg.Collection,
 		pq.Array(arg.Tags),

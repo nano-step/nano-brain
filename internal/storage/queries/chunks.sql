@@ -1,9 +1,29 @@
 -- name: UpsertChunk :one
-INSERT INTO chunks (document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, symbol_name, symbol_kind, language, line_start, line_end, chunk_type, embedding_strategy)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-ON CONFLICT (content_hash, workspace_hash, document_id) DO UPDATE SET
-    document_id = EXCLUDED.document_id,
-    content = EXCLUDED.content,
+INSERT INTO chunks (
+    document_id, workspace_hash, content_hash, blob_id, chunk_index,
+    start_line, end_line, metadata, symbol_name, symbol_kind, language,
+    line_start, line_end, chunk_type, embedding_strategy
+)
+VALUES (
+    @document_id,
+    @workspace_hash,
+    @content_hash,
+    intern_content_blob(@content::text),
+    @chunk_index,
+    @start_line,
+    @end_line,
+    @metadata,
+    @symbol_name,
+    @symbol_kind,
+    @language,
+    @line_start,
+    @line_end,
+    @chunk_type,
+    @embedding_strategy
+)
+ON CONFLICT (document_id, content_hash) DO UPDATE SET
+    workspace_hash = EXCLUDED.workspace_hash,
+    blob_id = EXCLUDED.blob_id,
     chunk_index = EXCLUDED.chunk_index,
     start_line = EXCLUDED.start_line,
     end_line = EXCLUDED.end_line,
@@ -15,8 +35,8 @@ ON CONFLICT (content_hash, workspace_hash, document_id) DO UPDATE SET
     line_end = EXCLUDED.line_end,
     chunk_type = EXCLUDED.chunk_type,
     embedding_strategy = EXCLUDED.embedding_strategy,
-    embed_status = CASE 
-        WHEN EXCLUDED.content != chunks.content THEN 'pending'
+    embed_status = CASE
+        WHEN EXCLUDED.blob_id != chunks.blob_id THEN 'pending'
         ELSE chunks.embed_status
     END
 RETURNING id;
@@ -31,12 +51,16 @@ DELETE FROM chunks WHERE id = ANY($1::uuid[]);
 SELECT count(*) FROM chunks WHERE document_id = $1 AND workspace_hash = $2;
 
 -- name: GetChunkByID :one
-SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, c.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.embed_status, c.created_at,
+SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, cb.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.embed_status, c.created_at,
        COALESCE(d.source_path, '') AS source_path
 FROM chunks c
+JOIN content_blobs cb ON cb.id = c.blob_id
 LEFT JOIN documents d ON d.id = c.document_id
 WHERE c.id = $1;
 
 -- name: ListChunksByDocumentID :many
-SELECT id, document_id, workspace_hash, content_hash, content, chunk_index, start_line, end_line, metadata, created_at
-FROM chunks WHERE document_id = $1 AND workspace_hash = $2 ORDER BY chunk_index;
+SELECT c.id, c.document_id, c.workspace_hash, c.content_hash, cb.content, c.chunk_index, c.start_line, c.end_line, c.metadata, c.created_at
+FROM chunks c
+JOIN content_blobs cb ON cb.id = c.blob_id
+WHERE c.document_id = $1 AND c.workspace_hash = $2
+ORDER BY c.chunk_index;

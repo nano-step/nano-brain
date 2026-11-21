@@ -14,11 +14,11 @@ import (
 )
 
 type unresolvedMaterializerStore struct {
-	edges []sqlc.GraphEdge
+	edges []sqlc.GraphEdgeView
 	docs  []sqlc.UpsertDocumentBySourcePathParams
 }
 
-func (s *unresolvedMaterializerStore) ListAllEdgesByWorkspace(context.Context, string) ([]sqlc.GraphEdge, error) {
+func (s *unresolvedMaterializerStore) ListAllEdgesByWorkspace(context.Context, string) ([]sqlc.GraphEdgeView, error) {
 	return s.edges, nil
 }
 
@@ -85,7 +85,7 @@ func TestUnresolvedCallDoesNotEnterDerivedFlow(t *testing.T) {
 
 func TestMaterializerDoesNotCacheUnresolvedFlowContent(t *testing.T) {
 	// Given: an HTTP flow with an unresolved raw calls edge.
-	store := &unresolvedMaterializerStore{edges: []sqlc.GraphEdge{
+	store := &unresolvedMaterializerStore{edges: []sqlc.GraphEdgeView{
 		{SourceNode: "POST /materialize", TargetNode: "repo-a/consumer.ts::caller", EdgeType: "http"},
 		{SourceNode: "repo-a/consumer.ts::caller", TargetNode: "<unresolved>", EdgeType: "calls"},
 	}}

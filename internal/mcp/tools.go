@@ -1210,7 +1210,7 @@ func registerMemoryVSearch(server *mcpsdk.Server, a *Adapter) {
 // when the UUID belongs to a chunk rather than a document. Search results
 // expose chunk IDs as their primary "id" field, so a bare UUID or #<uuid>
 // passed to memory_get frequently refers to a chunk, not a document.
-func resolveDocumentByAnyID(ctx context.Context, q *sqlc.Queries, ws string, id uuid.UUID) (sqlc.Document, error) {
+func resolveDocumentByAnyID(ctx context.Context, q *sqlc.Queries, ws string, id uuid.UUID) (sqlc.DocumentView, error) {
 	doc, err := q.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{ID: id, WorkspaceHash: ws})
 	if err == nil {
 		return doc, nil
@@ -1218,19 +1218,19 @@ func resolveDocumentByAnyID(ctx context.Context, q *sqlc.Queries, ws string, id 
 	if !errors.Is(err, sql.ErrNoRows) {
 		// A real DB/connection error — surface it rather than masking it as a
 		// misleading "not found" behind the chunk fallback.
-		return sqlc.Document{}, err
+		return sqlc.DocumentView{}, err
 	}
 	chunk, chunkErr := q.GetChunkByID(ctx, id)
 	if chunkErr != nil {
 		if errors.Is(chunkErr, sql.ErrNoRows) {
-			return sqlc.Document{}, fmt.Errorf("no document or chunk found for id %s in workspace %s", id, ws)
+			return sqlc.DocumentView{}, fmt.Errorf("no document or chunk found for id %s in workspace %s", id, ws)
 		}
 		// A real DB/connection error on the chunk lookup — surface it rather
 		// than masking it as a misleading "not found".
-		return sqlc.Document{}, chunkErr
+		return sqlc.DocumentView{}, chunkErr
 	}
 	if chunk.WorkspaceHash != ws {
-		return sqlc.Document{}, fmt.Errorf("no document or chunk found for id %s in workspace %s", id, ws)
+		return sqlc.DocumentView{}, fmt.Errorf("no document or chunk found for id %s in workspace %s", id, ws)
 	}
 	return q.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{ID: chunk.DocumentID, WorkspaceHash: ws})
 }
@@ -1264,7 +1264,7 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 				return errResult("path is required"), nil
 			}
 
-			var doc sqlc.Document
+			var doc sqlc.DocumentView
 			switch {
 			case strings.Contains(path, "::"):
 				// A graph node like "relpath::Symbol" as emitted by
@@ -1428,7 +1428,7 @@ func registerMemoryDelete(server *mcpsdk.Server, a *Adapter) {
 				return errResult("path is required"), nil
 			}
 
-			var doc sqlc.Document
+			var doc sqlc.DocumentView
 			switch {
 			case strings.HasPrefix(path, "#"):
 				docID, parseErr := uuid.Parse(strings.TrimPrefix(path, "#"))
@@ -1930,7 +1930,7 @@ func registerMemoryGraph(server *mcpsdk.Server, a *Adapter) {
 				EdgeType string `json:"edge_type"`
 			}
 
-			var rows []sqlc.GraphEdge
+			var rows []sqlc.GraphEdgeView
 			switch direction {
 			case "in":
 				rows, err = a.queries.GetIncomingEdges(ctx, sqlc.GetIncomingEdgesParams{
@@ -2055,7 +2055,7 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 				if cur.depth >= maxDepth {
 					continue
 				}
-				var edges []sqlc.GraphEdge
+				var edges []sqlc.GraphEdgeView
 				var err error
 				// Normalize to the workspace-relative form the DB stores before
 				// matching source_node; an absolute key (from a resolved child)

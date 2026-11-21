@@ -15,9 +15,9 @@ const maxNeighborhoodNodes = 500
 
 // NeighborhoodQuerier is the DB interface for graph neighborhood traversal.
 type NeighborhoodQuerier interface {
-	GetOutgoingEdges(ctx context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdge, error)
-	GetIncomingEdges(ctx context.Context, arg sqlc.GetIncomingEdgesParams) ([]sqlc.GraphEdge, error)
-	GetEdgesByNodes(ctx context.Context, arg sqlc.GetEdgesByNodesParams) ([]sqlc.GraphEdge, error)
+	GetOutgoingEdges(ctx context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdgeView, error)
+	GetIncomingEdges(ctx context.Context, arg sqlc.GetIncomingEdgesParams) ([]sqlc.GraphEdgeView, error)
+	GetEdgesByNodes(ctx context.Context, arg sqlc.GetEdgesByNodesParams) ([]sqlc.GraphEdgeView, error)
 	ListDocumentsByIDs(ctx context.Context, arg sqlc.ListDocumentsByIDsParams) ([]sqlc.ListDocumentsByIDsRow, error)
 }
 
@@ -112,7 +112,7 @@ func GraphNeighborhood(q NeighborhoodQuerier, logger zerolog.Logger) echo.Handle
 					continue
 				}
 
-				var edges []sqlc.GraphEdge
+				var edges []sqlc.GraphEdgeView
 				var err error
 
 				edgeFilter := ""

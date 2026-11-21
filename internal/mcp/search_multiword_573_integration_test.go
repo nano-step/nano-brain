@@ -51,7 +51,7 @@ func TestMemorySearch_MultiWordORFallback(t *testing.T) {
 	}
 	// search_vector is app-populated (UpsertChunk leaves it NULL); set it as the
 	// indexer would so BM25 can match.
-	if _, err := db.ExecContext(ctx, "UPDATE chunks SET search_vector = to_tsvector(get_tsvector_config(), content) WHERE workspace_hash=$1", wsHash); err != nil {
+	if _, err := db.ExecContext(ctx, "UPDATE chunks c SET search_vector = to_tsvector(get_tsvector_config(), cb.content) FROM content_blobs cb WHERE cb.id = c.blob_id AND c.workspace_hash=$1", wsHash); err != nil {
 		t.Fatalf("set search_vector: %v", err)
 	}
 
