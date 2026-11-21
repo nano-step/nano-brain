@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/knadh/koanf/v2"
@@ -379,12 +380,14 @@ func Load(configPath string) (*Config, error) {
 		"NANO_BRAIN_CODE_SUMMARIZE_API_KEY":  "code_summarization.api_key",
 		"NANO_BRAIN_AUTH_ENABLED":            "server.auth.enabled",
 		"NANO_BRAIN_AUTH_REALM":              "server.auth.realm",
-		"NANO_BRAIN_AUTH_TOKENS":             "server.auth.tokens",
 	}
 	for envVar, key := range specialEnvVars {
 		if value, exists := os.LookupEnv(envVar); exists {
 			_ = k.Set(key, value)
 		}
+	}
+	if value, exists := os.LookupEnv("NANO_BRAIN_AUTH_TOKENS"); exists {
+		_ = k.Set("server.auth.tokens", splitTokens(value))
 	}
 
 	// Unmarshal into Config struct with type conversion
@@ -433,6 +436,22 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// validRealm is the set of realms that can be placed inside the quoted
+// WWW-Authenticate realm parameter without escaping.
+var validRealm = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
+
+// splitTokens parses the comma-separated NANO_BRAIN_AUTH_TOKENS value,
+// dropping surrounding whitespace and empty entries.
+func splitTokens(value string) []string {
+	tokens := []string{}
+	for _, t := range strings.Split(value, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			tokens = append(tokens, t)
+		}
+	}
+	return tokens
 }
 
 // expandPaths expands "~/" prefixes in path-type config fields to the real home directory.
@@ -507,6 +526,15 @@ func validate(cfg *Config) error {
 	if cfg.Server.Auth.Enabled {
 		if len(cfg.Server.Auth.Users) == 0 && len(cfg.Server.Auth.Tokens) == 0 {
 			errs = append(errs, errors.New("auth enabled but no users or tokens configured"))
+		}
+		for _, token := range cfg.Server.Auth.Tokens {
+			if strings.TrimSpace(token) == "" {
+				errs = append(errs, errors.New("server.auth.tokens must not contain an empty token"))
+				break
+			}
+		}
+		if !validRealm.MatchString(cfg.Server.Auth.Realm) {
+			errs = append(errs, fmt.Errorf("server.auth.realm %q is not valid: use only letters, digits, spaces, '.', '_' and '-'", cfg.Server.Auth.Realm))
 		}
 	}
 

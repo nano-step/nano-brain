@@ -85,8 +85,8 @@ Server binding and authentication.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `server.auth.enabled` | bool | `false` | Enable authentication |
-| `server.auth.realm` | string | `nano-brain` | HTTP Basic Auth realm |
-| `server.auth.tokens` | []string | `[]` | Bearer tokens for API auth |
+| `server.auth.realm` | string | `nano-brain` | HTTP Basic Auth realm. Letters, digits, spaces, `.`, `_` and `-` only |
+| `server.auth.tokens` | []string | `[]` | Bearer tokens for API auth. Empty tokens are rejected |
 | `server.auth.users` | []object | `[]` | Basic Auth users (username + bcrypt hash) |
 | `server.auth.users[].username` | string | — | Username |
 | `server.auth.users[].password_hash` | string | — | bcrypt hash of password |
