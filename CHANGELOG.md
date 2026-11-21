@@ -22,7 +22,9 @@ All notable changes to nano-brain are documented here.
 ### Added
 - **`server.allowed_hosts`** — Host-header allowlist for the MCP endpoints, guarding against DNS rebinding. Defaults to `localhost`, `127.0.0.1`, `::1`, and `host.docker.internal`. Like `server.host` and `server.port`, changing it requires a restart.
 
-  The guard applies only to connections accepted on a loopback address, which is where DNS rebinding lands — a daemon bound to `0.0.0.0` and reached remotely is unaffected, so existing VPS and reverse-proxy deployments keep working without config changes.
+  The guard applies only to connections accepted on a loopback address, which is where DNS rebinding lands — a daemon bound to `0.0.0.0` and reached remotely on its public address is unaffected.
+
+  **Action needed for same-host reverse proxies and tunnels.** If nginx, Caddy or a tunnel runs on the same machine and forwards the public `Host` header to a daemon bound to `localhost`, `/mcp` and `/sse` now answer `403` until that hostname is added to `server.allowed_hosts` (or `NANO_BRAIN_SERVER_ALLOWED_HOSTS`, comma-separated). A configured list replaces the defaults, so include `localhost` and `host.docker.internal` again if they are still needed.
 - **Pi CLI agent session harvesting** (opt-in, disabled by default). A new `PiHarvester` ingests session transcripts from the Pi CLI coding agent (`~/.pi/agent/sessions/<encoded-cwd>/*.jsonl`), following the existing `Harvester` extension point alongside Claude Code and OpenCode. Enable with `harvester.pi.enabled: true` and `harvester.pi.session_dir` set to your Pi sessions directory.
 
 ## [2026.6.22] — 2026-06-22

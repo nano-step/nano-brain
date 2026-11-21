@@ -4,7 +4,7 @@ MCP (Model Context Protocol) server — 16 tools for AI agent memory and code in
 
 ## Transport
 
-- **Streamable HTTP:** `POST /mcp` (spec 2025-03-26, preferred)
+- **Streamable HTTP:** `POST /mcp` (go-sdk v1.7.0, protocol revisions up to 2026-07-28, stateless; preferred)
 - **SSE legacy:** `GET /sse` (subscribe) + `POST /sse` (send messages)
 - Keep-alive pings every 30s (`KeepAliveInterval`) to prevent proxy timeouts
 

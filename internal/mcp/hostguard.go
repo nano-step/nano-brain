@@ -33,9 +33,9 @@ var defaultAllowedHosts = []string{
 // indexed codebase. So the SDK check is disabled and this allowlist is
 // substituted rather than dropping the protection.
 //
-// An empty allowed slice falls back to defaultAllowedHosts; pass a configured
-// server.allowed_hosts to extend it for reverse-proxy or VPS deployments,
-// which AuthConfig explicitly supports.
+// An empty allowed slice falls back to defaultAllowedHosts. A configured
+// server.allowed_hosts REPLACES the defaults rather than adding to them, so a
+// reverse-proxy deployment that still needs localhost must list it too.
 // The guard fires only when the connection landed on a loopback local
 // address, mirroring the SDK check it replaces. That is not a weakening: DNS
 // rebinding is a browser attack, and a browser attacking this daemon resolves

@@ -7,10 +7,6 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// NewStreamableHTTPHandler creates an http.Handler for MCP Streamable HTTP transport.
-// Stateless mode is enabled so that clients do not need to track session IDs.
-// Each tool call is self-contained (workspace hash passed per-request), so
-// server-side session state provides no benefit for nano-brain.
 // maxRequestBodyBytes bounds an incoming MCP request body. Set explicitly
 // rather than inheriting the SDK's 4 MiB DefaultMaxRequestBodyBytes, which
 // would 413 large memory_write calls — that tool takes arbitrary document
@@ -18,6 +14,10 @@ import (
 // accept by accident.
 const maxRequestBodyBytes = 32 << 20 // 32 MiB
 
+// NewStreamableHTTPHandler creates an http.Handler for MCP Streamable HTTP transport.
+// Stateless mode is enabled so that clients do not need to track session IDs.
+// Each tool call is self-contained (workspace hash passed per-request), so
+// server-side session state provides no benefit for nano-brain.
 func NewStreamableHTTPHandler(server *mcpsdk.Server) http.Handler {
 	return mcpsdk.NewStreamableHTTPHandler(
 		func(_ *http.Request) *mcpsdk.Server {

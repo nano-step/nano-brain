@@ -17,7 +17,6 @@ package handlers
 // @Success      200 "protocol response (not JSON — see MCP spec)"
 // @Router       /mcp [get]
 // @Router       /mcp [post]
-// @Router       /mcp [delete]
 func mcpProtocolDoc() {}
 
 //nolint:unused // doc-only anchor for swag, never invoked
