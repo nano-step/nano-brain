@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -830,6 +831,104 @@ func TestAuthConfig_EnabledNoCredsRejectsStartup(t *testing.T) {
 	}
 }
 
+func TestAuthConfig_TokensFromEnvAreCommaSeparated(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want []string
+	}{
+		{"single token", "tok1", []string{"tok1"}},
+		{"two tokens", "tok1,tok2", []string{"tok1", "tok2"}},
+		{"padding and empty entries dropped", " tok1 , ,tok2,", []string{"tok1", "tok2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("NANO_BRAIN_AUTH_ENABLED", "true")
+			t.Setenv("NANO_BRAIN_AUTH_TOKENS", tt.env)
+
+			cfg, err := Load(filepath.Join(t.TempDir(), "nonexistent.yml"))
+			if err != nil {
+				t.Fatalf("Load() failed: %v", err)
+			}
+			if !reflect.DeepEqual(cfg.Server.Auth.Tokens, tt.want) {
+				t.Errorf("Tokens = %q, want %q", cfg.Server.Auth.Tokens, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthConfig_BlankTokensEnvIsNotACredential(t *testing.T) {
+	for _, env := range []string{"", " ", ",", " , "} {
+		t.Run(fmt.Sprintf("%q", env), func(t *testing.T) {
+			t.Setenv("NANO_BRAIN_AUTH_ENABLED", "true")
+			t.Setenv("NANO_BRAIN_AUTH_TOKENS", env)
+
+			_, err := Load(filepath.Join(t.TempDir(), "nonexistent.yml"))
+			if err == nil || !contains(err.Error(), "auth enabled but no users or tokens configured") {
+				t.Errorf("Load() error = %v, want the no-credentials validation error", err)
+			}
+		})
+	}
+}
+
+func TestAuthConfig_EmptyTokenRejected(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yml")
+	yamlContent := "server:\n  auth:\n    enabled: true\n    tokens: [tok1, \"\"]\n"
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(configPath)
+	if err == nil || !contains(err.Error(), "server.auth.tokens must not contain an empty token") {
+		t.Errorf("Load() error = %v, want the empty-token validation error", err)
+	}
+}
+
+func TestAuthConfig_RealmValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string // the realm scalar exactly as written in the config file
+		wantErr bool
+	}{
+		{"default-like", `nano-brain`, false},
+		{"allowed punctuation", `"My Brain v1.2_prod"`, false},
+		{"double quote", `'evil" x="y'`, true},
+		{"newline", `"a\nb"`, true},
+		{"carriage return", `"a\rb"`, true},
+		{"backslash", `'a\b'`, true},
+		{"empty", `""`, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.yml")
+			yamlContent := "server:\n  auth:\n    enabled: true\n    realm: " + tt.yaml + "\n    tokens: [tok1]\n"
+			if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := Load(configPath)
+			if tt.wantErr {
+				if err == nil || !contains(err.Error(), "server.auth.realm") {
+					t.Errorf("Load() error = %v, want a server.auth.realm validation error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Load() failed: %v", err)
+			}
+		})
+	}
+}
+
+func TestAuthConfig_RealmNotValidatedWhenAuthDisabled(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(configPath, []byte("server:\n  auth:\n    realm: \"\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(configPath); err != nil {
+		t.Errorf("Load() failed: %v", err)
+	}
+}
+
 func TestAuthConfig_DefaultsDisabled(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "nonexistent.yml")
@@ -994,4 +1093,64 @@ func TestServeOnlyConfigFlag(t *testing.T) {
 			t.Errorf("ServeOnly should be true from env, got false")
 		}
 	})
+}
+
+// TestLoadRestoresDefaultForEmptyHost pins #635. koanf applies a default only
+// when the key is absent, so an explicitly empty host survived as "" — and
+// Server.Start renders that as ":<port>", a wildcard bind on every interface.
+// The empty and omitted forms must mean the same safe thing, because a bare
+// `host:` in YAML is what commenting out the value produces.
+func TestLoadRestoresDefaultForEmptyHost(t *testing.T) {
+	want := getDefaults().Server.Host
+
+	for name, body := range map[string]string{
+		"omitted":      "server:\n  port: 3100\n",
+		"empty string": "server:\n  host: \"\"\n  port: 3100\n",
+		"yaml null":    "server:\n  host:\n  port: 3100\n",
+		"whitespace":   "server:\n  host: \"   \"\n  port: 3100\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "config.yml")
+			if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			cfg, err := Load(p)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.Server.Host != want {
+				t.Errorf("Server.Host = %q, want %q — an empty host binds every interface", cfg.Server.Host, want)
+			}
+		})
+	}
+}
+
+// An explicit host must still win; the normalization must not clobber it.
+func TestLoadKeepsExplicitHost(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(p, []byte("server:\n  host: \"0.0.0.0\"\n  port: 3100\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.Host != "0.0.0.0" {
+		t.Errorf("Server.Host = %q, want %q", cfg.Server.Host, "0.0.0.0")
+	}
+}
+
+// A padded but non-empty host must be usable, not refused as non-loopback.
+func TestLoadTrimsHostWhitespace(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(p, []byte("server:\n  host: \"  127.0.0.1  \"\n  port: 3100\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.Host != "127.0.0.1" {
+		t.Errorf("Server.Host = %q, want %q", cfg.Server.Host, "127.0.0.1")
+	}
 }

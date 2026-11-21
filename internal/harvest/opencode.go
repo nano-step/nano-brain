@@ -389,5 +389,5 @@ func renderMarkdown(sess *sessionFile, msgs []renderedMessage) string {
 		b.WriteString("\n")
 	}
 
-	return b.String()
+	return sanitizeText(b.String())
 }

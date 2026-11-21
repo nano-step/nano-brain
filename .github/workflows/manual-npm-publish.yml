@@ -1,0 +1,28 @@
+name: Manual npm publish
+
+# Dispatches release.yml's OIDC-trusted npm-publish job for an existing git tag.
+# npm OIDC Trusted Publishing is bound to workflow filename `release.yml`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to publish to npm (e.g. v2026.9.0703)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch release.yml for tag
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+          TARGET_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --repo "${{ github.repository }}" -f tag="$TARGET_TAG"
+          echo "Dispatched release.yml npm-publish for tag ${TARGET_TAG}"

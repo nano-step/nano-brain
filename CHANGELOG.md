@@ -14,6 +14,11 @@ All notable changes to nano-brain are documented here.
   - `GET`/`DELETE /mcp` now return `405` in stateless mode. The `DELETE /mcp` route was removed, since the SDK can no longer serve it.
   - Request bodies are capped. nano-brain sets this explicitly to 32 MiB rather than inheriting the SDK's 4 MiB default, which would have rejected large `memory_write` calls.
 
+### Fixed
+- **An empty `server.host` no longer binds every network interface without requiring auth** (#635). `server.host: "0.0.0.0"` was correctly refused unless auth was configured, but an empty value — or a bare `host:`, which is what commenting out the value produces — took a different path: it rendered as `":<port>"`, a wildcard bind, while the safety check treated it as `localhost` and let it through. An empty host now resolves to the `localhost` default at config load, and the bind-safety check no longer treats an empty host as loopback, so the control is correct regardless of how the value arrives.
+- **Auth hardening** (#271). Basic auth now spends one bcrypt comparison on an unknown username, as it does on a wrong password, so response time no longer reveals which usernames exist. `NANO_BRAIN_AUTH_TOKENS` is split on commas as documented (it was read as a single token), and a blank value no longer counts as a configured credential. With auth enabled, startup now rejects an empty bearer token and a `server.auth.realm` containing anything other than letters, digits, spaces, `.`, `_` and `-`.
+- **A session containing a NUL character is no longer dropped by the harvesters** (#648). Tool output can carry `\u0000`, which decodes to a real `0x00` that Postgres `TEXT` rejects, so the upsert failed with `invalid byte sequence for encoding "UTF8": 0x00` and the whole session was re-read and re-failed on every harvest cycle. NUL characters are now removed from rendered session content in the Pi, Claude Code and legacy OpenCode JSON harvesters, as the OpenCode SQLite harvester already did.
+
 ### Added
 - **`server.allowed_hosts`** — Host-header allowlist for the MCP endpoints, guarding against DNS rebinding. Defaults to `localhost`, `127.0.0.1`, `::1`, and `host.docker.internal`. Like `server.host` and `server.port`, changing it requires a restart.
 

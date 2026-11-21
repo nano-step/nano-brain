@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/knadh/koanf/v2"
@@ -384,12 +385,14 @@ func Load(configPath string) (*Config, error) {
 		"NANO_BRAIN_CODE_SUMMARIZE_API_KEY":  "code_summarization.api_key",
 		"NANO_BRAIN_AUTH_ENABLED":            "server.auth.enabled",
 		"NANO_BRAIN_AUTH_REALM":              "server.auth.realm",
-		"NANO_BRAIN_AUTH_TOKENS":             "server.auth.tokens",
 	}
 	for envVar, key := range specialEnvVars {
 		if value, exists := os.LookupEnv(envVar); exists {
 			_ = k.Set(key, value)
 		}
+	}
+	if value, exists := os.LookupEnv("NANO_BRAIN_AUTH_TOKENS"); exists {
+		_ = k.Set("server.auth.tokens", splitTokens(value))
 	}
 
 	// Unmarshal into Config struct with type conversion
@@ -398,6 +401,25 @@ func Load(configPath string) (*Config, error) {
 		Tag: "koanf",
 	}); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// koanf only applies the default when the key is absent, so an explicitly
+	// empty host ("" or a bare `host:`, which is what commenting out the value
+	// produces) survives as "". That is not harmless: Server.Start builds the
+	// listen address with fmt.Sprintf("%s:%d", host, port), so "" yields
+	// ":<port>" — a wildcard bind on every interface. Restoring the default
+	// here makes the empty and omitted forms mean the same safe thing, which
+	// is what an operator writing a bare `host:` intends. checkBindSafety
+	// independently refuses to treat "" as loopback, so the control is still
+	// correct for any value that reaches it by another path.
+	//
+	// Trimming the value (not just testing it) keeps one notion of "host"
+	// here: otherwise a padded but non-empty ` 127.0.0.1 ` would survive,
+	// fail net.ParseIP, and be refused as non-loopback. Trimming can only
+	// newly-admit literal loopback strings — " 0.0.0.0 " is still rejected.
+	cfg.Server.Host = strings.TrimSpace(cfg.Server.Host)
+	if cfg.Server.Host == "" {
+		cfg.Server.Host = getDefaults().Server.Host
 	}
 
 	if err := expandPaths(cfg); err != nil {
@@ -419,6 +441,22 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// validRealm is the set of realms that can be placed inside the quoted
+// WWW-Authenticate realm parameter without escaping.
+var validRealm = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
+
+// splitTokens parses the comma-separated NANO_BRAIN_AUTH_TOKENS value,
+// dropping surrounding whitespace and empty entries.
+func splitTokens(value string) []string {
+	tokens := []string{}
+	for _, t := range strings.Split(value, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			tokens = append(tokens, t)
+		}
+	}
+	return tokens
 }
 
 // expandPaths expands "~/" prefixes in path-type config fields to the real home directory.
@@ -493,6 +531,15 @@ func validate(cfg *Config) error {
 	if cfg.Server.Auth.Enabled {
 		if len(cfg.Server.Auth.Users) == 0 && len(cfg.Server.Auth.Tokens) == 0 {
 			errs = append(errs, errors.New("auth enabled but no users or tokens configured"))
+		}
+		for _, token := range cfg.Server.Auth.Tokens {
+			if strings.TrimSpace(token) == "" {
+				errs = append(errs, errors.New("server.auth.tokens must not contain an empty token"))
+				break
+			}
+		}
+		if !validRealm.MatchString(cfg.Server.Auth.Realm) {
+			errs = append(errs, fmt.Errorf("server.auth.realm %q is not valid: use only letters, digits, spaces, '.', '_' and '-'", cfg.Server.Auth.Realm))
 		}
 	}
 
