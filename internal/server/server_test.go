@@ -195,3 +195,38 @@ func TestResolveWorkspaceRouteSkipsWorkspaceMiddleware(t *testing.T) {
 		t.Errorf("expected 'path is required' from handler, got: %s", body)
 	}
 }
+
+// The MCP endpoints must sit behind mcp.HostGuard: the SDK's own
+// DNS-rebinding check is disabled, so the wrap in registerRoutes is the only
+// protection. This pins the wiring, not just the guard function (#630).
+func TestMCPRoutesRejectForeignHost(t *testing.T) {
+	s := newTestServer(&mockPool{})
+	const initialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`
+
+	tests := []struct {
+		name, method, path, host string
+		wantForbidden            bool
+	}{
+		{"mcp post foreign host", http.MethodPost, "/mcp", "evil.example:3100", true},
+		{"mcp get foreign host", http.MethodGet, "/mcp", "evil.example", true},
+		{"sse post foreign host", http.MethodPost, "/sse", "evil.example:3100", true},
+		{"sse get foreign host", http.MethodGet, "/sse", "evil.example", true},
+		{"mcp post localhost", http.MethodPost, "/mcp", "localhost:3100", false},
+		{"mcp post container host", http.MethodPost, "/mcp", "host.docker.internal:3100", false},
+		{"sse post localhost", http.MethodPost, "/sse", "127.0.0.1:3100", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(initialize))
+			req.Host = tt.host
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			rec := httptest.NewRecorder()
+			s.ServeHTTP(rec, req)
+
+			if got := rec.Code == http.StatusForbidden; got != tt.wantForbidden {
+				t.Errorf("%s %s with Host %q: status %d, want forbidden=%v", tt.method, tt.path, tt.host, rec.Code, tt.wantForbidden)
+			}
+		})
+	}
+}

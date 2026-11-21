@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -270,6 +271,8 @@ func (g *GitHarvester) updateLastHarvestedSHA(ctx context.Context, workspaceHash
 	return nil
 }
 
+var gitObjectID = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
+
 func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]gitCommit, error) {
 	// Use %x1e (record separator) to delimit commits, %x1f (unit separator) for fields.
 	// --name-only output appears after the format string for each commit.
@@ -284,9 +287,17 @@ func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]
 		args = append(args, fmt.Sprintf("-n%d", maxCommits))
 	}
 
-	if since != "" {
-		args = append(args, fmt.Sprintf("%s..HEAD", since))
+	// since comes from a stored document. Anything that is not an object id
+	// is dropped rather than handed to git, where a value starting with "-"
+	// would be parsed as an option.
+	if since != "" && !gitObjectID.MatchString(since) {
+		g.logger.Warn().Str("since", since).Msg("last-harvested marker is not a commit id, harvesting from the start")
+		since = ""
 	}
+	if since != "" {
+		args = append(args, since+"..HEAD")
+	}
+	args = append(args, "--")
 
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repoPath

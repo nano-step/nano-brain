@@ -6,14 +6,29 @@ All notable changes to nano-brain are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **MCP SDK upgraded to `go-sdk` v1.7.0**, adding support for MCP protocol revision `2026-07-28` (#630). nano-brain previously implemented `2025-06-18`, which modern clients refuse to talk to. All five revisions (`2024-11-05` → `2026-07-28`) are now supported with backward negotiation, so existing clients keep working.
+
+  Three behavior changes come from the SDK and are worth knowing about:
+  - `Content-Type: application/json` is now **required** on MCP requests; a request without it gets `415`.
+  - `GET`/`DELETE /mcp` now return `405` in stateless mode. The `DELETE /mcp` route was removed, since the SDK can no longer serve it.
+  - Request bodies are capped. nano-brain sets this explicitly to 32 MiB rather than inheriting the SDK's 4 MiB default, which would have rejected large `memory_write` calls.
+
 ### Fixed
 - **An empty `server.host` no longer binds every network interface without requiring auth** (#635). `server.host: "0.0.0.0"` was correctly refused unless auth was configured, but an empty value — or a bare `host:`, which is what commenting out the value produces — took a different path: it rendered as `":<port>"`, a wildcard bind, while the safety check treated it as `localhost` and let it through. An empty host now resolves to the `localhost` default at config load, and the bind-safety check no longer treats an empty host as loopback, so the control is correct regardless of how the value arrives.
 - **Auth hardening** (#271). Basic auth now spends one bcrypt comparison on an unknown username, as it does on a wrong password, so response time no longer reveals which usernames exist. `NANO_BRAIN_AUTH_TOKENS` is split on commas as documented (it was read as a single token), and a blank value no longer counts as a configured credential. With auth enabled, startup now rejects an empty bearer token and a `server.auth.realm` containing anything other than letters, digits, spaces, `.`, `_` and `-`.
 - **A session containing a NUL character is no longer dropped by the harvesters** (#648). Tool output can carry `\u0000`, which decodes to a real `0x00` that Postgres `TEXT` rejects, so the upsert failed with `invalid byte sequence for encoding "UTF8": 0x00` and the whole session was re-read and re-failed on every harvest cycle. NUL characters are now removed from rendered session content in the Pi, Claude Code and legacy OpenCode JSON harvesters, as the OpenCode SQLite harvester already did.
 - **`GET /api/v1/config` no longer returns provider API keys** (#651). Only `embedding.voyage_api_key` and `summarization.api_key` were redacted; the keys for code summarization, intelligence, bench, HyDE, reranking and query preprocessing were returned in clear. All of them are now redacted and rejected as secret paths by the config PATCH endpoint.
 - **Removed a provider API key that was committed in `config.test.yml`** (#650). Code summarization is now disabled in the test config; to exercise it, enable it locally and supply the key through `NANO_BRAIN_CODE_SUMMARIZE_API_KEY`. The old key remains in git history and must be treated as compromised.
+- **`git log` no longer receives a stored marker that is not a commit id** (#656). The git harvester passed the content of its last-harvested marker document straight to `git log`; a value starting with `-` was parsed as an option (`--output=<path>` writes a file). The marker is now used only when it is a hex object id; otherwise it is ignored with a warning and history is harvested from the start.
+- **Auth user entries are validated at startup** (#654). With auth enabled, startup now rejects an empty, padded or duplicate username, a username containing `:`, a `password_hash` that is not a complete bcrypt hash, and users whose hashes have different bcrypt costs. A malformed hash used to load silently, lock that user out and, as the first entry, undo the timing protection from #271; mixed costs let response time tell a cheaper user apart from an unknown username. If your users were hashed at different costs, re-hash them with `nano-brain auth hash`.
 
 ### Added
+- **`server.allowed_hosts`** — Host-header allowlist for the MCP endpoints, guarding against DNS rebinding. Defaults to `localhost`, `127.0.0.1`, `::1`, and `host.docker.internal`. Like `server.host` and `server.port`, changing it requires a restart.
+
+  The guard applies only to connections accepted on a loopback address, which is where DNS rebinding lands — a daemon bound to `0.0.0.0` and reached remotely on its public address is unaffected.
+
+  **Action needed for same-host reverse proxies and tunnels.** If nginx, Caddy or a tunnel runs on the same machine and forwards the public `Host` header to a daemon bound to `localhost`, `/mcp` and `/sse` now answer `403` until that hostname is added to `server.allowed_hosts` (or `NANO_BRAIN_SERVER_ALLOWED_HOSTS`, comma-separated). A configured list replaces the defaults, so include `localhost` and `host.docker.internal` again if they are still needed.
 - **Pi CLI agent session harvesting** (opt-in, disabled by default). A new `PiHarvester` ingests session transcripts from the Pi CLI coding agent (`~/.pi/agent/sessions/<encoded-cwd>/*.jsonl`), following the existing `Harvester` extension point alongside Claude Code and OpenCode. Enable with `harvester.pi.enabled: true` and `harvester.pi.session_dir` set to your Pi sessions directory.
 
 ## [2026.6.22] — 2026-06-22

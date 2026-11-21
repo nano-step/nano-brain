@@ -14,6 +14,7 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/structs"
 	"github.com/rs/zerolog"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // expandTildeForConfig resolves "~/..." to absolute path. Local copy to avoid
@@ -58,10 +59,15 @@ type Config struct {
 // containers that share a DB with a primary host instance running the
 // workers — prevents duplicate work and races. See issue #282.
 type ServerConfig struct {
-	Host      string     `koanf:"host" json:"host"`
-	Port      int        `koanf:"port" json:"port"`
-	Auth      AuthConfig `koanf:"auth" json:"auth"`
-	ServeOnly bool       `koanf:"serve_only" json:"serve_only"`
+	Host string     `koanf:"host" json:"host"`
+	Port int        `koanf:"port" json:"port"`
+	Auth AuthConfig `koanf:"auth" json:"auth"`
+	// AllowedHosts is the Host-header allowlist for the MCP endpoints
+	// (/mcp, /sse), guarding against DNS rebinding. Empty means the built-in
+	// set: localhost, 127.0.0.1, ::1, host.docker.internal. A non-empty list
+	// replaces that set, so list every hostname that must keep working.
+	AllowedHosts []string `koanf:"allowed_hosts" json:"allowed_hosts"`
+	ServeOnly    bool     `koanf:"serve_only" json:"serve_only"`
 }
 
 // AuthConfig holds authentication configuration for VPS/remote deployments.
@@ -387,7 +393,10 @@ func Load(configPath string) (*Config, error) {
 		}
 	}
 	if value, exists := os.LookupEnv("NANO_BRAIN_AUTH_TOKENS"); exists {
-		_ = k.Set("server.auth.tokens", splitTokens(value))
+		_ = k.Set("server.auth.tokens", splitCommaList(value))
+	}
+	if value, exists := os.LookupEnv("NANO_BRAIN_SERVER_ALLOWED_HOSTS"); exists {
+		_ = k.Set("server.allowed_hosts", splitCommaList(value))
 	}
 
 	// Unmarshal into Config struct with type conversion
@@ -438,20 +447,25 @@ func Load(configPath string) (*Config, error) {
 	return cfg, nil
 }
 
+// bcryptHashShape is a complete bcrypt hash: version, two-digit cost, then
+// 22 salt and 31 digest characters in the bcrypt base64 alphabet.
+var bcryptHashShape = regexp.MustCompile(`^\$2[abxy]?\$[0-9]{2}\$[./A-Za-z0-9]{53}$`)
+
 // validRealm is the set of realms that can be placed inside the quoted
 // WWW-Authenticate realm parameter without escaping.
 var validRealm = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
 
-// splitTokens parses the comma-separated NANO_BRAIN_AUTH_TOKENS value,
-// dropping surrounding whitespace and empty entries.
-func splitTokens(value string) []string {
-	tokens := []string{}
-	for _, t := range strings.Split(value, ",") {
-		if t = strings.TrimSpace(t); t != "" {
-			tokens = append(tokens, t)
+// splitCommaList parses a comma-separated env value (NANO_BRAIN_AUTH_TOKENS,
+// NANO_BRAIN_SERVER_ALLOWED_HOSTS), dropping surrounding whitespace and empty
+// entries.
+func splitCommaList(value string) []string {
+	items := []string{}
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
 		}
 	}
-	return tokens
+	return items
 }
 
 // expandPaths expands "~/" prefixes in path-type config fields to the real home directory.
@@ -531,6 +545,38 @@ func validate(cfg *Config) error {
 			if strings.TrimSpace(token) == "" {
 				errs = append(errs, errors.New("server.auth.tokens must not contain an empty token"))
 				break
+			}
+		}
+		seenUsers := make(map[string]bool, len(cfg.Server.Auth.Users))
+		firstCost := 0
+		for i, u := range cfg.Server.Auth.Users {
+			switch {
+			case strings.TrimSpace(u.Username) == "":
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not be empty", i))
+			case strings.TrimSpace(u.Username) != u.Username:
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not start or end with whitespace", i))
+			case strings.Contains(u.Username, ":"):
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not contain ':' (Basic credentials are split on the first colon, so it could never log in)", i))
+			case seenUsers[u.Username]:
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].username %q is a duplicate", i, u.Username))
+			}
+			seenUsers[u.Username] = true
+
+			// bcrypt.Cost alone accepts a well-formed prefix followed by junk,
+			// which then fails instantly at login, so the body is checked too.
+			// The bcrypt error is dropped on purpose: it can quote bytes of the hash.
+			cost, err := bcrypt.Cost([]byte(u.PasswordHash))
+			if err != nil || !bcryptHashShape.MatchString(u.PasswordHash) {
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].password_hash is not a valid bcrypt hash (generate one with: nano-brain auth hash <password>)", i))
+				continue
+			}
+			// An unknown username is compared against the first user's hash.
+			// With one cost for everybody, no response time says whether a
+			// username exists.
+			if firstCost == 0 {
+				firstCost = cost
+			} else if cost != firstCost {
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].password_hash has bcrypt cost %d but an earlier user has cost %d; all users must use the same cost, otherwise response time reveals which usernames exist", i, cost, firstCost))
 			}
 		}
 		if !validRealm.MatchString(cfg.Server.Auth.Realm) {

@@ -78,6 +78,7 @@ Server binding and authentication.
 |-----|------|---------|-------------|
 | `server.host` | string | `localhost` | Bind address. Use `0.0.0.0` for remote access |
 | `server.port` | int | `3100` | HTTP port (1-65535) |
+| `server.allowed_hosts` | []string | built-in set | `Host` headers accepted on `/mcp` and `/sse` for connections that arrive on a loopback address (DNS-rebinding guard). Built-in set: `localhost`, `127.0.0.1`, `::1`, `host.docker.internal`. A non-empty list **replaces** the built-in set. Needed when a reverse proxy or tunnel on the same host forwards the public hostname. Env: `NANO_BRAIN_SERVER_ALLOWED_HOSTS` (comma-separated). Requires a restart |
 | `server.serve_only` | bool | `false` | Disable all background workers (embed queue, watcher, harvester). Use for proxy containers sharing a DB with a primary instance |
 
 ### server.auth
@@ -87,9 +88,9 @@ Server binding and authentication.
 | `server.auth.enabled` | bool | `false` | Enable authentication |
 | `server.auth.realm` | string | `nano-brain` | HTTP Basic Auth realm. Letters, digits, spaces, `.`, `_` and `-` only |
 | `server.auth.tokens` | []string | `[]` | Bearer tokens for API auth. Empty tokens are rejected |
-| `server.auth.users` | []object | `[]` | Basic Auth users (username + bcrypt hash) |
-| `server.auth.users[].username` | string | — | Username |
-| `server.auth.users[].password_hash` | string | — | bcrypt hash of password |
+| `server.auth.users` | []object | `[]` | Basic Auth users (username + bcrypt hash). When auth is enabled, startup fails on an invalid entry |
+| `server.auth.users[].username` | string | — | Username. Must be non-empty, unique, without leading or trailing whitespace, and must not contain `:` |
+| `server.auth.users[].password_hash` | string | — | bcrypt hash of password. Must be a complete bcrypt hash, and every user must use the same bcrypt cost; generate one with `nano-brain auth hash <password>` |
 | `server.auth.bypass_paths` | []string | `["/health"]` | Paths that skip auth |
 
 ---
@@ -399,6 +400,12 @@ nano-brain validates config on startup. Invalid config → startup fails with er
 | `telemetry.retention_days` < 1 | `telemetry.retention_days must be >= 1` |
 | `logging.level` invalid | `logging.level "X" is not valid` |
 | `auth.enabled` but no users/tokens | `auth enabled but no users or tokens configured` |
+| `auth.enabled` and a user with an empty or whitespace-only username | `server.auth.users[N].username must not be empty` |
+| `auth.enabled` and a username containing `:` | `server.auth.users[N].username must not contain ':'` |
+| `auth.enabled` and a repeated username | `server.auth.users[N].username "X" is a duplicate` |
+| `auth.enabled` and a username with leading or trailing whitespace | `server.auth.users[N].username must not start or end with whitespace` |
+| `auth.enabled` and an incomplete or unparsable `password_hash` | `server.auth.users[N].password_hash is not a valid bcrypt hash` |
+| `auth.enabled` and users hashed at different bcrypt costs | `server.auth.users[N].password_hash has bcrypt cost X but an earlier user has cost Y` |
 | `summarization.enabled` but no provider_url | `summarization.provider_url is required when enabled` |
 | `summarization.enabled` but concurrency < 1 | `summarization.concurrency must be >= 1 when enabled` |
 | `code_summarization.enabled` but no provider_url | `code_summarization.provider_url is required when enabled` |
