@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -776,6 +778,16 @@ func TestAuthConfig_EnabledFromEnv(t *testing.T) {
 	_ = err
 }
 
+// testBcryptHash returns a genuine bcrypt hash at the cheapest cost.
+func testBcryptHash(t *testing.T, password string) string {
+	t.Helper()
+	h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(h)
+}
+
 func TestAuthConfig_EnabledFromYAML(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yml")
@@ -785,7 +797,7 @@ func TestAuthConfig_EnabledFromYAML(t *testing.T) {
     realm: "test-realm"
     users:
       - username: admin
-        password_hash: "$2a$10$fakehashjustfortest1234567890ab"
+        password_hash: "` + testBcryptHash(t, "secret") + `"
     bypass_paths:
       - /health
 `
@@ -893,6 +905,79 @@ func TestAuthConfig_EmptyTokenRejected(t *testing.T) {
 	_, err := Load(configPath)
 	if err == nil || !contains(err.Error(), "server.auth.tokens must not contain an empty token") {
 		t.Errorf("Load() error = %v, want the empty-token validation error", err)
+	}
+}
+
+func TestAuthConfig_UserValidation(t *testing.T) {
+	valid := testBcryptHash(t, "secret")
+	other := testBcryptHash(t, "other")
+	const garbage = "garbage-not-a-bcrypt-hash-garbage-not-a-bcrypt-hash-garbage!!"
+	truncated := valid[:40]
+	oneShort := valid[:59]
+	junkBody := valid[:7] + strings.Repeat("!", 53)
+	costTooHigh := valid[:4] + "99" + valid[6:]
+	costTooLow := valid[:4] + "03" + valid[6:]
+	higherCost, err := bcrypt.GenerateFromPassword([]byte("x"), bcrypt.MinCost+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type user struct{ name, hash string }
+	tests := []struct {
+		name    string
+		users   []user
+		wantErr string // empty: the config must load
+		secret  string // hash value that must not appear in the error
+	}{
+		{name: "valid user", users: []user{{"admin", valid}}},
+		{name: "two valid users", users: []user{{"admin", valid}, {"bob", other}}},
+		{name: "empty username", users: []user{{"", valid}}, wantErr: "server.auth.users[0].username must not be empty"},
+		{name: "whitespace username", users: []user{{"admin", valid}, {"   ", other}}, wantErr: "server.auth.users[1].username must not be empty"},
+		{name: "colon in username", users: []user{{"ad:min", valid}}, wantErr: "server.auth.users[0].username must not contain ':'"},
+		{name: "duplicate username", users: []user{{"admin", valid}, {"bob", other}, {"admin", other}}, wantErr: `server.auth.users[2].username "admin" is a duplicate`},
+		{name: "empty hash", users: []user{{"admin", ""}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash"},
+		{name: "garbage hash", users: []user{{"admin", valid}, {"bob", garbage}}, wantErr: "server.auth.users[1].password_hash is not a valid bcrypt hash", secret: garbage},
+		{name: "truncated hash", users: []user{{"admin", truncated}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: truncated},
+		{name: "hash one character short", users: []user{{"admin", oneShort}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: oneShort},
+		{name: "padded username", users: []user{{" admin", valid}}, wantErr: "server.auth.users[0].username must not start or end with whitespace"},
+		{name: "cost above the bcrypt range", users: []user{{"admin", costTooHigh}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: costTooHigh},
+		{name: "cost below the bcrypt range", users: []user{{"admin", costTooLow}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: costTooLow},
+		{name: "one extra character", users: []user{{"admin", valid + "A"}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: valid},
+		{name: "trailing newline", users: []user{{"admin", valid + "\n"}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: valid},
+		{name: "users with different costs", users: []user{{"admin", valid}, {"bob", string(higherCost)}}, wantErr: "server.auth.users[1].password_hash has bcrypt cost 5 but an earlier user has cost 4", secret: valid},
+		{name: "valid prefix with a non-base64 body", users: []user{{"admin", junkBody}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: junkBody},
+	}
+	for _, tt := range tests {
+		for _, enabled := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/enabled=%t", tt.name, enabled), func(t *testing.T) {
+				var b strings.Builder
+				fmt.Fprintf(&b, "server:\n  auth:\n    enabled: %t\n    users:\n", enabled)
+				for _, u := range tt.users {
+					fmt.Fprintf(&b, "      - username: %q\n        password_hash: %q\n", u.name, u.hash)
+				}
+				configPath := filepath.Join(t.TempDir(), "config.yml")
+				if err := os.WriteFile(configPath, []byte(b.String()), 0o644); err != nil {
+					t.Fatal(err)
+				}
+
+				cfg, err := Load(configPath)
+				if !enabled || tt.wantErr == "" {
+					if err != nil {
+						t.Fatalf("Load() failed: %v", err)
+					}
+					if len(cfg.Server.Auth.Users) != len(tt.users) {
+						t.Errorf("loaded %d users, want %d", len(cfg.Server.Auth.Users), len(tt.users))
+					}
+					return
+				}
+				if err == nil || !contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Load() error = %v, want it to contain %q", err, tt.wantErr)
+				}
+				if tt.secret != "" && contains(err.Error(), tt.secret) {
+					t.Errorf("Load() error leaks the password hash: %v", err)
+				}
+			})
+		}
 	}
 }
 
