@@ -103,7 +103,11 @@ jobs:
           files: artifacts/*
           fail_on_unmatched_files: true
 
-  npm-publish:
+  # @nano-step/nano-brain's Trusted Publisher on npmjs.com has no environment
+  # configured, whereas unscoped `nano-brain`'s Trusted Publisher is bound to
+  # GitHub Actions environment `release`. Splitting into two jobs matches each
+  # package's exact OIDC `sub`/`environment` claims independently.
+  npm-publish-scoped:
     needs: release
     if: always() && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success')
     permissions:
@@ -121,9 +125,6 @@ jobs:
           node-version: "24"
           registry-url: https://registry.npmjs.org
 
-      # setup-node writes //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
-      # into userconfig whenever registry-url is set; npm 11 sees _authToken=
-      # and skips the OIDC Trusted Publisher token exchange (actions/setup-node#1551).
       - name: Prepare OIDC Trusted Publishing
         run: |
           set -euo pipefail
@@ -155,14 +156,77 @@ jobs:
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
           npm version --no-git-tag-version "${TARGET_TAG#v}"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Publish @nano-step/nano-brain
         run: |
           unset NODE_AUTH_TOKEN
+          VER="${{ steps.npm-tag.outputs.version }}"
+          if npm view "@nano-step/nano-brain@${VER}" version >/dev/null 2>&1; then
+            echo "@nano-step/nano-brain@${VER} already published; skipping."
+            exit 0
+          fi
           npm publish --tag "${{ steps.npm-tag.outputs.tag }}" --access public
+
+  npm-publish-unscoped:
+    needs: release
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success')
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Prepare OIDC Trusted Publishing
+        run: |
+          set -euo pipefail
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "ERROR: ACTIONS_ID_TOKEN_REQUEST_URL is unset (missing id-token: write permission)"
+            exit 1
+          fi
+          NPMRC="${NPM_CONFIG_USERCONFIG:-$(npm config get userconfig)}"
+          if [ -f "$NPMRC" ]; then
+            sed -i '/_authToken/d' "$NPMRC"
+          fi
+          node -e 'const [maj,min,pat]=process.argv[1].split(".").map(Number); process.exit(maj>11||(maj===11&&(min>5||(min===5&&pat>=1)))?0:1)' "$(npm -v)" \
+            || npm install -g npm@^11.6.2
+          echo "node=$(node -v) npm=$(npm -v)"
+
+      - name: Determine npm tag and version
+        id: npm-tag
+        env:
+          TARGET_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TARGET_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "ERROR: invalid tag '$TARGET_TAG' (expected vMAJOR.MINOR.PATCH)"
+            exit 1
+          fi
+          if [[ "$TARGET_TAG" == *"-beta"* || "$TARGET_TAG" == *"-alpha"* || "$TARGET_TAG" == *"-rc"* ]]; then
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+          npm version --no-git-tag-version "${TARGET_TAG#v}"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Publish nano-brain (unscoped alias)
         run: |
           unset NODE_AUTH_TOKEN
+          VER="${{ steps.npm-tag.outputs.version }}"
+          if npm view "nano-brain@${VER}" version >/dev/null 2>&1; then
+            echo "nano-brain@${VER} already published; skipping."
+            exit 0
+          fi
           node -e "const p=require('./package.json'); p.name='nano-brain'; delete p.publishConfig; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
           npm publish --tag "${{ steps.npm-tag.outputs.tag }}" --access public
