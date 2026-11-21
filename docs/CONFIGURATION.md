@@ -78,6 +78,7 @@ Server binding and authentication.
 |-----|------|---------|-------------|
 | `server.host` | string | `localhost` | Bind address. Use `0.0.0.0` for remote access |
 | `server.port` | int | `3100` | HTTP port (1-65535) |
+| `server.allowed_hosts` | []string | built-in set | `Host` headers accepted on `/mcp` and `/sse` for connections that arrive on a loopback address (DNS-rebinding guard). Built-in set: `localhost`, `127.0.0.1`, `::1`, `host.docker.internal`. A non-empty list **replaces** the built-in set. Needed when a reverse proxy or tunnel on the same host forwards the public hostname. Env: `NANO_BRAIN_SERVER_ALLOWED_HOSTS` (comma-separated). Requires a restart |
 | `server.serve_only` | bool | `false` | Disable all background workers (embed queue, watcher, harvester). Use for proxy containers sharing a DB with a primary instance |
 
 ### server.auth

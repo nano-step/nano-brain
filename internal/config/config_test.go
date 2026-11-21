@@ -857,6 +857,19 @@ func TestAuthConfig_TokensFromEnvAreCommaSeparated(t *testing.T) {
 	}
 }
 
+func TestAllowedHostsFromEnvAreCommaSeparated(t *testing.T) {
+	t.Setenv("NANO_BRAIN_SERVER_ALLOWED_HOSTS", "brain.example.com, localhost,")
+
+	cfg, err := Load(filepath.Join(t.TempDir(), "nonexistent.yml"))
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	want := []string{"brain.example.com", "localhost"}
+	if !reflect.DeepEqual(cfg.Server.AllowedHosts, want) {
+		t.Errorf("AllowedHosts = %q, want %q", cfg.Server.AllowedHosts, want)
+	}
+}
+
 func TestAuthConfig_BlankTokensEnvIsNotACredential(t *testing.T) {
 	for _, env := range []string{"", " ", ",", " , "} {
 		t.Run(fmt.Sprintf("%q", env), func(t *testing.T) {

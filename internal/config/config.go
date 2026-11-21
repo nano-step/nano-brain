@@ -58,10 +58,15 @@ type Config struct {
 // containers that share a DB with a primary host instance running the
 // workers — prevents duplicate work and races. See issue #282.
 type ServerConfig struct {
-	Host      string     `koanf:"host" json:"host"`
-	Port      int        `koanf:"port" json:"port"`
-	Auth      AuthConfig `koanf:"auth" json:"auth"`
-	ServeOnly bool       `koanf:"serve_only" json:"serve_only"`
+	Host string     `koanf:"host" json:"host"`
+	Port int        `koanf:"port" json:"port"`
+	Auth AuthConfig `koanf:"auth" json:"auth"`
+	// AllowedHosts is the Host-header allowlist for the MCP endpoints
+	// (/mcp, /sse), guarding against DNS rebinding. Empty means the built-in
+	// set: localhost, 127.0.0.1, ::1, host.docker.internal. A non-empty list
+	// replaces that set, so list every hostname that must keep working.
+	AllowedHosts []string `koanf:"allowed_hosts" json:"allowed_hosts"`
+	ServeOnly    bool     `koanf:"serve_only" json:"serve_only"`
 }
 
 // AuthConfig holds authentication configuration for VPS/remote deployments.
@@ -387,7 +392,10 @@ func Load(configPath string) (*Config, error) {
 		}
 	}
 	if value, exists := os.LookupEnv("NANO_BRAIN_AUTH_TOKENS"); exists {
-		_ = k.Set("server.auth.tokens", splitTokens(value))
+		_ = k.Set("server.auth.tokens", splitCommaList(value))
+	}
+	if value, exists := os.LookupEnv("NANO_BRAIN_SERVER_ALLOWED_HOSTS"); exists {
+		_ = k.Set("server.allowed_hosts", splitCommaList(value))
 	}
 
 	// Unmarshal into Config struct with type conversion
@@ -442,16 +450,17 @@ func Load(configPath string) (*Config, error) {
 // WWW-Authenticate realm parameter without escaping.
 var validRealm = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
 
-// splitTokens parses the comma-separated NANO_BRAIN_AUTH_TOKENS value,
-// dropping surrounding whitespace and empty entries.
-func splitTokens(value string) []string {
-	tokens := []string{}
-	for _, t := range strings.Split(value, ",") {
-		if t = strings.TrimSpace(t); t != "" {
-			tokens = append(tokens, t)
+// splitCommaList parses a comma-separated env value (NANO_BRAIN_AUTH_TOKENS,
+// NANO_BRAIN_SERVER_ALLOWED_HOSTS), dropping surrounding whitespace and empty
+// entries.
+func splitCommaList(value string) []string {
+	items := []string{}
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
 		}
 	}
-	return tokens
+	return items
 }
 
 // expandPaths expands "~/" prefixes in path-type config fields to the real home directory.

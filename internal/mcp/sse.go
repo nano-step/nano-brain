@@ -12,6 +12,9 @@ func NewSSEHandler(server *mcpsdk.Server) http.Handler {
 		func(_ *http.Request) *mcpsdk.Server {
 			return server
 		},
-		nil,
+		&mcpsdk.SSEOptions{
+			// Replaced by mcp.HostGuard — see hostguard.go.
+			DisableLocalhostProtection: true,
+		},
 	)
 }

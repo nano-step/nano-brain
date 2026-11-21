@@ -7,6 +7,13 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// maxRequestBodyBytes bounds an incoming MCP request body. Set explicitly
+// rather than inheriting the SDK's 4 MiB DefaultMaxRequestBodyBytes, which
+// would 413 large memory_write calls — that tool takes arbitrary document
+// content, so the limit is a deliberate product decision, not a default to
+// accept by accident.
+const maxRequestBodyBytes = 32 << 20 // 32 MiB
+
 // NewStreamableHTTPHandler creates an http.Handler for MCP Streamable HTTP transport.
 // Stateless mode is enabled so that clients do not need to track session IDs.
 // Each tool call is self-contained (workspace hash passed per-request), so
@@ -16,7 +23,13 @@ func NewStreamableHTTPHandler(server *mcpsdk.Server) http.Handler {
 		func(_ *http.Request) *mcpsdk.Server {
 			return server
 		},
-		&mcpsdk.StreamableHTTPOptions{Stateless: true},
+		&mcpsdk.StreamableHTTPOptions{
+			Stateless:           true,
+			MaxRequestBodyBytes: maxRequestBodyBytes,
+			// Replaced by mcp.HostGuard — see hostguard.go for why the SDK's
+			// binary loopback check cannot be used here.
+			DisableLocalhostProtection: true,
+		},
 	)
 }
 

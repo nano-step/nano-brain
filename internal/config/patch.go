@@ -14,6 +14,7 @@ import (
 var PatchableFieldPaths = []string{
 	"server.host",
 	"server.port",
+	"server.allowed_hosts",
 	"embedding.provider",
 	"embedding.url",
 	"embedding.model",
