@@ -83,9 +83,10 @@ func validateBasic(encoded string, users []AuthUser) (string, bool) {
 	}
 
 	// Always pay for exactly one bcrypt comparison. An unknown username is
-	// checked against the first user's hash and the result discarded, so the
-	// response time does not reveal which usernames exist.
-	hash := users[0].PasswordHash
+	// checked against the most expensive configured hash and the result
+	// discarded, so the response time does not reveal which usernames exist:
+	// it costs as much as the slowest real user.
+	hash := highestCostHash(users)
 	matched := false
 	for _, u := range users {
 		if !matched && subtle.ConstantTimeCompare([]byte(u.Username), []byte(username)) == 1 {
@@ -98,6 +99,20 @@ func validateBasic(encoded string, users []AuthUser) (string, bool) {
 		return username, true
 	}
 	return "", false
+}
+
+// highestCostHash returns the configured hash with the highest bcrypt cost
+// (the first one on a tie). It only parses the cost prefix, so it adds no
+// bcrypt comparison. users must not be empty.
+func highestCostHash(users []AuthUser) string {
+	hash := users[0].PasswordHash
+	highest := -1
+	for _, u := range users {
+		if cost, err := bcrypt.Cost([]byte(u.PasswordHash)); err == nil && cost > highest {
+			hash, highest = u.PasswordHash, cost
+		}
+	}
+	return hash
 }
 
 func validateBearer(token string, validTokens []string) (string, bool) {

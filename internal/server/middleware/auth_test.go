@@ -240,19 +240,34 @@ func TestValidateBasic_Credentials(t *testing.T) {
 }
 
 // An unknown username must cost one bcrypt comparison, like a wrong password
-// does, so response time does not reveal which usernames exist (#271).
+// does, so response time does not reveal which usernames exist (#271). That
+// comparison runs against the most expensive configured hash, so an unknown
+// username is as slow as the slowest real user (#654).
 func TestValidateBasic_AlwaysOneBcryptComparison(t *testing.T) {
-	users := []AuthUser{
+	sameCost := []AuthUser{
 		{Username: "admin", PasswordHash: cheapHash(t, "secret")},
 		{Username: "second", PasswordHash: cheapHash(t, "other")},
 	}
+	costly, err := bcrypt.GenerateFromPassword([]byte("costly"), bcrypt.MinCost+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixedCost := []AuthUser{
+		{Username: "cheap", PasswordHash: cheapHash(t, "secret")},
+		{Username: "costly", PasswordHash: string(costly)},
+		{Username: "cheap2", PasswordHash: cheapHash(t, "other")},
+	}
 	tests := []struct {
 		name, user, pass string
+		users            []AuthUser
 		wantHash         string
 	}{
-		{"valid credentials", "admin", "secret", users[0].PasswordHash},
-		{"wrong password", "second", "wrong", users[1].PasswordHash},
-		{"unknown user", "nobody", "wrong", users[0].PasswordHash},
+		{"valid credentials", "admin", "secret", sameCost, sameCost[0].PasswordHash},
+		{"wrong password", "second", "wrong", sameCost, sameCost[1].PasswordHash},
+		{"unknown user, equal costs", "nobody", "wrong", sameCost, sameCost[0].PasswordHash},
+		{"unknown user, highest cost is not first", "nobody", "wrong", mixedCost, mixedCost[1].PasswordHash},
+		{"known cheap user keeps its own hash", "cheap", "secret", mixedCost, mixedCost[0].PasswordHash},
+		{"known cheap user after the costly one", "cheap2", "wrong", mixedCost, mixedCost[2].PasswordHash},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -264,7 +279,7 @@ func TestValidateBasic_AlwaysOneBcryptComparison(t *testing.T) {
 			}
 			t.Cleanup(func() { compareHash = original })
 
-			validateBasic(base64.StdEncoding.EncodeToString([]byte(tt.user+":"+tt.pass)), users)
+			validateBasic(base64.StdEncoding.EncodeToString([]byte(tt.user+":"+tt.pass)), tt.users)
 
 			if len(compared) != 1 || compared[0] != tt.wantHash {
 				t.Errorf("bcrypt comparisons = %d %q, want exactly one against %q", len(compared), compared, tt.wantHash)
