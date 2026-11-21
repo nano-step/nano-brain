@@ -255,7 +255,7 @@ git worktree move ../nano-brain-foo .opencode/worktrees/feat-NNN-short-name
 
 ## Project Architecture
 
-**Stack:** Go 1.23, PostgreSQL 17 + pgvector 0.8.2, Echo v4, sqlc, goose v3, zerolog, koanf, fsnotify.
+**Stack:** Go 1.26, PostgreSQL 17 + pgvector 0.8.2, Echo v4, sqlc, goose v3, zerolog, koanf, fsnotify.
 **Binary:** `CGO_ENABLED=0` static build. No DI framework. Constructor injection throughout.
 **Entry:** `cmd/nano-brain/` — CLI dispatcher + server startup. `internal/` — 17 packages.
 **Injection pattern:** config, logger, `*pgxpool.Pool` passed at construction; `sqlc.Queries` wraps the pool.
