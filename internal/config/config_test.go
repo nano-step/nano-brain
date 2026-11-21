@@ -915,6 +915,12 @@ func TestAuthConfig_UserValidation(t *testing.T) {
 	truncated := valid[:40]
 	oneShort := valid[:59]
 	junkBody := valid[:7] + strings.Repeat("!", 53)
+	costTooHigh := valid[:4] + "99" + valid[6:]
+	costTooLow := valid[:4] + "03" + valid[6:]
+	higherCost, err := bcrypt.GenerateFromPassword([]byte("x"), bcrypt.MinCost+1)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	type user struct{ name, hash string }
 	tests := []struct {
@@ -933,6 +939,12 @@ func TestAuthConfig_UserValidation(t *testing.T) {
 		{name: "garbage hash", users: []user{{"admin", valid}, {"bob", garbage}}, wantErr: "server.auth.users[1].password_hash is not a valid bcrypt hash", secret: garbage},
 		{name: "truncated hash", users: []user{{"admin", truncated}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: truncated},
 		{name: "hash one character short", users: []user{{"admin", oneShort}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: oneShort},
+		{name: "padded username", users: []user{{" admin", valid}}, wantErr: "server.auth.users[0].username must not start or end with whitespace"},
+		{name: "cost above the bcrypt range", users: []user{{"admin", costTooHigh}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: costTooHigh},
+		{name: "cost below the bcrypt range", users: []user{{"admin", costTooLow}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: costTooLow},
+		{name: "one extra character", users: []user{{"admin", valid + "A"}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: valid},
+		{name: "trailing newline", users: []user{{"admin", valid + "\n"}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: valid},
+		{name: "users with different costs", users: []user{{"admin", valid}, {"bob", string(higherCost)}}, wantErr: "server.auth.users[1].password_hash has bcrypt cost 5 but an earlier user has cost 4", secret: valid},
 		{name: "valid prefix with a non-base64 body", users: []user{{"admin", junkBody}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: junkBody},
 	}
 	for _, tt := range tests {
