@@ -156,7 +156,7 @@ func incrementalExtract(ctx context.Context, workspace, codeRoot string, docs []
 			continue
 		}
 		filesProcessed++
-		if err := processFile(ctx, workspace, doc.SourcePath, codeRoot, graphReg, queries); err != nil {
+		if err := processFile(ctx, workspace, doc.SourcePath, codeRoot, filter, graphReg, queries); err != nil {
 			reqLog.Warn().Err(err).Str("file", doc.SourcePath).Msg("reindex-cfg: failed")
 		} else {
 			cfgsExtracted++
@@ -221,7 +221,7 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 			if cfgExts[ext] {
 				filesProcessed++
 				reqLog.Debug().Str("file", path).Int("processed", filesProcessed).Msg("reindex-cfg: processing file")
-				if err := processFile(ctx, workspace, path, codeRoot, graphReg, queries); err != nil {
+				if err := processFile(ctx, workspace, path, codeRoot, filter, graphReg, queries); err != nil {
 					reqLog.Warn().Err(err).Str("file", path).Msg("reindex-cfg: failed")
 				} else {
 					cfgsExtracted++
@@ -243,12 +243,13 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 	return
 }
 
-func processFile(ctx context.Context, workspace, absPath, codeRoot string, graphReg *graph.Registry, queries ReindexCFGQuerier) error {
-	// Same containment rule as the watcher: a symlink resolving outside the
-	// code root is not read (issue #655).
-	if codeRoot != "" {
-		if inside, _ := watcher.PathInsideRoot(codeRoot, absPath); !inside {
-			return fmt.Errorf("path resolves outside workspace root")
+func processFile(ctx context.Context, workspace, absPath, codeRoot string, filter *watcher.FileFilter, graphReg *graph.Registry, queries ReindexCFGQuerier) error {
+	// Same rule as the watcher: a symlink is read only if it resolves inside
+	// the code root, to a file the filter admits (issue #655). The returned
+	// error says which: outside the root, excluded target, or unresolvable.
+	if info, lerr := os.Lstat(absPath); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
+		if cerr := watcher.CheckResolvedPath(codeRoot, filter, absPath); cerr != nil {
+			return fmt.Errorf("symlink skipped: %w", cerr)
 		}
 	}
 

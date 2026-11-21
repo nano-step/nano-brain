@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -142,5 +143,79 @@ func TestReindexCFG_NilGraphRegistry(t *testing.T) {
 	}
 	if httpErr.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", httpErr.Code)
+	}
+}
+
+// TestReindexCFG_SkipsSymlinksNotResolvingToAdmittedFiles: both the incremental
+// (document list) and the full (filesystem walk) paths must not read a symlink
+// that leaves the code root or resolves to an excluded file (issue #655). With
+// an empty registry every file that IS read costs exactly one
+// DeleteFunctionFlowchartsByFile, so the delete count is the number of files
+// read.
+func TestReindexCFG_SkipsSymlinksNotResolvingToAdmittedFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests need privileges on Windows")
+	}
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"incremental", `{"workspace":"ws123"}`},
+		{"full walk", `{"workspace":"ws123","full":true}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			root := filepath.Join(base, "ws")
+			outside := filepath.Join(base, "outside")
+			for _, dir := range []string{root, outside} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write := func(path string) {
+				t.Helper()
+				if err := os.WriteFile(path, []byte("function hello() { return 1; }"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(filepath.Join(root, "app.js"))
+			write(filepath.Join(outside, "secret.js"))
+			write(filepath.Join(root, "prod.env"))
+			links := map[string]string{
+				"leak.js":   filepath.Join(outside, "secret.js"), // leaves the root
+				"env.js":    "prod.env",                          // excluded target
+				"broken.js": "missing.js",                        // unresolvable
+				"alias.js":  "app.js",                            // fine
+			}
+			for name, target := range links {
+				if err := os.Symlink(target, filepath.Join(root, name)); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			mq := &mockReindexCFGQuerier{collections: []sqlc.Collection{{Name: "code", Path: root}}}
+			for _, name := range []string{"app.js", "leak.js", "env.js", "broken.js", "alias.js"} {
+				mq.documents = append(mq.documents, sqlc.ListDocumentsByWorkspaceRow{Collection: "code", SourcePath: filepath.Join(root, name)})
+			}
+
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/reindex-cfg", strings.NewReader(tc.body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.Set("workspace", "ws123")
+
+			if err := handlers.ReindexCFG(mq, graph.NewRegistry(), zerolog.Nop())(c); err != nil {
+				t.Fatalf("handler error: %v", err)
+			}
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+			}
+			if mq.deleteCount != 2 {
+				t.Errorf("files read = %d, want 2 (app.js and alias.js only)", mq.deleteCount)
+			}
+		})
 	}
 }
