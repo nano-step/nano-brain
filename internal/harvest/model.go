@@ -78,7 +78,7 @@ func RenderMarkdown(sess NormalizedSession) string {
 		b.WriteString(sanitizeText(msg.Content))
 		b.WriteString("\n")
 	}
-	return b.String()
+	return stripNUL(b.String())
 }
 
 // itoa is a minimal int-to-string helper to avoid importing strconv or fmt.
@@ -103,4 +103,11 @@ func itoa(n int) string {
 		buf[pos] = '-'
 	}
 	return string(buf[pos:])
+}
+
+// stripNUL removes NUL characters from rendered session content. Tool output
+// can carry them (a "\u0000" escape in the transcript decodes to a real 0x00),
+// and Postgres TEXT rejects 0x00, which would fail the whole session's upsert.
+func stripNUL(s string) string {
+	return strings.ReplaceAll(s, "\x00", "")
 }

@@ -485,7 +485,7 @@ func renderSQLiteMarkdown(sess SqSession, msgs []sqMessage) string {
 		b.WriteString(sanitizeText(msg.content))
 		b.WriteString("\n")
 	}
-	return b.String()
+	return stripNUL(b.String())
 }
 
 // writeRawFallback persists raw rendered markdown at the unified summary:// source_path

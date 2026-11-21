@@ -351,7 +351,7 @@ func renderPiMarkdown(sessionID string, events []piEvent) string {
 		}
 	}
 
-	return b.String()
+	return stripNUL(b.String())
 }
 
 // renderPiContent renders one message's content blocks to markdown.
