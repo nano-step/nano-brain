@@ -54,6 +54,21 @@ jobs:
         with:
           go-version: "1.26.11"
 
+      # The tag name reaches shell scripts only through `env:`, never through
+      # `${{ }}` inside `run:`, and must look like a release tag before
+      # anything is built from it (#659). `shell: bash` because the default
+      # shell on windows-latest is PowerShell.
+      - name: Validate tag
+        shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "ERROR: invalid tag '$VERSION' (expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE)"
+            exit 1
+          fi
+
       - name: Build
         # Env vars live in `env:` (not as command-prefix `VAR=value`) so the
         # step works on every runner shell — bash/zsh on Linux/macOS and
@@ -61,12 +76,15 @@ jobs:
         # bash-style `FOO=bar command` syntax and rejects the prefix
         # (`The term 'CGO_ENABLED=0' is not recognized…`), which made the
         # matrix windows entries added in #638 fail with exit 1 (#638
-        # follow-up).
+        # follow-up). `shell: bash` so `${VERSION}` expands the same way on
+        # all three runner OSes (#659).
+        shell: bash
         env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/nano-brain
+          VERSION: ${{ github.ref_name }}
+        run: go build -ldflags="-s -w -X main.Version=${VERSION}" -o nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/nano-brain
 
       - uses: actions/upload-artifact@v4
         with:

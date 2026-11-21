@@ -60,19 +60,63 @@ function safeUnlink(p) {
   }
 }
 
+// Release downloads start at github.com and are redirected to GitHub's asset
+// CDN. Only follow a redirect that stays on https and on a GitHub-owned host,
+// so a tampered or hijacked response cannot point the installer at another
+// origin; anything else is a non-retryable "SECURITY:" failure (#659).
+const MAX_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function isAllowedDownloadHost(hostname) {
+  const host = String(hostname).toLowerCase();
+  return host === "github.com" || host.endsWith(".githubusercontent.com");
+}
+
+// Returns the absolute URL to follow for a redirect response, resolving a
+// relative Location against the URL that produced it. Throws when the hop
+// budget is spent or the target is not an allowed https GitHub host.
+function nextRedirectURL(currentUrl, location, redirectsLeft) {
+  if (redirectsLeft <= 0) {
+    throw new Error(`Download failed: too many redirects (more than ${MAX_REDIRECTS})`);
+  }
+  if (!location) {
+    throw new Error("Download failed: redirect without a Location header");
+  }
+  let target;
+  try {
+    target = new URL(location, currentUrl);
+  } catch (_) {
+    throw new Error(`SECURITY: refusing redirect to unparseable location ${JSON.stringify(location)}`);
+  }
+  if (target.protocol !== "https:" || !isAllowedDownloadHost(target.hostname)) {
+    throw new Error(
+      `SECURITY: refusing redirect from ${currentUrl} to ${target.protocol}//${target.host} ` +
+      `(only https://github.com and https://*.githubusercontent.com are allowed)`
+    );
+  }
+  return target.href;
+}
+
 // file.close() is asynchronous; the fd is only released when its callback
 // fires. Every unlink / recursive-redirect / reject is therefore deferred into
 // file.close(() => …) so the partial file is gone (and not re-opened by a
 // racing redirect) before we act — otherwise Windows unlink fails with EPERM
 // while the fd is open, and a raw request error would leak the write stream.
-function download(url, dest) {
+function download(url, dest, redirectsLeft = MAX_REDIRECTS) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
     https.get(url, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
+      if (REDIRECT_STATUSES.has(res.statusCode)) {
+        let next, redirectErr;
+        try {
+          next = nextRedirectURL(url, res.headers.location, redirectsLeft);
+        } catch (err) {
+          redirectErr = err;
+        }
         file.close(() => {
           safeUnlink(dest);
-          download(res.headers.location, dest).then(resolve).catch(reject);
+          if (redirectErr) return reject(redirectErr);
+          download(next, dest, redirectsLeft - 1).then(resolve).catch(reject);
         });
         return;
       }
@@ -105,15 +149,22 @@ function download(url, dest) {
   });
 }
 
-function downloadWithHash(url, dest) {
+function downloadWithHash(url, dest, redirectsLeft = MAX_REDIRECTS) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
     const hash = crypto.createHash("sha256");
     https.get(url, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
+      if (REDIRECT_STATUSES.has(res.statusCode)) {
+        let next, redirectErr;
+        try {
+          next = nextRedirectURL(url, res.headers.location, redirectsLeft);
+        } catch (err) {
+          redirectErr = err;
+        }
         file.close(() => {
           safeUnlink(dest);
-          downloadWithHash(res.headers.location, dest).then(resolve).catch(reject);
+          if (redirectErr) return reject(redirectErr);
+          downloadWithHash(next, dest, redirectsLeft - 1).then(resolve).catch(reject);
         });
         return;
       }
@@ -155,6 +206,21 @@ function parseSHA256Line(content, targetFilename) {
   return null;
 }
 
+// A release without a usable checksum is treated like a checksum mismatch:
+// delete the downloaded binary and fail with a non-retryable "SECURITY:" error
+// rather than install something unverified (#659). install.sh does the same.
+function unverifiableError(tag, assetName, binPath, reason) {
+  safeUnlink(binPath);
+  return new Error(
+    `SECURITY: cannot verify ${assetName} from release ${tag}: ${reason}\n` +
+    `The downloaded binary has been deleted. The release may be incomplete ` +
+    `(see https://github.com/${REPO}/releases/tag/${tag}) or the checksum download was blocked.\n` +
+    `  - Retry later, or install a different version.\n` +
+    `  - To install without verification (not recommended), set NANO_BRAIN_SKIP_SHA_VERIFY=1.\n` +
+    `  - Build from source: CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain`
+  );
+}
+
 async function verifySHA256(tag, assetName, binPath, computedHex) {
   const sumsUrl = `https://github.com/${REPO}/releases/download/${tag}/SHA256SUMS`;
   const sumsPath = `${binPath}.SHA256SUMS.tmp`;
@@ -163,16 +229,15 @@ async function verifySHA256(tag, assetName, binPath, computedHex) {
     await download(sumsUrl, sumsPath);
     sumsContent = fs.readFileSync(sumsPath, "utf8");
   } catch (err) {
-    console.warn(`⚠ SHA256SUMS not available for ${tag} (${err.message}); skipping integrity verification.`);
-    return;
+    const detail = String(err && err.message ? err.message : err).replace(/^SECURITY:\s*/, "");
+    throw unverifiableError(tag, assetName, binPath, `SHA256SUMS could not be downloaded (${detail})`);
   } finally {
     safeUnlink(sumsPath);
   }
 
   const expectedHex = parseSHA256Line(sumsContent, assetName);
   if (!expectedHex) {
-    console.warn(`⚠ ${assetName} not listed in SHA256SUMS for ${tag}; skipping integrity verification.`);
-    return;
+    throw unverifiableError(tag, assetName, binPath, `SHA256SUMS has no entry for ${assetName}`);
   }
 
   if (expectedHex.toLowerCase() !== computedHex.toLowerCase()) {
@@ -397,4 +462,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parseSHA256Line, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion };
+module.exports = { parseSHA256Line, isAllowedDownloadHost, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion };
