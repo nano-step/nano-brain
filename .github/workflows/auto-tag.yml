@@ -37,29 +37,33 @@ jobs:
           # (tags created by GITHUB_TOKEN do NOT trigger other workflows).
           token: ${{ secrets.RELEASE_PAT }}
 
-      - name: Compute next tag (v{YYYY}.{M}.{DDNN})
+      - name: Compute next tag (v{YYYY}.{M}.{DNN})
         id: ver
         run: |
           set -euo pipefail
           YEAR=$(date -u +%Y)
           MONTH=$(date -u +%-m)
-          DAY=$(date -u +%d)
+          DAY=$(date -u +%-d)
+          DAY_PADDED=$(date -u +%d)
           PREFIX="v${YEAR}.${MONTH}.${DAY}"
+          PREFIX_PADDED="v${YEAR}.${MONTH}.${DAY_PADDED}"
 
           git fetch --tags --quiet
 
-          # Patch segment is exactly {DD}{NN} — 2-digit day + 2-digit run number,
-          # both zero-padded. This keeps semver ordering monotonic across days:
-          # tomorrow's first push (DDNN=3101) is > today's last (3099+) because
-          # the day component is the high-order pair of digits.
-          # Historic tags v{YYYY}.{M}.{D}{N} (variable-width run number, e.g.
-          # v2026.5.27278) are still readable but the new format is fixed-width
-          # so every new tag has exactly 4 patch digits.
-          MAX_NN=$(git tag --list "${PREFIX}??" \
-                  | grep -E "^${PREFIX}[0-9]{2}$" \
-                  | sed -E "s|^${PREFIX}||" \
-                  | sort -n \
-                  | tail -1 || true)
+          # Patch segment is {D}{NN} (= 100*D + NN): unpadded day (1..31) +
+          # 2-digit zero-padded run number (01..99). Avoiding a leading zero on
+          # days 1..9 keeps the git tag identical to the SemVer 2.0 version npm
+          # publishes (e.g. v2026.9.703 -> 2026.9.703) while staying monotonic
+          # across days (day 9 max 999 < day 10 min 1001). Also inspect historic
+          # zero-padded day tags (v2026.9.0703) when picking NEXT_NN.
+          MAX_NN=$( {
+                    git tag --list "${PREFIX}??" \
+                      | grep -E "^${PREFIX}[0-9]{2}$" \
+                      | sed -E "s|^${PREFIX}||" || true
+                    git tag --list "${PREFIX_PADDED}??" \
+                      | grep -E "^${PREFIX_PADDED}[0-9]{2}$" \
+                      | sed -E "s|^${PREFIX_PADDED}||" || true
+                  } | sort -n | tail -1 || true)
           NEXT_NN=$(printf '%02d' $(( 10#${MAX_NN:-0} + 1 )))
           TAG="${PREFIX}${NEXT_NN}"
 
@@ -75,18 +79,6 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git tag -a "${TAG}" -m "Auto-tag from master @ ${GITHUB_SHA::7}"
           git push origin "${TAG}"
-
-      - name: Bump package.json to match tag (no commit)
-        env:
-          TAG: ${{ steps.ver.outputs.tag }}
-        run: |
-          # Update package.json version in-place so the published npm package
-          # version matches the git tag. We do NOT commit this — release.yml's
-          # npm-publish step will use the in-place edit. The next master push
-          # will start from the previous committed version regardless.
-          VERSION="${TAG#v}"
-          node -e "const p=require('./package.json'); p.version='${VERSION}'; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
-          echo "package.json version set to ${VERSION} (in-place only)"
 
       - name: Summary
         env:
@@ -160,13 +152,35 @@ jobs:
           fi
           echo "PASS: correctly incremented to v2026.5.3002"
 
-          # 4) npm must accept the version string as numeric semver
+          # 4) npm must accept the version string verbatim (no leading zeros)
           node -e "
             const v = '${TAG#v}';
             const parts = v.split('.');
             if (parts.length !== 3) process.exit(1);
-            if (parts.some(p => !/^\\d+$/.test(p))) process.exit(1);
+            if (parts.some(p => !/^(0|[1-9]\\d*)$/.test(p))) process.exit(1);
             console.log('PASS: npm-compatible semver:', v);
           "
+
+          # 5) Single-digit day (e.g. day 7) must NOT have a leading zero in
+          #    patch and must still increment past historic zero-padded tags.
+          git tag v2026.9.0703
+          YEAR=2026; MONTH=9; DAY=7; DAY_PADDED=07
+          PREFIX="v${YEAR}.${MONTH}.${DAY}"
+          PREFIX_PADDED="v${YEAR}.${MONTH}.${DAY_PADDED}"
+          MAX_NN=$( {
+                    git tag --list "${PREFIX}??" \
+                      | grep -E "^${PREFIX}[0-9]{2}$" \
+                      | sed -E "s|^${PREFIX}||" || true
+                    git tag --list "${PREFIX_PADDED}??" \
+                      | grep -E "^${PREFIX_PADDED}[0-9]{2}$" \
+                      | sed -E "s|^${PREFIX_PADDED}||" || true
+                  } | sort -n | tail -1 || true)
+          NEXT_NN=$(printf '%02d' $(( 10#${MAX_NN:-0} + 1 )))
+          TAG_SINGLE="${PREFIX}${NEXT_NN}"
+          if [[ "$TAG_SINGLE" != "v2026.9.704" ]]; then
+            echo "FAIL: expected v2026.9.704, got ${TAG_SINGLE}"
+            exit 1
+          fi
+          echo "PASS: single-digit day produced SemVer-exact ${TAG_SINGLE}"
 
           rm -rf "$tmp"

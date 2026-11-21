@@ -7,7 +7,7 @@ const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
-const { parseSHA256Line, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath, getPlatformKey, platformExtension } = require("./postinstall");
+const { parseSHA256Line, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion } = require("./postinstall");
 const VERSION = require("../package.json").version;
 const isWin = os.platform() === "win32";
 
@@ -29,6 +29,13 @@ test("ensureBinary: returns existing binary without downloading", { skip: isWin 
     safeUnlink(bin);
     if (hadReal) fs.renameSync(backup, bin);
   }
+});
+
+test("binaryMatchesVersion: normalizes v-prefix and leading zeros (#644)", () => {
+  assert.strictEqual(binaryMatchesVersion('{"version":"v2026.9.0703"}\n', "2026.9.703"), true);
+  assert.strictEqual(binaryMatchesVersion('{"version":"v2026.11.2101"}\n', "2026.11.2101"), true);
+  assert.strictEqual(binaryMatchesVersion('{"version":"0.0.0-dev"}\n', "0.0.0-dev"), true);
+  assert.strictEqual(binaryMatchesVersion('{"version":"v2026.11.2101"}\n', "2026.11.210"), false);
 });
 
 // #594 BLOCKER regression: an unsupported platform must REJECT (not process.exit),
