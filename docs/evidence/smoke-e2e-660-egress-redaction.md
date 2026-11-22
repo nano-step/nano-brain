@@ -7,9 +7,11 @@
 Two boundary tests run real HTTP through `httptest` servers and inspect the
 **actual request body the provider would receive**:
 
-- `internal/embed`: `TestOllamaEmbedder_Embed_RedactsSecrets` — text containing
-  `sk-ant-api03-...` + `ghp_...` is sent to a fake Ollama `/api/embed`; the
-  handler asserts the secret strings are absent and `[REDACTED:` is present.
+- `internal/embed`: `TestOllamaEmbedder_Embed_RedactsSecrets` —
+  `sk-ant-api03-...` + `ghp_...` sent to a fake Ollama `/api/embed`;
+  `TestVoyageAIEmbedder_Embed_RedactsSecrets` — `AKIA...` sent to a fake
+  Voyage endpoint; each handler asserts the secret is absent and
+  `[REDACTED:` is present.
 - `internal/summarize`: `TestChatCompletion_RedactsSecrets` — user prompt
   containing an `sk-ant-` key is sent through the shared OpenAI-compatible
   client (covers session summarize, `flow`, `intelligence` callers); body
@@ -18,9 +20,10 @@ Two boundary tests run real HTTP through `httptest` servers and inspect the
 ## Results
 
 ```
-$ go test ./internal/redact/ -v        # 18 subtests incl. false-positive guards — all PASS
+$ go test ./internal/redact/ -v        # 28 secret shapes + 15 false-positive guards — all PASS
 $ go test ./internal/embed/ -run Redact -v
 --- PASS: TestOllamaEmbedder_Embed_RedactsSecrets (0.00s)
+--- PASS: TestVoyageAIEmbedder_Embed_RedactsSecrets (0.00s)
 $ go test ./internal/summarize/ -run Redact -v
 --- PASS: TestChatCompletion_RedactsSecrets (0.00s)
 

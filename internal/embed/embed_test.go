@@ -268,3 +268,34 @@ func TestOllamaEmbedder_Embed_RedactsSecrets(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestVoyageAIEmbedder_Embed_RedactsSecrets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(req.Input) != 1 {
+			t.Fatalf("input = %v, want 1 item", req.Input)
+		}
+		if strings.Contains(req.Input[0], "AKIAIOSFODNN7EXAMPLE") {
+			t.Errorf("secret leaked to provider: %q", req.Input[0])
+		}
+		if !strings.Contains(req.Input[0], "[REDACTED:") {
+			t.Errorf("expected redaction marker, got %q", req.Input[0])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []map[string]interface{}{{"embedding": []float32{0.1}}}})
+	}))
+	defer srv.Close()
+
+	ve, err := NewVoyageAIEmbedder("test-key", "voyage-3", srv.URL, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := ve.Embed(context.Background(), "aws_access_key_id = AKIAIOSFODNN7EXAMPLE"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

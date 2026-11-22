@@ -7,14 +7,14 @@
 | File | Change |
 |------|--------|
 | `internal/redact/redact.go` | NEW — `Scrub(text)` applying 9 ordered credential patterns → `[REDACTED:<kind>]` |
-| `internal/redact/redact_test.go` | NEW — 17 positive shapes, 12 false-positive guards, multi-secret case |
+| `internal/redact/redact_test.go` | NEW — 28 positive shapes, 15 false-positive guards, multi-secret case |
 | `internal/embed/ollama.go`, `voyageai.go` | `text = redact.Scrub(text)` at top of `Embed()` |
-| `internal/summarize/client.go` | Scrub `systemPrompt`/`userPrompt` in `ChatCompletion` (covers session summarize, `flow` summarizer, `intelligence` consolidator/categorizer — all route through this client) |
+| `internal/summarize/client.go` | Scrub `systemPrompt`/`userPrompt` in `ChatCompletion` — every LLM routed through this client is covered (session summarize pipeline, `flow` summarizer today; `intelligence` consolidator/categorizer has no production callers yet but satisfies the same interface) |
 | `internal/codesummarize/provider.go` | Scrub batch prompt in `SummarizeBatch` |
 | `internal/search/reranking/reranker.go` | Scrub `query` + every `documents[i]` in `callAPI` (Cohere egress) |
 | `internal/search/hyde/generator.go`, `preprocess/preprocessor.go` | Scrub outbound query |
 | `internal/bench/generate.go` | Scrub `content` in `generateLLMQuery` |
-| `internal/embed/embed_test.go`, `internal/summarize/client_test.go` | Wire-level boundary tests: httptest server asserts secret absent + marker present in actual request body |
+| `internal/embed/embed_test.go`, `internal/summarize/client_test.go` | Wire-level boundary tests (Ollama + Voyage + ChatCompletion): httptest server asserts secret absent + marker present in actual request body |
 | `docs/CONFIGURATION.md`, `internal/embed/AGENTS.md` | Document the egress-only policy |
 
 ## Correctness findings (self)
@@ -30,6 +30,24 @@
 - Assignment pattern requires ≥8-char non-space value — `EDITOR=vim`, `memory_limit=512mb`, `password=short` unaffected (test-covered).
 - Embedding-side impact: chunks containing credentials embed the masked form (rare; desired trade-off — a remote provider never receives the raw secret).
 - Known gap (accepted): random high-entropy secrets with no recognizable shape (e.g. bare 40-hex strings) are not redacted — shapeless secrets are unredactable without unacceptable false positives on hashes/UUIDs. Documented as residual risk.
+
+## Independent-review findings resolved (review-660, round 1 → SEND_BACK → fixed)
+
+- **B1 (blocking)** — JSON `"key": "value"` pairs leaked: added optional closing
+  `["']?` after the key capture and quoted-value branches
+  (`"..."`/`'...'` ≥8 chars incl. spaces) to the assignment pattern.
+  Table tests: `json api_key pair`, `json password pair`, `js camelCase key`,
+  `quoted json token value`.
+- **B2 (blocking)** — `*_TOKEN`/`*_SECRET` families missed (`JWT_SECRET`,
+  `GITHUB_TOKEN`, `GITLAB_TOKEN`, `SESSION_SECRET`): added bare `token`,
+  `secret`, `api_token` to the alternation; extended shapes with `glpat-`,
+  `hf_`, `xapp-`, `sk/rk/whsec_(live|test)_`.
+- **N2** — quoted multi-word secrets (`password="my secret pass"`) now matched
+  via quoted-value branches.
+- **N3** — dropped redundant `MatchString` pre-check.
+- **N4** — added `TestVoyageAIEmbedder_Embed_RedactsSecrets` boundary test.
+- **N5/N6** — evidence counts and the intelligence coverage claim corrected
+  above.
 
 ## Checks run
 

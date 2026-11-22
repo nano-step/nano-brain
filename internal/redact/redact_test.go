@@ -18,6 +18,9 @@ func TestScrub_LeavesNormalTextUnchanged(t *testing.T) {
 		"bearer abc is too short",
 		"api_version=2023-10-16 is not a credential",
 		"tokenize and tokenizer are ordinary words",
+		`token: "bearer" is too short to redact`,
+		`tokens = [1, 2, 3] is a list not a secret`,
+		`{"max_tokens": 100} short values stay`,
 		"Authorization: Basic dXNlcjpwYXNz", // basic-auth-ish but not covered shapes
 	}
 	for _, in := range cases {
@@ -129,6 +132,78 @@ func TestScrub_RedactsKnownShapes(t *testing.T) {
 			"POSTGRES_PASSWORD=tr0ub4dor&3xtralong",
 			"[REDACTED]",
 			"tr0ub4dor",
+		},
+		{
+			"json api_key pair",
+			`{"api_key": "abcd1234efgh5678ijkl", "model": "x"}`,
+			"[REDACTED]",
+			"abcd1234efgh5678ijkl",
+		},
+		{
+			"json password pair",
+			`"password": "hunter2pass"`,
+			"[REDACTED]",
+			"hunter2pass",
+		},
+		{
+			"js camelCase key",
+			`apiKey: "zxcvbnm123456789"`,
+			"[REDACTED]",
+			"zxcvbnm123456789",
+		},
+		{
+			"jwt secret env",
+			"JWT_SECRET=supersecretjwtvalue123",
+			"[REDACTED]",
+			"supersecretjwtvalue123",
+		},
+		{
+			"session secret env",
+			"SESSION_SECRET=nextauthsecretvalue99",
+			"[REDACTED]",
+			"nextauthsecretvalue99",
+		},
+		{
+			"github token env unshaped value",
+			"GITHUB_TOKEN=unshapedtokenvalue12345",
+			"[REDACTED]",
+			"unshapedtokenvalue12345",
+		},
+		{
+			"gitlab token env",
+			"GITLAB_TOKEN=glpat-abcdefghijklmnop",
+			"[REDACTED:api-key]",
+			"glpat-abcdefghijklmnop",
+		},
+		{
+			"stripe live key",
+			"sk_live_51MAbCdEfGhIjKl",
+			"[REDACTED:api-key]",
+			"sk_live_51MAbCdEfGhIjKl",
+		},
+		{
+			"huggingface token",
+			"hf_abcdefghij1234567890klmnop",
+			"[REDACTED:api-key]",
+			"hf_abcdefghij1234567890klmnop",
+		},
+		{
+			"slack app-level token",
+			"xapp-1-abcdefghijklmnop",
+			"[REDACTED:slack-token]",
+			"xapp-1-abcdefghijklmnop",
+		},
+		{
+			"quoted multi-word password",
+			`password="my secret passphrase"`,
+			"[REDACTED]",
+			"secret passphrase",
+		},
+		{
+			"quoted json token value",
+			`"access_token": "ya29.a0AfH6SMBxabcdef123456"`,
+			"[REDACTED]",
+			"ya29.a0AfH6SMBxabcdef123456",
 		},
 	}
 	for _, tc := range cases {

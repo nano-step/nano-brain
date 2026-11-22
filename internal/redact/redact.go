@@ -39,12 +39,12 @@ var patterns = []pattern{
 	},
 	{
 		"api-key",
-		regexp.MustCompile(`\bsk-(?:ant-|proj-|live-|test-|or-)?[A-Za-z0-9_-]{16,}\b|\bxai-[A-Za-z0-9_-]{16,}\b|\bnpm_[A-Za-z0-9]{30,}\b|\bpypi-[A-Za-z0-9_-]{16,}\b`),
+		regexp.MustCompile(`\bsk-(?:ant-|proj-|live-|test-|or-)?[A-Za-z0-9_-]{16,}\b|\b(?:sk|rk|whsec)_(?:live|test)_[A-Za-z0-9]{12,}\b|\bglpat-[A-Za-z0-9_-]{16,}\b|\bhf_[A-Za-z0-9]{20,}\b|\bxai-[A-Za-z0-9_-]{16,}\b|\bnpm_[A-Za-z0-9]{30,}\b|\bpypi-[A-Za-z0-9_-]{16,}\b`),
 		"[REDACTED:api-key]",
 	},
 	{
 		"slack-token",
-		regexp.MustCompile(`\bxox[baprs]-[A-Za-z0-9-]{10,}\b`),
+		regexp.MustCompile(`\bxox[baprs]-[A-Za-z0-9-]{10,}\b|\bxapp-[A-Za-z0-9-]{10,}\b`),
 		"[REDACTED:slack-token]",
 	},
 	{
@@ -58,8 +58,14 @@ var patterns = []pattern{
 		"[REDACTED:bearer]",
 	},
 	{
+		// The \w* affixes catch prefixed env names (DB_PASSWORD,
+		// OPENAI_API_KEY) and camelCase (apiKey, accessToken — (?i) covers
+		// the casing). Quoted-value branches handle JSON/YAML
+		// `"key": "value"` and multi-word quoted secrets. Shape-based
+		// scrubbing can over-mask near-miss names (password_reset_url=...)
+		// — acceptable: it only degrades provider input, never stored data.
 		"secret-assignment",
-		regexp.MustCompile(`(?i)(\w*(?:api[_-]?key|api[_-]?secret|secret[_-]?key|access[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|password|passwd|pgpass)\w*)\s*[:=]\s*["']?[^\s"',;$}\[]{8,}`),
+		regexp.MustCompile(`(?i)(\w*(?:api[_-]?key|api[_-]?secret|api[_-]?token|secret[_-]?key|access[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|password|passwd|pgpass|secret|token)\w*)["']?\s*[:=]\s*(?:"[^"]{8,}"|'[^']{8,}'|[^\s"',;$}\[]{8,})`),
 		"${1}=[REDACTED]",
 	},
 }
@@ -68,9 +74,7 @@ var patterns = []pattern{
 // [REDACTED:<kind>] markers. Non-secret content is returned unchanged.
 func Scrub(text string) string {
 	for _, p := range patterns {
-		if p.re.MatchString(text) {
-			text = p.re.ReplaceAllString(text, p.replacement)
-		}
+		text = p.re.ReplaceAllString(text, p.replacement)
 	}
 	return text
 }
