@@ -96,7 +96,11 @@ and stale queues competing, two files with the same symbol hash retaining
 independent failure rows, source-scoped summary existence, and a calls edge
 appearing after an edge-free interval. Migration 00031 changes only the
 partial unique index on unresolved failures, from workspace plus hash to
-workspace, hash, file and symbol name. Explicit retries select failure IDs;
+workspace, hash, SHA-256(file) and SHA-256(symbol name). A 3.2 KiB
+noncompressible source path failed with PostgreSQL's btree tuple-size error;
+the fixed-UTF8 hash helper indexes it without changing the exact file/name
+matching predicates, and escaped text paths remain distinct. Explicit
+retries select failure IDs;
 successful summaries resolve the same identity. The stale selector now
 checks for relevant calls edges instead of storing a permanent empty hash.
 The legacy hash-keyed migration down is intentionally allowed to fail when

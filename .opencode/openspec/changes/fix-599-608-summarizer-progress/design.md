@@ -29,8 +29,10 @@ Independent reviewers found that retry-all selected only the first cycle of
 failures. Explicit retry now chunks requested failure IDs by
 `max_summaries_per_cycle` so a request larger than one cycle still attempts
 every failure. Migration 00031 changes the unresolved-failure unique index
-from (workspace, hash) to (workspace, hash, source file, symbol name) without
-altering or deleting existing rows. It cannot be rolled back after new
+from (workspace, hash) to (workspace, hash, SHA-256(source file),
+SHA-256(symbol name)) without altering or deleting existing rows. Valid
+source paths can exceed PostgreSQL's btree tuple limit; a fixed-UTF8
+immutable hash helper avoids rejecting them. It cannot be rolled back after new
 same-hash failures are persisted unless those duplicate rows are resolved.
 Forced selection by failure ID prevents a retry of one symbol from submitting
 other symbols with the same hash. Summary-existence checks match hash, file

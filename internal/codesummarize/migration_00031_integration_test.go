@@ -4,6 +4,8 @@ package codesummarize
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -58,5 +60,44 @@ func TestMigration00031_PreservesExistingFailuresAndSeparatesNewOnes(t *testing.
 		if failure.SourceFile == "src/a.go" && failure.ID != id {
 			t.Fatalf("old failure ID changed: got %s, want %s", failure.ID, id)
 		}
+	}
+}
+
+func TestMigration00031_LongSourcePathCanRecordFailure(t *testing.T) {
+	pool := testutil.SetupTestDB(t)
+	db := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	q := sqlc.New(db)
+	workspace := uuid.NewString()
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: workspace, Name: "fixture", Path: "/tmp/fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	path := "/tmp/"
+	for i := range 50 {
+		path += fmt.Sprintf("%x/", sha256.Sum256([]byte{byte(i)}))
+	}
+	path += "file.go"
+	if err := q.UpsertCodeSummarizationFailure(ctx, sqlc.UpsertCodeSummarizationFailureParams{
+		WorkspaceHash: workspace, ContentHash: "symbol-long-path",
+		SourceFile: path, SymbolName: "Shared",
+		ErrorType: "transient_exhausted", ErrorReason: "HTTP 524",
+	}); err != nil {
+		t.Fatalf("valid long source path could not persist failure: %v", err)
+	}
+	for _, source := range []string{"src/a.go", `src/\x61.go`} {
+		if err := q.UpsertCodeSummarizationFailure(ctx, sqlc.UpsertCodeSummarizationFailureParams{
+			WorkspaceHash: workspace, ContentHash: "symbol-escape",
+			SourceFile: source, SymbolName: "Shared",
+			ErrorType: "transient_exhausted", ErrorReason: "HTTP 524",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	failures, err := q.GetUnresolvedFailures(ctx, workspace)
+	if err != nil || len(failures) != 3 {
+		t.Fatalf("distinct source paths collided in the identity index: rows=%v err=%v", failures, err)
 	}
 }

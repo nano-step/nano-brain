@@ -56,7 +56,10 @@ LIMIT $2;
 -- name: UpsertCodeSummarizationFailure :exec
 INSERT INTO code_summarization_failures (workspace_hash, symbol_name, symbol_kind, source_file, content_hash, error_reason, error_type, attempts, last_attempt_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, 1, NOW())
-ON CONFLICT (workspace_hash, content_hash, source_file, symbol_name) WHERE resolved_at IS NULL
+ON CONFLICT (workspace_hash, content_hash,
+             (code_summarization_identity_sha256(source_file)),
+             (code_summarization_identity_sha256(symbol_name)))
+WHERE resolved_at IS NULL
 DO UPDATE SET
     attempts = code_summarization_failures.attempts + 1,
     error_reason = EXCLUDED.error_reason,
