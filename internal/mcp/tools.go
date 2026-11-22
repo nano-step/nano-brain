@@ -28,6 +28,9 @@ import (
 )
 
 func RegisterTools(server *mcpsdk.Server, a *Adapter) {
+	if a.queries != nil {
+		server.AddReceivingMiddleware(a.telemetryMiddleware)
+	}
 	registerMemoryQuery(server, a)
 	registerMemorySearch(server, a)
 	registerMemoryVSearch(server, a)
