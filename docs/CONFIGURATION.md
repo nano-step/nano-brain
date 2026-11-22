@@ -204,24 +204,31 @@ These always apply. There is no opt-out: `exclude_patterns`, `allowed_extensions
 
 - A symlink that leaves the root is not indexed. It is logged at `warn` the first time it is seen in a process and at `debug` afterwards. To index shared files that live elsewhere, register their directory as its own collection.
 - A symlink to a file on the credential deny list below is not indexed, whatever the link is called (`docs/setup.md -> ../.env`).
-- A symlink to a file excluded by the built-in directory/lockfile excludes, the global or root-level `.nano-brainignore`, the root `.gitignore`, `exclude_patterns` or `allowed_extensions` is not indexed either (`readme2.md -> tok.txt` with `tok.txt` gitignored). `.gitignore` and `.nano-brainignore` files in subdirectories are not consulted for the link's target.
+- A symlink to a file excluded by the built-in directory/lockfile excludes, the global `.nano-brainignore`, a `.gitignore` or `.nano-brainignore` in the root or in any directory between the root and the target, `exclude_patterns` or `allowed_extensions` is not indexed either (`readme2.md -> tok.txt` with `tok.txt` gitignored; `alias.md -> sub/priv.txt` with `priv.txt` listed in `sub/.gitignore`). A target whose spelling differs from its on-disk directory entries — different casing, or a different Unicode normalisation form (NFC vs NFD) — is refused even when it would resolve to the same file; a legitimate link whose spelling does not match the disk entry is skipped rather than indexed.
 - A symlink to another indexable file inside the root is indexed as usual.
 - A broken symlink is skipped. Symlinked directories are not followed.
+- On a case-insensitive filesystem a root registered in a different casing than on disk still contains its own files: containment is decided by the directory itself, not by how the path is spelled.
 
 A document indexed by an earlier version for a symlink in one of the skipped cases is removed on the next scan of its collection.
+
+**Non-regular files.** Named pipes (FIFOs), sockets and device files considered for indexing are skipped at `debug` level, including symlinks to them. Non-regular `.gitignore` and `.nano-brainignore` files — in the root or any subdirectory — are not parsed, and neither is the global `~/.nano-brain/.nano-brainignore` if it is not a regular file. The same 4 MiB bound applies to every ignore file, so one that resolves to a regular-but-unbounded pseudo file (a committed symlink to `/proc/self/pagemap` on Linux) is treated as absent instead of exhausting memory; a global ignore file over 4 MiB is likewise skipped, with a warning logged at startup. Framework detection and JS import alias discovery (`go.mod`, `package.json`, `Gemfile`, `tsconfig.json`, `jsconfig.json`) read a filename only when it resolves to a regular file of at most 4 MiB, so a FIFO cannot block the scan and a symlink to a device cannot exhaust memory. Incremental reindex applies its 10 MiB size limit to the symlink's target and bounds the hash read itself. Two residual cases remain: the check-then-open window (a file swapped for a special file between the type check and the read, which requires a local attacker racing the scan) and hard links to files outside the root.
 
 **Credential files.** Not indexed, matched on the file's base name, case-insensitively, at any depth:
 
 | Denied | Still indexed |
 |--------|---------------|
 | `.env`, `.env.*`, `*.env` (`prod.env`), `.envrc` | names marked `example`, `sample`, `template` or `dist`: `.env.example`, `.env.production.sample`, `example.env`, `app.example.env` |
-| any name starting with `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519` (`id_rsa`, `id_rsa.bak`, `id_rsa_github`, `id_ed25519_sk`) | the same names ending in `.pub` (`id_ed25519.pub`) |
-| `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.ppk`, `*.kdbx`, `*.ovpn` | |
-| `.npmrc`, `.netrc`, `.pgpass`, `.htpasswd`, `.git-credentials`, `.pypirc`, `.dockercfg`, `.vault-token`, `.my.cnf`, `.s3cfg`, `.boto`, `kubeconfig` | `kubeconfig.md`, … (exact names only) |
-| `credentials`, `credentials.json`, `secrets.yml`, `secrets.yaml`, `secrets.json` | `credentials.md`, `secrets.md`, … (exact names only) |
-| `*.tfstate`, `*.tfstate.backup`, `*.tfvars` | `terraform.tfvars.example` |
+| `.env-*`, `.env_*` (`.env-production`, `.env_local`) | names ending in `.`, `-` or `_` plus `example`, `sample`, `template` or `dist`: `.env-production.example`, `.env-example`, `.env_sample` |
+| any name starting with `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519` (`id_rsa`, `id_rsa.bak`, `id_rsa_github`, `id_ed25519_sk`, `id_rsa.txt`) | the same names ending in `.pub` (`id_ed25519.pub`) or in a source-code or Markdown extension (`id_rsa_test.go`, `id_dsa.md`); the full list is below |
+| `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.ppk`, `*.kdbx`, `*.ovpn`, `*.pem.bak`, `*.key.bak` | |
+| `.npmrc`, `.netrc`, `.pgpass`, `.htpasswd`, `htpasswd`, `.git-credentials`, `.pypirc`, `.dockercfg`, `.vault-token`, `.my.cnf`, `.s3cfg`, `.boto`, `kubeconfig`, `kubeconfig.yaml`, `kubeconfig.yml` | `kubeconfig.md`, … (exact names only) |
+| `credentials`, `credentials.json`, `credentials.yml`, `credentials.yaml`, `secrets.yml`, `secrets.yaml`, `secrets.json` | `credentials.md`, `secrets.md`, … (exact names only) |
+| `client_secret*.json`, `service-account*.json`, `service_account*.json` | `client_secret.go`, `service-account.md` (only `.json`) |
+| `*.tfstate`, `*.tfstate.backup`, `*.tfvars`, `*.tfvars.json` | `terraform.tfvars.example` |
 
-The match is by name only, so it also excludes files that are not secrets: public certificates and CA bundles (`*.pem`), Keynote presentations (`*.key`), an `.npmrc` holding only registry settings, and source files whose name starts with an SSH key name (`id_rsa_test.go`). Rename such a file if it must be searchable.
+SSH key names: a name starting with `id_rsa`, `id_dsa`, `id_ecdsa` or `id_ed25519` is denied unless it ends in `.pub` or its final extension is one of `.go`, `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.rb`, `.rs`, `.java`, `.kt`, `.c`, `.h`, `.cpp`, `.cs`, `.php`, `.swift`, `.sh`, `.html`, `.css`, `.md`. Text and data extensions (`.txt`, `.json`, `.yaml`, `.yml`, `.toml`) are deliberately not on that list: `id_rsa.txt` is a plausible key backup.
+
+The match is by name only, so it also excludes files that are not secrets: public certificates and CA bundles (`*.pem`), Keynote presentations (`*.key`), an `.npmrc` holding only registry settings, and Terraform variable files without secrets (`*.tfvars`). Rename such a file if it must be searchable.
 
 A document indexed for a denied file by an earlier version is removed on the next scan of its collection.
 

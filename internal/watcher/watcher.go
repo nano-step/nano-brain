@@ -876,6 +876,12 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	if info.IsDir() {
 		return
 	}
+	// A FIFO blocks the read forever; sockets and devices are not content
+	// either (#675). info is the resolved target for a symlink.
+	if !info.Mode().IsRegular() {
+		w.logger.Debug().Str("file", filePath).Msg("skipping non-regular file")
+		return
+	}
 
 	// Re-detect frameworks when manifest files change (go.mod, package.json).
 	// The refreshed list is stored on the collection and consumed per-file by
@@ -1159,7 +1165,7 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		Exists:   graph.DiskExistsChecker(col.dirPath),
 		ReadFile: func(workspaceRelPath string) ([]byte, error) {
 			p := filepath.Join(col.dirPath, filepath.FromSlash(workspaceRelPath))
-			if skip, _ := w.skipResolved(col, p); skip {
+			if skip, _ := w.skipResolved(col, p); skip || !isRegularFile(p) {
 				return nil, fmt.Errorf("%s is not readable for indexing", workspaceRelPath)
 			}
 			return os.ReadFile(p)
@@ -1325,6 +1331,9 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 					return nil
 				}
 			}
+			if !d.Type().IsRegular() && !isRegularFile(path) {
+				return nil
+			}
 			content, err := os.ReadFile(path)
 			if err != nil {
 				return nil
@@ -1398,6 +1407,9 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 				if skip, _ := w.skipResolved(col, path); skip {
 					return nil
 				}
+			}
+			if !d.Type().IsRegular() && !isRegularFile(path) {
+				return nil
 			}
 			// Record every admitted file (in both stored forms — workspace-relative
 			// as written by extractAndUpsertEdges, and absolute) as soon as it passes
@@ -1740,6 +1752,14 @@ func (w *Watcher) resolveRubyCrossFileCalls(ctx context.Context, col watchedColl
 		Msg("ruby cross-file resolution complete")
 }
 
+// isRegularFile reports whether path, with symlinks followed, is a regular
+// file. Reading a FIFO blocks until a writer appears, so every read of a
+// workspace path that is not a plain directory entry checks this first (#675).
+func isRegularFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
 func collectRubyContents(dirPath string) map[string][]byte {
 	contents := make(map[string][]byte)
 	realRoot, err := filepath.EvalSymlinks(dirPath)
@@ -1754,6 +1774,9 @@ func collectRubyContents(dirPath string) map[string][]byte {
 			return nil
 		}
 		if d.Type()&fs.ModeSymlink != 0 && checkResolvedPath(dirPath, realRoot, nil, path) != nil {
+			return nil
+		}
+		if !d.Type().IsRegular() && !isRegularFile(path) {
 			return nil
 		}
 		data, err := os.ReadFile(path)
