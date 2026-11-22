@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -249,15 +250,16 @@ func runWriteCmd(args []string) {
 }
 
 type stubFlags struct {
-	query           string
-	workspace       string
-	scope           string
-	tags            []string
-	jsonFlag        bool
-	createdAfter    string
-	createdBefore   string
-	updatedAfter    string
-	updatedBefore   string
+	query         string
+	workspace     string
+	scope         string
+	tags          []string
+	jsonFlag      bool
+	help          bool
+	createdAfter  string
+	createdBefore string
+	updatedAfter  string
+	updatedBefore string
 }
 
 func parseTagList(raw string) []string {
@@ -282,6 +284,9 @@ func parseStubFlags(args []string) (stubFlags, string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
+		case arg == "-h" || arg == "--help":
+			f.help = true
+			return f, ""
 		case arg == "--workspace":
 			if i+1 >= len(args) {
 				return f, "--workspace requires a value"
@@ -357,6 +362,22 @@ func parseStubFlags(args []string) (stubFlags, string) {
 	return f, ""
 }
 
+func printStubUsage(w io.Writer, endpoint string) {
+	fmt.Fprintf(w, `Usage: nano-brain %s "<query>" --workspace <hash> [--scope all|workspace] [--tags t1,t2,...] [--created-after <ts|dur>] [--created-before <ts|dur>] [--updated-after <ts|dur>] [--updated-before <ts|dur>] [--json]
+
+Flags:
+  --workspace <hash>         Workspace hash (required unless --scope all)
+  --scope <all|workspace>    Search scope (default: workspace)
+  --tags <t1,t2,...>         Filter to documents matching any given tag
+  --created-after <ts|dur>   Filter to documents created after RFC3339 timestamp or duration (e.g. 30d, 720h)
+  --created-before <ts|dur>  Filter to documents created before RFC3339 timestamp or duration
+  --updated-after <ts|dur>   Filter to documents updated after RFC3339 timestamp or duration
+  --updated-before <ts|dur>  Filter to documents updated before RFC3339 timestamp or duration
+  --json                     Output raw JSON response
+  -h, --help                 Show this help
+`, endpoint)
+}
+
 func runStubCmd(endpoint string, args []string) {
 	cliLog.Info().Str("cmd", endpoint).Msg("cli command started")
 
@@ -364,6 +385,10 @@ func runStubCmd(endpoint string, args []string) {
 	if errMsg != "" {
 		fmt.Fprintf(os.Stderr, "%s\n", errMsg)
 		os.Exit(1)
+	}
+	if f.help {
+		printStubUsage(os.Stdout, endpoint)
+		return
 	}
 
 	var workspaceVal string
@@ -374,7 +399,7 @@ func runStubCmd(endpoint string, args []string) {
 	}
 
 	if f.query == "" || workspaceVal == "" {
-		fmt.Fprintf(os.Stderr, "Usage: nano-brain %s \"<query>\" --workspace <hash> [--scope all|workspace] [--json]\n", endpoint)
+		printStubUsage(os.Stderr, endpoint)
 		os.Exit(1)
 	}
 
