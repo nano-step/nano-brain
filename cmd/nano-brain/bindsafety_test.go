@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -109,5 +110,35 @@ func TestCheckBindSafety_AuthEnabledBypasses(t *testing.T) {
 
 	if err := checkBindSafety("0.0.0.0", true); err != nil {
 		t.Fatalf("checkBindSafety(0.0.0.0) with auth enabled should not error: %v", err)
+	}
+}
+
+// A bypass path is unauthenticated by design. On a network-reachable bind
+// with auth on, anything beyond the two defaults is flagged so the operator
+// sees it at startup (#673).
+func TestUnauthenticatedBypassPaths(t *testing.T) {
+	custom := []string{"/health", "/api/openapi.json", "/api/v1/write", "/mcp"}
+
+	tests := []struct {
+		name        string
+		host        string
+		authEnabled bool
+		bypass      []string
+		want        []string
+	}{
+		{"non-loopback with auth flags extra paths", "0.0.0.0", true, custom, []string{"/api/v1/write", "/mcp"}},
+		{"wildcard spelled empty", "", true, custom, []string{"/api/v1/write", "/mcp"}},
+		{"defaults only", "0.0.0.0", true, []string{"/health", "/api/openapi.json"}, nil},
+		{"no bypass paths", "0.0.0.0", true, nil, nil},
+		{"loopback bind", "127.0.0.1", true, custom, nil},
+		{"auth disabled", "0.0.0.0", false, custom, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := unauthenticatedBypassPaths(tt.host, tt.authEnabled, tt.bypass)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("unauthenticatedBypassPaths(%q, %v, %v) = %v, want %v", tt.host, tt.authEnabled, tt.bypass, got, tt.want)
+			}
+		})
 	}
 }

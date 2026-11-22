@@ -299,6 +299,7 @@ internal/
 - `200` — success
 - `400` — bad input (missing workspace, invalid params)
 - `404` — resource not found
+- `413` — request body too large
 - `415` — wrong content type
 - `500` — internal error
 - `503` — queue full (with `Retry-After` header)

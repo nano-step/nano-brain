@@ -81,6 +81,15 @@ Server binding and authentication.
 | `server.allowed_hosts` | []string | built-in set | `Host` headers accepted on **all routes** (REST API, `/health`, `/mcp`, `/sse`) — a DNS-rebinding guard; any other `Host` gets `403`. Enforced for connections that arrive on a loopback address, and for **every** connection while `server.auth.enabled` is `false` (e.g. the Docker deployment, where the published port lands on the container address); skipped only for non-loopback connections with auth enabled. Separately, state-changing requests (`POST`/`PUT`/`PATCH`/`DELETE`) on any route that carry a foreign `Origin` (or `Referer`) are rejected with `403`; requests with neither header (CLI, curl, MCP clients) are unaffected. Built-in set: `localhost`, `127.0.0.1`, `::1`, `host.docker.internal`. A non-empty list **replaces** the built-in set. Needed when a reverse proxy or tunnel on the same host forwards the public hostname. Env: `NANO_BRAIN_SERVER_ALLOWED_HOSTS` (comma-separated). Requires a restart |
 | `server.serve_only` | bool | `false` | Disable all background workers (embed queue, watcher, harvester). Use for proxy containers sharing a DB with a primary instance |
 
+### Request limits
+
+Fixed, not configurable:
+
+- **Body size:** 4 MiB on every route except `/mcp` and `/sse`, which accept 32 MiB. A larger body is answered with `413`, whether or not it declares a `Content-Length`.
+- **`POST /api/v1/multi-get`:** at most 200 `paths` and `ids` in total; more is answered with `400`.
+- **Timeouts:** 10 s to send the request headers, 120 s for an idle keep-alive connection. There is no read or write deadline on the body, because `/sse`, `/api/v1/events` and long MCP calls stream.
+- **`POST /api/harvest`, `POST /api/reload-config`:** a browser request must come from the daemon's own origin (same host and port); another local port is answered with `403`. Requests without `Origin` and `Sec-Fetch-Site` (CLI, curl) are unaffected.
+
 ### server.auth
 
 | Key | Type | Default | Description |
@@ -91,7 +100,7 @@ Server binding and authentication.
 | `server.auth.users` | []object | `[]` | Basic Auth users (username + bcrypt hash). When auth is enabled, startup fails on an invalid entry |
 | `server.auth.users[].username` | string | — | Username. Must be non-empty, unique, without leading or trailing whitespace, and must not contain `:` |
 | `server.auth.users[].password_hash` | string | — | bcrypt hash of password. Must be a complete bcrypt hash, and every user must use the same bcrypt cost; generate one with `nano-brain auth hash <password>` |
-| `server.auth.bypass_paths` | []string | `["/health"]` | Paths that skip auth |
+| `server.auth.bypass_paths` | []string | `["/health", "/api/openapi.json"]` | Paths that skip auth. On a non-loopback bind, startup prints a warning for every entry other than `/health` and `/api/openapi.json` |
 
 ---
 

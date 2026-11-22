@@ -193,3 +193,67 @@ func TestMultiGet_EmptyPaths(t *testing.T) {
 		t.Errorf("not_found len = %d, want 1", len(notFound))
 	}
 }
+
+// Each entry is one query, so the total of paths and ids is capped (#673).
+func TestMultiGet_EntryCap(t *testing.T) {
+	entries := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = fmt.Sprintf("memory://%d.md", i)
+		}
+		return out
+	}
+
+	tests := []struct {
+		name       string
+		paths, ids int
+		want       int
+	}{
+		{"paths at the cap", 200, 0, http.StatusOK},
+		{"paths and ids at the cap", 120, 80, http.StatusOK},
+		{"paths over the cap", 201, 0, http.StatusBadRequest},
+		{"ids over the cap", 0, 201, http.StatusBadRequest},
+		{"paths and ids together over the cap", 120, 81, http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			queries := 0
+			q := &mockMultiGetQuerier{
+				getBySourcePath: func(context.Context, sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error) {
+					queries++
+					return sqlc.DocumentView{}, sql.ErrNoRows
+				},
+			}
+			body, err := json.Marshal(map[string][]string{"paths": entries(tt.paths), "ids": entries(tt.ids)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/multi-get", strings.NewReader(string(body)))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			c := echo.New().NewContext(req, rec)
+			c.Set("workspace", "ws123")
+
+			got := rec.Code
+			var msg string
+			if err := handlers.MultiGet(q, zerolog.Nop())(c); err != nil {
+				he, ok := err.(*echo.HTTPError)
+				if !ok {
+					t.Fatalf("unexpected error type %T: %v", err, err)
+				}
+				got, msg = he.Code, fmt.Sprint(he.Message)
+			}
+			if got != tt.want {
+				t.Fatalf("status %d, want %d", got, tt.want)
+			}
+			if tt.want == http.StatusBadRequest {
+				if queries != 0 {
+					t.Errorf("ran %d queries before rejecting", queries)
+				}
+				if want := "too many entries: paths and ids together must not exceed 200"; msg != want {
+					t.Errorf("message %q, want %q", msg, want)
+				}
+			}
+		})
+	}
+}
