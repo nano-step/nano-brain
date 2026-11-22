@@ -29,6 +29,10 @@ WHERE c.workspace_hash = $1
   AND c.chunk_type = 'symbol'
   AND c.symbol_name IS NOT NULL
   AND c.symbol_name != ''
+  AND (COALESCE(cardinality(@force_hashes::text[]), 0) = 0
+       OR (f.id IS NOT NULL
+           AND f.source_file = COALESCE(d.source_path, '')
+           AND f.symbol_name = c.symbol_name))
   AND (COALESCE(cardinality(@force_hashes::text[]), 0) > 0
        OR NOT EXISTS (
            SELECT 1

@@ -224,7 +224,7 @@ func (s *Service) splitAndSend(ctx context.Context, workspaceHash string, batch 
 }
 
 func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed, skipped, errors int, err error) {
-	return s.runOnce(ctx, workspaceHash, 0, nil)
+	return s.runOnce(ctx, workspaceHash, 0, nil, false)
 }
 
 // RetryContentHashes bypasses automatic cooldown for explicitly selected
@@ -233,10 +233,24 @@ func (s *Service) RetryContentHashes(ctx context.Context, workspaceHash string, 
 	if len(hashes) == 0 {
 		return 0, 0, 0, nil
 	}
-	return s.runOnce(ctx, workspaceHash, 0, hashes)
+	limit := s.cfg.MaxSummariesPerCycle
+	if limit <= 0 {
+		limit = 100
+	}
+	for start := 0; start < len(hashes); start += limit {
+		end := min(start+limit, len(hashes))
+		p, sk, e, runErr := s.runOnce(ctx, workspaceHash, 0, hashes[start:end], false)
+		processed += p
+		skipped += sk
+		errors += e
+		if runErr != nil {
+			return processed, skipped, errors, runErr
+		}
+	}
+	return processed, skipped, errors, nil
 }
 
-func (s *Service) runOnce(ctx context.Context, workspaceHash string, workerLimit int, forceHashes []string) (processed, skipped, errors int, err error) {
+func (s *Service) runOnce(ctx context.Context, workspaceHash string, workerLimit int, forceHashes []string, preferStale bool) (processed, skipped, errors int, err error) {
 	exhausted, err := s.budget.IsExhausted(ctx, workspaceHash, s.cfg.MaxRequestsPerDay)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("check budget: %w", err)
@@ -252,6 +266,12 @@ func (s *Service) runOnce(ctx context.Context, workspaceHash string, workerLimit
 	}
 	if workerLimit > 0 && workerLimit < maxCycle {
 		maxCycle = workerLimit
+	}
+	if preferStale {
+		s.processGraphContextStale(ctx, workspaceHash, &processed, &errors, int32(maxCycle))
+		if processed+errors > 0 {
+			return processed, 0, errors, nil
+		}
 	}
 
 	rows, err := s.queries.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
@@ -660,14 +680,15 @@ func (s *Service) processAllWorkspaces(ctx context.Context, workerID int, curren
 	if batchLimit <= 0 {
 		batchLimit = 5
 	}
-	start := int(s.workspaceStart.Add(1)-1) % max(1, len(workspaces))
+	sweep := s.workspaceStart.Add(1) - 1
+	start := int(sweep % uint64(max(1, len(workspaces))))
 	for i := range workspaces {
 		ws := workspaces[(start+i)%len(workspaces)]
 		if ctx.Err() != nil {
 			return 0
 		}
 
-		_, _, _, err := s.runOnce(ctx, ws.Hash, batchLimit, nil)
+		_, _, _, err := s.runOnce(ctx, ws.Hash, batchLimit, nil, sweep%2 == 1)
 		if err != nil {
 			if stdErrors.Is(err, ErrBudgetExhausted) {
 				s.logger.Info().

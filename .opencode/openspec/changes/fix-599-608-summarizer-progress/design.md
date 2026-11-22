@@ -25,7 +25,23 @@ every requested failure successful. Tests cover SQL eligibility/order,
 targeted retry, partial responses, and worker quota/rotation using a local
 stubbed provider and isolated test schemas.
 
+Independent reviewers found that retry-all selected only the first cycle of
+failures. Explicit retry now chunks requested hashes by
+`max_summaries_per_cycle` so a request larger than one cycle still attempts
+every failure. The persisted failure row identifies a symbol by source file
+and name as well as content hash; forced selection must match that identity
+to avoid sending unrelated symbols with duplicate hashes. The unresolved
+failure table remains keyed by workspace and content hash, so separate
+same-hash failures still share retry state; changing that schema is out of
+scope for this fix.
+
 Graph-context-stale symbols use the same failure eligibility; otherwise the
 automatic worker would retry the same stale summary on every empty-backlog
 sweep. Explicit retries must also select stale symbols that already have an
 old summary document.
+To avoid starving graph-context-stale symbols when a workspace always has
+new pending symbols, worker sweeps alternate which queue gets the first
+chance. A stale sweep only takes its one bounded batch when it has eligible
+work; otherwise it falls through to normal selection. The pre-existing
+provider-429 error propagation still needs separate follow-up: a failed
+batch becomes failure rows and does not reach the worker's outer 429 backoff.

@@ -29,6 +29,16 @@ when its failure ID is passed to the retry endpoint,
 then only the selected symbol bypasses the cooldown and its failure is
 resolved only after a successful summary.
 
+#### Scenario: Explicit retry exceeds one cycle
+Given more selected failures than `max_summaries_per_cycle`,
+when retry-all runs,
+then it attempts every selected failure in successive bounded cycles.
+
+#### Scenario: Identical content hashes across files
+Given two symbols sharing a content hash but only one failure record,
+when that failure is retried,
+then only the recorded file and symbol name are submitted.
+
 ### Requirement: Bounded worker occupancy
 The automatic worker SHALL give each registered workspace at most one
 configured batch before advancing to the next workspace; it SHALL rotate
@@ -39,6 +49,12 @@ Given two registered workspaces each with more than one batch pending,
 when one worker sweeps both,
 then both receive a chance to submit one batch before either receives a
 second batch.
+
+#### Scenario: New backlog coexists with stale graph summaries
+Given an existing summary needing graph-context refresh and fresh
+unsummarized symbols arriving on successive sweeps,
+when the worker keeps polling,
+then a stale summary gets a bounded turn even while fresh work remains.
 
 ### Requirement: Partial model response
 Missing members of a successful model batch SHALL be reported and cooled

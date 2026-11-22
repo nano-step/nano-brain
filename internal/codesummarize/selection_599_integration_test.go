@@ -149,3 +149,45 @@ func TestGetGraphContextStaleSymbols_RespectsFailureCooldown(t *testing.T) {
 		t.Fatalf("expired stale failure should retry: %+v", rows)
 	}
 }
+
+func TestExplicitRetry_OnlySelectsFailedSymbolWhenContentHashShared(t *testing.T) {
+	pool := testutil.SetupTestDB(t)
+	db := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	q := sqlc.New(db)
+	workspace := uuid.NewString()
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: workspace, Name: "fixture", Path: "/tmp/fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	seedPendingSymbol(t, ctx, q, workspace, "Failed")
+	doc, err := q.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+		WorkspaceHash: workspace, ContentHash: "file-Other",
+		Content: "func Other() {}", SourcePath: "src/Other.go", Collection: "code",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
+		DocumentID: doc.ID, WorkspaceHash: workspace, ContentHash: "symbol-Failed",
+		Content: "func Other() {}", ChunkType: "symbol",
+		SymbolName: sql.NullString{String: "Other", Valid: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.UpsertCodeSummarizationFailure(ctx, sqlc.UpsertCodeSummarizationFailureParams{
+		WorkspaceHash: workspace, ContentHash: "symbol-Failed",
+		SymbolName: "Failed", SourceFile: "src/Failed.go",
+		ErrorType: "transient_exhausted", ErrorReason: "HTTP 524",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := q.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
+		WorkspaceHash: workspace, Limit: 10, ForceHashes: []string{"symbol-Failed"},
+	})
+	if err != nil || len(rows) != 1 || rows[0].SourcePath != "src/Failed.go" {
+		t.Fatalf("retry selected unrelated symbol sharing hash: rows=%v err=%v", rows, err)
+	}
+}
