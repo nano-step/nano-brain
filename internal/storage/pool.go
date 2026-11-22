@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,38 +47,34 @@ func ClosePool(pool *pgxpool.Pool) {
 	pool.Close()
 }
 
-// keywordPassword matches the password of a keyword/value DSN
-// (host=... password=secret, value optionally single-quoted with backslash
-// escapes) and a password= query parameter of a URL DSN. The key must end in
-// "password" so sslpassword= is covered too, and an unquoted value runs to
-// the next whitespace so `&` and `"` inside it cannot leak the tail.
-var keywordPassword = regexp.MustCompile(`(?i)(^|[\s?&])(\w*password\s*=\s*)('(?:[^'\\]|\\.)*'|[^\s]+)`)
+// dsnURLPassword matches a *password= query parameter inside a URL DSN
+// (postgres://u@h/db?password=x&sslpassword=y). Each parameter is masked
+// independently, so every credential in the query is covered; a literal &
+// inside a URL password must be written %26, so the value ends at & or at
+// the fragment.
+var dsnURLPassword = regexp.MustCompile(`(?i)([?&]\w*password=)[^&#\s]*`)
 
-// dsnParamStart finds a `&key=` parameter boundary inside a matched
-// keyword-DSN value so the tail is preserved rather than eaten as password
-// text.
-var dsnParamStart = regexp.MustCompile(`&[A-Za-z0-9_]+=`)
+// dsnKeywordPassword matches *password=value in a whitespace-separated
+// keyword DSN (host=... password=secret, value optionally single-quoted with
+// backslash escapes). The key must end in "password" so sslpassword= is
+// covered. An unquoted value runs to the next whitespace and is masked whole:
+// pgx keeps `abc&tail=X` as the password — keyword pairs are separated by
+// whitespace only, so a `&key=` inside the value is password bytes, not a
+// parameter boundary.
+var dsnKeywordPassword = regexp.MustCompile(`(?i)(^|\s)(\w*password\s*=\s*)('(?:[^'\\]|\\.)*'|\S+)`)
 
-// maskDSNValue builds the replacement for a keyword-DSN password match: the
-// key stays, the value becomes ***, and a `&key=` tail (a URL query parameter
-// or the next keyword pair) is kept.
-func maskDSNValue(m string) string {
-	g := keywordPassword.FindStringSubmatchIndex(m)
-	if g == nil || g[6] < 0 {
-		return m
-	}
-	v := m[g[6]:g[7]]
-	tail := ""
-	if !strings.HasPrefix(v, "'") {
-		if loc := dsnParamStart.FindStringIndex(v); loc != nil {
-			tail = v[loc[0]:]
-		}
-	}
-	return m[:g[6]] + "***" + tail
+// MaskDSNPasswords masks every *password= value in a database DSN, in both
+// URL form (postgres://u@h/db?password=x) and keyword form
+// (host=... password=secret). The key is kept, the value becomes ***. The
+// URL-query pass runs first; the keyword pass requires the key at the start
+// or after whitespace, so it never re-matches a URL query parameter.
+func MaskDSNPasswords(dsn string) string {
+	dsn = dsnURLPassword.ReplaceAllString(dsn, "${1}***")
+	return dsnKeywordPassword.ReplaceAllString(dsn, "${1}${2}***")
 }
 
 func maskPassword(dsn string) string {
-	dsn = keywordPassword.ReplaceAllStringFunc(dsn, maskDSNValue)
+	dsn = MaskDSNPasswords(dsn)
 	for i, c := range dsn {
 		if c == '@' {
 			for j := i - 1; j >= 0; j-- {

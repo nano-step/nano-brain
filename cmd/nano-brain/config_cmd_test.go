@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -221,5 +222,91 @@ func TestMaskSensitive_BinaryTag(t *testing.T) {
 func TestMaskSensitive_InvalidYAML(t *testing.T) {
 	if got := maskSensitive("api_key: sk-LEAKEDSECRET\n\t[unclosed\n"); got != "<redacted: invalid YAML>\n" {
 		t.Fatalf("maskSensitive() = %q, want %q", got, "<redacted: invalid YAML>\n")
+	}
+}
+
+func TestMaskSensitive_DSNTails(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		secrets []string
+		kept    []string
+	}{
+		{"URL DSN second password param", "url: postgres://u@localhost:5432/d?password=FAKEPW1&sslpassword=SSLTAILSECRET\n", []string{"FAKEPW1", "SSLTAILSECRET"}, nil},
+		{"keyword DSN ampersand key tail", "url: \"host=h password=abc&key=TAILSECRET dbname=d\"\n", []string{"TAILSECRET"}, []string{"dbname=d"}},
+		{"keyword DSN trailing ampersand param", "url: \"password=abc&tail=KWTAIL\"\n", []string{"KWTAIL"}, nil},
+		{"URL param keeps neighbours", "url: postgres://h/d?password=PWFIX&sslmode=disable\n", []string{"PWFIX"}, []string{"sslmode=disable"}},
+		{"quoted value with ampersand", "url: \"host=h password='a b&c=d' dbname=d\"\n", []string{"b&c=d"}, []string{"dbname=d"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := maskSensitive(tt.input)
+			for _, secret := range tt.secrets {
+				if strings.Contains(got, secret) {
+					t.Errorf("credential still visible: %q", got)
+				}
+			}
+			for _, want := range tt.kept {
+				if !strings.Contains(got, want) {
+					t.Errorf("expected %q to survive masking: %q", want, got)
+				}
+			}
+			var doc yaml.Node
+			if err := yaml.Unmarshal([]byte(got), &doc); err != nil {
+				t.Errorf("redacted output is not YAML: %v", err)
+			}
+		})
+	}
+}
+
+func TestMaskSensitive_BinaryKeys(t *testing.T) {
+	tests := []struct {
+		name, input, secret string
+	}{
+		{"binary voyage_api_key", "embedding:\n  !!binary dm95YWdlX2FwaV9rZXk= : BINSECRETA\n", "BINSECRETA"},
+		{"binary tokens in flow map", "server: {auth: {enabled: true, !!binary dG9rZW5z : [nbt_BINKEYTOKEN_AAAAAAAAAAAAAAAAAAAAAAAA]}}\n", "nbt_BINKEYTOKEN_AAA"},
+		{"alias to binary key", "defs:\n  k: &k !!binary dG9rZW5z\nserver:\n  auth:\n    enabled: true\n    *k : [nbt_ALIASBINTOKEN_BBBBBBBBBBBBBBBBBBBB]\n", "nbt_ALIASBINTOKEN_BBB"},
+		{"binary password_hash key", "server:\n  auth:\n    enabled: true\n    users:\n      - username: admin\n        !!binary cGFzc3dvcmRfaGFzaA== : \"$2a$10$BINEKEYHASHSECRET\"\n", "BINEKEYHASHSECRET"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := maskSensitive(tt.input)
+			if strings.Contains(got, tt.secret) {
+				t.Errorf("credential still visible: %q", got)
+			}
+			var doc yaml.Node
+			if err := yaml.Unmarshal([]byte(got), &doc); err != nil {
+				t.Errorf("redacted output is not YAML: %v", err)
+			}
+		})
+	}
+}
+
+func TestConfigShow_BinaryKeysLoadAndStayHidden(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yml")
+	content := "server:\n  auth:\n    enabled: true\n    !!binary dG9rZW5z : [nbt_BINKEYREALTOKEN_0123456789ABCDEF]\nembedding:\n  !!binary dm95YWdlX2FwaV9rZXk= : BINVOYAGESECRET\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// koanf decodes the !!binary keys, so the server really loads these
+	// credentials; that is what makes the masking necessary.
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("config.Load() failed: %v", err)
+	}
+	if len(cfg.Server.Auth.Tokens) != 1 || cfg.Server.Auth.Tokens[0] != "nbt_BINKEYREALTOKEN_0123456789ABCDEF" {
+		t.Fatalf("binary key did not load tokens: %#v", cfg.Server.Auth.Tokens)
+	}
+	if cfg.Embedding.VoyageAPIKey != "BINVOYAGESECRET" {
+		t.Fatalf("binary key did not load voyage_api_key: %q", cfg.Embedding.VoyageAPIKey)
+	}
+	for _, jsonFlag := range []bool{false, true} {
+		out := captureStdout(t, func() { runConfigShow(path, jsonFlag) })
+		for _, secret := range []string{"nbt_BINKEYREALTOKEN", "BINVOYAGESECRET"} {
+			if strings.Contains(out, secret) {
+				t.Errorf("config show --json=%v leaked %s:\n%s", jsonFlag, secret, out)
+			}
+		}
 	}
 }
