@@ -27,10 +27,11 @@ then the second file's symbol doc is not rewritten — its `updated_at`
 is unchanged.
 
 ### Requirement: Convergent stale-doc cleanup
-After the admission and re-extraction pass for a file, the watcher MUST
-delete its remaining spanless symbol docs — symbols no longer emitted, or
-files no longer indexed — so a later restart finds no stale rows and does
-no further work.
+The watcher MUST delete a file's remaining spanless symbol docs after a
+complete re-extraction pass, or when the file is provably not indexed
+(ignored, deleted, outside the workspace, or oversized), so a later
+restart finds no stale rows and does no further work. Deleted docs are
+never rebuilt, so the watcher MUST NOT delete them on transient failures.
 
 #### Scenario: Orphan stale doc for a removed symbol is deleted
 Given a stale symbol doc for a name the file no longer declares,
@@ -49,6 +50,19 @@ Given a file that parses to zero symbols but still has a stale symbol
 doc,
 when the watcher starts,
 then the stale doc is deleted and the file is not counted as repaired.
+
+### Requirement: Transient failures keep stale docs
+The watcher SHALL keep a file's stale symbol docs — for repair at the
+next start — whenever the outcome is not a proven orphan: an unreadable
+file, a resolve or stat error, a failed symbol upsert, or an extension no
+registered extractor supports.
+
+#### Scenario: Unreadable file keeps its stale docs
+Given a file whose stale symbol docs exist and whose permissions deny
+reads,
+when the watcher starts,
+then the stale docs are kept unchanged, and after the file becomes
+readable the next start re-extracts its spans.
 
 ### Requirement: Ignored files are never re-indexed by the backfill
 The backfill MUST NOT read or re-extract a file the initial scan treated

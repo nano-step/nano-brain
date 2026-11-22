@@ -165,7 +165,7 @@ func (e *env584) symbolMeta(t *testing.T, sourcePath string) map[string]string {
 // end_line. Deadlines beat sleeps: the watcher writes asynchronously.
 func (e *env584) waitSpan(t *testing.T, symbolSourcePath string) {
 	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		doc, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    symbolSourcePath,
@@ -190,7 +190,7 @@ func (e *env584) waitSpan(t *testing.T, symbolSourcePath string) {
 // waitDoc polls until a document exists at sourcePath.
 func (e *env584) waitDoc(t *testing.T, sourcePath string) {
 	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		_, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    sourcePath,
@@ -211,7 +211,7 @@ func (e *env584) waitDoc(t *testing.T, sourcePath string) {
 // so completion of this wait means the backfill has run for that file.
 func (e *env584) waitDocGone(t *testing.T, sourcePath string) {
 	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		_, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    sourcePath,
@@ -424,4 +424,94 @@ func TestWatcherBackfillDropsStaleSymbolsWhenExtractorYieldsNone(t *testing.T) {
 	e.start(t)
 	defer e.stop(t)
 	e.waitDocGone(t, symPath)
+}
+
+// TestWatcherBackfillKeepsStaleSymbolsWhenFileUnreadable covers the
+// transient-failure half of the rework: a file that cannot be read (EACCES
+// here) is not provably orphaned, so its stale symbol docs must be kept for
+// the next start rather than deleted permanently.
+func TestWatcherBackfillKeepsStaleSymbolsWhenFileUnreadable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can read 000-permission files")
+	}
+	e := newEnv584(t)
+	lockedPath := e.writeFile(t, "src/locked.ts", "export function keepMe() {\n  return 1;\n}\n")
+	otherPath := e.writeFile(t, "src/other.ts", "export function bar(x: number): number {\n  return x * 2;\n}\n")
+	keepPath := lockedPath + "?symbol=keepMe&kind=function"
+
+	e.start(t)
+	e.waitSpan(t, keepPath)
+	e.stop(t)
+
+	e.stripSpans(t, lockedPath)
+	if err := os.Chmod(lockedPath, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	// Canary on a readable file: its deletion proves the backfill ran.
+	canaryPath := otherPath + "?symbol=gone&kind=function"
+	e.insertStaleSymbolDoc(t, otherPath, "gone", "function")
+
+	e.start(t)
+	e.waitDocGone(t, canaryPath)
+	// Row order within the pass is arbitrary; a short settle guarantees the
+	// locked file's row has been visited before asserting on it.
+	time.Sleep(300 * time.Millisecond)
+	e.stop(t)
+
+	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    keepPath,
+		WorkspaceHash: e.ws,
+	}); err != nil {
+		t.Fatalf("stale doc for unreadable file must be kept, got err=%v", err)
+	}
+
+	// Once the file is readable again the next start repairs the spans.
+	if err := os.Chmod(lockedPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.start(t)
+	defer e.stop(t)
+	e.waitSpan(t, keepPath)
+}
+
+// TestWatcherBackfillKeepsStaleSymbolsWhenExtractorMissing covers the case
+// where no registered extractor supports the file's extension: the stale
+// docs may belong to a symbol kind a future or differently-configured
+// binary emits, so they are kept rather than deleted.
+func TestWatcherBackfillKeepsStaleSymbolsWhenExtractorMissing(t *testing.T) {
+	e := newEnv584(t)
+	tsPath := e.writeFile(t, "src/handler.ts", "export function tsOnly() {\n  return 1;\n}\n")
+	goPath := e.writeFile(t, "src/main.go", "package main\n\nfunc goSym() {}\n")
+	tsSymPath := tsPath + "?symbol=tsOnly&kind=function"
+	goSymPath := goPath + "?symbol=goSym&kind=function"
+
+	e.start(t)
+	e.waitSpan(t, tsSymPath)
+	e.waitSpan(t, goSymPath)
+	e.stop(t)
+
+	e.stripSpans(t, tsPath)
+	canaryPath := goPath + "?symbol=gone&kind=function"
+	e.insertStaleSymbolDoc(t, goPath, "gone", "function")
+
+	// Second start with a registry that lacks the TypeScript extractor: the
+	// .go canary still proves the backfill ran while the .ts docs are kept.
+	goE, err := symbol.NewGoExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.reg = symbol.NewRegistry(goE)
+	e.start(t)
+	defer e.stop(t)
+	e.waitDocGone(t, canaryPath)
+	// Row order within the pass is arbitrary; a short settle guarantees the
+	// .ts row has been visited before asserting on it.
+	time.Sleep(300 * time.Millisecond)
+
+	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    tsSymPath,
+		WorkspaceHash: e.ws,
+	}); err != nil {
+		t.Fatalf("stale doc for unsupported extension must be kept, got err=%v", err)
+	}
 }

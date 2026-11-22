@@ -14,3 +14,9 @@
       files and the third-start no-op.
 - [x] Quick + full integration validation.
 - [ ] Independent review and PR.
+- [x] Review rework 2: delete stale docs only when provably orphaned —
+      transient failures (unreadable, resolve/stat/read errors, failed
+      upsert, missing extractor) keep them for the next start;
+      `extractAndUpsertSymbols` reports `complete`. Red tests for
+      unreadable file and missing extractor plus a mock-driven upsert
+      failure unit test.

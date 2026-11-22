@@ -1031,7 +1031,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	w.extractAndInsertEntities(ctx, col.workspaceHash, chunks, chunkIDs)
 
 	if w.symbolRegistry != nil {
-		numSyms := w.extractAndUpsertSymbols(ctx, col, filePath, content)
+		numSyms, _ := w.extractAndUpsertSymbols(ctx, col, filePath, content)
 		if numSyms > 0 && w.summarizeNotify != nil {
 			w.summarizeNotify()
 		}
@@ -1049,16 +1049,19 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 // extractAndUpsertSymbols parses filePath for language symbols and upserts them
 // as summary-eligible chunks. Returns the number of symbols found so callers can
 // avoid waking the code-summarization worker for files with none (e.g. JSON/text).
-func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollection, filePath string, content []byte) int {
+// complete is false when extraction errored or any symbol failed to persist —
+// the caller's symbol docs are then only partially current.
+func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollection, filePath string, content []byte) (int, bool) {
 	syms, err := w.symbolRegistry.Extract(filePath, content)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("symbol extraction failed")
-		return 0
+		return 0, false
 	}
 	if len(syms) == 0 {
-		return 0
+		return 0, true
 	}
 
+	complete := true
 	for _, s := range syms {
 		metaBytes, _ := json.Marshal(map[string]string{
 			"source_type": "symbol",
@@ -1083,6 +1086,7 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 		docRow, err := w.queries.UpsertDocumentBySourcePath(ctx, params)
 		if err != nil {
 			w.logger.Warn().Err(err).Str("symbol", s.Name).Msg("symbol upsert failed")
+			complete = false
 			continue
 		}
 
@@ -1094,6 +1098,7 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 		chunkIDs, err := w.writeChunks(ctx, w.queries, docRow.ID, col.workspaceHash, chunks, chunkMeta)
 		if err != nil {
 			w.logger.Warn().Err(err).Str("symbol", s.Name).Msg("symbol chunk write failed")
+			complete = false
 			continue
 		}
 		if w.embedQueue != nil {
@@ -1108,7 +1113,7 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 		Int("symbols", len(syms)).
 		Msg("symbols extracted")
 
-	return len(syms)
+	return len(syms), complete
 }
 
 // aliasIndexEntry guards a single collection root's *graph.AliasIndex build
@@ -1343,12 +1348,12 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 // backfillSymbolSpans repairs symbol documents written before #539 added
 // line/end_line metadata — the content-hash early exit in processFile skips
 // their parent files on every scan, so a restart alone never re-extracts
-// them (issue #584). It runs once at startup, after the initial processAll,
-// and converges in a single pass: files that can be re-read are re-extracted
-// through the normal symbol path, and any doc still lacking a span
-// afterwards — a renamed or removed symbol, a file that now parses to zero
-// symbols, or a file the scan no longer indexes — is deleted so the next
-// start has nothing left to do.
+// them (issue #584). It runs once at startup, after the initial processAll.
+// Stale docs are deleted only when they are provably orphaned — the file is
+// ignored or gone, resolves outside the workspace, or re-extraction ran to
+// completion and did not re-emit them. Any transient failure (unreadable
+// file, resolve error, failed upsert, missing extractor) leaves the docs
+// for the next start instead of losing them permanently.
 func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
 	if w.symbolRegistry == nil {
 		return
@@ -1377,34 +1382,62 @@ func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
 				return
 			}
 			path := row.FilePath
+			remove := func() { removed += w.deleteStaleSymbolSpanDocs(ctx, col, path) }
 			// The initial scan deleted the file doc of every ignored file,
 			// so a missing parent means the file is not admitted — drop its
-			// stale symbols without reading it. A deleted file's doc can
-			// still be present; the Stat check below catches that case.
-			admitted := row.ParentIndexed
-			if admitted && col.filter != nil && col.filter.ShouldSkip(path, false) {
-				admitted = false
+			// stale symbols without reading it.
+			switch {
+			case !row.ParentIndexed:
+				remove()
+				continue
+			case col.filter != nil && col.filter.ShouldSkip(path, false):
+				remove()
+				continue
 			}
-			if admitted {
-				if skip, _ := w.skipResolved(col, path); skip {
-					admitted = false
+			skip, purge := w.skipResolved(col, path)
+			if skip {
+				if purge {
+					remove()
+				} else {
+					w.logger.Debug().Str("file", path).Msg("stale symbol docs kept: path cannot be resolved")
 				}
+				continue
 			}
-			if admitted {
-				info, err := os.Stat(path)
-				admitted = err == nil && info.Mode().IsRegular() && info.Size() <= w.maxFileSize
+			info, statErr := os.Stat(path)
+			switch {
+			case errors.Is(statErr, fs.ErrNotExist):
+				remove()
+				continue
+			case statErr != nil:
+				w.logger.Debug().Err(statErr).Str("file", path).Msg("stale symbol docs kept: stat failed")
+				continue
+			case !info.Mode().IsRegular():
+				remove()
+				continue
+			case info.Size() > w.maxFileSize:
+				remove()
+				continue
 			}
-			var content []byte
-			if admitted {
-				var readErr error
-				if content, readErr = os.ReadFile(path); readErr != nil {
-					admitted = false
-				}
+			if !w.symbolRegistry.Supports(filepath.Ext(path)) {
+				w.logger.Debug().Str("file", path).Msg("stale symbol docs kept: no extractor for extension")
+				continue
 			}
-			if admitted && w.extractAndUpsertSymbols(ctx, col, path, content) > 0 {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				w.logger.Debug().Err(err).Str("file", path).Msg("stale symbol docs kept: read failed")
+				continue
+			}
+			n, complete := w.extractAndUpsertSymbols(ctx, col, path, content)
+			if n > 0 {
 				repaired++
 			}
-			removed += w.deleteStaleSymbolSpanDocs(ctx, col, path)
+			if !complete {
+				w.logger.Warn().Str("file", path).Msg("stale symbol docs kept: re-extraction incomplete")
+				continue
+			}
+			// Re-emitted symbols carry end_line and survive; whatever this
+			// deletes was an orphan for a symbol no longer emitted.
+			remove()
 		}
 		if repaired > 0 || removed > 0 {
 			w.logger.Info().Str("collection", col.name).
