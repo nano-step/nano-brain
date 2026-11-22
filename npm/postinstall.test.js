@@ -10,7 +10,7 @@ const { spawnSync } = require("node:child_process");
 const https = require("node:https");
 const { EventEmitter } = require("node:events");
 const { Readable } = require("node:stream");
-const { parseSHA256Line, isAllowedDownloadHost, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion } = require("./postinstall");
+const { parseSHA256Line, isAllowedDownloadHost, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion, setSumsRetryDelayMs } = require("./postinstall");
 const VERSION = require("../package.json").version;
 const isWin = os.platform() === "win32";
 
@@ -750,11 +750,153 @@ for (const fn of [download, downloadWithHash]) {
   });
 }
 
-test("isAllowedDownloadHost: github.com and *.githubusercontent.com only (#659)", () => {
-  for (const h of ["github.com", "GitHub.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "raw.githubusercontent.com"]) {
+// #676: the allowlist is the exact set of hosts a release download uses —
+// other *.githubusercontent.com hosts (raw, codeload, avatars, ...) are refused.
+test("isAllowedDownloadHost: github.com and the two asset CDN hosts only (#676)", () => {
+  for (const h of ["github.com", "GitHub.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"]) {
     assert.strictEqual(isAllowedDownloadHost(h), true, h);
   }
-  for (const h of ["githubusercontent.com", "api.github.com", "evilgithub.com", "github.com.evil.example.com", "evilgithubusercontent.com", "example.com", ""]) {
+  for (const h of [
+    "githubusercontent.com",
+    "raw.githubusercontent.com",
+    "codeload.github.com",
+    "api.github.com",
+    "evil.githubusercontent.com.attacker",
+    "evilgithub.com",
+    "github.com.evil.example.com",
+    "evilgithubusercontent.com",
+    "example.com",
+    "",
+  ]) {
     assert.strictEqual(isAllowedDownloadHost(h), false, h);
   }
+});
+
+// --- #676: .partial download + atomic rename; SHA256SUMS retried once ---
+
+// A hash mismatch, an unverifiable release and a refused redirect must never
+// leave anything at binPath or at <binPath>.partial: the rename is the only
+// path that creates binPath, and it runs after verification.
+test("ensureBinary: SHA-256 mismatch deletes the .partial and never creates binPath (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  const wrongSha = crypto.createHash("sha256").update("not the binary\n").digest("hex");
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) return { status: 200, body: `${wrongSha}  ${ASSET_NAME}\n` };
+    return { status: 404 };
+  });
+
+  await assert.rejects(() => ensureBinary(), securityError(/SHA-256 mismatch/));
+  assert.strictEqual(fs.existsSync(bin), false, "unverified binary must not stay installed");
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false, ".partial must be deleted");
+});
+
+test("ensureBinary: failed SHA256SUMS fetch leaves neither binPath nor .partial (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  stubHttps(t, (url) => (isAssetURL(url) ? { status: 200, body: FAKE_BINARY } : { status: 404 }));
+
+  await assert.rejects(() => ensureBinary(), securityError(/cannot verify .*SHA256SUMS could not be downloaded/));
+  assert.strictEqual(fs.existsSync(bin), false);
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false);
+});
+
+test("ensureBinary: verified install renames .partial into place (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) return { status: 200, body: `${FAKE_BINARY_SHA}  ${ASSET_NAME}\n` };
+    return { status: 404 };
+  });
+
+  assert.strictEqual(await ensureBinary(), bin);
+  assert.strictEqual(fs.readFileSync(bin, "utf8"), FAKE_BINARY);
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false, "rename consumed the .partial");
+});
+
+// The redirect allowlist is the exact release hosts: another
+// *.githubusercontent.com host — even a real GitHub one like raw — is refused.
+test("ensureBinary: redirect to a githubusercontent host outside the allowlist is refused (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  const requested = stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 302, headers: { location: "https://raw.githubusercontent.com/x" } };
+    return { status: 200, body: FAKE_BINARY };
+  });
+
+  await assert.rejects(() => ensureBinary(), securityError(/refusing redirect .* to https:\/\/raw\.githubusercontent\.com/));
+  assert.strictEqual(fs.existsSync(bin), false);
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false);
+  assert.ok(!requested.some((u) => u.includes("raw.githubusercontent.com")), "must not contact the redirect target");
+});
+
+// A transient SHA256SUMS failure is retried once; the second answer is used.
+test("ensureBinary: SHA256SUMS is retried once and succeeds (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  let sumsCalls = 0;
+  const requested = stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) {
+      sumsCalls++;
+      if (sumsCalls === 1) return { error: new Error("ECONNRESET") };
+      return { status: 200, body: `${FAKE_BINARY_SHA}  ${ASSET_NAME}\n` };
+    }
+    return { status: 404 };
+  });
+
+  assert.strictEqual(await ensureBinary(), bin);
+  assert.strictEqual(fs.readFileSync(bin, "utf8"), FAKE_BINARY);
+  assert.strictEqual(sumsCalls, 2, "exactly one retry");
+  assert.strictEqual(requested.filter(isSumsURL).length, 2);
+});
+
+test("ensureBinary: SHA256SUMS fails closed after the first and only retry (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  let sumsCalls = 0;
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) {
+      sumsCalls++;
+      return { error: new Error("ECONNRESET") };
+    }
+    return { status: 404 };
+  });
+
+  await assert.rejects(() => ensureBinary(), securityError(/SHA256SUMS could not be downloaded .*ECONNRESET/));
+  assert.strictEqual(sumsCalls, 2, "one retry, then fail closed");
+  assert.strictEqual(fs.existsSync(bin), false);
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false);
+});
+
+// A fetched SHA256SUMS that simply lacks the asset entry is a security
+// failure, not a transient one: it must not burn the retry.
+test("ensureBinary: a missing SHA256SUMS entry is not retried (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  let sumsCalls = 0;
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) {
+      sumsCalls++;
+      return { status: 200, body: `${FAKE_BINARY_SHA}  nano-brain-other-platform\n` };
+    }
+    return { status: 404 };
+  });
+
+  await assert.rejects(() => ensureBinary(), securityError(/SHA256SUMS has no entry/));
+  assert.strictEqual(sumsCalls, 1, "no retry for a downloaded but missing entry");
 });

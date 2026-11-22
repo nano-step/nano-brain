@@ -61,20 +61,26 @@ function safeUnlink(p) {
 }
 
 // Release downloads start at github.com and are redirected to GitHub's asset
-// CDN. Only follow a redirect that stays on https and on a GitHub-owned host,
-// so a tampered or hijacked response cannot point the installer at another
-// origin; anything else is a non-retryable "SECURITY:" failure (#659).
+// CDN. Only follow a redirect that stays on https and on one of the exact
+// hosts a release download actually uses (measured: release-assets and
+// objects.githubusercontent.com), so a tampered or hijacked response cannot
+// point the installer at another GitHub-looking host either; anything else is
+// a non-retryable "SECURITY:" failure (#659, narrowed by #676).
 const MAX_REDIRECTS = 5;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const ALLOWED_DOWNLOAD_HOSTS = new Set([
+  "github.com",
+  "release-assets.githubusercontent.com",
+  "objects.githubusercontent.com",
+]);
 
 function isAllowedDownloadHost(hostname) {
-  const host = String(hostname).toLowerCase();
-  return host === "github.com" || host.endsWith(".githubusercontent.com");
+  return ALLOWED_DOWNLOAD_HOSTS.has(String(hostname).toLowerCase());
 }
 
 // Returns the absolute URL to follow for a redirect response, resolving a
 // relative Location against the URL that produced it. Throws when the hop
-// budget is spent or the target is not an allowed https GitHub host.
+// budget is spent or the target is not an allowed https release host.
 function nextRedirectURL(currentUrl, location, redirectsLeft) {
   if (redirectsLeft <= 0) {
     throw new Error(`Download failed: too many redirects (more than ${MAX_REDIRECTS})`);
@@ -91,7 +97,8 @@ function nextRedirectURL(currentUrl, location, redirectsLeft) {
   if (target.protocol !== "https:" || !isAllowedDownloadHost(target.hostname)) {
     throw new Error(
       `SECURITY: refusing redirect from ${currentUrl} to ${target.protocol}//${target.host} ` +
-      `(only https://github.com and https://*.githubusercontent.com are allowed)`
+      `(only https://github.com, https://release-assets.githubusercontent.com and ` +
+      `https://objects.githubusercontent.com are allowed)`
     );
   }
   return target.href;
@@ -209,8 +216,8 @@ function parseSHA256Line(content, targetFilename) {
 // A release without a usable checksum is treated like a checksum mismatch:
 // delete the downloaded binary and fail with a non-retryable "SECURITY:" error
 // rather than install something unverified (#659). install.sh does the same.
-function unverifiableError(tag, assetName, binPath, reason) {
-  safeUnlink(binPath);
+function unverifiableError(tag, assetName, filePath, reason) {
+  safeUnlink(filePath);
   return new Error(
     `SECURITY: cannot verify ${assetName} from release ${tag}: ${reason}\n` +
     `The downloaded binary has been deleted. The release may be incomplete ` +
@@ -221,30 +228,49 @@ function unverifiableError(tag, assetName, binPath, reason) {
   );
 }
 
-async function verifySHA256(tag, assetName, binPath, computedHex) {
-  const sumsUrl = `https://github.com/${REPO}/releases/download/${tag}/SHA256SUMS`;
-  const sumsPath = `${binPath}.SHA256SUMS.tmp`;
-  let sumsContent;
+// A transient blip fetching SHA256SUMS should not fail a good download closed,
+// so the fetch is tried once more after a short wait. Only the download is
+// retried — a SHA256SUMS that arrives but has no entry for the asset still
+// fails closed immediately. The delay is a module variable so tests can
+// shrink it.
+let sumsRetryDelayMs = 1000;
+function setSumsRetryDelayMs(ms) {
+  sumsRetryDelayMs = ms;
+}
+
+async function fetchSumsContent(sumsUrl, sumsPath) {
   try {
     await download(sumsUrl, sumsPath);
-    sumsContent = fs.readFileSync(sumsPath, "utf8");
+  } catch (firstErr) {
+    await new Promise((resolve) => setTimeout(resolve, sumsRetryDelayMs));
+    await download(sumsUrl, sumsPath);
+  }
+  return fs.readFileSync(sumsPath, "utf8");
+}
+
+async function verifySHA256(tag, assetName, filePath, computedHex) {
+  const sumsUrl = `https://github.com/${REPO}/releases/download/${tag}/SHA256SUMS`;
+  const sumsPath = `${filePath}.SHA256SUMS.tmp`;
+  let sumsContent;
+  try {
+    sumsContent = await fetchSumsContent(sumsUrl, sumsPath);
   } catch (err) {
     const detail = String(err && err.message ? err.message : err).replace(/^SECURITY:\s*/, "");
-    throw unverifiableError(tag, assetName, binPath, `SHA256SUMS could not be downloaded (${detail})`);
+    throw unverifiableError(tag, assetName, filePath, `SHA256SUMS could not be downloaded (${detail})`);
   } finally {
     safeUnlink(sumsPath);
   }
 
   const expectedHex = parseSHA256Line(sumsContent, assetName);
   if (!expectedHex) {
-    throw unverifiableError(tag, assetName, binPath, `SHA256SUMS has no entry for ${assetName}`);
+    throw unverifiableError(tag, assetName, filePath, `SHA256SUMS has no entry for ${assetName}`);
   }
 
   if (expectedHex.toLowerCase() !== computedHex.toLowerCase()) {
     // safeUnlink so an unrelated fs error (e.g. EACCES) can't turn a SHA
     // mismatch into a non-"SECURITY:" rejection that main() would treat as a
     // retryable download failure, bypassing the hard-fail fail-safe.
-    safeUnlink(binPath);
+    safeUnlink(filePath);
     throw new Error(
       `SECURITY: SHA-256 mismatch for ${assetName}\n` +
       `  expected: ${expectedHex}\n` +
@@ -401,15 +427,28 @@ async function ensureBinary() {
   const assetName = `nano-brain-${platformKey}${platformExtension()}`;
   let lastErr;
 
+  // The binary is downloaded to <binPath>.partial and only renamed into place
+  // after it is downloaded whole and — unless verification is skipped — its
+  // SHA-256 matches the release's SHA256SUMS. binPath itself therefore never
+  // holds an unverified or truncated file; the existing-binary check above
+  // already unlinked any stale binPath, so the rename lands cleanly (a rename
+  // over an existing file would fail on Windows).
+  const partialPath = `${binPath}.partial`;
   const attempt = async (tag, suffix) => {
     const url = `https://github.com/${REPO}/releases/download/${tag}/${assetName}`;
-    if (skipVerify) {
-      await download(url, binPath);
-    } else {
-      const computedHex = await downloadWithHash(url, binPath);
-      await verifySHA256(tag, assetName, binPath, computedHex);
+    try {
+      if (skipVerify) {
+        await download(url, partialPath);
+      } else {
+        const computedHex = await downloadWithHash(url, partialPath);
+        await verifySHA256(tag, assetName, partialPath, computedHex);
+      }
+      fs.chmodSync(partialPath, 0o755);
+      fs.renameSync(partialPath, binPath);
+    } catch (err) {
+      safeUnlink(partialPath);
+      throw err;
     }
-    fs.chmodSync(binPath, 0o755);
     console.error(`nano-brain v${VERSION} installed successfully from ${tag}${suffix || ""}.`);
     return binPath;
   };
@@ -462,4 +501,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parseSHA256Line, isAllowedDownloadHost, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion };
+module.exports = { parseSHA256Line, isAllowedDownloadHost, download, downloadWithHash, verifySHA256, tryAutoLink, safeUnlink, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion, setSumsRetryDelayMs };

@@ -46,7 +46,7 @@ Core pipeline: Harvest → Chunk → Embed → Store → Search → Return. Each
 
 | Constraint | Decision |
 |---|---|
-| Language | Go 1.23+ |
+| Language | Go 1.26+ |
 | Database | PostgreSQL 17 + pgvector 0.8.2 (pinned Docker image) |
 | MCP Transport | HTTP only (SSE + Streamable HTTP). No stdio. |
 | Deployment | Docker Compose. Single-node only. |
@@ -71,7 +71,7 @@ Core pipeline: Harvest → Chunk → Embed → Store → Search → Return. Each
 
 ### Primary Technology Domain
 
-Backend API / data pipeline (Go 1.23+). No starter template applicable — Go projects initialize from `go mod init` and build structure manually.
+Backend API / data pipeline (Go 1.26+). No starter template applicable — Go projects initialize from `go mod init` and build structure manually.
 
 ### Initialization
 
@@ -112,7 +112,7 @@ Standard Go Project Layout (`/cmd`, `/internal`, `/pkg`):
 - `Makefile` for build, test, lint, migrate commands
 - `golangci-lint` for static analysis (CI gate)
 - `go test -race` for race detection (CI gate)
-- Multi-stage Dockerfile: build stage (golang:1.23) → runtime stage (distroless/static)
+- Multi-stage Dockerfile: build stage (golang:1.26) → runtime stage (distroless/static)
 
 ---
 
@@ -167,7 +167,7 @@ Interfaces defined where they are consumed, not where they are implemented. Exam
 ### Infrastructure & Deployment
 
 **D10: Multi-stage Dockerfile.**
-- Build stage: `golang:1.23-bookworm` — compile static binary with CGO_ENABLED=0.
+- Build stage: `golang:1.26-bookworm` — compile static binary with CGO_ENABLED=0.
 - Production runtime: `gcr.io/distroless/static-debian12` — ~15MB image, no shell, minimal attack surface.
 - Development runtime: `alpine:3.19` — shell available for debugging.
 - Dockerfile uses build arg to switch: `ARG RUNTIME=distroless`. Default = distroless.
