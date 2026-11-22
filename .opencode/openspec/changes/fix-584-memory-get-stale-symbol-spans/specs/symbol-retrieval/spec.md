@@ -27,11 +27,11 @@ then the second file's symbol doc is not rewritten — its `updated_at`
 is unchanged.
 
 ### Requirement: Convergent stale-doc cleanup
-The watcher MUST delete a file's remaining spanless symbol docs after a
-complete re-extraction pass, or when the file is provably not indexed
-(ignored, deleted, outside the workspace, or oversized), so a later
-restart finds no stale rows and does no further work. Deleted docs are
-never rebuilt, so the watcher MUST NOT delete them on transient failures.
+The watcher MUST delete a file's spanless symbol docs only when the
+parent file doc is gone or a complete re-extraction pass did not re-emit
+them, so a later restart finds no stale rows and does no further work.
+Deleted docs are never rebuilt, so the watcher MUST NOT delete them on
+any other outcome.
 
 #### Scenario: Orphan stale doc for a removed symbol is deleted
 Given a stale symbol doc for a name the file no longer declares,
@@ -40,12 +40,7 @@ then the re-emitted symbols keep their spans and the orphan doc is
 deleted, and a subsequent start leaves the file's `updated_at`
 untouched.
 
-#### Scenario: Stale docs of a deleted file are deleted
-Given a stale symbol doc whose parent file was removed from disk,
-when the watcher starts on the tree without it,
-then the stale doc is deleted.
-
-#### Scenario: Stale doc survives no extraction
+#### Scenario: Stale doc deleted when re-extraction emits nothing
 Given a file that parses to zero symbols but still has a stale symbol
 doc,
 when the watcher starts,
@@ -53,9 +48,10 @@ then the stale doc is deleted and the file is not counted as repaired.
 
 ### Requirement: Transient failures keep stale docs
 The watcher SHALL keep a file's stale symbol docs — for repair at the
-next start — whenever the outcome is not a proven orphan: an unreadable
-file, a resolve or stat error, a failed symbol upsert, or an extension no
-registered extractor supports.
+next start — whenever the parent file doc still exists and the outcome is
+not a completed pass: an ignored path, an unresolvable path, a stat or
+read failure, a missing, non-regular, oversized, or binary file, a failed
+symbol upsert, or an extension no registered extractor supports.
 
 #### Scenario: Unreadable file keeps its stale docs
 Given a file whose stale symbol docs exist and whose permissions deny
@@ -64,10 +60,31 @@ when the watcher starts,
 then the stale docs are kept unchanged, and after the file becomes
 readable the next start re-extracts its spans.
 
+#### Scenario: Missing indexed file keeps its stale docs
+Given a stale symbol doc whose parent file doc exists but whose file is
+missing from disk at startup,
+when the watcher starts,
+then the stale doc is kept, and after the file returns unchanged the next
+start re-extracts its span.
+
+#### Scenario: Oversized file keeps its stale docs
+Given a stale symbol doc whose file exceeds the configured
+`max_file_size`,
+when the watcher starts,
+then the stale doc is kept, and after the limit is raised the next start
+re-extracts its span.
+
+#### Scenario: Binary file keeps its stale docs and is never read for symbols
+Given a stale symbol doc whose file's content became binary,
+when the watcher starts,
+then no symbol docs are extracted from the binary content and the stale
+doc is kept.
+
 ### Requirement: Ignored files are never re-indexed by the backfill
 The backfill MUST NOT read or re-extract a file the initial scan treated
 as ignored — including files excluded only by a nested `.gitignore` or
-`.nano-brainignore` — and MUST delete its leftover stale symbol docs.
+`.nano-brainignore` — and MUST delete its leftover stale symbol docs when
+the parent file doc is gone.
 
 #### Scenario: Newly ignored file's stale symbols are dropped
 Given a file that was indexed, then excluded by a new nested

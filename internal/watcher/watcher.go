@@ -1348,12 +1348,16 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 // backfillSymbolSpans repairs symbol documents written before #539 added
 // line/end_line metadata — the content-hash early exit in processFile skips
 // their parent files on every scan, so a restart alone never re-extracts
-// them (issue #584). It runs once at startup, after the initial processAll.
-// Stale docs are deleted only when they are provably orphaned — the file is
-// ignored or gone, resolves outside the workspace, or re-extraction ran to
-// completion and did not re-emit them. Any transient failure (unreadable
-// file, resolve error, failed upsert, missing extractor) leaves the docs
-// for the next start instead of losing them permanently.
+// them (issue #584). It runs once at startup, after the initial processAll,
+// and the symbol docs follow the file doc: when the parent file doc is
+// gone the row is deleted without a read; while it exists the stale docs
+// are deleted only after a complete re-extraction. Every other outcome —
+// an ignored, unresolvable, missing, non-regular, oversized, binary or
+// unreadable file, an unsupported extension, or a partial upsert — keeps
+// the docs for a later start, because deleting them is irreversible: the
+// file's unchanged content hash keeps it off every subsequent scan. Once
+// the parent doc is gone, !ParentIndexed cleans the row up on a later
+// start.
 func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
 	if w.symbolRegistry == nil {
 		return
@@ -1382,49 +1386,54 @@ func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
 				return
 			}
 			path := row.FilePath
+			keep := func(msg string) {
+				w.logger.Debug().Str("file", path).Msg("stale symbol docs kept: " + msg)
+			}
 			remove := func() { removed += w.deleteStaleSymbolSpanDocs(ctx, col, path) }
 			// The initial scan deleted the file doc of every ignored file,
 			// so a missing parent means the file is not admitted — drop its
 			// stale symbols without reading it.
-			switch {
-			case !row.ParentIndexed:
-				remove()
-				continue
-			case col.filter != nil && col.filter.ShouldSkip(path, false):
+			if !row.ParentIndexed {
 				remove()
 				continue
 			}
-			skip, purge := w.skipResolved(col, path)
-			if skip {
-				if purge {
-					remove()
-				} else {
-					w.logger.Debug().Str("file", path).Msg("stale symbol docs kept: path cannot be resolved")
-				}
+			// The file doc exists, so only a complete re-extraction proves
+			// the stale docs are orphans. Everything else keeps them.
+			if col.filter != nil && col.filter.ShouldSkip(path, false) {
+				keep("ignored by collection filter")
+				continue
+			}
+			if skip, _ := w.skipResolved(col, path); skip {
+				keep("path cannot be resolved")
 				continue
 			}
 			info, statErr := os.Stat(path)
 			switch {
-			case errors.Is(statErr, fs.ErrNotExist):
-				remove()
-				continue
 			case statErr != nil:
 				w.logger.Debug().Err(statErr).Str("file", path).Msg("stale symbol docs kept: stat failed")
 				continue
 			case !info.Mode().IsRegular():
-				remove()
+				keep("not a regular file")
 				continue
 			case info.Size() > w.maxFileSize:
-				remove()
+				keep("file exceeds max_file_size")
 				continue
 			}
 			if !w.symbolRegistry.Supports(filepath.Ext(path)) {
-				w.logger.Debug().Str("file", path).Msg("stale symbol docs kept: no extractor for extension")
+				keep("no extractor for extension")
+				continue
+			}
+			if isBinaryExtension(path) {
+				keep("binary extension")
 				continue
 			}
 			content, err := os.ReadFile(path)
 			if err != nil {
 				w.logger.Debug().Err(err).Str("file", path).Msg("stale symbol docs kept: read failed")
+				continue
+			}
+			if isBinaryContent(content) {
+				keep("binary content")
 				continue
 			}
 			n, complete := w.extractAndUpsertSymbols(ctx, col, path, content)

@@ -91,10 +91,10 @@ func newEnv584(t *testing.T) *env584 {
 		t.Fatal(err)
 	}
 	return &env584{
-		ctx: context.Background(),
-		q:   q,
-		db:  db,
-		ws:  ws,
+		ctx:  context.Background(),
+		q:    q,
+		db:   db,
+		ws:   ws,
 		root: root,
 		cfg: config.Config{
 			Watcher: config.WatcherConfig{DebounceMs: 10, ReindexInterval: 3600},
@@ -383,12 +383,16 @@ func TestWatcherBackfillDropsStaleSymbolsForIgnoredFile(t *testing.T) {
 	}
 }
 
-// TestWatcherBackfillDropsStaleSymbolsForDeletedFile covers a stale symbol
-// doc whose parent file was removed from disk: the doc must be deleted at
-// startup instead of re-attempted forever.
-func TestWatcherBackfillDropsStaleSymbolsForDeletedFile(t *testing.T) {
+// TestWatcherBackfillKeepsStaleSymbolsForMissingIndexedFile covers the F1
+// loss: the file doc exists but the file itself is missing at startup
+// (moved out and back, a branch switch, an empty mounted root). The stale
+// symbol docs must be kept — once the file returns unchanged the hash fast
+// path never re-extracts it, so deleting them would lose them permanently.
+func TestWatcherBackfillKeepsStaleSymbolsForMissingIndexedFile(t *testing.T) {
 	e := newEnv584(t)
-	gonePath := e.writeFile(t, "src/gone.ts", "export function removed() {\n  return 1;\n}\n")
+	src := "export function removed() {\n  return 1;\n}\n"
+	gonePath := e.writeFile(t, "src/gone.ts", src)
+	otherPath := e.writeFile(t, "src/other.ts", "export function bar(x: number): number {\n  return x * 2;\n}\n")
 	symPath := gonePath + "?symbol=removed&kind=function"
 
 	e.start(t)
@@ -399,10 +403,118 @@ func TestWatcherBackfillDropsStaleSymbolsForDeletedFile(t *testing.T) {
 	if err := os.Remove(gonePath); err != nil {
 		t.Fatal(err)
 	}
+	// ListFilesWithStaleSymbolSpans orders by file_path, and src/other.ts
+	// sorts after src/gone.ts, so the missing row was already visited.
+	canaryPath := otherPath + "?symbol=gone&kind=function"
+	e.insertStaleSymbolDoc(t, otherPath, "gone", "function")
 
 	e.start(t)
+	e.waitDocGone(t, canaryPath)
+	e.stop(t)
+
+	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    symPath,
+		WorkspaceHash: e.ws,
+	}); err != nil {
+		t.Fatalf("stale doc for missing-but-indexed file must be kept, got err=%v", err)
+	}
+
+	// Restore the file unchanged: the content hash keeps it off every later
+	// scan, so only the backfill can repair the spans.
+	if err := os.WriteFile(gonePath, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.start(t)
 	defer e.stop(t)
-	e.waitDocGone(t, symPath)
+	e.waitSpan(t, symPath)
+}
+
+// TestWatcherBackfillKeepsStaleSymbolsWhenOversized covers the max_file_size
+// case: a file over the current limit keeps its stale docs, so lowering the
+// limit cannot permanently lose symbols that a later, higher limit repairs.
+func TestWatcherBackfillKeepsStaleSymbolsWhenOversized(t *testing.T) {
+	e := newEnv584(t)
+	var b strings.Builder
+	b.WriteString("export function bigSym() {\n  return 1;\n}\n")
+	for i := 0; i < 80; i++ {
+		b.WriteString("// padding padding padding padding padding\n")
+	}
+	bigPath := e.writeFile(t, "src/big.ts", b.String())
+	goPath := e.writeFile(t, "src/zz.go", "package zz\n")
+	symPath := bigPath + "?symbol=bigSym&kind=function"
+
+	e.start(t)
+	e.waitSpan(t, symPath)
+	e.stop(t)
+
+	e.stripSpans(t, bigPath)
+	canaryPath := goPath + "?symbol=gone&kind=function"
+	e.insertStaleSymbolDoc(t, goPath, "gone", "function")
+
+	// Second start under a small limit: big.ts is oversized and kept; the
+	// tiny zz.go canary still deletes, proving the row order was visited —
+	// src/big.ts sorts before src/zz.go.
+	e.cfg.Storage.MaxFileSize = 128
+	e.start(t)
+	e.waitDocGone(t, canaryPath)
+	e.stop(t)
+
+	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    symPath,
+		WorkspaceHash: e.ws,
+	}); err != nil {
+		t.Fatalf("stale doc for oversized file must be kept, got err=%v", err)
+	}
+
+	e.cfg.Storage.MaxFileSize = 1 << 20
+	e.start(t)
+	defer e.stop(t)
+	e.waitSpan(t, symPath)
+}
+
+// TestWatcherBackfillKeepsStaleSymbolsWhenBinary covers the F3 bypass: the
+// backfill must apply the same binary-content gate as processFile, so a
+// file that became binary is never read for symbols and its stale docs are
+// kept.
+func TestWatcherBackfillKeepsStaleSymbolsWhenBinary(t *testing.T) {
+	e := newEnv584(t)
+	orig := "export function oldSym() {\n  return 1;\n}\n"
+	tsPath := e.writeFile(t, "src/turned.ts", orig)
+	otherPath := e.writeFile(t, "src/zother.ts", "export function bar(x: number): number {\n  return x * 2;\n}\n")
+	symPath := tsPath + "?symbol=oldSym&kind=function"
+	sneakyPath := tsPath + "?symbol=sneakyNew&kind=function"
+
+	e.start(t)
+	e.waitSpan(t, symPath)
+	e.stop(t)
+
+	e.stripSpans(t, tsPath)
+	if err := os.WriteFile(tsPath, []byte(orig+"export function sneakyNew() {\n  return 2;\n}\n\x00\x00"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// src/zother.ts sorts after src/turned.ts, so its canary deletion means
+	// the binary row was already visited.
+	canaryPath := otherPath + "?symbol=gone&kind=function"
+	e.insertStaleSymbolDoc(t, otherPath, "gone", "function")
+
+	e.start(t)
+	e.waitDocGone(t, canaryPath)
+	e.stop(t)
+
+	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    symPath,
+		WorkspaceHash: e.ws,
+	}); err != nil {
+		t.Fatalf("stale doc for binary file must be kept, got err=%v", err)
+	}
+	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    sneakyPath,
+		WorkspaceHash: e.ws,
+	}); err == nil {
+		t.Fatal("binary file must not be read for symbols: sneakyNew was indexed")
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatal(err)
+	}
 }
 
 // TestWatcherBackfillDropsStaleSymbolsWhenExtractorYieldsNone covers the

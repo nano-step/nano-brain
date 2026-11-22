@@ -18,25 +18,32 @@ re-extract walks — collection filter (`FileFilter.ShouldSkip`, the
 single-path gate the hot-rescan handler uses), `skipResolved` containment
 for any symlink component, regular-file and `max_file_size` checks — then
 re-extracts through `extractAndUpsertSymbols`, so spans, content and chunks
-land exactly as a fresh index would produce them. Stale docs are deleted
-only when they are provably orphaned; anything ambiguous is kept for the
-next start, because a deleted stale doc is never rebuilt (the content hash
-keeps the file off every later scan).
+land exactly as a fresh index would produce them. Symbol docs follow the
+file doc: while the parent document exists, its stale symbol docs are
+deleted only after a complete re-extraction proves they are orphans; every
+other outcome keeps them, because deleting is irreversible — the file's
+unchanged content hash keeps it off every subsequent scan, so a deleted
+stale doc is never rebuilt.
 
-Delete without reading when the row is provably orphaned: `parent_indexed`
-is false (the initial scan deleted the file doc of every file a nested
-`.gitignore`/`.nano-brainignore` now excludes — a plain `ShouldSkip` cannot
-see nested ignore files and would silently re-index and embed the ignored
-content), the filter skips the path, `skipResolved` says the docs should be
-purged (outside root, denied target, unresolvable path), `os.Stat` reports
-`fs.ErrNotExist` or a non-regular file, or the file exceeds
-`max_file_size`.
+Delete without reading only when `parent_indexed` is false: the initial
+scan deleted the file doc of every file a nested `.gitignore`/
+`.nano-brainignore` now excludes, so the parent row is the admission
+record — a plain `ShouldSkip` cannot see nested ignore files and would
+silently re-index and embed the ignored content. Once the parent doc is
+gone, the row is cleaned up on a later start.
 
-Keep the docs — Debug log, no delete — on transient failure: `skipResolved`
-skips without purge (unresolvable root, EIO, …), `os.Stat` fails otherwise,
-`os.ReadFile` fails (EACCES, …), or no registered extractor supports the
-extension (checked before reading, so a binary without the TS extractor
-does not wipe `.ts` symbols).
+With the parent present, keep the docs — Debug log, no delete — on every
+other outcome, in order: the filter skips the path, `skipResolved` skips
+(purge or not — a file the scan no longer serves may still be indexed
+again later), `os.Stat` fails for any reason including `fs.ErrNotExist`
+(the file may return unchanged; the hash path never re-extracts it), the
+file is not regular or exceeds `max_file_size` (a config value that can
+be raised later), no registered extractor supports the extension (checked
+before reading, so a binary without the TS extractor does not wipe `.ts`
+symbols), the extension is a known binary type, `os.ReadFile` fails
+(EACCES, …), or the content is binary — the same `isBinaryExtension` /
+`isBinaryContent` gates `processFile` applies, so the backfill never reads
+symbols out of content normal indexing rejects.
 
 For admitted files `extractAndUpsertSymbols` returns `(n, complete)`:
 `complete` is false when `Extract` errors or any symbol's upsert or chunk
@@ -63,9 +70,10 @@ object-property method rather than the reverse.
 
 ## Non-goals
 
-- Transient failures (unreadable file, resolve error, failed upsert,
-  missing extractor) are not retried within the pass; the kept docs are
-  handled at the next start.
+- Non-admitted or partially processed files (ignored, unresolvable,
+  missing, non-regular, oversized, binary, unreadable, unsupported
+  extension, incomplete upsert) are not retried within the pass; the kept
+  docs are handled at the next start.
 - Collections registered at runtime through hot paths are not backfilled;
   their stale spans are repaired at the next restart.
 - Deleting fresh symbol docs is out of scope — the delete only matches
