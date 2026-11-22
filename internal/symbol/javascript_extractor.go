@@ -12,12 +12,12 @@ const jsQuery = `
 (function_declaration name: (identifier) @name) @decl
 (generator_function_declaration name: (identifier) @name) @decl
 (method_definition name: (property_identifier) @name) @decl
+(field_definition property: [(property_identifier) (private_property_identifier)] @name value: (_) @val) @decl
 (class_declaration name: (identifier) @name) @decl
-(lexical_declaration (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression)])) @decl
-(variable_declaration (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression)])) @decl
-(lexical_declaration (variable_declarator name: (identifier) @name value: (call_expression arguments: (arguments [(arrow_function) (function_expression)])))) @decl
-(pair key: (property_identifier) @name value: [(arrow_function) (function_expression)]) @decl
-(assignment_expression left: (member_expression property: (property_identifier) @name) right: [(arrow_function) (function_expression)]) @decl
+(lexical_declaration (variable_declarator name: (identifier) @name value: (_) @val)) @decl
+(variable_declaration (variable_declarator name: (identifier) @name value: (_) @val)) @decl
+(pair key: (property_identifier) @name value: (_) @val) @decl
+(assignment_expression left: (member_expression property: (property_identifier) @name) right: (_) @val) @decl
 `
 
 type JavaScriptExtractor struct {
@@ -55,51 +55,7 @@ func (e *JavaScriptExtractor) Extract(filePath string, content []byte) ([]Symbol
 
 	matches := e.query.Execute(tree)
 	var symbols []Symbol
-	seen := map[string]bool{}
-
-	for _, match := range matches {
-		var declNode, nameNode *gotreesitter.Node
-		for _, cap := range match.Captures {
-			switch cap.Name {
-			case "decl":
-				declNode = cap.Node
-			case "name":
-				nameNode = cap.Node
-			}
-		}
-		if nameNode == nil || declNode == nil {
-			continue
-		}
-		name := bt.NodeText(nameNode)
-		kind := jsNodeKind(bt, declNode)
-		key := string(kind) + ":" + name
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		symbols = append(symbols, Symbol{
-			Name:      name,
-			Kind:      kind,
-			File:      filePath,
-			Line:      lineForByte(content, nameNode.StartByte()),
-			EndLine:   lineForByte(content, declNode.EndByte()),
-			Signature: firstLine(bt.NodeText(declNode)),
-			Language:  "javascript",
-		})
-	}
+	seen := make(map[string]rankedSymbolIndex, len(matches))
+	appendJSTSSymbols(&symbols, seen, bt, e.lang, matches, content, filePath, "javascript")
 	return symbols, nil
-}
-
-func jsNodeKind(bt *gotreesitter.BoundTree, node *gotreesitter.Node) Kind {
-	switch bt.NodeType(node) {
-	case "function_declaration", "generator_function_declaration":
-		return KindFunction
-	case "method_definition", "pair":
-		return KindMethod
-	case "class_declaration":
-		return KindType
-	case "lexical_declaration", "variable_declaration", "assignment_expression":
-		return KindFunction
-	}
-	return KindFunction
 }

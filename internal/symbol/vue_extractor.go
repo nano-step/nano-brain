@@ -89,61 +89,28 @@ func (e *VueExtractor) Extract(filePath string, content []byte) ([]Symbol, error
 	}()
 
 	var symbols []Symbol
-	seen := map[string]bool{}
+	seen := map[string]rankedSymbolIndex{}
 
 	for _, inj := range result.Injections {
 		if inj.Tree == nil {
 			continue
 		}
 		var q *gotreesitter.Query
-		var isTS bool
+		var lang *gotreesitter.Language
 		switch inj.Language {
 		case "typescript":
 			q = e.tsQ
-			isTS = true
+			lang = e.tsLang
 		case "javascript":
 			q = e.jsQ
+			lang = e.jsLang
 		default:
 			continue
 		}
 
 		bt := gotreesitter.Bind(inj.Tree)
 		matches := q.Execute(inj.Tree)
-		for _, match := range matches {
-			var declNode, nameNode *gotreesitter.Node
-			for _, cap := range match.Captures {
-				switch cap.Name {
-				case "decl":
-					declNode = cap.Node
-				case "name":
-					nameNode = cap.Node
-				}
-			}
-			if nameNode == nil || declNode == nil {
-				continue
-			}
-			name := bt.NodeText(nameNode)
-			var kind Kind
-			if isTS {
-				kind = tsNodeKind(bt, declNode)
-			} else {
-				kind = jsNodeKind(bt, declNode)
-			}
-			key := string(kind) + ":" + name
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			symbols = append(symbols, Symbol{
-				Name:      name,
-				Kind:      kind,
-				File:      filePath,
-				Line:      lineForByte(content, nameNode.StartByte()),
-				EndLine:   lineForByte(content, declNode.EndByte()),
-				Signature: firstLine(bt.NodeText(declNode)),
-				Language:  "vue",
-			})
-		}
+		appendJSTSSymbols(&symbols, seen, bt, lang, matches, content, filePath, "vue")
 		bt.Release()
 	}
 
