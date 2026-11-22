@@ -99,7 +99,7 @@ func (g *GitHarvester) harvestRepo(
 		return 0, 0, fmt.Errorf("get last SHA: %w", err)
 	}
 
-	commits, err := g.gitLog(repoPath, lastSHA, g.maxCommits)
+	commits, err := g.gitLogRecovering(repoPath, lastSHA, g.maxCommits)
 	if err != nil {
 		return 0, 0, fmt.Errorf("git log: %w", err)
 	}
@@ -126,7 +126,8 @@ func (g *GitHarvester) harvestRepo(
 		sum := sha256.Sum256([]byte(md))
 		contentHash := hex.EncodeToString(sum[:])
 
-		sourcePath := fmt.Sprintf("git://commit/%s", commit.SHA)
+		// The dedup lookup and the write use the same sanitized source path.
+		sourcePath := "git://commit/" + sanitizeText(commit.SHA)
 		existing, err := g.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    sourcePath,
 			WorkspaceHash: workspaceHash,
@@ -178,7 +179,8 @@ func (g *GitHarvester) upsertCommit(
 	semanticTags := InferSemanticTags(md, commit.Subject)
 	tags = append(tags, semanticTags...)
 
-	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+	md = sanitizeText(md)
+	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: workspaceHash,
 		ContentHash:   contentHash,
 		Title:         commit.Subject,
@@ -187,7 +189,7 @@ func (g *GitHarvester) upsertCommit(
 		Collection:    "git-history",
 		Tags:          tags,
 		Metadata:      meta,
-	})
+	}))
 	if err != nil {
 		return fmt.Errorf("upsert document: %w", err)
 	}
@@ -255,7 +257,7 @@ func (g *GitHarvester) updateLastHarvestedSHA(ctx context.Context, workspaceHash
 	contentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(sha)))
 	meta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
 
-	_, err := g.queries.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+	_, err := g.queries.UpsertDocumentBySourcePath(ctx, sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: workspaceHash,
 		ContentHash:   contentHash,
 		Title:         "Last Harvested Commit",
@@ -264,7 +266,7 @@ func (g *GitHarvester) updateLastHarvestedSHA(ctx context.Context, workspaceHash
 		Collection:    "git-history",
 		Tags:          []string{"git", "meta"},
 		Metadata:      meta,
-	})
+	}))
 	if err != nil {
 		return fmt.Errorf("upsert marker: %w", err)
 	}
@@ -273,7 +275,58 @@ func (g *GitHarvester) updateLastHarvestedSHA(ctx context.Context, workspaceHash
 
 var gitObjectID = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
 
+// gitLogRecovering is gitLog with one repair: a marker that is a well-formed
+// object id but names no commit in this repository (rewritten history, a
+// hand-edited marker) makes every "git log <id>..HEAD" fail, so the marker
+// would never advance again. In that case the harvest restarts from the
+// beginning; commits already stored are skipped by their content hash. Any
+// other git failure is returned unchanged.
+func (g *GitHarvester) gitLogRecovering(repoPath string, since string, maxCommits int) ([]gitCommit, error) {
+	commits, err := g.gitLog(repoPath, since, maxCommits)
+	if err == nil || !gitCommitMissing(repoPath, since) {
+		return commits, err
+	}
+	g.logger.Warn().Str("repo", repoPath).Str("since", since).Msg("last-harvested marker is not a commit in this repository, harvesting from the start")
+	return g.gitLog(repoPath, "", maxCommits)
+}
+
+// gitCommitMissing reports whether id is a well-formed object id that git
+// cannot resolve to a commit in repoPath. It is false when id is empty or
+// malformed (gitLog already ignores those) and when git itself cannot be run.
+func gitCommitMissing(repoPath, id string) bool {
+	if !gitObjectID.MatchString(id) {
+		return false
+	}
+	cmd := exec.Command("git", "cat-file", "-e", id+"^{commit}")
+	cmd.Dir = repoPath
+	_, isExit := cmd.Run().(*exec.ExitError)
+	return isExit
+}
+
 func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]gitCommit, error) {
+	// since comes from a stored document. Anything that is not an object id
+	// is dropped rather than handed to git, where a value starting with "-"
+	// would be parsed as an option.
+	if since != "" && !gitObjectID.MatchString(since) {
+		g.logger.Warn().Str("since", since).Msg("last-harvested marker is not a commit id, harvesting from the start")
+		since = ""
+	}
+
+	// With a limit, the batch must be the OLDEST pending commits: "-nN" keeps
+	// the newest N, and the marker then jumps to HEAD and skips the rest for
+	// good. So the batch's upper bound is the Nth pending commit, and the
+	// marker advances contiguously from one cycle to the next.
+	until := "HEAD"
+	if maxCommits > 0 {
+		var err error
+		if until, err = gitNthPendingCommit(repoPath, since, maxCommits); err != nil {
+			return nil, err
+		}
+		if until == "" {
+			return nil, nil
+		}
+	}
+
 	// Use %x1e (record separator) to delimit commits, %x1f (unit separator) for fields.
 	// --name-only output appears after the format string for each commit.
 	args := []string{
@@ -282,34 +335,63 @@ func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]
 		"--name-only",
 		"--reverse",
 	}
-
-	if maxCommits > 0 {
-		args = append(args, fmt.Sprintf("-n%d", maxCommits))
-	}
-
-	// since comes from a stored document. Anything that is not an object id
-	// is dropped rather than handed to git, where a value starting with "-"
-	// would be parsed as an option.
-	if since != "" && !gitObjectID.MatchString(since) {
-		g.logger.Warn().Str("since", since).Msg("last-harvested marker is not a commit id, harvesting from the start")
-		since = ""
-	}
-	if since != "" {
-		args = append(args, since+"..HEAD")
+	switch {
+	case since != "":
+		args = append(args, since+".."+until)
+	case until != "HEAD":
+		args = append(args, until)
 	}
 	args = append(args, "--")
 
+	output, err := runGitLog(repoPath, args)
+	if err != nil {
+		return nil, err
+	}
+	return parseGitLog(output)
+}
+
+// gitNthPendingCommit returns the id of the nth commit after since (or from
+// the start when since is empty), oldest first, or the newest pending commit
+// when fewer than n are pending. It returns "" when nothing is pending.
+//
+// --topo-order guarantees every parent is listed before its children, so all
+// pending ancestors of the returned commit are among the first n: the range
+// since..<returned> never holds more than n commits. Commits on a side branch
+// that are not ancestors of it stay pending and are picked up by a later cycle.
+func gitNthPendingCommit(repoPath, since string, n int) (string, error) {
+	rev := "HEAD"
+	if since != "" {
+		rev = since + "..HEAD"
+	}
+	output, err := runGitLog(repoPath, []string{"log", "--format=%H", "--reverse", "--topo-order", rev, "--"})
+	if err != nil {
+		return "", err
+	}
+	ids := strings.Fields(output)
+	if len(ids) == 0 {
+		return "", nil
+	}
+	if len(ids) > n {
+		ids = ids[:n]
+	}
+	id := ids[len(ids)-1]
+	if !gitObjectID.MatchString(id) {
+		return "", fmt.Errorf("git log returned %q, which is not a commit id", id)
+	}
+	return id, nil
+}
+
+func runGitLog(repoPath string, args []string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repoPath
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("git log failed: %s", string(exitErr.Stderr))
+			return "", fmt.Errorf("git log failed: %s", string(exitErr.Stderr))
 		}
-		return nil, fmt.Errorf("git log failed: %w", err)
+		return "", fmt.Errorf("git log failed: %w", err)
 	}
-
-	return parseGitLog(string(output))
+	return string(output), nil
 }
 
 func parseGitLog(output string) ([]gitCommit, error) {
@@ -403,7 +485,10 @@ func renderCommitMarkdown(c gitCommit) string {
 		}
 	}
 
-	return b.String()
+	// Commit subjects, authors and file names come from the repository and
+	// need not be UTF-8, so the whole document is sanitized like the session
+	// renderers.
+	return sanitizeText(b.String())
 }
 
 func isBotCommit(author, email string) bool {

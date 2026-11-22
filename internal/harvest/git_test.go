@@ -345,3 +345,170 @@ func TestGitObjectID(t *testing.T) {
 		})
 	}
 }
+
+// newGitTestRepo creates a repository in a fresh temp dir with n linear
+// commits ("commit 1" … "commit n") and returns its path and the commit ids,
+// oldest first. Callers must skip under -short before calling it.
+func newGitTestRepo(t *testing.T, n int) (string, []string) {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	runGit := func(args ...string) string {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmpDir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test Author",
+			"GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=Test Author",
+			"GIT_COMMITTER_EMAIL=test@example.com",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init")
+	runGit("config", "user.name", "Test Author")
+	runGit("config", "user.email", "test@example.com")
+
+	shas := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		name := "file" + itoa(i) + ".txt"
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte("content"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		runGit("add", name)
+		runGit("commit", "-m", "commit "+itoa(i))
+		shas = append(shas, runGit("rev-parse", "HEAD"))
+	}
+	return tmpDir, shas
+}
+
+// A marker that is a well-formed id but names no commit in the repository
+// (rewritten history, hand-edited marker) used to make "git log <id>..HEAD"
+// fail on every cycle, and the marker was never repaired (#675).
+func TestGitLogRecoversFromMarkerMissingInRepo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available in PATH")
+	}
+
+	tmpDir, shas := newGitTestRepo(t, 2)
+	const missing = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	h := &GitHarvester{logger: testLogger()}
+
+	t.Run("gitCommitMissing", func(t *testing.T) {
+		tests := []struct {
+			name string
+			id   string
+			want bool
+		}{
+			{"existing commit", shas[0], false},
+			{"well-formed id not in the repo", missing, true},
+			{"empty marker", "", false},
+			{"malformed marker never reaches git", "--output=x", false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if got := gitCommitMissing(tmpDir, tt.id); got != tt.want {
+					t.Errorf("gitCommitMissing(%q) = %v, want %v", tt.id, got, tt.want)
+				}
+			})
+		}
+	})
+
+	tests := []struct {
+		name         string
+		since        string
+		maxCommits   int
+		wantSubjects []string
+	}{
+		{"missing marker restarts from the first commit", missing, 0, []string{"commit 1", "commit 2"}},
+		{"missing marker with a limit restarts from the first commit", missing, 1, []string{"commit 1"}},
+		{"valid marker is honoured", shas[0], 0, []string{"commit 2"}},
+		{"no marker", "", 0, []string{"commit 1", "commit 2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			commits, err := h.gitLogRecovering(tmpDir, tt.since, tt.maxCommits)
+			if err != nil {
+				t.Fatalf("gitLogRecovering failed: %v", err)
+			}
+			if got := commitSubjects(commits); strings.Join(got, "|") != strings.Join(tt.wantSubjects, "|") {
+				t.Errorf("got commits %q, want %q", got, tt.wantSubjects)
+			}
+		})
+	}
+
+	// Without the recovery the failure is what harvestRepo saw every cycle.
+	if _, err := h.gitLog(tmpDir, missing, 0); err == nil {
+		t.Errorf("gitLog with a marker missing from the repo succeeded; the recovery test proves nothing")
+	}
+}
+
+// "git log --reverse -nN" keeps the NEWEST N commits, so with more than N
+// pending the marker jumped to HEAD and the older ones were never harvested
+// (#675). Each batch must be the oldest N pending commits.
+func TestGitLogLimitTakesOldestPendingCommits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available in PATH")
+	}
+
+	tmpDir, shas := newGitTestRepo(t, 5)
+	h := &GitHarvester{logger: testLogger()}
+
+	wantBatches := [][]string{
+		{"commit 1", "commit 2"},
+		{"commit 3", "commit 4"},
+		{"commit 5"},
+		nil,
+	}
+	marker := ""
+	var seen []string
+	for i, want := range wantBatches {
+		commits, err := h.gitLog(tmpDir, marker, 2)
+		if err != nil {
+			t.Fatalf("batch %d: gitLog failed: %v", i+1, err)
+		}
+		if got := commitSubjects(commits); strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Fatalf("batch %d (marker %q): got %q, want %q", i+1, marker, got, want)
+		}
+		for _, c := range commits {
+			seen = append(seen, c.SHA)
+		}
+		if len(commits) > 0 {
+			// harvestRepo stores the last commit of the batch as the marker.
+			marker = commits[len(commits)-1].SHA
+		}
+	}
+	if strings.Join(seen, "|") != strings.Join(shas, "|") {
+		t.Errorf("harvested %q, want every commit exactly once in order %q", seen, shas)
+	}
+
+	t.Run("limit larger than the pending set", func(t *testing.T) {
+		commits, err := h.gitLog(tmpDir, shas[2], 10)
+		if err != nil {
+			t.Fatalf("gitLog failed: %v", err)
+		}
+		if got := commitSubjects(commits); strings.Join(got, "|") != "commit 4|commit 5" {
+			t.Errorf("got %q, want commits 4 and 5", got)
+		}
+	})
+}
+
+func commitSubjects(commits []gitCommit) []string {
+	var subjects []string
+	for _, c := range commits {
+		subjects = append(subjects, c.Subject)
+	}
+	return subjects
+}
