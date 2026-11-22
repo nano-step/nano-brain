@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           # Use RELEASE_PAT so the resulting tag push re-triggers release.yml
@@ -96,7 +96,7 @@ jobs:
   test-tag-scheme:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: "Regression: broken tag v2026.5.30.3 must not poison next tag"
         run: |
