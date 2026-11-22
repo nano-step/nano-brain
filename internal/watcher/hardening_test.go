@@ -4,10 +4,38 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestIgnoreFiles_NonRegularDoNotBlock(t *testing.T) {
+	if _, err := exec.LookPath("mkfifo"); err != nil {
+		t.Skip("mkfifo unavailable")
+	}
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{".gitignore", ".nano-brainignore"} {
+		for _, dir := range []string{root, sub} {
+			if out, err := exec.Command("mkfifo", filepath.Join(dir, name)).CombinedOutput(); err != nil {
+				t.Fatalf("mkfifo: %v: %s", err, out)
+			}
+		}
+	}
+	filter, err := NewFileFilter(root, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(sub, "ok.md"), "ok")
+	mustSymlink(t, filepath.Join(sub, "ok.md"), filepath.Join(root, "alias.md"))
+	if err := CheckResolvedPath(root, filter, filepath.Join(root, "alias.md")); err != nil {
+		t.Fatalf("alias through nested FIFO ignore files: %v", err)
+	}
+}
 
 // TestScanCollection_SymlinkTargetNestedIgnore: an alias is indexed only if a
 // regular file at its target would be, including under the ignore files of the
@@ -179,6 +207,8 @@ func TestCheckResolvedPath_RootInDifferentCase(t *testing.T) {
 	mustWrite(t, filepath.Join(onDisk, "Docs", "real.md"), "# real\ninside the root")
 	mustWrite(t, filepath.Join(onDisk, "Docs", ".gitignore"), "priv.txt\n")
 	mustWrite(t, filepath.Join(onDisk, "Docs", "priv.txt"), "not a real secret")
+	mustWrite(t, filepath.Join(onDisk, ".gitignore"), "rootpriv.txt\n")
+	mustWrite(t, filepath.Join(onDisk, "rootpriv.txt"), "ignored")
 	mustWrite(t, filepath.Join(onDisk, ".env"), "KEY=not-a-real-key")
 	mustWrite(t, filepath.Join(base, "Outside", "secret.md"), "# secret\noutside the root")
 	mustWrite(t, filepath.Join(base, "Root-evil", "secret.md"), "# secret\nsibling dir")
@@ -189,6 +219,9 @@ func TestCheckResolvedPath_RootInDifferentCase(t *testing.T) {
 	mustSymlink(t, filepath.Join(base, "root-evil", "secret.md"), filepath.Join(onDisk, "sibling-lower.md"))
 	mustSymlink(t, filepath.Join(onDisk, ".env"), filepath.Join(onDisk, "setup.md"))
 	mustSymlink(t, filepath.Join(onDisk, "Docs", "priv.txt"), filepath.Join(onDisk, "priv.md"))
+	mustSymlink(t, filepath.Join(strings.ToUpper(onDisk), "DOCS", "PRIV.TXT"), filepath.Join(onDisk, "case-priv.md"))
+	mustSymlink(t, filepath.Join(strings.ToUpper(onDisk), "ROOTPRIV.TXT"), filepath.Join(onDisk, "case-root.md"))
+	mustSymlink(t, filepath.Join("Docs", "PRIV.TXT"), filepath.Join(onDisk, "relative-case.md"))
 
 	filter, err := NewFileFilter(root, nil, nil, nil)
 	if err != nil {
@@ -201,7 +234,7 @@ func TestCheckResolvedPath_RootInDifferentCase(t *testing.T) {
 		want error
 	}{
 		{"absolute target in on-disk casing", filepath.Join(root, "alias.md"), nil},
-		{"absolute target in a third casing", filepath.Join(root, "shouting.md"), nil},
+		{"absolute target in a third casing", filepath.Join(root, "shouting.md"), ErrTargetDenied},
 		{"regular file addressed in on-disk casing", filepath.Join(onDisk, "Docs", "real.md"), nil},
 		{"target outside the root", filepath.Join(root, "escape.md"), ErrOutsideRoot},
 		{"sibling sharing the root's name prefix", filepath.Join(root, "sibling.md"), ErrOutsideRoot},
@@ -210,6 +243,9 @@ func TestCheckResolvedPath_RootInDifferentCase(t *testing.T) {
 		{"parent directory", base, ErrOutsideRoot},
 		{"credential target in on-disk casing", filepath.Join(root, "setup.md"), ErrTargetDenied},
 		{"nested-ignored target in on-disk casing", filepath.Join(root, "priv.md"), ErrTargetDenied},
+		{"case-variant nested ignore", filepath.Join(root, "case-priv.md"), ErrTargetDenied},
+		{"case-variant root ignore", filepath.Join(root, "case-root.md"), ErrTargetDenied},
+		{"relative case-variant nested ignore", filepath.Join(root, "relative-case.md"), ErrTargetDenied},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -224,9 +260,14 @@ func TestCheckResolvedPath_RootInDifferentCase(t *testing.T) {
 	mq := newMockQuerier()
 	w := newTestWatcher(mq, 2000, 300)
 	w.scanCollection(context.Background(), watchedCollection{name: "c", dirPath: root, workspaceHash: "ws", globPattern: "*", filter: filter})
-	for rel, want := range map[string]bool{"alias.md": true, "shouting.md": true, "Docs/real.md": true, "escape.md": false, "sibling.md": false, "setup.md": false, "priv.md": false} {
+	for rel, want := range map[string]bool{"alias.md": true, "shouting.md": false, "Docs/real.md": true, "escape.md": false, "sibling.md": false, "setup.md": false, "priv.md": false, "case-priv.md": false, "case-root.md": false, "relative-case.md": false} {
 		if _, ok := mq.sourcePathHash[filepath.Join(root, filepath.FromSlash(rel))]; ok != want {
 			t.Errorf("%s: indexed = %v, want %v (upserts=%v)", rel, ok, want, mq.sourcePathHash)
 		}
+	}
+	mustWrite(t, filepath.Join(onDisk, "Docs", "node_modules", "x.md"), "generated")
+	mustSymlink(t, filepath.Join(strings.ToUpper(onDisk), "DOCS", "NODE_MODULES", "X.MD"), filepath.Join(onDisk, "case-generated.md"))
+	if got := CheckResolvedPath(root, filter, filepath.Join(root, "case-generated.md")); !errors.Is(got, ErrTargetDenied) {
+		t.Errorf("case-variant excluded directory: got %v, want ErrTargetDenied", got)
 	}
 }

@@ -85,13 +85,10 @@ func (a *walkAdmitter) ignore(path string, isDir bool) bool {
 	a.stack.PopAbove(path)
 
 	if isDir {
-		// Compile directly and check the error rather than os.Stat-ing first — a
-		// missing/unreadable/dir path just fails to compile and is skipped, and we
-		// avoid a redundant syscall (repo convention).
-		if gi, err := gitignore.CompileIgnoreFile(filepath.Join(path, ".gitignore")); err == nil {
+		if gi, err := compileRegularIgnore(filepath.Join(path, ".gitignore")); err == nil {
 			a.stack.Push(path, gi)
 		}
-		if li, err := gitignore.CompileIgnoreFile(filepath.Join(path, ".nano-brainignore")); err == nil {
+		if li, err := compileRegularIgnore(filepath.Join(path, ".nano-brainignore")); err == nil {
 			a.stack.Push(path, li)
 		}
 	}
@@ -114,31 +111,31 @@ func collRelFile(dirPath, filePath string) string {
 }
 
 var defaultExcludeDirs = map[string]bool{
-	"node_modules": true,
-	".git":         true,
-	".hg":          true,
-	".svn":         true,
-	"dist":         true,
-	"build":        true,
-	"out":          true,
-	".next":        true,
-	".nuxt":        true,
-	"vendor":       true,
-	"__pycache__":  true,
+	"node_modules":  true,
+	".git":          true,
+	".hg":           true,
+	".svn":          true,
+	"dist":          true,
+	"build":         true,
+	"out":           true,
+	".next":         true,
+	".nuxt":         true,
+	"vendor":        true,
+	"__pycache__":   true,
 	".pytest_cache": true,
-	".mypy_cache":  true,
-	".tox":         true,
-	"venv":         true,
-	".venv":        true,
-	"env":          true,
-	".cache":       true,
-	"coverage":     true,
-	".terraform":   true,
-	"target":       true,
-	".worktrees":   true,
-	".pr-reviews":  true,
-	".opencode":    true,
-	".output":      true,
+	".mypy_cache":   true,
+	".tox":          true,
+	"venv":          true,
+	".venv":         true,
+	"env":           true,
+	".cache":        true,
+	"coverage":      true,
+	".terraform":    true,
+	"target":        true,
+	".worktrees":    true,
+	".pr-reviews":   true,
+	".opencode":     true,
+	".output":       true,
 	// Common framework build/vendor output dirs (Nuxt/Next/Svelte/Angular/
 	// Astro/Turbo/Vercel/Netlify/Parcel and legacy JS package dirs).
 	"_nuxt":            true,
@@ -160,17 +157,17 @@ var defaultExcludeDirs = map[string]bool{
 // excluded (covers yarn.lock, Cargo.lock, Gemfile.lock, composer.lock,
 // poetry.lock, Pipfile.lock, pubspec.lock, mix.lock, flake.lock, …).
 var defaultExcludeFiles = map[string]bool{
-	"package-lock.json":    true, // npm
-	"npm-shrinkwrap.json":  true, // npm
-	"pnpm-lock.yaml":       true, // pnpm
-	"bun.lockb":            true, // bun
-	"packages.lock.json":   true, // .NET
-	"go.sum":               true, // Go
-	"Package.resolved":     true, // Swift
-	"gradle.lockfile":      true, // Gradle
-	".terraform.lock.hcl":  true, // Terraform
-	"Podfile.lock":         true, // CocoaPods (also .lock, kept explicit)
-	"composer.lock":        true, // PHP (also .lock)
+	"package-lock.json":   true, // npm
+	"npm-shrinkwrap.json": true, // npm
+	"pnpm-lock.yaml":      true, // pnpm
+	"bun.lockb":           true, // bun
+	"packages.lock.json":  true, // .NET
+	"go.sum":              true, // Go
+	"Package.resolved":    true, // Swift
+	"gradle.lockfile":     true, // Gradle
+	".terraform.lock.hcl": true, // Terraform
+	"Podfile.lock":        true, // CocoaPods (also .lock, kept explicit)
+	"composer.lock":       true, // PHP (also .lock)
 }
 
 // Built-in credential deny list (issue #655). A file whose base name matches is
@@ -322,15 +319,12 @@ func NewFileFilter(rootDir string, excludePatterns, allowedExtensions []string, 
 		}
 	}
 
-	gitignorePath := filepath.Join(rootDir, ".gitignore")
-	if _, err := os.Stat(gitignorePath); err == nil {
-		if gi, err := gitignore.CompileIgnoreFile(gitignorePath); err == nil {
-			f.gitignoreMatcher = gi
-		}
+	if gi, err := compileRegularIgnore(filepath.Join(rootDir, ".gitignore")); err == nil {
+		f.gitignoreMatcher = gi
 	}
 
 	localIgnPath := filepath.Join(rootDir, ".nano-brainignore")
-	gi, err := gitignore.CompileIgnoreFile(localIgnPath)
+	gi, err := compileRegularIgnore(localIgnPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return f, fmt.Errorf("load workspace .nano-brainignore at %s: %w", localIgnPath, err)
@@ -340,6 +334,20 @@ func NewFileFilter(rootDir string, excludePatterns, allowedExtensions []string, 
 	}
 
 	return f, nil
+}
+
+func compileRegularIgnore(path string) (*gitignore.GitIgnore, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		if info.IsDir() {
+			return nil, fmt.Errorf("ignore file is a directory: %s", path)
+		}
+		return nil, os.ErrNotExist
+	}
+	return gitignore.CompileIgnoreFile(path)
 }
 
 func (f *FileFilter) shouldSkip(absPath string, isDir bool) bool {

@@ -59,10 +59,36 @@ func checkResolvedPath(root, realRoot string, filter *FileFilter, path string) e
 	// The filter works on paths under the unresolved root, so map the real
 	// path back into it. Equal to path for anything that is not an alias,
 	// which the caller's walk has already filtered.
-	if target := filepath.Join(root, rel); target != path && walkWouldIgnore(root, filter, rel) {
-		return ErrTargetDenied
+	if target := filepath.Join(root, rel); target != path {
+		// Ignore patterns are case-sensitive even on case-insensitive disks.
+		// Refuse aliases whose target spelling differs from its directory entries.
+		if !hasExactSpelling(realRoot, rel) || walkWouldIgnore(root, filter, rel) {
+			return ErrTargetDenied
+		}
 	}
 	return nil
+}
+
+func hasExactSpelling(root, rel string) bool {
+	dir := root
+	for _, part := range strings.Split(rel, string(os.PathSeparator)) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return false
+		}
+		found := false
+		for _, entry := range entries {
+			if entry.Name() == part {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+		dir = filepath.Join(dir, part)
+	}
+	return true
 }
 
 // relBySameFile is the containment answer when filepath.Rel says realPath is
