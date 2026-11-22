@@ -463,6 +463,11 @@ func TestTriggerRescanByName(t *testing.T) {
 		t.Fatal("expected directory to be marked dirty")
 	}
 	w.mu.Unlock()
+	select {
+	case <-w.hotRegisterCh:
+	default:
+		t.Fatal("reindex must wake an idle watcher to process its dirty collection")
+	}
 
 	notFound := w.TriggerRescanByName("other", "ws42")
 	if notFound {
