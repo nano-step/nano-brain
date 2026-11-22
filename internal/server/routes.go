@@ -6,6 +6,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
+	"github.com/nano-brain/nano-brain/internal/server/middleware"
 )
 
 func registerRoutes(s *Server) {
@@ -120,8 +121,10 @@ func registerRoutes(s *Server) {
 
 	api.GET("/sessions/by-ticket", handlers.TicketHandler(s.queries, s.logger))
 
-	s.echo.POST("/api/harvest", handlers.TriggerHarvest(s.getHarvestRunner))
-	s.echo.POST("/api/reload-config", handlers.ReloadConfig(s.configPath, s.currentConfig, s.applyReloadedConfig, s.logger))
+	// These two take no body, so nothing but the origin checks stands between
+	// a web page and the action: require the exact origin, not any loopback port.
+	s.echo.POST("/api/harvest", handlers.TriggerHarvest(s.getHarvestRunner), middleware.SameOrigin())
+	s.echo.POST("/api/reload-config", handlers.ReloadConfig(s.configPath, s.currentConfig, s.applyReloadedConfig, s.logger), middleware.SameOrigin())
 
 	sseHandler := mcp.NewSSEHandler(s.mcpServer)
 	streamableHandler := mcp.NewStreamableHTTPHandler(s.mcpServer)

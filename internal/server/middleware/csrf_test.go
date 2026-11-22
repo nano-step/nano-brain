@@ -29,6 +29,8 @@ func TestCSRF_7StepMatrix(t *testing.T) {
 	}{
 		{"GET bypasses CSRF", http.MethodGet, "", "", "", http.StatusOK},
 		{"Rule1: X-Requested-With header allows", http.MethodPost, "nano-brain-ui", "", "", http.StatusOK},
+		{"Rule1: dashboard header allows", http.MethodPost, "nano-brain-dashboard", "", "", http.StatusOK},
+		{"Rule1: unknown X-Requested-With falls through", http.MethodPost, "evil", "http://evil.com", "", http.StatusForbidden},
 		{"Rule2: no Origin no Referer allows (CLI)", http.MethodPost, "", "", "", http.StatusOK},
 		{"Rule3: Origin null rejects", http.MethodPost, "", "null", "", http.StatusForbidden},
 		{"Rule4: Origin same host allows", http.MethodPost, "", "http://localhost:3100", "", http.StatusOK},

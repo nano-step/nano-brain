@@ -96,8 +96,10 @@ func TestAllRoutesRejectForeignHost(t *testing.T) {
 // The CSRF origin check is server-wide too: every state-changing route, not
 // only the write subgroup, must refuse a cross-origin browser request while
 // still admitting clients that send no Origin (CLI, curl, MCP) and pages on
-// a loopback origin (the dashboard dev server) (#652).
+// a loopback origin (the dashboard dev server) (#652). The two routes that
+// act without a body admit no other loopback port (#673).
 func TestStateChangingRoutesRejectForeignOrigin(t *testing.T) {
+	exactOriginOnly := map[string]bool{"/api/reload-config": true, "/api/harvest": true}
 	s := newGuardTestServer(t, config.AuthConfig{})
 
 	routes := []route{
@@ -143,8 +145,9 @@ func TestStateChangingRoutesRejectForeignOrigin(t *testing.T) {
 				rec := httptest.NewRecorder()
 				s.ServeHTTP(rec, req)
 
-				if got := rec.Code == http.StatusForbidden; got != o.wantForbidden {
-					t.Errorf("%s with %s %q: status %d, want forbidden=%v", rt, o.header, o.value, rec.Code, o.wantForbidden)
+				want := o.wantForbidden || (o.name == "loopback origin other port" && exactOriginOnly[rt.path])
+				if got := rec.Code == http.StatusForbidden; got != want {
+					t.Errorf("%s with %s %q: status %d, want forbidden=%v", rt, o.header, o.value, rec.Code, want)
 				}
 			})
 		}
@@ -292,5 +295,52 @@ func TestHostOriginMiddlewareOrder(t *testing.T) {
 				t.Errorf("status %d body %q, want %d containing %q", rec.Code, rec.Body.String(), tt.wantStatus, tt.wantBody)
 			}
 		})
+	}
+}
+
+// /api/harvest and /api/reload-config take no body, so a page on another
+// local port could trigger them through the loopback leniency of the CSRF
+// check. They accept only the exact origin, and nothing a browser marks as
+// cross-site or same-site; the CLI, which sends neither header, still gets
+// through (#673).
+func TestBodylessActionsRequireSameOrigin(t *testing.T) {
+	s := newGuardTestServer(t, config.AuthConfig{})
+
+	tests := []struct {
+		name          string
+		headers       map[string]string
+		wantForbidden bool
+	}{
+		{"cli, no browser headers", nil, false},
+		{"same origin", map[string]string{"Origin": "http://localhost:3100", "Sec-Fetch-Site": "same-origin"}, false},
+		{"same origin, no fetch metadata", map[string]string{"Origin": "http://localhost:3100"}, false},
+		{"user-initiated", map[string]string{"Sec-Fetch-Site": "none"}, false},
+		{"other loopback port", map[string]string{"Origin": "http://localhost:8080"}, true},
+		{"other loopback name", map[string]string{"Origin": "http://127.0.0.1:3100"}, true},
+		{"cross-site fetch metadata", map[string]string{"Sec-Fetch-Site": "cross-site"}, true},
+		{"same-site fetch metadata", map[string]string{"Sec-Fetch-Site": "same-site"}, true},
+		{"ui header waives the check", map[string]string{"Sec-Fetch-Site": "cross-site", "X-Requested-With": "nano-brain-ui"}, false},
+		// The standalone dashboard's proxy rewrites Host to the daemon's and
+		// forwards the browser's Origin from its own port; it identifies itself
+		// with this header instead.
+		{"dashboard proxy", map[string]string{"Origin": "http://localhost:4321", "Sec-Fetch-Site": "same-origin", "X-Requested-With": "nano-brain-dashboard"}, false},
+		{"other port, unknown requested-with", map[string]string{"Origin": "http://localhost:4321", "Sec-Fetch-Site": "same-origin", "X-Requested-With": "something-else"}, true},
+	}
+	for _, path := range []string{"/api/harvest", "/api/reload-config"} {
+		for _, tt := range tests {
+			t.Run(path+" "+tt.name, func(t *testing.T) {
+				req := httptest.NewRequest(http.MethodPost, path, nil)
+				req.Host = "localhost:3100"
+				for k, v := range tt.headers {
+					req.Header.Set(k, v)
+				}
+				rec := httptest.NewRecorder()
+				s.ServeHTTP(rec, req)
+
+				if got := rec.Code == http.StatusForbidden; got != tt.wantForbidden {
+					t.Errorf("POST %s with %v: status %d, want forbidden=%v", path, tt.headers, rec.Code, tt.wantForbidden)
+				}
+			})
+		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -227,6 +228,32 @@ func TestMCPRoutesRejectForeignHost(t *testing.T) {
 
 			if got := rec.Code == http.StatusForbidden; got != tt.wantForbidden {
 				t.Errorf("%s %s with Host %q: status %d, want forbidden=%v", tt.method, tt.path, tt.host, rec.Code, tt.wantForbidden)
+			}
+		})
+	}
+}
+
+// A client that never finishes its request headers, or parks an idle
+// keep-alive connection, must not hold a goroutine forever. ReadTimeout and
+// WriteTimeout stay unset: /sse, /api/v1/events and long MCP calls stream
+// (#673).
+func TestServerTimeouts(t *testing.T) {
+	srv := newGuardTestServer(t, config.AuthConfig{}).Echo().Server
+
+	tests := []struct {
+		name string
+		got  time.Duration
+		want time.Duration
+	}{
+		{"ReadHeaderTimeout", srv.ReadHeaderTimeout, 10 * time.Second},
+		{"IdleTimeout", srv.IdleTimeout, 120 * time.Second},
+		{"ReadTimeout", srv.ReadTimeout, 0},
+		{"WriteTimeout", srv.WriteTimeout, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.want)
 			}
 		})
 	}
