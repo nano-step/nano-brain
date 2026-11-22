@@ -529,3 +529,63 @@ func TestOpenCodeJSON_InvalidUTF8SourcePath(t *testing.T) {
 		t.Errorf("second cycle: harvested=%d skipped=%d errCount=%d, want 0/1/0 (dedup)", harvested, skipped, errCount)
 	}
 }
+
+// The OpenCode JSON source path is the session FILE path, and file names may
+// carry invalid UTF-8. Two names that sanitizeText maps to one string
+// ("ses_\xffz" and "ses_\xfez" both become "ses_\ufffdz") must still produce
+// two documents: a bare sanitize would let whichever file is read last
+// overwrite the other one's document (#675). sanitizeID appends ~<sha8 of
+// the raw name> to dirty paths, keeping the mapping injective.
+func TestOpenCodeJSON_SanitizedSourcePathCollisionKeepsBothSessions(t *testing.T) {
+	db, q, dir, wsHash := setupSanitizeDB(t)
+	ctx := context.Background()
+
+	files := []struct{ name, id, text string }{
+		{"ses_\xffz.json", "ses_oc_a", "TEXT-FROM-DIRTY-A"},
+		{"ses_\xfez.json", "ses_oc_b", "TEXT-FROM-DIRTY-B"},
+	}
+	paths := make([]string, len(files))
+	for i, s := range files {
+		paths[i] = filepath.Join(dir, "session", "proj", s.name)
+	}
+	if err := os.MkdirAll(filepath.Dir(paths[0]), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i, s := range files {
+		if err := os.WriteFile(paths[i], []byte("{}"), 0o644); err != nil {
+			t.Skipf("file system refuses a file name that is not UTF-8: %v", err)
+		}
+		writeJSON(t, paths[i], map[string]any{
+			"id": s.id, "title": s.id, "projectID": "proj", "directory": dir,
+			"time": map[string]any{"created": 1700000000000, "updated": 1700000100000},
+		})
+		msgID := "msg_" + s.id
+		writeJSON(t, filepath.Join(dir, "message", s.id, msgID+".json"), map[string]any{
+			"id": msgID, "sessionID": s.id, "role": "user", "time": map[string]any{"created": 1700000000000},
+		})
+		writeJSON(t, filepath.Join(dir, "part", msgID, "prt_"+s.id+".json"), map[string]any{
+			"id": "prt_" + s.id, "type": "text", "text": s.text, "messageID": msgID,
+		})
+	}
+
+	h := NewOpenCodeHarvester(db, zerolog.Nop(), dir, wsHash)
+	if harvested, _, errCount := h.HarvestAll(ctx, nil); harvested != 2 || errCount != 0 {
+		t.Fatalf("first cycle: harvested=%d errCount=%d, want 2/0", harvested, errCount)
+	}
+
+	docA := assertStorableDoc(t, q, sanitizeID(paths[0]), wsHash)
+	docB := assertStorableDoc(t, q, sanitizeID(paths[1]), wsHash)
+	if docA.SourcePath == docB.SourcePath {
+		t.Fatalf("colliding file names mapped to one source path %q", docA.SourcePath)
+	}
+	if !strings.Contains(docA.Content, "TEXT-FROM-DIRTY-A") {
+		t.Errorf("dirty-name doc A holds the wrong session's content")
+	}
+	if !strings.Contains(docB.Content, "TEXT-FROM-DIRTY-B") {
+		t.Errorf("dirty-name doc B was shadowed by the colliding file")
+	}
+
+	if harvested, skipped, errCount := h.HarvestAll(ctx, nil); harvested != 0 || skipped != 2 || errCount != 0 {
+		t.Errorf("second cycle: harvested=%d skipped=%d errCount=%d, want 0/2/0 (dedup)", harvested, skipped, errCount)
+	}
+}

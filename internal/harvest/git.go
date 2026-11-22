@@ -317,14 +317,23 @@ func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]
 		since = ""
 	}
 
+	// HEAD is resolved once per cycle and the resulting SHA bounds every
+	// range below — the batch log, the record filter, the Nth-commit pick
+	// and the stored marker. A commit landing mid-cycle stays outside those
+	// ranges and the next cycle picks it up; re-reading HEAD later in the
+	// cycle would move the marker past a commit that was never batched.
+	head, err := gitHeadSHA(repoPath)
+	if err != nil {
+		return nil, "", err
+	}
+
 	// With a limit, the batch must be the OLDEST pending commits: "-nN" keeps
 	// the newest N, and the marker then jumps to HEAD and skips the rest for
 	// good. So the batch's upper bound is the Nth pending commit, and the
 	// marker advances contiguously from one cycle to the next.
-	until := "HEAD"
+	until := head
 	if maxCommits > 0 {
-		var err error
-		if until, err = gitNthPendingCommit(repoPath, since, maxCommits); err != nil {
+		if until, err = gitNthPendingCommit(repoPath, since, head, maxCommits); err != nil {
 			return nil, "", err
 		}
 		if until == "" {
@@ -332,12 +341,9 @@ func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]
 		}
 	}
 
-	revSpec := "HEAD"
-	switch {
-	case since != "":
+	revSpec := until
+	if since != "" {
 		revSpec = since + ".." + until
-	case until != "HEAD":
-		revSpec = until
 	}
 
 	// Use %x1e (record separator) to delimit commits, %x1f (unit separator) for fields.
@@ -392,14 +398,9 @@ func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]
 		return nil, "", nil
 	}
 
-	// The marker comes from git output, not the parsed records.
-	tip := until
-	if maxCommits == 0 {
-		if tip, err = gitHeadSHA(repoPath); err != nil {
-			return nil, "", err
-		}
-	}
-	return real, tip, nil
+	// The marker comes from git output, not the parsed records: the head
+	// resolved at the start of the cycle, or the batch end derived from it.
+	return real, until, nil
 }
 
 // gitRevListSHAs returns the full hex ids of every commit in revSpec.
@@ -413,6 +414,15 @@ func gitRevListSHAs(repoPath, revSpec string) (map[string]struct{}, error) {
 		ids[id] = struct{}{}
 	}
 	return ids, nil
+}
+
+// gitIsAncestor reports whether ancestor is an ancestor of head in repoPath.
+// A git failure — including ancestor naming no object — counts as "not an
+// ancestor", which puts the caller on the plain-walk fallback.
+func gitIsAncestor(repoPath, ancestor, head string) bool {
+	cmd := exec.Command("git", "merge-base", "--is-ancestor", ancestor, head)
+	cmd.Dir = repoPath
+	return cmd.Run() == nil
 }
 
 // gitHeadSHA returns HEAD's full commit id, or an error for an empty or
@@ -431,24 +441,36 @@ func gitHeadSHA(repoPath string) (string, error) {
 
 // gitNthPendingCommit returns the id of the nth pending commit, oldest first,
 // or the newest pending commit when fewer than n are pending. It returns ""
-// when nothing is pending.
+// when nothing is pending. head is the HEAD commit the caller resolved at the
+// start of the cycle.
 //
-// With a marker the walk is --ancestry-path since..HEAD: it visits only
-// commits that descend from the marker, so the returned batch end is always a
-// descendant of the marker and the marker can only move forward. Plain
-// since..HEAD would let the Nth commit sit on a branch that forked BEFORE the
-// marker; storing it regresses the marker, re-lists since's ancestors every
-// cycle and never reaches HEAD on merge history. The cost: the batch
-// since..<batchEnd> may exceed n when a large side branch merges into the
-// chosen commit — the limit bounds the ancestry path, not the whole batch.
-// Without a marker the plain HEAD walk and the nth-in-topo-order cut are
+// With a marker that is an ancestor of head the walk is --ancestry-path
+// since..head: it visits only commits that descend from the marker, so the
+// returned batch end is always a descendant of the marker and the marker can
+// only move forward. Plain since..head would let the Nth commit sit on a
+// branch that forked BEFORE the marker; storing it regresses the marker,
+// re-lists since's ancestors every cycle and never reaches HEAD on merge
+// history. The cost: the batch since..<batchEnd> may exceed n when a large
+// side branch merges into the chosen commit — the limit bounds the ancestry
+// path, not the whole batch.
+//
+// A marker that exists but is NOT an ancestor of head — after a force-push,
+// rebase, amend or a switch to a branch that forked before the marker — makes
+// --ancestry-path empty and would stall the harvester for good, so the walk
+// falls back to plain since..head for that cycle. The batch end is then an
+// ancestor of head, so every later cycle is back on the ancestry path.
+// Without a marker the plain head walk and the nth-in-topo-order cut are
 // kept: commits not yet reachable stay pending for a later cycle.
-func gitNthPendingCommit(repoPath, since string, n int) (string, error) {
+func gitNthPendingCommit(repoPath, since, head string, n int) (string, error) {
 	args := []string{"log", "--format=%H", "--reverse", "--topo-order"}
 	if since != "" {
-		args = append(args, "--ancestry-path", since+"..HEAD")
+		if gitIsAncestor(repoPath, since, head) {
+			args = append(args, "--ancestry-path", since+".."+head)
+		} else {
+			args = append(args, since+".."+head)
+		}
 	} else {
-		args = append(args, "HEAD")
+		args = append(args, head)
 	}
 	args = append(args, "--")
 	output, err := runGitLog(repoPath, args)
