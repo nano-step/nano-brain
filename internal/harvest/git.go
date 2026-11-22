@@ -99,7 +99,7 @@ func (g *GitHarvester) harvestRepo(
 		return 0, 0, fmt.Errorf("get last SHA: %w", err)
 	}
 
-	commits, err := g.gitLogRecovering(repoPath, lastSHA, g.maxCommits)
+	commits, tip, err := g.gitLogRecovering(repoPath, lastSHA, g.maxCommits)
 	if err != nil {
 		return 0, 0, fmt.Errorf("git log: %w", err)
 	}
@@ -148,9 +148,11 @@ func (g *GitHarvester) harvestRepo(
 		harvested++
 	}
 
+	// The marker is the batch end git itself reported (rev-list/rev-parse), not
+	// a hash parsed out of the log body: a commit message can embed the record
+	// separators and forge a "commit" with any SHA (#675).
 	if len(commits) > 0 {
-		latestSHA := commits[len(commits)-1].SHA
-		if err := g.updateLastHarvestedSHA(ctx, workspaceHash, latestSHA); err != nil {
+		if err := g.updateLastHarvestedSHA(ctx, workspaceHash, tip); err != nil {
 			return harvested, skipped, fmt.Errorf("update marker: %w", err)
 		}
 	}
@@ -281,10 +283,10 @@ var gitObjectID = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
 // would never advance again. In that case the harvest restarts from the
 // beginning; commits already stored are skipped by their content hash. Any
 // other git failure is returned unchanged.
-func (g *GitHarvester) gitLogRecovering(repoPath string, since string, maxCommits int) ([]gitCommit, error) {
-	commits, err := g.gitLog(repoPath, since, maxCommits)
+func (g *GitHarvester) gitLogRecovering(repoPath string, since string, maxCommits int) ([]gitCommit, string, error) {
+	commits, tip, err := g.gitLog(repoPath, since, maxCommits)
 	if err == nil || !gitCommitMissing(repoPath, since) {
-		return commits, err
+		return commits, tip, err
 	}
 	g.logger.Warn().Str("repo", repoPath).Str("since", since).Msg("last-harvested marker is not a commit in this repository, harvesting from the start")
 	return g.gitLog(repoPath, "", maxCommits)
@@ -303,7 +305,10 @@ func gitCommitMissing(repoPath, id string) bool {
 	return isExit
 }
 
-func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]gitCommit, error) {
+// gitLog returns the batch of pending commits oldest-first and the batch end
+// git itself reported (the marker to store): the Nth pending commit when a
+// limit applies, HEAD otherwise — never a hash parsed out of the log body.
+func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]gitCommit, string, error) {
 	// since comes from a stored document. Anything that is not an object id
 	// is dropped rather than handed to git, where a value starting with "-"
 	// would be parsed as an option.
@@ -320,11 +325,19 @@ func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]
 	if maxCommits > 0 {
 		var err error
 		if until, err = gitNthPendingCommit(repoPath, since, maxCommits); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if until == "" {
-			return nil, nil
+			return nil, "", nil
 		}
+	}
+
+	revSpec := "HEAD"
+	switch {
+	case since != "":
+		revSpec = since + ".." + until
+	case until != "HEAD":
+		revSpec = until
 	}
 
 	// Use %x1e (record separator) to delimit commits, %x1f (unit separator) for fields.
@@ -334,36 +347,111 @@ func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]
 		"--format=%x1e%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b",
 		"--name-only",
 		"--reverse",
+		revSpec,
+		"--",
 	}
-	switch {
-	case since != "":
-		args = append(args, since+".."+until)
-	case until != "HEAD":
-		args = append(args, until)
-	}
-	args = append(args, "--")
 
 	output, err := runGitLog(repoPath, args)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return parseGitLog(output)
+	commits, err := parseGitLog(output)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(commits) == 0 {
+		return nil, "", nil
+	}
+
+	// A commit message may itself contain \x1e/\x1f, so a parsed "record" can
+	// be a forgery embedded in another commit's body and would overwrite that
+	// hash's document. Keep only records whose hash is a real commit of this
+	// range, and drop every hash that appears more than once: git lists each
+	// commit exactly once, so a duplicate means at least one forged record.
+	validIDs, err := gitRevListSHAs(repoPath, revSpec)
+	if err != nil {
+		return nil, "", err
+	}
+	counts := make(map[string]int, len(commits))
+	for _, c := range commits {
+		counts[c.SHA]++
+	}
+	real := commits[:0]
+	for _, c := range commits {
+		if _, ok := validIDs[c.SHA]; !ok {
+			g.logger.Warn().Str("sha", c.SHA).Msg("dropping forged git-log record: hash is not a commit in this range")
+			continue
+		}
+		if counts[c.SHA] > 1 {
+			g.logger.Warn().Str("sha", c.SHA).Msg("dropping duplicated git-log record: hash is ambiguous")
+			continue
+		}
+		real = append(real, c)
+	}
+	if len(real) == 0 {
+		return nil, "", nil
+	}
+
+	// The marker comes from git output, not the parsed records.
+	tip := until
+	if maxCommits == 0 {
+		if tip, err = gitHeadSHA(repoPath); err != nil {
+			return nil, "", err
+		}
+	}
+	return real, tip, nil
 }
 
-// gitNthPendingCommit returns the id of the nth commit after since (or from
-// the start when since is empty), oldest first, or the newest pending commit
-// when fewer than n are pending. It returns "" when nothing is pending.
-//
-// --topo-order guarantees every parent is listed before its children, so all
-// pending ancestors of the returned commit are among the first n: the range
-// since..<returned> never holds more than n commits. Commits on a side branch
-// that are not ancestors of it stay pending and are picked up by a later cycle.
-func gitNthPendingCommit(repoPath, since string, n int) (string, error) {
-	rev := "HEAD"
-	if since != "" {
-		rev = since + "..HEAD"
+// gitRevListSHAs returns the full hex ids of every commit in revSpec.
+func gitRevListSHAs(repoPath, revSpec string) (map[string]struct{}, error) {
+	output, err := runGitLog(repoPath, []string{"rev-list", revSpec, "--"})
+	if err != nil {
+		return nil, err
 	}
-	output, err := runGitLog(repoPath, []string{"log", "--format=%H", "--reverse", "--topo-order", rev, "--"})
+	ids := make(map[string]struct{})
+	for _, id := range strings.Fields(output) {
+		ids[id] = struct{}{}
+	}
+	return ids, nil
+}
+
+// gitHeadSHA returns HEAD's full commit id, or an error for an empty or
+// missing HEAD (an unborn branch has nothing to harvest anyway).
+func gitHeadSHA(repoPath string) (string, error) {
+	output, err := runGitLog(repoPath, []string{"rev-parse", "HEAD"})
+	if err != nil {
+		return "", err
+	}
+	id := strings.TrimSpace(output)
+	if !gitObjectID.MatchString(id) {
+		return "", fmt.Errorf("git rev-parse HEAD returned %q, which is not a commit id", id)
+	}
+	return id, nil
+}
+
+// gitNthPendingCommit returns the id of the nth pending commit, oldest first,
+// or the newest pending commit when fewer than n are pending. It returns ""
+// when nothing is pending.
+//
+// With a marker the walk is --ancestry-path since..HEAD: it visits only
+// commits that descend from the marker, so the returned batch end is always a
+// descendant of the marker and the marker can only move forward. Plain
+// since..HEAD would let the Nth commit sit on a branch that forked BEFORE the
+// marker; storing it regresses the marker, re-lists since's ancestors every
+// cycle and never reaches HEAD on merge history. The cost: the batch
+// since..<batchEnd> may exceed n when a large side branch merges into the
+// chosen commit — the limit bounds the ancestry path, not the whole batch.
+// Without a marker the plain HEAD walk and the nth-in-topo-order cut are
+// kept: commits not yet reachable stay pending for a later cycle.
+func gitNthPendingCommit(repoPath, since string, n int) (string, error) {
+	args := []string{"log", "--format=%H", "--reverse", "--topo-order"}
+	if since != "" {
+		args = append(args, "--ancestry-path", since+"..HEAD")
+	} else {
+		args = append(args, "HEAD")
+	}
+	args = append(args, "--")
+	output, err := runGitLog(repoPath, args)
 	if err != nil {
 		return "", err
 	}

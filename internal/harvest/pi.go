@@ -126,7 +126,7 @@ func (h *PiHarvester) harvestSession(ctx context.Context, sessionFile string, en
 	// The id reaches the source path, the title and the JSONB metadata, and a
 	// JSON string may carry "\u0000". It is sanitized once here so the dedup
 	// lookup below and the later write use the same source path.
-	sessionID := sanitizeText(header.ID)
+	sessionID := sanitizeID(header.ID)
 	if err != nil || sessionID == "" {
 		return harvestSkipped, fmt.Errorf("parse session header: %w", err)
 	}

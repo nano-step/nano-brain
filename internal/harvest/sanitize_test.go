@@ -250,3 +250,52 @@ func TestTitleFromContent(t *testing.T) {
 		})
 	}
 }
+
+// Dirty ids get a short digest of the RAW id appended, so two raw ids that
+// sanitize to the same value cannot collide onto one document and shadow each
+// other ("pi\x00x" and "pix" both sanitized to "pix" before #675).
+func TestSanitizeID(t *testing.T) {
+	if got := sanitizeID("clean-id_123"); got != "clean-id_123" {
+		t.Errorf("clean id changed: %q", got)
+	}
+	// A clean id is returned as the very same string (stable source paths).
+	in := "019fdb51-2ce0-7085-a1d1-471be7c19602"
+	if out := sanitizeID(in); unsafe.StringData(out) != unsafe.StringData(in) {
+		t.Errorf("clean id was copied instead of returned as is")
+	}
+
+	dirty := sanitizeID("pi\x00x")
+	if !storable(dirty) {
+		t.Errorf("sanitizeID returned an unstorable value: %q", dirty)
+	}
+	if !strings.HasPrefix(dirty, "pix~") || len(dirty) != len("pix~")+8 {
+		t.Errorf("dirty id = %q, want <sanitized>~<8 hex>", dirty)
+	}
+	if dirty == sanitizeID("pix") {
+		t.Errorf("ids collided: %q == %q", "pi\\x00x", "pix")
+	}
+	if got := sanitizeID("s\xffz"); got == sanitizeID("s\xfez") {
+		t.Errorf("ids collided: %q", got)
+	}
+	if sanitizeID("pi\x00x") != dirty {
+		t.Errorf("sanitizeID is not deterministic")
+	}
+}
+
+// SqSession ids shorter than 8 bytes used to panic sess.ID[:8] (pre-existing,
+// #675); the fallback title must be guarded instead.
+func TestFallbackSessionTitle_ShortID(t *testing.T) {
+	for _, tt := range []struct{ id, want string }{
+		{"", "OpenCode session "},
+		{"ab", "OpenCode session ab"},
+		{"12345678", "OpenCode session 12345678"},
+		{"123456789", "OpenCode session 12345678"},
+	} {
+		if got := fallbackSessionTitle(SqSession{ID: tt.id}); got != tt.want {
+			t.Errorf("fallbackSessionTitle(%q) = %q, want %q", tt.id, got, tt.want)
+		}
+	}
+	if got := fallbackSessionTitle(SqSession{ID: "x", Title: "real title"}); got != "real title" {
+		t.Errorf("existing title overridden: %q", got)
+	}
+}

@@ -131,8 +131,8 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 			// Ids reach source paths, titles and JSONB metadata. Sanitizing them
 			// once here keeps the dedup lookup, the parent lookup and the later
 			// write on the same source path.
-			sess.SessionID = sanitizeText(sess.SessionID)
-			sess.ParentID = sanitizeText(sess.ParentID)
+			sess.SessionID = sanitizeID(sess.SessionID)
+			sess.ParentID = sanitizeID(sess.ParentID)
 
 			sourcePath := "summary://" + e.source.Name() + "/" + sess.SessionID
 

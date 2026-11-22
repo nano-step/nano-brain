@@ -113,7 +113,7 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 
 	// sessionFile is used raw to open the file; the stored source path is the
 	// sanitized form, and the lookup uses the same value as the write.
-	sourcePath := sanitizeText(sessionFile)
+	sourcePath := sanitizeID(sessionFile)
 
 	queries := sqlc.New(h.db)
 	existing, err := queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{

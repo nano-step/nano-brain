@@ -1,6 +1,8 @@
 package harvest
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -12,6 +14,20 @@ import (
 // string that is already clean is returned as is, without allocating.
 func sanitizeText(s string) string {
 	return strings.ToValidUTF8(strings.ReplaceAll(s, "\x00", ""), "\uFFFD")
+}
+
+// sanitizeID maps a session or source id to the value used in source paths
+// and dedup keys. A clean id is returned unchanged, so existing paths stay
+// stable. A dirty one is suffixed with a short digest of the RAW id: bare
+// sanitizeText is not injective ("pi\x00x" and "pix" both become "pix"), and
+// the colliding session would shadow the other one's document forever.
+func sanitizeID(raw string) string {
+	clean := sanitizeText(raw)
+	if clean == raw {
+		return raw
+	}
+	sum := sha256.Sum256([]byte(raw))
+	return clean + "~" + hex.EncodeToString(sum[:4])
 }
 
 // sanitizeStrings applies sanitizeText to each element. The input slice is

@@ -63,7 +63,7 @@ func (e *AutoMemoryExtractor) ExtractAndStore(ctx context.Context, sessionID, se
 	// they are sanitized before anything is derived from them: the content
 	// hash, the source path used for the dedup lookup and the stored row then
 	// all describe the same sanitized text.
-	sessionID = sanitizeText(sessionID)
+	sessionID = sanitizeID(sessionID)
 	memories := extractMemories(sanitizeText(sessionContent))
 	if len(memories) == 0 {
 		return 0

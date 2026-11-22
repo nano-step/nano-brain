@@ -162,7 +162,7 @@ func TestGitLogIntegration(t *testing.T) {
 	runGit("commit", "-m", "second commit\n\nWith a body")
 
 	h := &GitHarvester{logger: testLogger()}
-	commits, err := h.gitLog(tmpDir, "", 10)
+	commits, _, err := h.gitLog(tmpDir, "", 10)
 	if err != nil {
 		t.Fatalf("gitLog failed: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestGitLogWithSince(t *testing.T) {
 	runGit("commit", "-m", "second commit")
 
 	h := &GitHarvester{logger: testLogger()}
-	commits, err := h.gitLog(tmpDir, firstSHA, 10)
+	commits, _, err := h.gitLog(tmpDir, firstSHA, 10)
 	if err != nil {
 		t.Fatalf("gitLog with since failed: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestGitLogIgnoresSinceThatIsNotACommitID(t *testing.T) {
 	h := &GitHarvester{logger: testLogger()}
 	for _, since := range []string{"--output=" + filepath.Join(tmpDir, "written-by-git"), "-p", "--all", "HEAD~1", "abc", "ABCDEF1", "deadbeef;x"} {
 		t.Run(since, func(t *testing.T) {
-			commits, err := h.gitLog(tmpDir, since, 0)
+			commits, _, err := h.gitLog(tmpDir, since, 0)
 			if err != nil {
 				t.Fatalf("gitLog failed: %v", err)
 			}
@@ -435,7 +435,7 @@ func TestGitLogRecoversFromMarkerMissingInRepo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			commits, err := h.gitLogRecovering(tmpDir, tt.since, tt.maxCommits)
+			commits, _, err := h.gitLogRecovering(tmpDir, tt.since, tt.maxCommits)
 			if err != nil {
 				t.Fatalf("gitLogRecovering failed: %v", err)
 			}
@@ -446,7 +446,7 @@ func TestGitLogRecoversFromMarkerMissingInRepo(t *testing.T) {
 	}
 
 	// Without the recovery the failure is what harvestRepo saw every cycle.
-	if _, err := h.gitLog(tmpDir, missing, 0); err == nil {
+	if _, _, err := h.gitLog(tmpDir, missing, 0); err == nil {
 		t.Errorf("gitLog with a marker missing from the repo succeeded; the recovery test proves nothing")
 	}
 }
@@ -475,7 +475,7 @@ func TestGitLogLimitTakesOldestPendingCommits(t *testing.T) {
 	marker := ""
 	var seen []string
 	for i, want := range wantBatches {
-		commits, err := h.gitLog(tmpDir, marker, 2)
+		commits, tip, err := h.gitLog(tmpDir, marker, 2)
 		if err != nil {
 			t.Fatalf("batch %d: gitLog failed: %v", i+1, err)
 		}
@@ -486,8 +486,8 @@ func TestGitLogLimitTakesOldestPendingCommits(t *testing.T) {
 			seen = append(seen, c.SHA)
 		}
 		if len(commits) > 0 {
-			// harvestRepo stores the last commit of the batch as the marker.
-			marker = commits[len(commits)-1].SHA
+			// harvestRepo stores the batch end git itself reported as the marker.
+			marker = tip
 		}
 	}
 	if strings.Join(seen, "|") != strings.Join(shas, "|") {
@@ -495,7 +495,7 @@ func TestGitLogLimitTakesOldestPendingCommits(t *testing.T) {
 	}
 
 	t.Run("limit larger than the pending set", func(t *testing.T) {
-		commits, err := h.gitLog(tmpDir, shas[2], 10)
+		commits, _, err := h.gitLog(tmpDir, shas[2], 10)
 		if err != nil {
 			t.Fatalf("gitLog failed: %v", err)
 		}
@@ -511,4 +511,222 @@ func commitSubjects(commits []gitCommit) []string {
 		subjects = append(subjects, c.Subject)
 	}
 	return subjects
+}
+
+// newGitMergeRepo builds the reviewer repro: P -> C1 -> S -> A -> M on the
+// default branch, with P -> B -> M merged in from a side branch. The marker
+// starts at S, so A, M and B are pending but B does not descend from S.
+func newGitMergeRepo(t *testing.T) (tmpDir string, shas map[string]string) {
+	t.Helper()
+	tmpDir = t.TempDir()
+	runGit := func(args ...string) string {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmpDir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test Author",
+			"GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=Test Author",
+			"GIT_COMMITTER_EMAIL=test@example.com",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	commit := func(name, msg string) string {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(msg), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		runGit("add", name)
+		runGit("commit", "-m", msg)
+		return runGit("rev-parse", "HEAD")
+	}
+
+	runGit("init")
+	runGit("config", "user.name", "Test Author")
+	runGit("config", "user.email", "test@example.com")
+	// Works on the unborn HEAD before the first commit, unlike rev-parse.
+	main := runGit("symbolic-ref", "--short", "HEAD")
+
+	shas = map[string]string{}
+	shas["P"] = commit("p.txt", "P")
+	runGit("checkout", "-b", "side")
+	shas["B"] = commit("b.txt", "B")
+	runGit("checkout", main)
+	shas["C1"] = commit("c1.txt", "C1")
+	shas["S"] = commit("s.txt", "S")
+	shas["A"] = commit("a.txt", "A")
+	runGit("merge", "side", "-m", "M")
+	shas["M"] = runGit("rev-parse", "HEAD")
+	return tmpDir, shas
+}
+
+// A merge that pulls in a branch forking BEFORE the marker regressed the
+// marker forever: the nth commit of plain since..HEAD need not descend from
+// since, so storing it re-listed since's ancestors on every cycle (#675).
+// With --ancestry-path the batch end is always a descendant of the marker.
+func TestGitLogLimitMarkerMovesForwardOnMergeHistory(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available in PATH")
+	}
+	tmpDir, shas := newGitMergeRepo(t)
+	h := &GitHarvester{logger: testLogger()}
+
+	for _, limit := range []int{1, 2} {
+		t.Run("limit "+itoa(limit), func(t *testing.T) {
+			marker := shas["S"]
+			seen := map[string]int{}
+			settled := false
+			for cycle := 0; cycle < 8; cycle++ {
+				commits, tip, err := h.gitLog(tmpDir, marker, limit)
+				if err != nil {
+					t.Fatalf("cycle %d (marker %.7s): gitLog failed: %v", cycle+1, marker, err)
+				}
+				if len(commits) == 0 {
+					if cycle == 0 {
+						t.Fatal("first cycle returned nothing; S has pending commits")
+					}
+					settled = true
+					break
+				}
+				for _, c := range commits {
+					seen[c.SHA]++
+					if seen[c.SHA] > 1 {
+						t.Fatalf("commit %.7s harvested twice", c.SHA)
+					}
+				}
+				// The marker may only move forward: the previous marker must be
+				// an ancestor of the new batch end.
+				cmd := exec.Command("git", "merge-base", "--is-ancestor", marker, tip)
+				cmd.Dir = tmpDir
+				if err := cmd.Run(); err != nil {
+					t.Fatalf("cycle %d: marker moved backwards %.7s -> %.7s", cycle+1, marker, tip)
+				}
+				marker = tip
+			}
+			if !settled {
+				t.Error("did not settle within 8 cycles")
+			}
+			for _, name := range []string{"A", "B", "M"} {
+				if seen[shas[name]] != 1 {
+					t.Errorf("commit %s (%.7s) harvested %d times, want exactly once", name, shas[name], seen[shas[name]])
+				}
+			}
+			if len(seen) != 3 {
+				t.Errorf("harvested %d distinct commits, want exactly A, B and M", len(seen))
+			}
+		})
+	}
+}
+
+// A commit message may contain the \x1e/\x1f separators parseGitLog splits
+// on: a crafted body embeds a forged "record" claiming any hash. Forged
+// records must be dropped so they cannot overwrite another commit's document
+// or be stored as the marker (#675).
+func TestGitLogDropsForgedRecords(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available in PATH")
+	}
+
+	tmpDir := t.TempDir()
+	runGit := func(args ...string) string {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmpDir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test Author",
+			"GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=Test Author",
+			"GIT_COMMITTER_EMAIL=test@example.com",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	commitFile := func(name, msgFile string) string {
+		runGit("add", name)
+		runGit("commit", "--cleanup=verbatim", "-F", msgFile)
+		return runGit("rev-parse", "HEAD")
+	}
+
+	runGit("init")
+	runGit("config", "user.name", "Test Author")
+	runGit("config", "user.email", "test@example.com")
+
+	write := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("c1.txt", "1")
+	runGit("add", "c1.txt")
+	runGit("commit", "-m", "C1")
+	c1 := runGit("rev-parse", "HEAD")
+	write("c2.txt", "2")
+	runGit("add", "c2.txt")
+	runGit("commit", "-m", "C2")
+	c2 := runGit("rev-parse", "HEAD")
+
+	fakeSHA := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	// C3's body embeds two forged records: one naming a hash that is not a
+	// commit in this repo, and one naming the real C2 inside the same range.
+	forged := "C3\n\nbody" +
+		"\x1e" + fakeSHA + "\x1fforged author\x1ff@e.example\x1f2020-01-01T00:00:00Z\x1fforged subject" +
+		"\x1e" + c2 + "\x1fforged author\x1ff@e.example\x1f2020-01-01T00:00:00Z\x1fforged subject as " + c2[:7]
+	write("c3.txt", "3")
+	write("msg.txt", forged)
+	c3 := commitFile("c3.txt", "msg.txt")
+
+	h := &GitHarvester{logger: testLogger()}
+
+	t.Run("unbounded", func(t *testing.T) {
+		commits, tip, err := h.gitLog(tmpDir, "", 0)
+		if err != nil {
+			t.Fatalf("gitLog failed: %v", err)
+		}
+		if tip != c3 {
+			t.Errorf("tip = %.7s, want the real batch end %.7s (git rev-parse HEAD)", tip, c3)
+		}
+		var got []string
+		for _, c := range commits {
+			got = append(got, c.SHA)
+			if strings.Contains(c.Subject, "forged") {
+				t.Errorf("forged record survived: sha %.7s subject %q", c.SHA, c.Subject)
+			}
+		}
+		// The forged record duplicated real C2's hash, so both copies are
+		// dropped rather than risk an overwrite; C1 and C3 remain.
+		if strings.Join(got, "|") != strings.Join([]string{c1, c3}, "|") {
+			t.Errorf("commits = %v, want exactly C1 and C3 (ambiguous C2 dropped)", got)
+		}
+	})
+
+	t.Run("marker in place, forged in-range duplicates are dropped", func(t *testing.T) {
+		commits, tip, err := h.gitLog(tmpDir, c1, 0)
+		if err != nil {
+			t.Fatalf("gitLog failed: %v", err)
+		}
+		if tip != c3 {
+			t.Errorf("tip = %.7s, want %.7s", tip, c3)
+		}
+		for _, c := range commits {
+			if c.SHA == fakeSHA {
+				t.Errorf("forged non-repo hash survived")
+			}
+			if strings.Contains(c.Subject, "forged") {
+				t.Errorf("forged record survived for sha %.7s", c.SHA)
+			}
+		}
+		if len(commits) != 1 || commits[0].SHA != c3 {
+			t.Errorf("commits = %v, want only C3 (ambiguous C2 dropped)", commitSubjects(commits))
+		}
+	})
 }

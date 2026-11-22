@@ -216,7 +216,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 		// sess.ID stays raw for the SQLite message lookup; everything that
 		// reaches Postgres (source path, title, metadata) uses the sanitized id
 		// so the dedup lookup and the later write agree on one source path.
-		sessionID := sanitizeText(sess.ID)
+		sessionID := sanitizeID(sess.ID)
 		sourcePath := "summary://opencode/" + sessionID
 		existing, lookupErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    sourcePath,
@@ -240,10 +240,7 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 
 		md := renderSQLiteMarkdown(sess, msgs)
 
-		title := sess.Title
-		if title == "" {
-			title = "OpenCode session " + sess.ID[:8]
-		}
+		title := fallbackSessionTitle(sess)
 
 		if h.summarizer != nil {
 			smeta := sanitizeSummaryMeta(SummaryMeta{
@@ -304,6 +301,22 @@ func (h *OpenCodeSQLiteHarvester) dbStamp() string {
 		return ""
 	}
 	return fmt.Sprintf("%d-%d", info.ModTime().UnixNano(), info.Size())
+}
+
+// fallbackSessionTitle derives the document title when a session has none:
+// "OpenCode session " + the first 8 bytes of its id — guarded, because ids
+// shorter than 8 bytes exist (pre-existing panic site). The byte cut may
+// split a multi-byte rune; sanitizeDocParams repairs it to U+FFFD at the
+// persistence boundary.
+func fallbackSessionTitle(sess SqSession) string {
+	if sess.Title != "" {
+		return sess.Title
+	}
+	id := sess.ID
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	return "OpenCode session " + id
 }
 
 type SqSession struct {

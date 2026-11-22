@@ -120,7 +120,7 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 	// A file name is not guaranteed to be valid UTF-8. sessionFile stays raw
 	// for opening the file; the id used for the source path, title and
 	// metadata is sanitized once here so the lookup and the write agree.
-	sessionID := sanitizeText(strings.TrimSuffix(filepath.Base(sessionFile), ".jsonl"))
+	sessionID := sanitizeID(strings.TrimSuffix(filepath.Base(sessionFile), ".jsonl"))
 	sourcePath := "summary://claude/" + sessionID
 
 	queries := sqlc.New(h.db)

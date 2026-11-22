@@ -160,7 +160,7 @@ func TestOpenCodeSQLite_DirtySessionStringsArePersisted(t *testing.T) {
 			}
 
 			for _, s := range sessions {
-				doc := assertStorableDoc(t, q, "summary://opencode/"+sanitizeText(s.id), wsHash)
+				doc := assertStorableDoc(t, q, "summary://opencode/"+sanitizeID(s.id), wsHash)
 				if !strings.Contains(doc.Title, sanitizeText(s.title)) {
 					t.Errorf("%s: stored title %q lost the clean part of %q", s.name, doc.Title, s.title)
 				}
@@ -225,7 +225,7 @@ func TestPiHarvester_NULInHeaderID(t *testing.T) {
 			if harvested != 1 || skipped != 0 || errCount != 0 {
 				t.Fatalf("first cycle: harvested=%d skipped=%d errCount=%d, want 1/0/0", harvested, skipped, errCount)
 			}
-			assertStorableDoc(t, q, piSourcePath("pi-ses-dirty"), wsHash)
+			assertStorableDoc(t, q, piSourcePath(sanitizeID("pi-ses\x00-dirty")), wsHash)
 
 			harvested, skipped, errCount = h.HarvestAll(ctx, nil)
 			if harvested != 0 || skipped != 1 || errCount != 0 {
@@ -286,7 +286,7 @@ func TestEngine_DirtyHeaderFieldsArePersisted(t *testing.T) {
 				if harvested != 1 || skipped != 0 || errCount != 0 {
 					t.Fatalf("first cycle: harvested=%d skipped=%d errCount=%d, want 1/0/0", harvested, skipped, errCount)
 				}
-				doc := assertStorableDoc(t, q, "summary://opencode/"+sanitizeText("ses"+d), wsHash)
+				doc := assertStorableDoc(t, q, "summary://opencode/"+sanitizeID("ses"+d), wsHash)
 				if mode == "raw fallback" {
 					contentSum := sha256.Sum256([]byte(doc.Content))
 					if got := hex.EncodeToString(contentSum[:]); got != doc.ContentHash {
@@ -379,7 +379,7 @@ func TestAutoMemory_DirtySessionIDAndContent(t *testing.T) {
 	}
 
 	memory := "Use Postgres for storage a\uFFFDb"
-	assertStorableDoc(t, q, "automemory://ses-am/decision/"+shortHash(memory), wsHash)
+	assertStorableDoc(t, q, "automemory://"+sanitizeID("ses\x00-am")+"/decision/"+shortHash(memory), wsHash)
 }
 
 // The write functions are the persistence boundary: whatever a caller hands
@@ -456,7 +456,7 @@ func TestClaudeHarvester_InvalidUTF8FileName(t *testing.T) {
 	if harvested, _, errCount := h.HarvestAll(ctx, nil); harvested != 1 || errCount != 0 {
 		t.Fatalf("first cycle: harvested=%d errCount=%d, want 1/0", harvested, errCount)
 	}
-	assertStorableDoc(t, q, "summary://claude/ses_a\uFFFDb", wsHash)
+	assertStorableDoc(t, q, "summary://claude/"+sanitizeID("ses_"+invalidUTF8), wsHash)
 	if harvested, skipped, errCount := h.HarvestAll(ctx, nil); harvested != 0 || skipped != 1 || errCount != 0 {
 		t.Errorf("second cycle: harvested=%d skipped=%d errCount=%d, want 0/1/0 (dedup)", harvested, skipped, errCount)
 	}
@@ -489,6 +489,42 @@ func TestOpenCodeJSON_NULInTitle(t *testing.T) {
 	if doc.Title != "beforeafter" {
 		t.Errorf("title = %q, want %q", doc.Title, "beforeafter")
 	}
+	if harvested, skipped, errCount := h.HarvestAll(ctx, nil); harvested != 0 || skipped != 1 || errCount != 0 {
+		t.Errorf("second cycle: harvested=%d skipped=%d errCount=%d, want 0/1/0 (dedup)", harvested, skipped, errCount)
+	}
+}
+
+// The OpenCode JSON harvester builds the stored source path from the session
+// file path; a file name that is not valid UTF-8 must be sanitized (and
+// disambiguated by sanitizeID) before it reaches Postgres or the write fails
+// with SQLSTATE 22021 on every cycle (#675).
+func TestOpenCodeJSON_InvalidUTF8SourcePath(t *testing.T) {
+	db, q, dir, wsHash := setupSanitizeDB(t)
+	ctx := context.Background()
+
+	sessionFile := filepath.Join(dir, "session", "proj", "ses_"+invalidUTF8+".json")
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sessionFile, []byte("{}"), 0o644); err != nil {
+		t.Skipf("file system refuses a file name that is not UTF-8: %v", err)
+	}
+	writeJSON(t, sessionFile, map[string]any{
+		"id": "ses_json_utf8", "title": "title", "projectID": "proj", "directory": dir,
+		"time": map[string]any{"created": 1700000000000, "updated": 1700000100000},
+	})
+	writeJSON(t, filepath.Join(dir, "message", "ses_json_utf8", "msg_1.json"), map[string]any{
+		"id": "msg_1", "sessionID": "ses_json_utf8", "role": "user", "time": map[string]any{"created": 1700000000000},
+	})
+	writeJSON(t, filepath.Join(dir, "part", "msg_1", "prt_1.json"), map[string]any{
+		"id": "prt_1", "type": "text", "text": "hello", "messageID": "msg_1",
+	})
+
+	h := NewOpenCodeHarvester(db, zerolog.Nop(), dir, wsHash)
+	if harvested, _, errCount := h.HarvestAll(ctx, nil); harvested != 1 || errCount != 0 {
+		t.Fatalf("first cycle: harvested=%d errCount=%d, want 1/0 (source path must be storable)", harvested, errCount)
+	}
+	assertStorableDoc(t, q, sanitizeID(sessionFile), wsHash)
 	if harvested, skipped, errCount := h.HarvestAll(ctx, nil); harvested != 0 || skipped != 1 || errCount != 0 {
 		t.Errorf("second cycle: harvested=%d skipped=%d errCount=%d, want 0/1/0 (dedup)", harvested, skipped, errCount)
 	}
