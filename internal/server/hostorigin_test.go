@@ -320,6 +320,11 @@ func TestBodylessActionsRequireSameOrigin(t *testing.T) {
 		{"cross-site fetch metadata", map[string]string{"Sec-Fetch-Site": "cross-site"}, true},
 		{"same-site fetch metadata", map[string]string{"Sec-Fetch-Site": "same-site"}, true},
 		{"ui header waives the check", map[string]string{"Sec-Fetch-Site": "cross-site", "X-Requested-With": "nano-brain-ui"}, false},
+		// The standalone dashboard's proxy rewrites Host to the daemon's and
+		// forwards the browser's Origin from its own port; it identifies itself
+		// with this header instead.
+		{"dashboard proxy", map[string]string{"Origin": "http://localhost:4321", "Sec-Fetch-Site": "same-origin", "X-Requested-With": "nano-brain-dashboard"}, false},
+		{"other port, unknown requested-with", map[string]string{"Origin": "http://localhost:4321", "Sec-Fetch-Site": "same-origin", "X-Requested-With": "something-else"}, true},
 	}
 	for _, path := range []string{"/api/harvest", "/api/reload-config"} {
 		for _, tt := range tests {

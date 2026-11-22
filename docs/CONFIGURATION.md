@@ -100,7 +100,7 @@ Fixed, not configurable:
 | `server.auth.users` | []object | `[]` | Basic Auth users (username + bcrypt hash). When auth is enabled, startup fails on an invalid entry |
 | `server.auth.users[].username` | string | — | Username. Must be non-empty, unique, without leading or trailing whitespace, and must not contain `:` |
 | `server.auth.users[].password_hash` | string | — | bcrypt hash of password. Must be a complete bcrypt hash, and every user must use the same bcrypt cost; generate one with `nano-brain auth hash <password>` |
-| `server.auth.bypass_paths` | []string | `["/health"]` | Paths that skip auth. On a non-loopback bind, startup prints a warning for every entry other than `/health` and `/api/openapi.json` |
+| `server.auth.bypass_paths` | []string | `["/health", "/api/openapi.json"]` | Paths that skip auth. On a non-loopback bind, startup prints a warning for every entry other than `/health` and `/api/openapi.json` |
 
 ---
 

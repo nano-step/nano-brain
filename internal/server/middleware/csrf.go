@@ -23,7 +23,7 @@ var loopbackHosts = map[string]bool{
 // browser-initiated requests while allowing CLI/curl/MCP (no Origin header).
 //
 // 7-step rules (first match wins):
-//  1. X-Requested-With: nano-brain-ui → ALLOW
+//  1. X-Requested-With: nano-brain-ui or nano-brain-dashboard → ALLOW
 //  2. Both Origin and Referer absent → ALLOW (CLI/curl/MCP)
 //  3. Origin: null → REJECT 403
 //  4. Origin present + host matches boundAddr or the request's Host → ALLOW
@@ -51,7 +51,7 @@ func CSRF(boundAddr string) echo.MiddlewareFunc {
 			}
 
 			// Rule 1: X-Requested-With header
-			if c.Request().Header.Get("X-Requested-With") == "nano-brain-ui" {
+			if trustedClientHeader(c.Request()) {
 				return next(c)
 			}
 
@@ -99,15 +99,16 @@ func CSRF(boundAddr string) echo.MiddlewareFunc {
 // body, where CSRF's leniency towards any loopback port (rule 4) would let a
 // page served from another local port trigger the action. It rejects with 403
 // a request whose Sec-Fetch-Site is neither same-origin nor none, and one
-// whose Origin is not exactly the request's own Host. Clients that send
-// neither header (CLI, curl) pass. Apply it behind CSRF, not instead of it.
+// whose Origin is not exactly the request's own Host — such as the standalone
+// dashboard's proxy, which rewrites Host to the daemon's while forwarding the
+// browser's Origin; the dashboard identifies itself with X-Requested-With
+// instead. Clients that send neither header (CLI, curl) pass. Apply it behind
+// CSRF, not instead of it.
 func SameOrigin() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			req := c.Request()
-			// A cross-origin page cannot set a custom header without a
-			// preflight, and preflights get no CORS headers here.
-			if req.Header.Get("X-Requested-With") == "nano-brain-ui" {
+			if trustedClientHeader(req) {
 				return next(c)
 			}
 			if site := req.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
@@ -119,6 +120,20 @@ func SameOrigin() echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+// trustedClientHeader reports whether the request carries the documented
+// X-Requested-With value of a first-party client: the embedded UI
+// (nano-brain-ui) or the standalone dashboard (nano-brain-dashboard). The
+// server sends no CORS headers, so a cross-origin page cannot set this custom
+// header without a preflight that already fails — the fixed value is not a
+// secret and waiving it does not weaken the origin checks.
+func trustedClientHeader(r *http.Request) bool {
+	switch r.Header.Get("X-Requested-With") {
+	case "nano-brain-ui", "nano-brain-dashboard":
+		return true
+	}
+	return false
 }
 
 func extractHost(raw string) string {
