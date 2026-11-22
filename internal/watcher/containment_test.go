@@ -342,12 +342,12 @@ func (q *purgeTrackingQuerier) seed(path string) {
 	q.sourcePathHash[path] = "stale-hash"
 }
 
-func (q *purgeTrackingQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
+func (q *purgeTrackingQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error) {
 	id, ok := q.idByPath[arg.SourcePath]
 	if !ok {
-		return sqlc.Document{}, sql.ErrNoRows
+		return sqlc.DocumentView{}, sql.ErrNoRows
 	}
-	return sqlc.Document{ID: id, ContentHash: q.sourcePathHash[arg.SourcePath]}, nil
+	return sqlc.DocumentView{ID: id, ContentHash: q.sourcePathHash[arg.SourcePath]}, nil
 }
 
 func (q *purgeTrackingQuerier) DeleteChunksByDocumentID(_ context.Context, arg sqlc.DeleteChunksByDocumentIDParams) error {
