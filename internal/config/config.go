@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/knadh/koanf/v2"
 	"github.com/knadh/koanf/parsers/yaml"
@@ -457,6 +458,15 @@ var bcryptHashShape = regexp.MustCompile(`^\$2[abxy]?\$[0-9]{2}\$[./A-Za-z0-9]{5
 // WWW-Authenticate realm parameter without escaping.
 var validRealm = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
 
+// maxBcryptCost is the highest password_hash cost accepted at startup.
+const maxBcryptCost = 14
+
+// isControlOrFormat reports whether r is a control (Cc) or format (Cf)
+// character: NUL, newline, zero-width space, BOM and the like.
+func isControlOrFormat(r rune) bool {
+	return unicode.In(r, unicode.Cc, unicode.Cf)
+}
+
 // splitCommaList parses a comma-separated env value (NANO_BRAIN_AUTH_TOKENS,
 // NANO_BRAIN_SERVER_ALLOWED_HOSTS), dropping surrounding whitespace and empty
 // entries.
@@ -557,6 +567,8 @@ func validate(cfg *Config) error {
 				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not be empty", i))
 			case strings.TrimSpace(u.Username) != u.Username:
 				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not start or end with whitespace", i))
+			case strings.ContainsFunc(u.Username, isControlOrFormat):
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not contain control or invisible characters", i))
 			case strings.Contains(u.Username, ":"):
 				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not contain ':' (Basic credentials are split on the first colon, so it could never log in)", i))
 			case seenUsers[u.Username]:
@@ -571,6 +583,11 @@ func validate(cfg *Config) error {
 			if err != nil || !bcryptHashShape.MatchString(u.PasswordHash) {
 				errs = append(errs, fmt.Errorf("server.auth.users[%d].password_hash is not a valid bcrypt hash (generate one with: nano-brain auth hash <password>)", i))
 				continue
+			}
+			// The same bcrypt work is done for an unknown username, so anyone
+			// who can reach the port can make the server pay this cost.
+			if cost > maxBcryptCost {
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].password_hash has bcrypt cost %d; costs above %d make every login attempt, including unauthenticated ones, very slow", i, cost, maxBcryptCost))
 			}
 			// An unknown username is compared against the first user's hash.
 			// With one cost for everybody, no response time says whether a

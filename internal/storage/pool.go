@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,7 +47,13 @@ func ClosePool(pool *pgxpool.Pool) {
 	pool.Close()
 }
 
+// keywordPassword matches the password of a keyword/value DSN
+// (host=... password=secret, value optionally single-quoted with backslash
+// escapes) and a password= query parameter of a URL DSN.
+var keywordPassword = regexp.MustCompile(`(?i)\b(password\s*=\s*)('(?:[^'\\]|\\.)*'|[^\s&]+)`)
+
 func maskPassword(dsn string) string {
+	dsn = keywordPassword.ReplaceAllString(dsn, "${1}***")
 	for i, c := range dsn {
 		if c == '@' {
 			for j := i - 1; j >= 0; j-- {

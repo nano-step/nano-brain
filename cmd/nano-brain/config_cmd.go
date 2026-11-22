@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/config"
 )
@@ -70,14 +71,47 @@ func runConfigCheck(configPath string, jsonFlag bool) {
 	runDoctorCmd(args, configPath)
 }
 
+var (
+	maskPostgresPassword = regexp.MustCompile(`(postgres(?:ql)?://[^:]+:)([^@]+)(@)`)
+	maskAPIKey           = regexp.MustCompile(`(api_key:\s*).+`)
+	maskPasswordHash     = regexp.MustCompile(`(password_hash:\s*).+`)
+	maskDSNPassword      = regexp.MustCompile(`(?i)\b(password\s*=\s*)('(?:[^'\\]|\\.)*'|[^\s&"]+)`)
+	maskURL              = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'` + "`" + `]+`)
+	tokensKey            = regexp.MustCompile(`^(\s*(?:-\s+)?["']?tokens["']?\s*:)\s*(.*)$`)
+	tokensItem           = regexp.MustCompile(`^(\s*-\s+)\S.*$`)
+)
+
+// maskSensitive hides credentials in config YAML, one line at a time: API
+// keys, password hashes, auth tokens, DSN passwords, and the userinfo and
+// credential query parameters of any URL.
 func maskSensitive(s string) string {
-	re := regexp.MustCompile(`(postgres(?:ql)?://[^:]+:)([^@]+)(@)`)
-	s = re.ReplaceAllString(s, "${1}***${3}")
-	re2 := regexp.MustCompile(`(voyage_api_key:\s*).+`)
-	s = re2.ReplaceAllString(s, "${1}***")
-	re3 := regexp.MustCompile(`(api_key:\s*).+`)
-	s = re3.ReplaceAllString(s, "${1}***")
-	return s
+	lines := strings.Split(s, "\n")
+	inTokens := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if m := tokensKey.FindStringSubmatch(line); m != nil {
+			// "tokens:" opens a block list; "tokens: [a, b]" carries the
+			// values on the same line.
+			inTokens = m[2] == "" || strings.HasPrefix(m[2], "#")
+			if !inTokens {
+				lines[i] = m[1] + " ***"
+			}
+			continue
+		}
+		if inTokens && trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			if tokensItem.MatchString(line) {
+				lines[i] = tokensItem.ReplaceAllString(line, "${1}***")
+				continue
+			}
+			inTokens = false
+		}
+		line = maskPostgresPassword.ReplaceAllString(line, "${1}***${3}")
+		line = maskAPIKey.ReplaceAllString(line, "${1}***")
+		line = maskPasswordHash.ReplaceAllString(line, "${1}***")
+		line = maskDSNPassword.ReplaceAllString(line, "${1}***")
+		lines[i] = maskURL.ReplaceAllStringFunc(line, config.RedactURLCredentials)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func configToMap(cfg *config.Config, configPath string) map[string]interface{} {
@@ -92,7 +126,7 @@ func configToMap(cfg *config.Config, configPath string) map[string]interface{} {
 		},
 		"embedding": map[string]interface{}{
 			"provider":    cfg.Embedding.Provider,
-			"url":         cfg.Embedding.URL,
+			"url":         config.RedactURLCredentials(cfg.Embedding.URL),
 			"model":       cfg.Embedding.Model,
 			"concurrency": cfg.Embedding.Concurrency,
 		},
@@ -113,7 +147,7 @@ func printConfigDefaults(cfg *config.Config) {
 	fmt.Printf("server:\n  host: %s\n  port: %d\n\n", cfg.Server.Host, cfg.Server.Port)
 	fmt.Printf("database:\n  url: %s\n\n", maskSensitive(cfg.Database.URL))
 	fmt.Printf("embedding:\n  provider: %s\n  url: %s\n  model: %s\n  concurrency: %d\n\n",
-		cfg.Embedding.Provider, cfg.Embedding.URL, cfg.Embedding.Model, cfg.Embedding.Concurrency)
+		cfg.Embedding.Provider, config.RedactURLCredentials(cfg.Embedding.URL), cfg.Embedding.Model, cfg.Embedding.Concurrency)
 	fmt.Printf("search:\n  rrf_k: %.0f\n  limit: %d\n\n", cfg.Search.RrfK, cfg.Search.Limit)
 	fmt.Printf("logging:\n  level: %s\n", cfg.Logging.Level)
 }

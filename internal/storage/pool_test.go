@@ -49,6 +49,30 @@ func TestMaskPassword(t *testing.T) {
 			in:   "not-a-url",
 			want: "not-a-url",
 		},
+		{
+			in:   "host=localhost user=nb password=hunter2 dbname=db",
+			want: "host=localhost user=nb password=*** dbname=db",
+		},
+		{
+			in:   "host=localhost password='hun ter\\'2' dbname=db",
+			want: "host=localhost password=*** dbname=db",
+		},
+		{
+			in:   "host=localhost PASSWORD = hunter2",
+			want: "host=localhost PASSWORD = ***",
+		},
+		{
+			in:   "password=hunter2",
+			want: "password=***",
+		},
+		{
+			in:   "postgres://localhost:5432/db?user=nb&password=hunter2&sslmode=disable",
+			want: "postgres://localhost:5432/db?user=nb&password=***&sslmode=disable",
+		},
+		{
+			in:   "host=localhost user=nb dbname=db",
+			want: "host=localhost user=nb dbname=db",
+		},
 	}
 
 	for _, tc := range cases {

@@ -490,7 +490,7 @@ func startServer(configPath string) {
 	if cfg.Embedding.Provider != "" {
 		e, embedErr := embed.NewFromConfig(cfg.Embedding)
 		if embedErr != nil {
-			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", cfg.Embedding.URL).Msg("embedding provider init failed")
+			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", config.RedactURLCredentials(cfg.Embedding.URL)).Msg("embedding provider init failed")
 		} else {
 			embedder = e
 			if cfg.Server.ServeOnly {
