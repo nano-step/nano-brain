@@ -33,11 +33,12 @@ func persistRawFallback(
 	metadata map[string]any,
 	enqueuer ChunkEnqueuer,
 ) (chunkCount int, err error) {
-	metaBytes, _ := json.Marshal(metadata)
+	metaBytes, _ := json.Marshal(sanitizeMetadata(metadata))
 	meta := pqtype.NullRawMessage{RawMessage: metaBytes, Valid: true}
 
+	md = sanitizeText(md)
 	chunks := chunk.Split(md, chunk.DefaultConfig())
-	params := sqlc.UpsertDocumentBySourcePathParams{
+	params := sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: workspace,
 		ContentHash:   contentHash,
 		Title:         title,
@@ -46,7 +47,7 @@ func persistRawFallback(
 		Collection:    "sessions",
 		Tags:          tags,
 		Metadata:      meta,
-	}
+	})
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

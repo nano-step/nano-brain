@@ -213,7 +213,11 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 			wsCache[worktree] = wsHash
 		}
 
-		sourcePath := "summary://opencode/" + sess.ID
+		// sess.ID stays raw for the SQLite message lookup; everything that
+		// reaches Postgres (source path, title, metadata) uses the sanitized id
+		// so the dedup lookup and the later write agree on one source path.
+		sessionID := sanitizeID(sess.ID)
+		sourcePath := "summary://opencode/" + sessionID
 		existing, lookupErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    sourcePath,
 			WorkspaceHash: wsHash,
@@ -236,19 +240,16 @@ func (h *OpenCodeSQLiteHarvester) HarvestAll(ctx context.Context, enqueuer Chunk
 
 		md := renderSQLiteMarkdown(sess, msgs)
 
-		title := sess.Title
-		if title == "" {
-			title = "OpenCode session " + sess.ID[:8]
-		}
+		title := fallbackSessionTitle(sess)
 
 		if h.summarizer != nil {
-			smeta := SummaryMeta{
+			smeta := sanitizeSummaryMeta(SummaryMeta{
 				Source:        "opencode",
-				SessionID:     sess.ID,
+				SessionID:     sessionID,
 				Title:         title,
 				CreatedAt:     sess.CreatedAt,
 				WorkspaceHash: wsHash,
-			}
+			})
 			if sumErr := h.summarizer.SummarizeAndPersist(ctx, md, smeta); sumErr != nil {
 				h.logger.Warn().Err(sumErr).Str("session", sess.ID).Msg("summarization failed, falling back to raw")
 				if fbErr := h.writeRawFallback(ctx, sess, md, wsHash, title, sourcePath, len(msgs), enqueuer); fbErr != nil {
@@ -300,6 +301,22 @@ func (h *OpenCodeSQLiteHarvester) dbStamp() string {
 		return ""
 	}
 	return fmt.Sprintf("%d-%d", info.ModTime().UnixNano(), info.Size())
+}
+
+// fallbackSessionTitle derives the document title when a session has none:
+// "OpenCode session " + the first 8 bytes of its id — guarded, because ids
+// shorter than 8 bytes exist (pre-existing panic site). The byte cut may
+// split a multi-byte rune; sanitizeDocParams repairs it to U+FFFD at the
+// persistence boundary.
+func fallbackSessionTitle(sess SqSession) string {
+	if sess.Title != "" {
+		return sess.Title
+	}
+	id := sess.ID
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	return "OpenCode session " + id
 }
 
 type SqSession struct {
@@ -461,12 +478,6 @@ func (h *OpenCodeSQLiteHarvester) listMessages(ctx context.Context, sqdb *sql.DB
 	return msgs, nil
 }
 
-// sanitizeText removes characters that PostgreSQL UTF-8 encoding rejects,
-// specifically null bytes (0x00) which cause "invalid byte sequence" errors.
-func sanitizeText(s string) string {
-	return strings.ReplaceAll(s, "\x00", "")
-}
-
 func renderSQLiteMarkdown(sess SqSession, msgs []sqMessage) string {
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -485,7 +496,7 @@ func renderSQLiteMarkdown(sess SqSession, msgs []sqMessage) string {
 		b.WriteString(sanitizeText(msg.content))
 		b.WriteString("\n")
 	}
-	return b.String()
+	return sanitizeText(b.String())
 }
 
 // writeRawFallback persists raw rendered markdown at the unified summary:// source_path
@@ -506,19 +517,20 @@ func (h *OpenCodeSQLiteHarvester) writeRawFallback(
 	messageCount int,
 	enqueuer ChunkEnqueuer,
 ) error {
+	md = sanitizeText(md)
 	sum := sha256.Sum256([]byte(md))
 	contentHash := hex.EncodeToString(sum[:])
 
-	meta, _ := marshalJSON(map[string]any{
+	meta, _ := marshalJSON(sanitizeMetadata(map[string]any{
 		"source":        "opencode",
 		"session_id":    sess.ID,
 		"message_count": messageCount,
 		"created_at":    sess.CreatedAt.Format(time.RFC3339),
 		"fallback":      true,
-	})
+	}))
 
 	chunks := chunk.Split(md, chunk.DefaultConfig())
-	params := sqlc.UpsertDocumentBySourcePathParams{
+	params := sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: wsHash,
 		ContentHash:   contentHash,
 		Title:         title,
@@ -527,7 +539,7 @@ func (h *OpenCodeSQLiteHarvester) writeRawFallback(
 		Collection:    "sessions",
 		Tags:          []string{"opencode", "session", "fallback"},
 		Metadata:      pqtype.NullRawMessage{RawMessage: meta, Valid: true},
-	}
+	})
 
 	tx, err := h.pgDB.BeginTx(ctx, nil)
 	if err != nil {

@@ -78,7 +78,10 @@ func RenderMarkdown(sess NormalizedSession) string {
 		b.WriteString(sanitizeText(msg.Content))
 		b.WriteString("\n")
 	}
-	return b.String()
+	// Header fields (session id, branch, cwd, title, role, tool name) are
+	// session-derived too, so the whole document is sanitized, not only the
+	// message bodies. Idempotent with the per-message pass above.
+	return sanitizeText(b.String())
 }
 
 // itoa is a minimal int-to-string helper to avoid importing strconv or fmt.

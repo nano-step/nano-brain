@@ -122,11 +122,14 @@ func (h *PiHarvester) harvestSession(ctx context.Context, sessionFile string, en
 		return harvestSkipped, nil // empty file
 	}
 	var header piSessionHeader
-	if err := json.Unmarshal(scanner.Bytes(), &header); err != nil || header.ID == "" {
+	err = json.Unmarshal(scanner.Bytes(), &header)
+	// The id reaches the source path, the title and the JSONB metadata, and a
+	// JSON string may carry "\u0000". It is sanitized once here so the dedup
+	// lookup below and the later write use the same source path.
+	sessionID := sanitizeID(header.ID)
+	if err != nil || sessionID == "" {
 		return harvestSkipped, fmt.Errorf("parse session header: %w", err)
 	}
-
-	sessionID := header.ID
 	sourcePath := piSourcePath(sessionID)
 
 	queries := sqlc.New(h.db)
@@ -143,13 +146,13 @@ func (h *PiHarvester) harvestSession(ctx context.Context, sessionFile string, en
 		if dw, ok := h.summarizer.(interface {
 			EnsureSummaryOnDisk(context.Context, string, SummaryMeta)
 		}); ok {
-			dw.EnsureSummaryOnDisk(ctx, existing.Content, SummaryMeta{
+			dw.EnsureSummaryOnDisk(ctx, existing.Content, sanitizeSummaryMeta(SummaryMeta{
 				Source:        "pi",
 				SessionID:     sessionID,
 				Title:         "Pi Session " + sessionID,
 				CreatedAt:     existing.CreatedAt,
 				WorkspaceHash: h.workspace,
-			})
+			}))
 		}
 		return harvestSkipped, nil
 	}
@@ -182,13 +185,13 @@ func (h *PiHarvester) harvestSession(ctx context.Context, sessionFile string, en
 	title := "Pi Session " + sessionID
 
 	if h.summarizer != nil {
-		smeta := SummaryMeta{
+		smeta := sanitizeSummaryMeta(SummaryMeta{
 			Source:        "pi",
 			SessionID:     sessionID,
 			Title:         title,
 			CreatedAt:     createdAt,
 			WorkspaceHash: h.workspace,
-		}
+		})
 		if sumErr := h.summarizer.SummarizeAndPersist(ctx, md, smeta); sumErr != nil {
 			h.logger.Warn().Err(sumErr).Str("session", sessionID).Msg("summarization failed, falling back to raw")
 			if fbErr := h.writeRawFallback(ctx, sessionID, md, contentHash, title, sourcePath, len(events), enqueuer); fbErr != nil {

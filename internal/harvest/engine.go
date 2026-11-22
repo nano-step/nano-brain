@@ -128,6 +128,12 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 				sess.WorkspaceHash = wsHash
 			}
 
+			// Ids reach source paths, titles and JSONB metadata. Sanitizing them
+			// once here keeps the dedup lookup, the parent lookup and the later
+			// write on the same source path.
+			sess.SessionID = sanitizeID(sess.SessionID)
+			sess.ParentID = sanitizeID(sess.ParentID)
+
 			sourcePath := "summary://" + e.source.Name() + "/" + sess.SessionID
 
 			existing, lookupErr := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
@@ -154,13 +160,13 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 				if dw, ok := e.summarizer.(interface {
 					EnsureSummaryOnDisk(context.Context, string, SummaryMeta)
 				}); ok {
-					dw.EnsureSummaryOnDisk(ctx, existing.Content, SummaryMeta{
+					dw.EnsureSummaryOnDisk(ctx, existing.Content, sanitizeSummaryMeta(SummaryMeta{
 						Source:        e.source.Name(),
 						SessionID:     sess.SessionID,
 						Title:         sess.Title,
 						CreatedAt:     existing.CreatedAt,
 						WorkspaceHash: wsHash,
-					})
+					}))
 				}
 				skipped++
 				continue
@@ -187,7 +193,7 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 			}
 
 			if e.summarizer != nil {
-				smeta := SummaryMeta{
+				smeta := sanitizeSummaryMeta(SummaryMeta{
 					Source:        e.source.Name(),
 					SessionID:     sess.SessionID,
 					Title:         sess.Title,
@@ -197,7 +203,7 @@ func (e *Engine) HarvestAll(ctx context.Context, enqueuer ChunkEnqueuer) (harves
 					Branch:        sess.Branch,
 					Cwd:           sess.Cwd,
 					Tags:          ticketTags,
-				}
+				})
 				if sumErr := e.summarizer.SummarizeAndPersist(ctx, md, smeta); sumErr != nil {
 					e.logger.Warn().Err(sumErr).Str("session", sess.SessionID).Msg("engine: summarization failed, falling back to raw")
 					if fbErr := e.writeRawFallback(ctx, sess, md, contentHash, wsHash, sourcePath, ticketTags, enqueuer); fbErr != nil {
@@ -239,12 +245,12 @@ func (e *Engine) writeRawFallback(
 	ticketTags []string,
 	enqueuer ChunkEnqueuer,
 ) error {
-	metaBytes, _ := marshalJSON(map[string]any{
+	metaBytes, _ := marshalJSON(sanitizeMetadata(map[string]any{
 		"source":        e.source.Name(),
 		"session_id":    sess.SessionID,
 		"message_count": len(sess.Messages),
 		"fallback":      true,
-	})
+	}))
 
 	title := sess.Title
 	if title == "" {
@@ -254,8 +260,9 @@ func (e *Engine) writeRawFallback(
 	baseTags := []string{e.source.Name(), "session", "fallback"}
 	tags := append(baseTags, ticketTags...)
 
+	md = sanitizeText(md)
 	chunks := chunk.Split(md, chunk.DefaultConfig())
-	params := sqlc.UpsertDocumentBySourcePathParams{
+	params := sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: wsHash,
 		ContentHash:   contentHash,
 		Title:         title,
@@ -264,7 +271,7 @@ func (e *Engine) writeRawFallback(
 		Collection:    "sessions",
 		Tags:          tags,
 		Metadata:      pqtype.NullRawMessage{RawMessage: metaBytes, Valid: true},
-	}
+	})
 
 	tx, err := e.pgDB.BeginTx(ctx, nil)
 	if err != nil {
