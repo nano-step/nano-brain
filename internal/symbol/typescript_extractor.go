@@ -3,6 +3,7 @@ package symbol
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
@@ -106,7 +107,9 @@ func appendJSTSSymbols(
 		if nameNode == nil || declNode == nil {
 			continue
 		}
-		if valNode != nil && !isFunctionInitializer(bt, lang, valNode) {
+		declType := bt.NodeType(declNode)
+		allowHOF := declType == "lexical_declaration" || declType == "variable_declaration"
+		if valNode != nil && !isFunctionInitializer(bt, lang, valNode, allowHOF) {
 			continue
 		}
 
@@ -115,10 +118,11 @@ func appendJSTSSymbols(
 		key := string(kind) + ":" + name
 		rank := symbolDeclRank(bt, declNode)
 
+		sigNode := declNode
 		endByte := declNode.EndByte()
-		declType := bt.NodeType(declNode)
-		if valNode != nil && (declType == "lexical_declaration" || declType == "variable_declaration") && declNode.NamedChildCount() > 1 {
+		if valNode != nil && allowHOF && hasMultipleVariableDeclarators(bt, declNode) {
 			if declarator := valNode.Parent(); declarator != nil {
+				sigNode = declarator
 				endByte = declarator.EndByte()
 			}
 		}
@@ -129,7 +133,7 @@ func appendJSTSSymbols(
 			File:      filePath,
 			Line:      lineForByte(content, nameNode.StartByte()),
 			EndLine:   lineForByte(content, endByte),
-			Signature: firstLine(bt.NodeText(declNode)),
+			Signature: jsTSSymbolSignature(bt, content, sigNode, nameNode),
 			Language:  language,
 		}
 
@@ -161,20 +165,63 @@ func jsTSNodeKind(bt *gotreesitter.BoundTree, node *gotreesitter.Node) Kind {
 	return KindFunction
 }
 
+func hasMultipleVariableDeclarators(bt *gotreesitter.BoundTree, declNode *gotreesitter.Node) bool {
+	count := 0
+	for i := 0; i < int(declNode.NamedChildCount()); i++ {
+		if c := declNode.NamedChild(i); c != nil && bt.NodeType(c) == "variable_declarator" {
+			count++
+			if count > 1 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func jsTSSymbolSignature(bt *gotreesitter.BoundTree, content []byte, sigNode, nameNode *gotreesitter.Node) string {
+	sigStart := sigNode.StartByte()
+	sigEnd := sigNode.EndByte()
+	nameStart := nameNode.StartByte()
+	if lineForByte(content, sigStart) < lineForByte(content, nameStart) &&
+		int(sigEnd) <= len(content) && sigStart <= nameStart && nameStart <= sigEnd {
+		lineStart := sigStart
+		for i := int(nameStart); i > int(sigStart); i-- {
+			if content[i-1] == '\n' {
+				lineStart = uint32(i)
+				break
+			}
+		}
+		lineEnd := sigEnd
+		for i := int(nameStart); i < int(sigEnd); i++ {
+			if content[i] == '\n' {
+				lineEnd = uint32(i)
+				break
+			}
+		}
+		return strings.TrimSpace(string(content[lineStart:lineEnd]))
+	}
+	return firstLine(bt.NodeText(sigNode))
+}
+
 func symbolDeclRank(bt *gotreesitter.BoundTree, declNode *gotreesitter.Node) int {
 	switch bt.NodeType(declNode) {
 	case "function_declaration", "generator_function_declaration",
 		"lexical_declaration", "variable_declaration",
 		"class_declaration", "interface_declaration", "type_alias_declaration", "enum_declaration":
-		if isModuleScopeNode(bt, declNode) {
+		if atModule, exported := moduleScopeInfo(bt, declNode); atModule {
+			if exported {
+				return 5
+			}
 			return 4
 		}
 		return 2
 	case "method_definition", "public_field_definition", "field_definition":
 		if parent := declNode.Parent(); parent != nil && bt.NodeType(parent) == "class_body" {
 			if classNode := parent.Parent(); classNode != nil {
-				ct := bt.NodeType(classNode)
-				if (ct == "class_declaration" || ct == "abstract_class_declaration" || ct == "class") && isModuleScopeNode(bt, classNode) {
+				if atModule, exported := classScopeInfo(bt, classNode); atModule {
+					if exported {
+						return 5
+					}
 					return 4
 				}
 			}
@@ -192,18 +239,86 @@ func symbolDeclRank(bt *gotreesitter.BoundTree, declNode *gotreesitter.Node) int
 	return 2
 }
 
-func isModuleScopeNode(bt *gotreesitter.BoundTree, node *gotreesitter.Node) bool {
-	for p := node.Parent(); p != nil; p = p.Parent() {
+func moduleScopeInfo(bt *gotreesitter.BoundTree, node *gotreesitter.Node) (atModuleScope bool, exported bool) {
+	allExported := true
+	cur := node
+	for cur != nil {
+		p := cur.Parent()
+		if p == nil {
+			return false, false
+		}
+		if bt.NodeType(p) == "export_statement" {
+			cur = p
+			p = cur.Parent()
+			if p == nil {
+				return false, false
+			}
+		} else {
+			allExported = false
+		}
+
 		switch bt.NodeType(p) {
 		case "program":
-			return true
-		case "export_statement":
-			continue
+			return true, allExported
+		case "statement_block":
+			ns := p.Parent()
+			for ns != nil && (bt.NodeType(ns) == "internal_module" || bt.NodeType(ns) == "module") {
+				cur = ns
+				if next := ns.Parent(); next != nil && (bt.NodeType(next) == "internal_module" || bt.NodeType(next) == "module") {
+					ns = next
+					continue
+				}
+				break
+			}
+			if cur != ns || ns == nil {
+				return false, false
+			}
 		default:
-			return false
+			return false, false
 		}
 	}
-	return false
+	return false, false
+}
+
+func classScopeInfo(bt *gotreesitter.BoundTree, classNode *gotreesitter.Node) (atModuleScope bool, exported bool) {
+	ct := bt.NodeType(classNode)
+	if ct != "class_declaration" && ct != "abstract_class_declaration" && ct != "class" {
+		return false, false
+	}
+	if atModule, exp := moduleScopeInfo(bt, classNode); atModule {
+		return true, exp
+	}
+	if ct != "class" {
+		return false, false
+	}
+	cur := classNode
+	for steps := 0; steps < 16 && cur != nil; steps++ {
+		p := cur.Parent()
+		if p == nil {
+			return false, false
+		}
+		switch bt.NodeType(p) {
+		case "parenthesized_expression", "satisfies_expression", "as_expression", "type_assertion", "non_null_expression":
+			cur = p
+		case "variable_declarator":
+			if decl := p.Parent(); decl != nil {
+				dt := bt.NodeType(decl)
+				if dt == "lexical_declaration" || dt == "variable_declaration" {
+					return moduleScopeInfo(bt, decl)
+				}
+			}
+			return false, false
+		case "assignment_expression":
+			if stmt := p.Parent(); stmt != nil && bt.NodeType(stmt) == "expression_statement" {
+				atMod, _ := moduleScopeInfo(bt, stmt)
+				return atMod, false
+			}
+			return false, false
+		default:
+			return false, false
+		}
+	}
+	return false, false
 }
 
 func hasEnclosingCallableOrClass(bt *gotreesitter.BoundTree, node *gotreesitter.Node) bool {
@@ -218,9 +333,12 @@ func hasEnclosingCallableOrClass(bt *gotreesitter.BoundTree, node *gotreesitter.
 	return false
 }
 
-const maxHOFWrapperDepth = 4
+const (
+	maxHOFWrapperDepth    = 4
+	maxHOFCalleeChainStep = 8
+)
 
-func isFunctionInitializer(bt *gotreesitter.BoundTree, lang *gotreesitter.Language, valNode *gotreesitter.Node) bool {
+func isFunctionInitializer(bt *gotreesitter.BoundTree, lang *gotreesitter.Language, valNode *gotreesitter.Node, allowHOF bool) bool {
 	n := unwrapJSExpr(bt, valNode)
 	if n == nil {
 		return false
@@ -229,7 +347,7 @@ func isFunctionInitializer(bt *gotreesitter.BoundTree, lang *gotreesitter.Langua
 	if isDirectJSFunctionNode(nt) {
 		return true
 	}
-	if nt == "call_expression" {
+	if allowHOF && nt == "call_expression" {
 		return isHOFWrappedFunction(bt, lang, n, 0)
 	}
 	return false
@@ -239,21 +357,44 @@ func unwrapJSExpr(bt *gotreesitter.BoundTree, n *gotreesitter.Node) *gotreesitte
 	for steps := 0; steps < 16 && n != nil; steps++ {
 		switch bt.NodeType(n) {
 		case "parenthesized_expression", "satisfies_expression", "as_expression", "non_null_expression", "instantiation_expression":
-			if n.NamedChildCount() == 0 {
+			next := firstNonCommentNamedChild(bt, n)
+			if next == nil {
 				return n
 			}
-			n = n.NamedChild(0)
+			n = next
 		case "type_assertion":
-			cnt := int(n.NamedChildCount())
-			if cnt == 0 {
+			next := lastNonCommentNamedChild(bt, n)
+			if next == nil {
 				return n
 			}
-			n = n.NamedChild(cnt - 1)
+			n = next
 		default:
 			return n
 		}
 	}
 	return n
+}
+
+func isJSCommentNode(nodeType string) bool {
+	return nodeType == "comment" || nodeType == "html_comment"
+}
+
+func firstNonCommentNamedChild(bt *gotreesitter.BoundTree, n *gotreesitter.Node) *gotreesitter.Node {
+	for i := 0; i < int(n.NamedChildCount()); i++ {
+		if c := n.NamedChild(i); c != nil && !isJSCommentNode(bt.NodeType(c)) {
+			return c
+		}
+	}
+	return nil
+}
+
+func lastNonCommentNamedChild(bt *gotreesitter.BoundTree, n *gotreesitter.Node) *gotreesitter.Node {
+	for i := int(n.NamedChildCount()) - 1; i >= 0; i-- {
+		if c := n.NamedChild(i); c != nil && !isJSCommentNode(bt.NodeType(c)) {
+			return c
+		}
+	}
+	return nil
 }
 
 func isDirectJSFunctionNode(nodeType string) bool {
@@ -294,37 +435,42 @@ func isHOFWrappedFunction(bt *gotreesitter.BoundTree, lang *gotreesitter.Languag
 }
 
 func isHOFCallee(bt *gotreesitter.BoundTree, lang *gotreesitter.Language, fnNode *gotreesitter.Node) bool {
-	if fnNode == nil {
-		return false
+	cur := unwrapJSExpr(bt, fnNode)
+	for steps := 0; steps < maxHOFCalleeChainStep && cur != nil; steps++ {
+		switch bt.NodeType(cur) {
+		case "identifier":
+			return !isNonHOFCalleeName(bt.NodeText(cur))
+		case "member_expression":
+			prop := cur.ChildByFieldName("property", lang)
+			if prop == nil || bt.NodeType(prop) != "property_identifier" || isNonHOFCalleeName(bt.NodeText(prop)) {
+				return false
+			}
+			cur = unwrapJSExpr(bt, cur.ChildByFieldName("object", lang))
+		case "call_expression":
+			cur = unwrapJSExpr(bt, cur.ChildByFieldName("function", lang))
+		default:
+			return false
+		}
 	}
-	switch bt.NodeType(fnNode) {
-	case "identifier":
-		switch bt.NodeText(fnNode) {
-		case "setTimeout", "setInterval", "setImmediate", "requestAnimationFrame", "requestIdleCallback", "queueMicrotask":
-			return false
-		default:
-			return true
-		}
-	case "member_expression":
-		obj := fnNode.ChildByFieldName("object", lang)
-		prop := fnNode.ChildByFieldName("property", lang)
-		if obj == nil || prop == nil || bt.NodeType(obj) != "identifier" || bt.NodeType(prop) != "property_identifier" {
-			return false
-		}
-		switch bt.NodeText(prop) {
-		case "map", "flatMap", "filter", "reduce", "reduceRight",
-			"find", "findIndex", "findLast", "findLastIndex",
-			"some", "every", "forEach", "sort", "toSorted",
-			"then", "catch", "finally",
-			"from", "of",
-			"replace", "replaceAll",
-			"parse", "stringify",
-			"addEventListener", "removeEventListener", "subscribe",
-			"transaction", "$transaction":
-			return false
-		default:
-			return true
-		}
+	return false
+}
+
+func isNonHOFCalleeName(name string) bool {
+	switch name {
+	case "setTimeout", "setInterval", "setImmediate", "requestAnimationFrame", "requestIdleCallback", "queueMicrotask",
+		"map", "flatMap", "filter", "reduce", "reduceRight",
+		"find", "findIndex", "findLast", "findLastIndex",
+		"some", "every", "forEach", "sort", "toSorted",
+		"from", "of",
+		"groupBy", "keyBy", "countBy", "sortBy", "orderBy", "uniqBy", "partition",
+		"replace", "replaceAll", "split",
+		"then", "catch", "finally",
+		"parse", "stringify",
+		"transaction", "$transaction",
+		"addEventListener", "removeEventListener", "subscribe",
+		"on", "once", "off", "addListener", "removeListener", "listen",
+		"describe", "it", "test":
+		return true
 	default:
 		return false
 	}

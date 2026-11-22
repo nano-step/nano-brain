@@ -379,3 +379,334 @@ func TestClassFieldArrows_704(t *testing.T) {
 		})
 	}
 }
+
+func TestCurriedAndBuilderHOFsAndScopedBlocking_704(t *testing.T) {
+	reg := newProdSymbolRegistry(t)
+
+	tsxSrc := `export const ConnectedList = connect(mapState)((props: Props) => <div/>);
+export const StyledButton = styled('button')((props: BtnProps) => <button/>);
+export const useCart = create<CartState>()((set) => ({ count: 0 }));
+export const validatedSave = validate(schema)(async (req: Req) => {
+  return req;
+});
+export const getOrders = protectedProcedure.input(schema).query(async ({ input }) => {
+  return input;
+});
+export const healthQuery = t.procedure.query(() => 'ok');
+export const serverLoad = createServerFn({ method: 'GET' }).handler(async () => {
+  return { ok: true };
+});
+export const useCartStore = defineStore('cart', () => {
+  return { items: [] };
+});
+export const doubled = computed(() => count.value * 2);
+
+const winTimer = window.setTimeout(() => {}, 100);
+const globalInterval = globalThis.setInterval(() => {}, 1000);
+const unsub = bus.on('evt', () => {});
+const grouped = Object.groupBy(items, (x: Item) => x.kind);
+const suite = describe('suite', () => {});
+const arrNoise = [1, 2].custom(() => {});
+const cfg = {
+  listener: bus.on('x', () => {}),
+  directHelper: (x: number) => x + 1,
+};
+class NoiseHolder {
+  timer = setTimeout(() => {}, 100);
+  wrappedField = memo(() => {});
+  run() {
+    this.memberUnsub = bus.on('evt', () => {});
+  }
+}
+`
+	syms, err := reg.Extract("src/curried_hof.tsx", []byte(tsxSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/curried_hof.tsx): %v", err)
+	}
+
+	for _, want := range []struct {
+		name    string
+		line    int
+		endLine int
+	}{
+		{name: "ConnectedList", line: 1, endLine: 1},
+		{name: "StyledButton", line: 2, endLine: 2},
+		{name: "useCart", line: 3, endLine: 3},
+		{name: "validatedSave", line: 4, endLine: 6},
+		{name: "getOrders", line: 7, endLine: 9},
+		{name: "healthQuery", line: 10, endLine: 10},
+		{name: "serverLoad", line: 11, endLine: 13},
+		{name: "useCartStore", line: 14, endLine: 16},
+		{name: "doubled", line: 17, endLine: 17},
+	} {
+		got := findSymbol704(syms, want.name, symbol.KindFunction)
+		if got == nil {
+			t.Errorf("missing HOF symbol %q in %+v", want.name, syms)
+			continue
+		}
+		if got.Line != want.line || got.EndLine != want.endLine {
+			t.Errorf("%s span = %d..%d, want %d..%d", want.name, got.Line, got.EndLine, want.line, want.endLine)
+		}
+	}
+
+	if got := findSymbol704(syms, "directHelper", symbol.KindMethod); got == nil {
+		t.Errorf("expected direct object-literal arrow directHelper as KindMethod, got %+v", syms)
+	}
+
+	for _, forbidden := range []string{
+		"winTimer", "globalInterval", "unsub", "grouped", "suite", "arrNoise",
+		"listener", "timer", "wrappedField", "memberUnsub",
+	} {
+		for _, s := range syms {
+			if s.Name == forbidden {
+				t.Errorf("noise symbol %q must not be extracted, got %+v", forbidden, s)
+			}
+		}
+	}
+
+	vueHofSrc := `<template><div>{{ doubled }}</div></template>
+<script setup lang="ts">
+const useCartStore = defineStore('cart', () => {
+  return { items: [] };
+});
+const doubled = computed(() => count.value * 2);
+const unsub = bus.on('evt', () => {});
+</script>
+`
+	vueSyms, err := reg.Extract("src/Cart.vue", []byte(vueHofSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/Cart.vue): %v", err)
+	}
+	if got := findSymbol704(vueSyms, "useCartStore", symbol.KindFunction); got == nil || got.Line != 3 || got.EndLine != 5 {
+		t.Errorf("Cart.vue: useCartStore got %+v, want 3..5 (all=%+v)", got, vueSyms)
+	}
+	if got := findSymbol704(vueSyms, "doubled", symbol.KindFunction); got == nil || got.Line != 6 || got.EndLine != 6 {
+		t.Errorf("Cart.vue: doubled got %+v, want 6..6 (all=%+v)", got, vueSyms)
+	}
+	if got := findSymbol704(vueSyms, "unsub", symbol.KindFunction); got != nil {
+		t.Errorf("Cart.vue: unsub must not be extracted, got %+v", *got)
+	}
+}
+
+func TestUnwrapJSExprSkipsComments_704(t *testing.T) {
+	reg := newProdSymbolRegistry(t)
+
+	tsxOnly := `export const pureSatisfies = (
+  /* leading comment */
+  async (req: Req) => {
+    return req;
+  }
+) satisfies Handler;
+
+export const PureMemo = (/*#__PURE__*/ memo((props: Props) => <div/>));
+
+export const PureCalleeMemo = (/*#__PURE__*/ memo)((props: Props) => <div/>);
+`
+	tsxSyms, err := reg.Extract("src/comments.tsx", []byte(tsxOnly))
+	if err != nil {
+		t.Fatalf("Extract(src/comments.tsx): %v", err)
+	}
+	for _, want := range []struct {
+		name    string
+		line    int
+		endLine int
+	}{
+		{name: "pureSatisfies", line: 1, endLine: 6},
+		{name: "PureMemo", line: 8, endLine: 8},
+		{name: "PureCalleeMemo", line: 10, endLine: 10},
+	} {
+		got := findSymbol704(tsxSyms, want.name, symbol.KindFunction)
+		if got == nil || got.Line != want.line || got.EndLine != want.endLine {
+			t.Errorf("comments.tsx: %s got %+v, want %d..%d (all=%+v)", want.name, got, want.line, want.endLine, tsxSyms)
+		}
+	}
+
+	tsAngleSrc := `export const pureSatisfies = (
+  /* leading comment */
+  async (req: Req) => {
+    return req;
+  }
+) satisfies Handler;
+
+export const angledWithComment = <Handler>( // trailing line comment
+  (req: Req) => {
+    return req;
+  }
+);
+`
+	syms, err := reg.Extract("src/angle_comments.ts", []byte(tsAngleSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/angle_comments.ts): %v", err)
+	}
+	for _, want := range []struct {
+		name    string
+		line    int
+		endLine int
+	}{
+		{name: "pureSatisfies", line: 1, endLine: 6},
+		{name: "angledWithComment", line: 8, endLine: 12},
+	} {
+		got := findSymbol704(syms, want.name, symbol.KindFunction)
+		if got == nil || got.Line != want.line || got.EndLine != want.endLine {
+			t.Errorf("angle_comments.ts: %s got %+v, want %d..%d (all=%+v)", want.name, got, want.line, want.endLine, syms)
+		}
+	}
+}
+
+func TestSignatureDecoratedFieldAndMultiDeclarator_704(t *testing.T) {
+	reg := newProdSymbolRegistry(t)
+
+	tsSrc := `export class FormController {
+  @bound
+  onSubmit = async (e: Event) => {
+    e.preventDefault();
+  };
+}
+
+const TIMEOUT = 5000,
+  fetchWithRetry = async (url: string) => {
+    const res = await fetch(url);
+    return res;
+  };
+`
+	syms, err := reg.Extract("src/form.ts", []byte(tsSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/form.ts): %v", err)
+	}
+
+	onSubmit := findSymbol704(syms, "onSubmit", symbol.KindMethod)
+	if onSubmit == nil {
+		t.Fatalf("missing method onSubmit in %+v", syms)
+	}
+	if onSubmit.Line != 3 || onSubmit.EndLine != 5 {
+		t.Errorf("onSubmit span = %d..%d, want 3..5", onSubmit.Line, onSubmit.EndLine)
+	}
+	if !strings.Contains(onSubmit.Signature, "onSubmit") || onSubmit.Signature == "@bound" {
+		t.Errorf("onSubmit Signature = %q, want signature containing onSubmit (not @bound)", onSubmit.Signature)
+	}
+
+	fetchSym := findSymbol704(syms, "fetchWithRetry", symbol.KindFunction)
+	if fetchSym == nil {
+		t.Fatalf("missing function fetchWithRetry in %+v", syms)
+	}
+	if fetchSym.Line != 9 || fetchSym.EndLine != 12 {
+		t.Errorf("fetchWithRetry span = %d..%d, want 9..12", fetchSym.Line, fetchSym.EndLine)
+	}
+	if !strings.Contains(fetchSym.Signature, "fetchWithRetry") || strings.Contains(fetchSym.Signature, "TIMEOUT") {
+		t.Errorf("fetchWithRetry Signature = %q, want signature containing fetchWithRetry without TIMEOUT", fetchSym.Signature)
+	}
+}
+
+func TestRankingClassExprNamespaceAndExportEdge_704(t *testing.T) {
+	reg := newProdSymbolRegistry(t)
+
+	classExprSrc := `const fallback = { handle: () => 0 };
+
+export const RealController = class {
+  handle = async (req: Req) => {
+    const res = await process(req);
+    return res;
+  };
+};
+`
+	syms, err := reg.Extract("src/class_expr.ts", []byte(classExprSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/class_expr.ts): %v", err)
+	}
+	if got := findSymbol704(syms, "handle", symbol.KindMethod); got == nil || got.Line != 4 || got.EndLine != 7 {
+		t.Errorf("class_expr.ts: handle got %+v, want 4..7 (all=%+v)", got, syms)
+	}
+
+	nsSrc := `function unrelatedHelper() {
+  const foo = () => 1;
+  return foo();
+}
+
+export namespace Orders {
+  export function foo(orderId: string) {
+    const normalized = orderId.trim();
+    return normalized;
+  }
+}
+`
+	nsSyms, err := reg.Extract("src/namespace.ts", []byte(nsSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/namespace.ts): %v", err)
+	}
+	if got := findSymbol704(nsSyms, "foo", symbol.KindFunction); got == nil || got.Line != 7 || got.EndLine != 10 {
+		t.Errorf("namespace.ts: foo got %+v, want 7..10 (all=%+v)", got, nsSyms)
+	}
+
+	exportEdgeSrc := `class noopAdapter {
+  handle() {}
+}
+
+export class OrderController {
+  handle(req: Req) {
+    const ok = validate(req);
+    return ok;
+  }
+}
+`
+	edgeSyms, err := reg.Extract("src/export_edge.ts", []byte(exportEdgeSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/export_edge.ts): %v", err)
+	}
+	if got := findSymbol704(edgeSyms, "handle", symbol.KindMethod); got == nil || got.Line != 6 || got.EndLine != 9 {
+		t.Errorf("export_edge.ts: handle got %+v, want 6..9 (all=%+v)", got, edgeSyms)
+	}
+
+	defaultClassSrc := `const fallback = { handle: () => 0 };
+
+export default class {
+  handle(req: Req) {
+    const ok = validate(req);
+    return ok;
+  }
+}
+`
+	defSyms, err := reg.Extract("src/default_class.ts", []byte(defaultClassSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/default_class.ts): %v", err)
+	}
+	if got := findSymbol704(defSyms, "handle", symbol.KindMethod); got == nil || got.Line != 4 || got.EndLine != 7 {
+		t.Errorf("default_class.ts: handle got %+v, want 4..7 (all=%+v)", got, defSyms)
+	}
+
+	cjsClassSrc := `const fallback = { handle: () => 0 };
+
+module.exports = class {
+  handle(req) {
+    const ok = validate(req);
+    return ok;
+  }
+};
+`
+	cjsSyms, err := reg.Extract("src/cjs_class.js", []byte(cjsClassSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/cjs_class.js): %v", err)
+	}
+	if got := findSymbol704(cjsSyms, "handle", symbol.KindMethod); got == nil || got.Line != 4 || got.EndLine != 7 {
+		t.Errorf("cjs_class.js: handle got %+v, want 4..7 (all=%+v)", got, cjsSyms)
+	}
+
+	dottedNsSrc := `function unrelatedHelper() {
+  const foo = () => 1;
+  return foo();
+}
+
+export namespace Orders.V2 {
+  export function foo(orderId: string) {
+    const normalized = orderId.trim();
+    return normalized;
+  }
+}
+`
+	dottedSyms, err := reg.Extract("src/dotted_ns.ts", []byte(dottedNsSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/dotted_ns.ts): %v", err)
+	}
+	if got := findSymbol704(dottedSyms, "foo", symbol.KindFunction); got == nil || got.Line != 7 || got.EndLine != 10 {
+		t.Errorf("dotted_ns.ts: foo got %+v, want 7..10 (all=%+v)", got, dottedSyms)
+	}
+}
