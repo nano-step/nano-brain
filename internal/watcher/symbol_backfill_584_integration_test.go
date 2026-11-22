@@ -517,15 +517,16 @@ func TestWatcherBackfillKeepsStaleSymbolsWhenBinary(t *testing.T) {
 	}
 }
 
-// TestWatcherBackfillDropsStaleSymbolsWhenExtractorYieldsNone covers the
-// #703 shape: the current extractor emits no symbols for a file that once
-// had them, so re-extraction upserts nothing and the stale doc must be
-// deleted for the backfill to converge.
+// TestWatcherBackfillDropsStaleSymbolsWhenExtractorYieldsNone covers a file
+// that genuinely yields zero symbols (scalar const only) while still carrying
+// a leftover stale symbol doc: re-extraction upserts nothing and the stale doc
+// must be deleted for the backfill to converge.
 func TestWatcherBackfillDropsStaleSymbolsWhenExtractorYieldsNone(t *testing.T) {
 	e := newEnv584(t)
-	narrowPath := e.writeFile(t, "src/narrow.ts", "const f = (p: P) => 1;\n")
+	narrowPath := e.writeFile(t, "src/narrow.ts", "export const VERSION = 1;\n")
 
-	// The file yields no symbols today, so index just the file doc.
+	// Scalar const declarations yield no symbols in TypeScriptExtractor, so only
+	// the parent file doc is indexed.
 	e.start(t)
 	e.waitDoc(t, narrowPath)
 	e.stop(t)

@@ -20,7 +20,7 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/natefinch/lumberjack v2.0.0+incompatible
-	github.com/odvcencio/gotreesitter v0.19.1
+	github.com/odvcencio/gotreesitter v0.57.0
 	github.com/pgvector/pgvector-go v0.2.2
 	github.com/pressly/goose/v3 v3.22.1
 	github.com/rs/zerolog v1.35.1
