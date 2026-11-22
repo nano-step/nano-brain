@@ -98,8 +98,10 @@ func TestIncrementalReindex_SkipsNonRegularFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	// app.js, sub/lib.js and alias.js; not the FIFO, not the link to it.
-	if resp["embedded"] != float64(3) {
-		t.Errorf("embedded = %v, want 3 (the regular files and the alias of one)", resp["embedded"])
+	// Embedding is queued asynchronously now, so the changed files are reported
+	// as files_pending_ingest and embedded stays 0.
+	if resp["files_pending_ingest"] != float64(3) || resp["embedded"] != float64(0) {
+		t.Errorf("files_pending_ingest = %v, embedded = %v; want 3 and 0 (the regular files and the alias of one)", resp["files_pending_ingest"], resp["embedded"])
 	}
 }
 

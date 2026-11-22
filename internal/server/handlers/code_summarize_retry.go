@@ -111,31 +111,35 @@ func RetryCodeSummarize(
 			})
 		}
 
-		// Run the summarizer to reprocess
-		_, _, errs, err := summarizer.RunOnce(ctx, workspace)
-		if err != nil {
-			if errors.Is(err, codesummarize.ErrBudgetExhausted) {
-				return c.JSON(http.StatusOK, RetryResponse{
-					Retried:   len(failuresToRetry),
-					Succeeded: 0,
-					Failed:    len(failuresToRetry),
-					Message:   "daily code summarization budget exhausted",
-				})
-			}
-
+		ids := make([]uuid.UUID, 0, len(failuresToRetry))
+		for id := range failuresToRetry {
+			ids = append(ids, id)
+		}
+		_, _, _, err = summarizer.RetryFailures(ctx, workspace, ids)
+		budgetExhausted := errors.Is(err, codesummarize.ErrBudgetExhausted)
+		if err != nil && !budgetExhausted {
 			reqLog.Error().Err(err).Msg("code summarization retry failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "code summarization retry failed")
 		}
 
+		remaining, err := queries.GetUnresolvedFailures(ctx, workspace)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to verify retry results")
+		}
+		stillFailed := make(map[uuid.UUID]bool, len(remaining))
+		for _, f := range remaining {
+			stillFailed[f.ID] = true
+		}
 		succeeded := 0
-		failed := errs
 		for id := range failuresToRetry {
-			if err := queries.ResolveFailure(ctx, id); err != nil {
-				reqLog.Warn().Err(err).Str("failure_id", id.String()).Msg("failed to resolve failure")
-				failed++
-			} else {
+			if !stillFailed[id] {
 				succeeded++
 			}
+		}
+		failed := len(failuresToRetry) - succeeded
+		message := ""
+		if budgetExhausted {
+			message = "daily code summarization budget exhausted"
 		}
 
 		reqLog.Info().
@@ -148,6 +152,7 @@ func RetryCodeSummarize(
 			Retried:   len(failuresToRetry),
 			Succeeded: succeeded,
 			Failed:    failed,
+			Message:   message,
 		})
 	}
 }
@@ -209,31 +214,35 @@ func RetryAllCodeSummarize(
 			})
 		}
 
-		// Run the summarizer to reprocess
-		_, _, errs, err := summarizer.RunOnce(ctx, workspace)
-		if err != nil {
-			if errors.Is(err, codesummarize.ErrBudgetExhausted) {
-				return c.JSON(http.StatusOK, RetryResponse{
-					Retried:   len(failures),
-					Succeeded: 0,
-					Failed:    len(failures),
-					Message:   "daily code summarization budget exhausted",
-				})
-			}
-
+		ids := make([]uuid.UUID, 0, len(failures))
+		for _, f := range failures {
+			ids = append(ids, f.ID)
+		}
+		_, _, _, err = summarizer.RetryFailures(ctx, workspace, ids)
+		budgetExhausted := errors.Is(err, codesummarize.ErrBudgetExhausted)
+		if err != nil && !budgetExhausted {
 			reqLog.Error().Err(err).Msg("code summarization retry-all failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "code summarization retry-all failed")
 		}
 
+		remaining, err := queries.GetUnresolvedFailures(ctx, workspace)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to verify retry results")
+		}
+		stillFailed := make(map[uuid.UUID]bool, len(remaining))
+		for _, f := range remaining {
+			stillFailed[f.ID] = true
+		}
 		succeeded := 0
-		failed := errs
 		for _, f := range failures {
-			if err := queries.ResolveFailure(ctx, f.ID); err != nil {
-				reqLog.Warn().Err(err).Str("failure_id", f.ID.String()).Msg("failed to resolve failure")
-				failed++
-			} else {
+			if !stillFailed[f.ID] {
 				succeeded++
 			}
+		}
+		failed := len(failures) - succeeded
+		message := ""
+		if budgetExhausted {
+			message = "daily code summarization budget exhausted"
 		}
 
 		reqLog.Info().
@@ -246,6 +255,7 @@ func RetryAllCodeSummarize(
 			Retried:   len(failures),
 			Succeeded: succeeded,
 			Failed:    failed,
+			Message:   message,
 		})
 	}
 }

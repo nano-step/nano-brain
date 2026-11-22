@@ -268,15 +268,23 @@ func CheckVersionSkew(cliVersion, serverVersion string) Check {
 	return Check{Name: "Version skew", Status: "ok", Detail: fmt.Sprintf("cli=%s server=%s", cliVersion, serverVersion)}
 }
 
-// CheckMCPReachable performs GET baseURL+"/mcp" with 3s timeout, expects HTTP 200.
+// CheckMCPReachable performs POST baseURL+"/mcp" with a minimal JSON-RPC
+// initialize request (3s timeout) and expects HTTP 200 plus a well-formed
+// JSON-RPC response. GET is not used: the stateless streamable transport
+// answers GET with 405 because it is the SSE-resume verb and stateless mode
+// has no sessions to resume — which made doctor always report a healthy
+// server as unreachable (#633).
 func CheckMCPReachable(mcpURL string) Check {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, mcpURL, nil)
+	const initialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"nano-brain-doctor","version":"1"}}}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, mcpURL, strings.NewReader(initialize))
 	if err != nil {
 		return Check{Name: "MCP reachable", Status: "fail", Detail: mcpURL, Hint: fmt.Sprintf("Request error: %v", err)}
 	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -286,6 +294,15 @@ func CheckMCPReachable(mcpURL string) Check {
 
 	if resp.StatusCode != http.StatusOK {
 		return Check{Name: "MCP reachable", Status: "fail", Detail: fmt.Sprintf("HTTP %d", resp.StatusCode), Hint: "MCP endpoint returned unexpected status"}
+	}
+
+	// The streamable transport may answer as application/json or
+	// text/event-stream; either way a working MCP endpoint returns a JSON-RPC
+	// payload containing "result" (or "error" for a live-but-rejecting server,
+	// which still proves the transport works).
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil || !strings.Contains(string(body), `"result"`) && !strings.Contains(string(body), `"error"`) {
+		return Check{Name: "MCP reachable", Status: "fail", Detail: mcpURL, Hint: "MCP endpoint returned a malformed JSON-RPC response"}
 	}
 
 	return Check{Name: "MCP reachable", Status: "ok", Detail: mcpURL}

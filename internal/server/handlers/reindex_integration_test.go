@@ -90,8 +90,8 @@ func TestIncrementalReindex_Integration(t *testing.T) {
 	}
 
 	resp := doReindex(`{}`)
-	if resp["embedded"] != float64(2) {
-		t.Errorf("first pass: expected embedded=2, got %v", resp["embedded"])
+	if resp["files_pending_ingest"] != float64(2) || resp["embedded"] != float64(0) || resp["chunks_enqueued"] != float64(0) {
+		t.Errorf("first pass: expected 2 pending files and 0 ingested chunks, got %v", resp)
 	}
 	if resp["skipped"] != float64(0) {
 		t.Errorf("first pass: expected skipped=0, got %v", resp["skipped"])
@@ -109,8 +109,8 @@ func TestIncrementalReindex_Integration(t *testing.T) {
 	}
 
 	resp2 := doReindex(`{}`)
-	if resp2["embedded"] != float64(2) {
-		t.Errorf("second pass (no DB records): expected embedded=2, got %v", resp2["embedded"])
+	if resp2["files_pending_ingest"] != float64(2) || resp2["embedded"] != float64(0) {
+		t.Errorf("second pass (no DB records): expected 2 pending files, got %v", resp2)
 	}
 
 	if err := os.WriteFile(fileA, []byte("modified content A"), 0o644); err != nil {

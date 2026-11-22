@@ -326,6 +326,10 @@ func (w *Watcher) TriggerRescanByName(collectionName, workspaceHash string) bool
 				w.collections[col.dirPath] = updated
 			}
 			w.dirty[path] = true
+			select {
+			case w.hotRegisterCh <- struct{}{}:
+			default:
+			}
 			return true
 		}
 	}
