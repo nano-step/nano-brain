@@ -263,6 +263,9 @@ func startServer(configPath string) {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
+	for _, p := range unauthenticatedBypassPaths(cfg.Server.Host, cfg.Server.Auth.Enabled, cfg.Server.Auth.BypassPaths) {
+		fmt.Fprintf(os.Stderr, "Warning: server.auth.bypass_paths entry %q is reachable without authentication on %s\n", p, cfg.Server.Host)
+	}
 
 	logger, err := health.NewLogger(cfg.Logging)
 	if err != nil {
