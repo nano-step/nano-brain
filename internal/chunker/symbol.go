@@ -41,12 +41,16 @@ type symbolSpan struct {
 
 func NewSymbolAwareChunker(fallback Chunker, logger zerolog.Logger) (*SymbolAwareChunker, error) {
 	configs := map[string]langConfig{
-		".go": {lang: grammars.GoLanguage(), query: goSymbolQuery},
-		".ts": {lang: grammars.TypescriptLanguage(), query: tsSymbolQuery},
+		".go":  {lang: grammars.GoLanguage(), query: goSymbolQuery},
+		".ts":  {lang: grammars.TypescriptLanguage(), query: tsSymbolQuery},
+		".mts": {lang: grammars.TypescriptLanguage(), query: tsSymbolQuery},
+		".cts": {lang: grammars.TypescriptLanguage(), query: tsSymbolQuery},
 		".tsx": {lang: grammars.TsxLanguage(), query: tsSymbolQuery},
-		".js": {lang: grammars.JavascriptLanguage(), query: jsSymbolQuery},
+		".js":  {lang: grammars.JavascriptLanguage(), query: jsSymbolQuery},
+		".mjs": {lang: grammars.JavascriptLanguage(), query: jsSymbolQuery},
+		".cjs": {lang: grammars.JavascriptLanguage(), query: jsSymbolQuery},
 		".jsx": {lang: grammars.JavascriptLanguage(), query: jsSymbolQuery},
-		".py": {lang: grammars.PythonLanguage(), query: pySymbolQuery},
+		".py":  {lang: grammars.PythonLanguage(), query: pySymbolQuery},
 	}
 
 	langs := make(map[string]*parsedLang, len(configs))
@@ -213,9 +217,9 @@ func langForExt(ext string) string {
 	switch ext {
 	case ".go":
 		return "go"
-	case ".ts", ".tsx":
+	case ".ts", ".tsx", ".mts", ".cts":
 		return "typescript"
-	case ".js", ".jsx":
+	case ".js", ".jsx", ".mjs", ".cjs":
 		return "javascript"
 	case ".py":
 		return "python"

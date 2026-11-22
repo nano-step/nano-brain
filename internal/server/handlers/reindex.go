@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -127,6 +128,9 @@ func triggerForceWipe(c echo.Context, queries ReindexQuerier, w *watcher.Watcher
 			watcherTriggered = true
 		}
 	}
+	if watcherTriggered && w != nil {
+		go w.ReextractSymbolsForWorkspace(context.Background(), workspace)
+	}
 
 	publishReindex(pub, workspace, "completed", int(totalChunks), 0, 0, 0, "")
 
@@ -189,6 +193,8 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 		}
 
 		var colHasChanges bool
+		changedFiles := make(map[string]bool)
+		ignoredFiles := make(map[string]bool)
 		for path, diskHash := range diskFiles {
 			// Skip files matching ignore patterns — the watcher's periodic
 			// scanCollection handles their cleanup via shouldSkip.
@@ -196,6 +202,7 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 				// Also purge from indexed so the orphan loop below deletes
 				// any previously-indexed document + chunks.
 				delete(indexed, path)
+				ignoredFiles[path] = true
 				skipped++
 				continue
 			}
@@ -214,6 +221,7 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 					reqLog := LoggerFromCtx(c, logger)
 					reqLog.Warn().Err(err).Str("path", path).Msg("delete chunks failed")
 				}
+				changedFiles[path] = true
 				colHasChanges = true
 				embedded++
 			}
@@ -225,6 +233,36 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 		}
 
 		for path, entry := range indexed {
+			// Never treat synthetic scheme URIs (flow://, summary://, opencode://, memory://)
+			// as deleted filesystem files.
+			if strings.Contains(path, "://") {
+				continue
+			}
+			// Synthetic child docs (e.g. "/abs/file.js?symbol=foo&kind=function") are not
+			// disk paths themselves: keep them while their parent file remains unchanged on
+			// disk, and drop them only when the parent file changed, became ignored, or was
+			// deleted from disk (#624).
+			if qIdx := strings.IndexByte(path, '?'); qIdx > 0 {
+				basePath := path[:qIdx]
+				refreshingParent := changedFiles[basePath] || ignoredFiles[basePath]
+				if !refreshingParent {
+					if _, onDisk := diskFiles[basePath]; onDisk {
+						continue
+					}
+					if _, statErr := os.Stat(basePath); statErr == nil {
+						continue
+					}
+				}
+				_ = queries.DeleteChunksByDocumentID(c.Request().Context(), sqlc.DeleteChunksByDocumentIDParams{
+					DocumentID:    entry.id,
+					WorkspaceHash: workspace,
+				})
+				_, _ = queries.DeleteDocumentByIDAndWorkspace(c.Request().Context(), sqlc.DeleteDocumentByIDAndWorkspaceParams{
+					ID:            entry.id,
+					WorkspaceHash: workspace,
+				})
+				continue
+			}
 			if _, onDisk := diskFiles[path]; !onDisk {
 				if _, statErr := os.Stat(path); statErr == nil {
 					// File still exists on disk — was likely filtered (e.g., too large). Skip.
@@ -250,13 +288,6 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 					deleted++
 				}
 			}
-		}
-
-		if colHasChanges {
-			_ = queries.DeleteSymbolDocumentsByCollection(c.Request().Context(), sqlc.DeleteSymbolDocumentsByCollectionParams{
-				WorkspaceHash: workspace,
-				Collection:    col.Name,
-			})
 		}
 	}
 

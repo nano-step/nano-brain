@@ -330,6 +330,11 @@ func startServer(configPath string) {
 	} else {
 		extractors = append(extractors, rbE)
 	}
+	if vueE, err := symbol.NewVueExtractor(); err != nil {
+		logger.Warn().Err(err).Msg("vue symbol extractor init failed, skipping")
+	} else {
+		extractors = append(extractors, vueE)
+	}
 	symRegistry := symbol.NewRegistry(extractors...)
 
 	var graphExtractors []graph.Extractor
