@@ -1238,13 +1238,43 @@ func resolveDocumentByAnyID(ctx context.Context, q *sqlc.Queries, ws string, id 
 	return q.GetDocumentByID(ctx, sqlc.GetDocumentByIDParams{ID: chunk.DocumentID, WorkspaceHash: ws})
 }
 
+// workspaceRoot returns the registered root path for a workspace hash, or ""
+// when the workspace row is missing.
+func (a *Adapter) workspaceRoot(ctx context.Context, ws string) string {
+	w, err := a.queries.GetWorkspaceByHash(ctx, ws)
+	if err != nil {
+		return ""
+	}
+	return w.Path
+}
+
+// getDocumentByPath looks up a document by source_path, retrying
+// workspace-relative paths joined to the workspace root when the exact match
+// misses (agents pass "internal/x.go"; stored source_paths are absolute).
+// Scheme paths ("summary://", "opencode://") are exempt from the join.
+func (a *Adapter) getDocumentByPath(ctx context.Context, ws, path string) (sqlc.DocumentView, error) {
+	doc, err := a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    path,
+		WorkspaceHash: ws,
+	})
+	if errors.Is(err, sql.ErrNoRows) && !filepath.IsAbs(path) && !strings.Contains(path, "://") {
+		if root := a.workspaceRoot(ctx, ws); root != "" {
+			doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+				SourcePath:    filepath.Join(root, path),
+				WorkspaceHash: ws,
+			})
+		}
+	}
+	return doc, err
+}
+
 func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_get",
 			Description: "Fetch full content for one known document. Use after memory_query/memory_search/memory_vsearch when a result snippet is relevant and you need exact text or line slices. Do not use for broad discovery; search first, then get one selected hit.",
 			InputSchema: toolSchema(map[string]map[string]any{
-				"path":       {"type": "string", "description": "Document source_path, UUID (auto-detected), #<uuid> (document or chunk id from a search result), or a \"file::Symbol\" graph node from memory_trace/memory_graph (returns the symbol's full body)"},
+				"path":       {"type": "string", "description": "Document source_path (absolute or workspace-relative), UUID (auto-detected), #<uuid> (document or chunk id from a search result), or a \"file::Symbol\" graph node from memory_trace/memory_graph (returns the symbol's full body)"},
 				"workspace":  {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash. Optional if the MCP connection was configured with a default workspace via the ?workspace= URL query param; otherwise required."},
 				"start_line": {"type": "number", "description": "Start line (1-indexed, inclusive)"},
 				"end_line":   {"type": "number", "description": "End line (1-indexed, inclusive)"},
@@ -1275,6 +1305,15 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 				// document so the node is directly re-feedable into memory_get.
 				sepIdx := strings.Index(path, "::")
 				filePart, symName := path[:sepIdx], path[sepIdx+2:]
+				// Graph nodes may carry a workspace-relative file part while
+				// symbol source_paths can be stored absolute or relative;
+				// match against both the raw and root-joined form.
+				filePartAbs := filePart
+				if !filepath.IsAbs(filePartAbs) {
+					if root := a.workspaceRoot(ctx, ws); root != "" {
+						filePartAbs = filepath.Join(root, filePart)
+					}
+				}
 				matches, rErr := a.queries.ResolveSymbolByName(ctx, sqlc.ResolveSymbolByNameParams{
 					WorkspaceHash: ws,
 					Column2:       symName,
@@ -1283,12 +1322,15 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 					return errResult(fmt.Sprintf("symbol lookup failed for %q", symName)), nil
 				}
 				for _, m := range matches {
-					if qi := strings.Index(m.SourcePath, "?"); qi >= 0 && m.SourcePath[:qi] == filePart {
-						doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
-							SourcePath:    m.SourcePath,
-							WorkspaceHash: ws,
-						})
-						break
+					if qi := strings.Index(m.SourcePath, "?"); qi >= 0 {
+						sp := m.SourcePath[:qi]
+						if sp == filePart || sp == filePartAbs {
+							doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+								SourcePath:    m.SourcePath,
+								WorkspaceHash: ws,
+							})
+							break
+						}
 					}
 				}
 				if err == nil && doc.ID == uuid.Nil {
@@ -1309,10 +1351,7 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 				if docID, parseErr := uuid.Parse(path); parseErr == nil {
 					doc, err = resolveDocumentByAnyID(ctx, a.queries, ws, docID)
 				} else {
-					doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
-						SourcePath:    path,
-						WorkspaceHash: ws,
-					})
+					doc, err = a.getDocumentByPath(ctx, ws, path)
 				}
 			}
 			if err != nil {
@@ -1443,10 +1482,7 @@ func registerMemoryDelete(server *mcpsdk.Server, a *Adapter) {
 				if docID, parseErr := uuid.Parse(path); parseErr == nil {
 					doc, err = resolveDocumentByAnyID(ctx, a.queries, ws, docID)
 				} else {
-					doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
-						SourcePath:    path,
-						WorkspaceHash: ws,
-					})
+					doc, err = a.getDocumentByPath(ctx, ws, path)
 				}
 			}
 			if err != nil {
