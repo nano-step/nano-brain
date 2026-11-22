@@ -95,7 +95,7 @@ func runServeDaemon(configPath string) {
 		logStart = info.Size()
 	}
 
-	_, _ = resolveCLIConfigPath(configPath)
+	_ = resolveConfigPathOnce(configPath)
 
 	childArgs := []string{exe, "--daemon-child"}
 	if trimmed := strings.TrimSpace(configPath); trimmed != "" {

@@ -19,34 +19,48 @@ var (
 	lastClientConfigWarn string
 )
 
-// resolveCLIConfigPath resolves the config file path via ResolveConfigPathStrict
-// and prints any missing-explicit-config warning to stderr.
+func resetClientConfigWarnState() {
+	clientConfigWarnMu.Lock()
+	lastClientConfigWarn = ""
+	clientConfigWarnMu.Unlock()
+}
+
+// resolveCLIConfigPath resolves the config file path via ResolveConfigPathStrict,
+// prints any missing-explicit-config warning to stderr, and updates deduplication
+// state (clearing it when warn is empty).
 func resolveCLIConfigPath(flagValue string) (string, string) {
 	path, warn := config.ResolveConfigPathStrict(flagValue)
+	clientConfigWarnMu.Lock()
+	lastClientConfigWarn = warn
+	clientConfigWarnMu.Unlock()
 	if warn != "" {
 		fmt.Fprintln(os.Stderr, warn)
-		clientConfigWarnMu.Lock()
-		lastClientConfigWarn = warn
-		clientConfigWarnMu.Unlock()
 	}
 	return path, warn
 }
 
-// resolveClientConfigPath resolves the config path for HTTP client commands,
-// emitting a missing-explicit-config warning to stderr at most once per unique
-// warning string so repeated HTTP probes do not duplicate stderr output.
-func resolveClientConfigPath() string {
-	path, warn := config.ResolveConfigPathStrict(cliConfigPath)
-	if warn != "" {
-		clientConfigWarnMu.Lock()
-		shouldPrint := warn != lastClientConfigWarn
-		lastClientConfigWarn = warn
+// resolveConfigPathOnce resolves flagValue via ResolveConfigPathStrict and
+// emits any missing-explicit-config warning to stderr at most once per unique
+// warning string until cleared (by warn == "" or resetClientConfigWarnState).
+func resolveConfigPathOnce(flagValue string) string {
+	path, warn := config.ResolveConfigPathStrict(flagValue)
+	clientConfigWarnMu.Lock()
+	if warn == "" {
+		lastClientConfigWarn = ""
 		clientConfigWarnMu.Unlock()
-		if shouldPrint {
-			fmt.Fprintln(os.Stderr, warn)
-		}
+		return path
+	}
+	shouldPrint := warn != lastClientConfigWarn
+	lastClientConfigWarn = warn
+	clientConfigWarnMu.Unlock()
+	if shouldPrint {
+		fmt.Fprintln(os.Stderr, warn)
 	}
 	return path
+}
+
+func resolveClientConfigPath() string {
+	return resolveConfigPathOnce(cliConfigPath)
 }
 
 func runConfigCmd(args []string, configPath string) {

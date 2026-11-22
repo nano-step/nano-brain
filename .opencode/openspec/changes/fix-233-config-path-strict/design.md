@@ -3,24 +3,29 @@
 ## Config Path Resolution & Propagation
 
 1. **`internal/config/config.go` (`ResolveConfigPath`, `ResolveConfigPathStrict`, `Load`):**
-   - `ResolveConfigPath` and `ResolveConfigPathStrict` trim surrounding
-     whitespace on both `flagValue` and `NANO_BRAIN_CONFIG`, and expand leading
-     `~`/`~/` via `expandTildeForConfig` before returning or calling `os.Stat`
-     so `os.Stat` and `os.ReadFile` agree with `config.Load`.
-   - `Load(configPath)` also trims `configPath` as defense-in-depth while
-     preserving all `#674` validation, host normalization, and secret redaction
-     invariants.
+   - `ResolveConfigPath`, `ResolveConfigPathStrict`, and `Load` share
+     `expandTildeForConfig` (`"~"`, `"~/..."`, and `"~\\..."`, leaving
+     `"~otheruser/..."` untouched) after `strings.TrimSpace` so `os.Stat` and
+     `os.ReadFile` always agree with `config.Load` while preserving all `#674`
+     validation, host normalization, and secret redaction invariants.
 
 2. **Unified CLI Resolution (`cmd/nano-brain/`):**
-   - Store the parsed global `--config` flag in `cliConfigPath` in `main.go` and
-     thread `configPath` into `runBenchCmd`, `runDBMigrateCmd`, `runLogsCmd`,
-     `runResetEmbeddingsCmd`, `runBackfillSummariesCmd`, `runCleanupStaleRawCmd`,
-     and `runCleanupOrphanWorkspacesCmd`.
-   - Add `resolveCLIConfigPath(flagValue string) (string, string)` in
-     `config_cmd.go` wrapping `config.ResolveConfigPathStrict`: prints non-empty
-     `WARNING:` to `os.Stderr` and records the emitted warning so downstream
-     HTTP client calls (`resolveHostPort` in `client.go`) do not duplicate the
-     same warning on stderr within a single command invocation.
+   - Store the parsed global `--config` flag in `cliConfigPath` in `main.go`,
+     reset warning deduplication state via `resetClientConfigWarnState()` after
+     `flag.Parse()`, and thread `configPath` into `runBenchCmd`,
+     `runDBMigrateCmd`, `runLogsCmd`, `runResetEmbeddingsCmd`,
+     `runBackfillSummariesCmd`, `runCleanupStaleRawCmd`, and
+     `runCleanupOrphanWorkspacesCmd`.
+   - `resolveCLIConfigPath` and `resolveConfigPathOnce` /
+     `resolveClientConfigPath` in `config_cmd.go` wrap
+     `config.ResolveConfigPathStrict`, clearing `lastClientConfigWarn` whenever
+     `warn == ""` so repeated in-process tests or healthy calls reset state
+     cleanly while repeated HTTP client probes within a single command emit at
+     most one `WARNING:`.
+   - `recoverFromConnectionRefused` passes raw `cliConfigPath` to
+     `runServeDaemonFn` so zero-config auto-start never mistakes
+     `DefaultConfigPath()` for an explicit `--config` flag or misattributes
+     `NANO_BRAIN_CONFIG` warnings.
    - `runConfigShow`, `startServer`, `runServeDaemon`, `runDoctorCmd`, and all
      direct-DB/log commands call `resolveCLIConfigPath(configPath)`
      unconditionally (removing `if configPath == ""` guards).

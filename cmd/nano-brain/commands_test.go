@@ -892,3 +892,226 @@ func TestCLI_ConfigFlagWhitespaceAndThreading(t *testing.T) {
 		}
 	})
 }
+
+func TestRecoverFromConnectionRefused_PassesRawCLIConfigPath(t *testing.T) {
+	setupHealthyTarget := func(t *testing.T) {
+		t.Helper()
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(ts.Close)
+		pointHTTPClientAt(t, ts)
+	}
+
+	withCLIConfigState := func(t *testing.T, val string) {
+		t.Helper()
+		origFlag := cliConfigPath
+		cliConfigPath = val
+		resetClientConfigWarnState()
+		t.Cleanup(func() {
+			cliConfigPath = origFlag
+			resetClientConfigWarnState()
+		})
+	}
+
+	t.Run("zero-config auto-start passes empty path and emits zero --config warning", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		t.Setenv("NANO_BRAIN_CONFIG", "")
+		t.Setenv("NANO_BRAIN_NO_AUTO_START", "")
+		setupHealthyTarget(t)
+		withCLIConfigState(t, "")
+		withRecoveryHooks(t, true, true, nil)
+
+		gotPath := "<uncalled>"
+		runServeDaemonFn = func(cfgPath string) {
+			gotPath = cfgPath
+			_ = resolveConfigPathOnce(cfgPath)
+		}
+
+		_, stderr := captureOutput(t, func() {
+			if !recoverFromConnectionRefused("127.0.0.1", 19991) {
+				t.Error("recoverFromConnectionRefused() = false, want true")
+			}
+		})
+
+		if gotPath != "" {
+			t.Errorf("runServeDaemonFn received %q, want empty string", gotPath)
+		}
+		if strings.Contains(stderr, "WARNING:") || strings.Contains(stderr, "--config") {
+			t.Errorf("unexpected config warning on zero-config auto-start: %q", stderr)
+		}
+	})
+
+	t.Run("missing NANO_BRAIN_CONFIG on auto-start attributes warning to env not --config", func(t *testing.T) {
+		dir := t.TempDir()
+		missing := filepath.Join(dir, "missing-env.yml")
+		t.Setenv("HOME", dir)
+		t.Setenv("NANO_BRAIN_CONFIG", missing)
+		t.Setenv("NANO_BRAIN_NO_AUTO_START", "")
+		setupHealthyTarget(t)
+		withCLIConfigState(t, "")
+		withRecoveryHooks(t, true, true, nil)
+
+		gotPath := "<uncalled>"
+		runServeDaemonFn = func(cfgPath string) {
+			gotPath = cfgPath
+			_ = resolveConfigPathOnce(cfgPath)
+		}
+
+		_, stderr := captureOutput(t, func() {
+			_ = recoverFromConnectionRefused("127.0.0.1", 19991)
+		})
+
+		if gotPath != "" {
+			t.Errorf("runServeDaemonFn received %q, want empty string", gotPath)
+		}
+		if strings.Count(stderr, "WARNING:") != 1 {
+			t.Errorf("expected 1 WARNING on stderr, got %d: %q", strings.Count(stderr, "WARNING:"), stderr)
+		}
+		if !strings.Contains(stderr, "NANO_BRAIN_CONFIG env") || strings.Contains(stderr, "--config flag") {
+			t.Errorf("stderr misattributed source: %q", stderr)
+		}
+	})
+
+	t.Run("explicit --config passes raw cliConfigPath", func(t *testing.T) {
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "explicit.yml")
+		if err := os.WriteFile(cfgPath, []byte("server:\n  port: 3199\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		rawFlag := "  " + cfgPath + "  "
+		t.Setenv("NANO_BRAIN_CONFIG", "")
+		t.Setenv("NANO_BRAIN_NO_AUTO_START", "")
+		setupHealthyTarget(t)
+		withCLIConfigState(t, rawFlag)
+		withRecoveryHooks(t, true, true, nil)
+
+		var gotPath string
+		runServeDaemonFn = func(p string) {
+			gotPath = p
+			_ = resolveConfigPathOnce(p)
+		}
+
+		_, stderr := captureOutput(t, func() {
+			_ = recoverFromConnectionRefused("127.0.0.1", 19991)
+		})
+
+		if gotPath != rawFlag {
+			t.Errorf("runServeDaemonFn received %q, want raw %q", gotPath, rawFlag)
+		}
+		if strings.Contains(stderr, "WARNING:") {
+			t.Errorf("unexpected WARNING for valid --config: %q", stderr)
+		}
+	})
+}
+
+func TestClientCmd_MissingExplicitConfigWarnsOnce(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","version":"test"}`))
+	}))
+	defer ts.Close()
+	hostPort := strings.Split(strings.TrimPrefix(ts.URL, "http://"), ":")
+
+	t.Run("status --json with missing NANO_BRAIN_CONFIG warns once on stderr", func(t *testing.T) {
+		dir := t.TempDir()
+		missing := filepath.Join(dir, "missing-client-env.yml")
+
+		stdout, stderr, code := invokeCLI(t, map[string]string{
+			"HOME":                     dir,
+			"NANO_BRAIN_CONFIG":        missing,
+			"NANO_BRAIN_HOST":          hostPort[0],
+			"NANO_BRAIN_PORT":          hostPort[1],
+			"NANO_BRAIN_NO_AUTO_START": "1",
+		}, "status", "--json")
+
+		if code != 0 {
+			t.Fatalf("exit code = %d, stderr = %q", code, stderr)
+		}
+		if got := strings.Count(stderr, "WARNING:"); got != 1 {
+			t.Errorf("WARNING count = %d, want 1; stderr = %q", got, stderr)
+		}
+		if !strings.Contains(stderr, "NANO_BRAIN_CONFIG env") || !strings.Contains(stderr, missing) {
+			t.Errorf("stderr = %q, want NANO_BRAIN_CONFIG env and %q", stderr, missing)
+		}
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+			t.Fatalf("stdout is not valid JSON (%q): %v", stdout, err)
+		}
+		if parsed["status"] != "ok" {
+			t.Errorf("parsed status = %v, want ok", parsed["status"])
+		}
+	})
+
+	t.Run("status --json with missing --config warns once on stderr", func(t *testing.T) {
+		dir := t.TempDir()
+		missing := filepath.Join(dir, "missing-client-flag.yml")
+
+		stdout, stderr, code := invokeCLI(t, map[string]string{
+			"HOME":                     dir,
+			"NANO_BRAIN_CONFIG":        "",
+			"NANO_BRAIN_HOST":          hostPort[0],
+			"NANO_BRAIN_PORT":          hostPort[1],
+			"NANO_BRAIN_NO_AUTO_START": "1",
+		}, "--config", missing, "status", "--json")
+
+		if code != 0 {
+			t.Fatalf("exit code = %d, stderr = %q", code, stderr)
+		}
+		if got := strings.Count(stderr, "WARNING:"); got != 1 {
+			t.Errorf("WARNING count = %d, want 1; stderr = %q", got, stderr)
+		}
+		if !strings.Contains(stderr, "--config flag") || !strings.Contains(stderr, missing) {
+			t.Errorf("stderr = %q, want --config flag and %q", stderr, missing)
+		}
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+			t.Fatalf("stdout is not valid JSON (%q): %v", stdout, err)
+		}
+	})
+}
+
+func TestResolveClientConfigPath_ResetAndCount2Idempotent(t *testing.T) {
+	const fixedMissing = "/tmp/nano-brain-233-fixed-nonexistent-config.yml"
+	if _, err := os.Stat(fixedMissing); err == nil {
+		t.Skipf("%s unexpectedly exists on host", fixedMissing)
+	}
+
+	origFlag := cliConfigPath
+	cliConfigPath = ""
+	resetClientConfigWarnState()
+	t.Cleanup(func() {
+		cliConfigPath = origFlag
+		resetClientConfigWarnState()
+	})
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("NANO_BRAIN_CONFIG", fixedMissing)
+
+	// 1st probe emits warning; 2nd probe in same state is deduplicated.
+	_, err1 := captureOutput(t, func() { _ = resolveClientConfigPath() })
+	if strings.Count(err1, "WARNING:") != 1 {
+		t.Fatalf("first probe stderr = %q, want 1 WARNING", err1)
+	}
+	_, err2 := captureOutput(t, func() { _ = resolveClientConfigPath() })
+	if err2 != "" {
+		t.Fatalf("second probe stderr = %q, want empty (deduplicated)", err2)
+	}
+
+	// Clearing NANO_BRAIN_CONFIG yields warn == "" and resets lastClientConfigWarn.
+	t.Setenv("NANO_BRAIN_CONFIG", "")
+	_, errClean := captureOutput(t, func() { _ = resolveClientConfigPath() })
+	if errClean != "" {
+		t.Fatalf("clean probe stderr = %q, want empty", errClean)
+	}
+
+	// Re-pointing at the same fixed missing path warns again because state reset.
+	t.Setenv("NANO_BRAIN_CONFIG", fixedMissing)
+	_, err3 := captureOutput(t, func() { _ = resolveClientConfigPath() })
+	if strings.Count(err3, "WARNING:") != 1 {
+		t.Fatalf("post-reset probe stderr = %q, want 1 WARNING", err3)
+	}
+}

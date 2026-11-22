@@ -66,6 +66,7 @@ func main() {
 	flag.Usage = func() { printUsage(os.Stderr) }
 	flag.Parse()
 
+	resetClientConfigWarnState()
 	configPath := cliConfigPath
 	initCLILog(configPath)
 

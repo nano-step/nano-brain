@@ -180,7 +180,7 @@ func recoverFromConnectionRefused(host string, port int) bool {
 		return false
 	}
 
-	runServeDaemonFn(config.ResolveConfigPath(cliConfigPath))
+	runServeDaemonFn(cliConfigPath)
 
 	if err := waitForServerHealthy(serverHealthTimeout); err != nil {
 		fmt.Fprintln(os.Stderr, "Server started but did not become healthy in 10s. Check logs: ~/.nano-brain/logs/nano-brain.log")

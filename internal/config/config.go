@@ -18,10 +18,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// expandTildeForConfig resolves "~/..." to absolute path. Local copy to avoid
-// internal/config → internal/summarize import cycle.
+// expandTildeForConfig resolves "~", "~/...", and "~\..." to absolute path.
+// "~otheruser/..." is returned unchanged so Load and ResolveConfigPath* agree.
+// Local copy to avoid internal/config → internal/summarize import cycle.
 func expandTildeForConfig(p string) (string, error) {
-	if !strings.HasPrefix(p, "~/") && p != "~" {
+	if p != "~" && !strings.HasPrefix(p, "~/") && !strings.HasPrefix(p, `~\`) {
 		return p, nil
 	}
 	home, err := os.UserHomeDir()
@@ -381,14 +382,11 @@ func Load(configPath string) (*Config, error) {
 	// If config path is provided, load from file
 	configPath = strings.TrimSpace(configPath)
 	if configPath != "" {
-		// Expand tilde if present
-		if strings.HasPrefix(configPath, "~") {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get home directory: %w", err)
-			}
-			configPath = filepath.Join(home, configPath[1:])
+		expanded, err := expandTildeForConfig(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get home directory: %w", err)
 		}
+		configPath = expanded
 
 		// Only try to load if file exists
 		if _, err := os.Stat(configPath); err == nil {

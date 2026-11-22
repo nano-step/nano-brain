@@ -729,16 +729,29 @@ func TestResolveConfigPath_TrimsWhitespace(t *testing.T) {
 func TestResolveConfigPathStrict_TrimsWhitespaceAndExpandsTilde(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	cfgPath := filepath.Join(home, "custom.yml")
 	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 3199\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, warn := ResolveConfigPathStrict("  ~/custom.yml  ")
-	if warn != "" {
-		t.Errorf("unexpected warning for existing tilde path: %q", warn)
+	for _, input := range []string{"  ~/custom.yml  ", `  ~\custom.yml  `} {
+		got, warn := ResolveConfigPathStrict(input)
+		if warn != "" {
+			t.Errorf("ResolveConfigPathStrict(%q) unexpected warning: %q", input, warn)
+		}
+		if got != cfgPath {
+			t.Errorf("ResolveConfigPathStrict(%q) = %q, want %q", input, got, cfgPath)
+		}
+		cfg, err := Load(input)
+		if err != nil {
+			t.Fatalf("Load(%q) failed: %v", input, err)
+		}
+		if cfg.Server.Port != 3199 {
+			t.Errorf("Load(%q) port = %d, want 3199", input, cfg.Server.Port)
+		}
 	}
-	if got != cfgPath {
-		t.Errorf("ResolveConfigPathStrict() = %q, want %q", got, cfgPath)
+	if got := ResolveConfigPath("~otheruser/custom.yml"); got != "~otheruser/custom.yml" {
+		t.Errorf("ResolveConfigPath(~otheruser) = %q, want unchanged", got)
 	}
 }
 
