@@ -27,3 +27,6 @@ Full integration tests exposed an important compatibility constraint: bare
 calls edges must still produce candidate impacts for a qualified request,
 even without an exact graph endpoint or document. Those tests pass with
 `node_found:false` and candidate results preserved.
+Two independent follow-up reviewers returned MERGE after the bare-candidate
+and orphan-symbol regressions passed. Large-workspace existence-query cost
+remains unmeasured; the test-data observation is not a production benchmark.
