@@ -150,9 +150,11 @@ func GenerateDefault(path string) error {
 		path = filepath.Join(home, path[1:])
 	}
 
-	// Create parent directories if they don't exist
+	// Create parent directories if they don't exist. The directory may hold a
+	// config with credentials, so new dirs are owner-only; MkdirAll does not
+	// chmod a directory that already exists.
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("failed to create config directory %s: %w", dir, err)
 	}
 

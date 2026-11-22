@@ -23,7 +23,7 @@ browser ── http://localhost:4321 ──► npx dashboard server ──► pr
 
 ## Skills & tools you need
 
-- Go 1.23 (`go`, `gofmt`), Node 20+, npm, Docker (for Postgres), `git`, `gh`.
+- Go 1.26 (`go`, `gofmt`), Node 20+, npm, Docker (for Postgres), `git`, `gh`.
 - Comfortable with React + TypeScript + Vite. You'll learn TanStack Query/Router and one graph library.
 - Read `AGENTS.md` / `docs/HARNESS.md` — this repo has a **strict process** (below).
 

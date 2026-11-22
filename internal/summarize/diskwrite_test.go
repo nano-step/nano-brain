@@ -268,3 +268,38 @@ func TestWriteFileAtomic_FileNotGroupOrWorldAccessible(t *testing.T) {
 		t.Errorf("file mode = %o, want owner rw", perm)
 	}
 }
+
+// A pre-planted <path>.tmp symlink must not be clobbered: the temp file gets a
+// unique name (os.CreateTemp), so a predictable sibling name is never opened.
+func TestWriteFileAtomic_DoesNotFollowPredictableTmpSymlink(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "summary.md")
+
+	sentinel := filepath.Join(dir, "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("sentinel content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tmpLink := filePath + ".tmp"
+	if err := os.Symlink(sentinel, tmpLink); err != nil {
+		t.Skipf("symlink not permitted: %v", err)
+	}
+
+	if err := WriteFileAtomic(filePath, []byte("real content\n")); err != nil {
+		t.Fatalf("WriteFileAtomic error: %v", err)
+	}
+
+	got, err := os.ReadFile(sentinel)
+	if err != nil {
+		t.Fatalf("read sentinel: %v", err)
+	}
+	if string(got) != "sentinel content" {
+		t.Errorf("sentinel was clobbered through the symlink: %q", got)
+	}
+	if got, err := os.ReadFile(filePath); err != nil || string(got) != "real content\n" {
+		t.Errorf("filePath = %q, %v", got, err)
+	}
+	// The pre-planted link itself was never opened or replaced.
+	if target, err := os.Readlink(tmpLink); err != nil || target != sentinel {
+		t.Errorf(".tmp path changed: readlink = %q, %v", target, err)
+	}
+}

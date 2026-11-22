@@ -228,7 +228,7 @@ Each workspace is identified by a hash of its root path. The `workspace_hash` co
 #### 6.2.3 PostgreSQL setup
 
 ```bash
-docker run -d --name nanobrain-pg -p 5432:5432 \
+docker run -d --name nanobrain-pg -p 127.0.0.1:5432:5432 \
   -e POSTGRES_USER=nanobrain \
   -e POSTGRES_PASSWORD=nanobrain \
   -e POSTGRES_DB=nanobrain_dev \

@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/@nano-step/nano-brain?color=blue)](https://www.npmjs.com/package/@nano-step/nano-brain)
 [![Publish Stable](https://github.com/nano-step/nano-brain/actions/workflows/publish-stable.yml/badge.svg?branch=master)](https://github.com/nano-step/nano-brain/actions/workflows/publish-stable.yml)
 [![Publish Beta](https://github.com/nano-step/nano-brain/actions/workflows/publish-beta.yml/badge.svg?branch=develop)](https://github.com/nano-step/nano-brain/actions/workflows/publish-beta.yml)
-[![Go 1.23](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go)](https://go.dev/)
+[![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Persistent memory and code intelligence for AI coding agents.
@@ -132,7 +132,7 @@ CGO_ENABLED=0 go build -o nano-brain ./cmd/nano-brain
 ### Start PostgreSQL
 
 ```bash
-docker run -d --name nanobrain-pg -p 5432:5432 \
+docker run -d --name nanobrain-pg -p 127.0.0.1:5432:5432 \
   -e POSTGRES_USER=nanobrain \
   -e POSTGRES_PASSWORD=nanobrain \
   -e POSTGRES_DB=nanobrain_dev \
@@ -294,7 +294,7 @@ nano-brain/
 
 ## Tech Stack
 
-- **Go 1.23** — Single static binary (`CGO_ENABLED=0`)
+- **Go 1.26** — Single static binary (`CGO_ENABLED=0`)
 - **PostgreSQL 17** — Full-text search (tsvector/tsquery)
 - **pgvector 0.8.2** — HNSW vector indexing
 - **Echo v4** — HTTP framework

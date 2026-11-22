@@ -10,7 +10,7 @@ const { spawnSync } = require("node:child_process");
 const https = require("node:https");
 const { EventEmitter } = require("node:events");
 const { Readable } = require("node:stream");
-const { parseSHA256Line, isAllowedDownloadHost, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion } = require("./postinstall");
+const { parseSHA256Line, isAllowedDownloadHost, tryAutoLink, safeUnlink, download, downloadWithHash, ensureBinary, binaryPath, getPlatformKey, platformExtension, binaryMatchesVersion, setSumsRetryDelayMs } = require("./postinstall");
 const VERSION = require("../package.json").version;
 const isWin = os.platform() === "win32";
 
@@ -510,7 +510,8 @@ test("TestAutoLink_MacOS_TargetPath", (t) => {
 // --- #659: checksum verification fails closed; redirects stay on GitHub ---
 
 // Replace https.get with an in-memory responder so these tests never touch the
-// network. `respond(url)` returns { status, headers, body } or { error }.
+// network. `respond(url)` returns { status, headers, body }, { stream } (a
+// pre-built Readable for paced/mid-body-failure responses) or { error }.
 // Returns the list of requested URLs.
 const REAL_HTTPS_GET = https.get;
 function stubHttps(t, respond) {
@@ -522,7 +523,7 @@ function stubHttps(t, respond) {
     const r = respond(String(url));
     setImmediate(() => {
       if (r.error) return req.emit("error", r.error);
-      const res = Readable.from(r.body === undefined ? [] : [Buffer.from(r.body)]);
+      const res = r.stream || Readable.from(r.body === undefined ? [] : [Buffer.from(r.body)]);
       res.statusCode = r.status;
       res.headers = r.headers || {};
       cb(res);
@@ -531,6 +532,46 @@ function stubHttps(t, respond) {
   };
   t.after(() => { https.get = REAL_HTTPS_GET; });
   return requested;
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// A response body paced over time: yields each part gapMs apart, then — when
+// errorAfterMs is set — fails the stream mid-body (a socket reset after
+// Content-Length bytes were promised).
+function pacedBody(parts, { gapMs = 15, errorAfterMs = null } = {}) {
+  return Readable.from((async function* () {
+    for (const p of parts) {
+      await sleep(gapMs);
+      yield Buffer.from(p);
+    }
+    if (errorAfterMs !== null) {
+      await sleep(errorAfterMs);
+      throw new Error("ECONNRESET mid-body");
+    }
+  })());
+}
+
+// Files in the binary's directory belonging to a staging scheme: the old fixed
+// <base>.partial, the per-attempt <base>.<pid>.<rand>.partial and
+// <base>.*.SHA256SUMS.tmp.
+function stagingFiles(bin) {
+  const base = path.basename(bin);
+  return fs.readdirSync(path.dirname(bin)).filter(
+    (f) => f.startsWith(`${base}.`) && (f.endsWith(".partial") || f.endsWith(".SHA256SUMS.tmp")),
+  );
+}
+
+// Record every destination createWriteStream is asked to open.
+function spyWriteDests(t) {
+  const dests = [];
+  const real = fs.createWriteStream;
+  fs.createWriteStream = (p, opts) => {
+    dests.push(String(p));
+    return real(p, opts);
+  };
+  t.after(() => { fs.createWriteStream = real; });
+  return dests;
 }
 
 // Force ensureBinary() down the download path: move any real binary aside and
@@ -750,11 +791,314 @@ for (const fn of [download, downloadWithHash]) {
   });
 }
 
-test("isAllowedDownloadHost: github.com and *.githubusercontent.com only (#659)", () => {
-  for (const h of ["github.com", "GitHub.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "raw.githubusercontent.com"]) {
+// #676: the allowlist is the exact set of hosts a release download uses —
+// other *.githubusercontent.com hosts (raw, codeload, avatars, ...) are refused.
+test("isAllowedDownloadHost: github.com and the two asset CDN hosts only (#676)", () => {
+  for (const h of ["github.com", "GitHub.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"]) {
     assert.strictEqual(isAllowedDownloadHost(h), true, h);
   }
-  for (const h of ["githubusercontent.com", "api.github.com", "evilgithub.com", "github.com.evil.example.com", "evilgithubusercontent.com", "example.com", ""]) {
+  for (const h of [
+    "githubusercontent.com",
+    "raw.githubusercontent.com",
+    "codeload.github.com",
+    "api.github.com",
+    "evil.githubusercontent.com.attacker",
+    "evilgithub.com",
+    "github.com.evil.example.com",
+    "evilgithubusercontent.com",
+    "example.com",
+    "",
+  ]) {
     assert.strictEqual(isAllowedDownloadHost(h), false, h);
   }
+});
+
+// --- #676: .partial download + atomic rename; SHA256SUMS retried once ---
+
+// A hash mismatch, an unverifiable release and a refused redirect must never
+// leave anything at binPath or at <binPath>.partial: the rename is the only
+// path that creates binPath, and it runs after verification.
+test("ensureBinary: SHA-256 mismatch deletes the .partial and never creates binPath (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  const wrongSha = crypto.createHash("sha256").update("not the binary\n").digest("hex");
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) return { status: 200, body: `${wrongSha}  ${ASSET_NAME}\n` };
+    return { status: 404 };
+  });
+
+  await assert.rejects(() => ensureBinary(), securityError(/SHA-256 mismatch/));
+  assert.strictEqual(fs.existsSync(bin), false, "unverified binary must not stay installed");
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false, ".partial must be deleted");
+});
+
+test("ensureBinary: failed SHA256SUMS fetch leaves neither binPath nor .partial (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  stubHttps(t, (url) => (isAssetURL(url) ? { status: 200, body: FAKE_BINARY } : { status: 404 }));
+
+  await assert.rejects(() => ensureBinary(), securityError(/cannot verify .*SHA256SUMS could not be downloaded/));
+  assert.strictEqual(fs.existsSync(bin), false);
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false);
+});
+
+test("ensureBinary: verified install renames .partial into place (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) return { status: 200, body: `${FAKE_BINARY_SHA}  ${ASSET_NAME}\n` };
+    return { status: 404 };
+  });
+
+  assert.strictEqual(await ensureBinary(), bin);
+  assert.strictEqual(fs.readFileSync(bin, "utf8"), FAKE_BINARY);
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false, "rename consumed the .partial");
+});
+
+// The redirect allowlist is the exact release hosts: another
+// *.githubusercontent.com host — even a real GitHub one like raw — is refused.
+test("ensureBinary: redirect to a githubusercontent host outside the allowlist is refused (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  const requested = stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 302, headers: { location: "https://raw.githubusercontent.com/x" } };
+    return { status: 200, body: FAKE_BINARY };
+  });
+
+  await assert.rejects(() => ensureBinary(), securityError(/refusing redirect .* to https:\/\/raw\.githubusercontent\.com/));
+  assert.strictEqual(fs.existsSync(bin), false);
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false);
+  assert.ok(!requested.some((u) => u.includes("raw.githubusercontent.com")), "must not contact the redirect target");
+});
+
+// A transient SHA256SUMS failure is retried once; the second answer is used.
+test("ensureBinary: SHA256SUMS is retried once and succeeds (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  let sumsCalls = 0;
+  const requested = stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) {
+      sumsCalls++;
+      if (sumsCalls === 1) return { error: new Error("ECONNRESET") };
+      return { status: 200, body: `${FAKE_BINARY_SHA}  ${ASSET_NAME}\n` };
+    }
+    return { status: 404 };
+  });
+
+  assert.strictEqual(await ensureBinary(), bin);
+  assert.strictEqual(fs.readFileSync(bin, "utf8"), FAKE_BINARY);
+  assert.strictEqual(sumsCalls, 2, "exactly one retry");
+  assert.strictEqual(requested.filter(isSumsURL).length, 2);
+});
+
+test("ensureBinary: SHA256SUMS fails closed after the first and only retry (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  let sumsCalls = 0;
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) {
+      sumsCalls++;
+      return { error: new Error("ECONNRESET") };
+    }
+    return { status: 404 };
+  });
+
+  await assert.rejects(() => ensureBinary(), securityError(/SHA256SUMS could not be downloaded .*ECONNRESET/));
+  assert.strictEqual(sumsCalls, 2, "one retry, then fail closed");
+  assert.strictEqual(fs.existsSync(bin), false);
+  assert.strictEqual(fs.existsSync(`${bin}.partial`), false);
+});
+
+// A fetched SHA256SUMS that simply lacks the asset entry is a security
+// failure, not a transient one: it must not burn the retry.
+test("ensureBinary: a missing SHA256SUMS entry is not retried (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  let sumsCalls = 0;
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) {
+      sumsCalls++;
+      return { status: 200, body: `${FAKE_BINARY_SHA}  nano-brain-other-platform\n` };
+    }
+    return { status: 404 };
+  });
+
+  await assert.rejects(() => ensureBinary(), securityError(/SHA256SUMS has no entry/));
+  assert.strictEqual(sumsCalls, 1, "no retry for a downloaded but missing entry");
+});
+
+// --- #676 round 2: unique per-attempt staging, opened exclusively ---
+
+// With one shared <bin>.partial, a second install could O_TRUNC the file the
+// first install later renamed verified — leaving corrupt bytes at binPath.
+// Unique staging names make that impossible: after overlapping installs,
+// binPath is absent or exactly the verified bytes.
+test("ensureBinary: overlapping installs never leave a corrupt binary (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  const bodyA = Buffer.alloc(200_000, 0x41);
+  const shaA = crypto.createHash("sha256").update(bodyA).digest("hex");
+  const partsA = [];
+  for (let off = 0; off < bodyA.length; off += 20_000) partsA.push(bodyA.subarray(off, off + 20_000));
+  const bodyB = Buffer.alloc(60_000, 0x42); // different bytes: any mixing is visible
+  let assetCalls = 0;
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) {
+      assetCalls++;
+      // The first request (install A) streams slowly but completes. Every
+      // later request (install B, on every candidate tag) dies mid-body.
+      if (assetCalls === 1) return { status: 200, stream: pacedBody(partsA, { gapMs: 15 }) };
+      return {
+        status: 200,
+        headers: { "content-length": String(bodyB.length * 3) },
+        stream: pacedBody(
+          [bodyB.subarray(0, 20_000), bodyB.subarray(20_000, 40_000), bodyB.subarray(40_000)],
+          { gapMs: 20, errorAfterMs: 150 },
+        ),
+      };
+    }
+    if (isSumsURL(url)) return { status: 200, body: `${shaA}  ${ASSET_NAME}\n` };
+    return { error: new Error("offline") };
+  });
+
+  const installA = ensureBinary();
+  await sleep(60); // A is mid-download when B starts
+  const installB = ensureBinary();
+  const [resA, resB] = await Promise.allSettled([installA, installB]);
+
+  assert.strictEqual(resA.status, "fulfilled", JSON.stringify(resA.reason));
+  assert.strictEqual(resB.status, "rejected");
+  assert.ok(fs.existsSync(bin), "the verified install must land");
+  assert.strictEqual(
+    crypto.createHash("sha256").update(fs.readFileSync(bin)).digest("hex"),
+    shaA,
+    "binPath must hold exactly the verified bytes, never a mixed file",
+  );
+  assert.deepStrictEqual(stagingFiles(bin), []);
+});
+
+// The skip-verify path must stage too: a download cut short mid-body (the
+// response advertises Content-Length, so the failure is detected) leaves no
+// binPath and no staging file — and the write never went to binPath directly.
+test("ensureBinary: skip-verify download stages and cleans up a mid-body failure (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  const dests = spyWriteDests(t);
+  const prev = process.env.NANO_BRAIN_SKIP_SHA_VERIFY;
+  process.env.NANO_BRAIN_SKIP_SHA_VERIFY = "1";
+  t.after(() => {
+    if (prev === undefined) delete process.env.NANO_BRAIN_SKIP_SHA_VERIFY;
+    else process.env.NANO_BRAIN_SKIP_SHA_VERIFY = prev;
+  });
+  const body = Buffer.alloc(60_000, 0x43);
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) {
+      return {
+        status: 200,
+        headers: { "content-length": String(body.length * 3) },
+        stream: pacedBody(
+          [body.subarray(0, 20_000), body.subarray(20_000, 40_000)],
+          { gapMs: 10, errorAfterMs: 20 },
+        ),
+      };
+    }
+    return { error: new Error("offline") };
+  });
+
+  await assert.rejects(() => ensureBinary(), /Failed to download binary/);
+  assert.strictEqual(fs.existsSync(bin), false, "a failed download must not remain installed");
+  assert.deepStrictEqual(stagingFiles(bin), []);
+  assert.ok(dests.some((d) => d.endsWith(".partial")), "skip-verify must download into a .partial staging file");
+  assert.ok(!dests.includes(bin), "binPath itself is only ever created by rename");
+});
+
+// A planted symlink at the old fixed <bin>.partial name is never opened at all
+// now; one at the exact per-attempt name (randomBytes stubbed for determinism)
+// is refused by the exclusive "wx" open rather than followed. Either way the
+// sentinel stays byte-identical.
+test("ensureBinary: pre-planted staging symlinks are never followed (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nb-planted-"));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const sentinel = path.join(tmp, "sentinel");
+  fs.writeFileSync(sentinel, "SENTINEL");
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) return { status: 200, body: `${FAKE_BINARY_SHA}  ${ASSET_NAME}\n` };
+    return { status: 404 };
+  });
+
+  // The pre-#676 fixed name is not even a candidate anymore: a successful
+  // install must leave both the symlink and its target untouched.
+  const oldFixed = `${bin}.partial`;
+  fs.symlinkSync(sentinel, oldFixed);
+  t.after(() => safeUnlink(oldFixed));
+  assert.strictEqual(await ensureBinary(), bin);
+  assert.strictEqual(fs.readFileSync(sentinel, "utf8"), "SENTINEL");
+  assert.ok(fs.lstatSync(oldFixed).isSymbolicLink(), "fixed-name symlink must be left in place");
+  safeUnlink(oldFixed);
+
+  // A symlink at the exact per-attempt name is refused by "wx" instead of
+  // followed. (The failing attempt unlinks the planted path, so whether a
+  // later attempt succeeds depends on the candidate-tag count — either
+  // outcome is fine as long as the sentinel is never written.)
+  safeUnlink(bin);
+  const realRandom = crypto.randomBytes;
+  crypto.randomBytes = (n) => Buffer.alloc(n, 0xab);
+  t.after(() => { crypto.randomBytes = realRandom; });
+  const predicted = `${bin}.${process.pid}.abababababab.partial`;
+  fs.symlinkSync(sentinel, predicted);
+  try {
+    await ensureBinary();
+  } catch (_) {
+    /* an EEXIST fail-closed outcome is acceptable */
+  }
+  assert.strictEqual(fs.readFileSync(sentinel, "utf8"), "SENTINEL", "a planted symlink must never be written through");
+  if (fs.existsSync(bin)) {
+    assert.strictEqual(fs.readFileSync(bin, "utf8"), FAKE_BINARY, "an installed binary must be the verified bytes");
+  }
+});
+
+// If the rename itself fails (binPath is a non-empty directory), the outer
+// catch must still remove the per-attempt staging file.
+test("ensureBinary: a failed rename leaves no staging file behind (#676)", async (t) => {
+  const bin = withoutInstalledBinary(t);
+  captureStderr(t);
+  setSumsRetryDelayMs(1);
+  t.after(() => setSumsRetryDelayMs(1000));
+  // binPath exists as a NON-EMPTY directory: version probing fails, the
+  // stale-binary unlink cannot remove it, and renameSync(<file>, <nonempty
+  // dir>) throws — exercising cleanup in attempt()'s outer catch.
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, "keep"), "x");
+  t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
+  stubHttps(t, (url) => {
+    if (isAssetURL(url)) return { status: 200, body: FAKE_BINARY };
+    if (isSumsURL(url)) return { status: 200, body: `${FAKE_BINARY_SHA}  ${ASSET_NAME}\n` };
+    return { error: new Error("offline") };
+  });
+
+  await assert.rejects(() => ensureBinary(), /Failed to download binary/);
+  assert.deepStrictEqual(stagingFiles(bin), [], "a rename failure must not leave a .partial behind");
+  assert.strictEqual(fs.readFileSync(path.join(bin, "keep"), "utf8"), "x", "the existing directory must be untouched");
 });
