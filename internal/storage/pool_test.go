@@ -144,12 +144,21 @@ func TestMaskPassword_PgxParity(t *testing.T) {
 		{"spaces around equals", `host=h password = SPACEDPW dbname=d`, []string{"SPACEDPW"}, nil},
 		{"uppercase key", `host=h PASSWORD=UPPERPW dbname=d`, []string{"UPPERPW"}, nil},
 		{"malformed unterminated quote", `host=h password='unterminated SECRET`, []string{"SECRET"}, nil},
+		{"at sign in query", `postgres://h/db?application_name=me@laptop&password=ATPW`, []string{"ATPW"}, []string{"application_name=me@laptop"}},
+		{"at sign in query with port", `postgres://h:5432/d?user=alice@example.com&password=ATPORTPW&sslmode=disable`, []string{"ATPORTPW"}, []string{"alice@example.com", "sslmode=disable"}},
+		{"at sign in options with sslpassword", `postgres://h/d?options=a@b&sslpassword=ATSSLPW`, []string{"ATSSLPW"}, []string{"options=a@b"}},
+		{"uppercase scheme is keyword form", `POSTGRES://h/db?sslmode=disable password=UPSCHEMEPW`, []string{"UPSCHEMEPW"}, []string{"sslmode=disable"}},
+		{"leading space is keyword form", ` postgres://h/db?sslmode=disable password=SPACEPW`, []string{"SPACEPW"}, []string{"sslmode=disable"}},
+		{"leading tab is keyword form", "\tpostgres://h/d?x=1 password=TABPW", []string{"TABPW"}, nil},
+		{"mixed case postgresql is keyword form", `Postgresql://h/d?x=1 password=MIXEDPW sslmode=disable`, []string{"MIXEDPW"}, nil},
+		{"unterminated quote with backslash", `host=h password='abc\`, []string{"abc"}, nil},
+		{"empty value before backslash", `='\`, []string{}, []string{"='\\"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := maskPassword(tc.dsn)
-			if pcfg, err := pgconn.ParseConfig(tc.dsn); err == nil && pcfg.Password != "" && strings.Contains(got, pcfg.Password) {
-				t.Errorf("masked output still contains the password pgx loads (%q): %q", pcfg.Password, got)
+			if pw := pgxPassword(tc.dsn); pw != "" && strings.Contains(got, pw) {
+				t.Errorf("masked output still contains the password pgx loads (%q): %q", pw, got)
 			}
 			for _, s := range tc.secrets {
 				if strings.Contains(got, s) {
@@ -163,4 +172,36 @@ func TestMaskPassword_PgxParity(t *testing.T) {
 			}
 		})
 	}
+}
+
+// pgxPassword returns the password pgconn.ParseConfig loads, or "" when the
+// parse fails or panics (pgx itself panics on a trailing backslash inside an
+// unterminated quote — upstream off-by-one, pgconn/config.go).
+func pgxPassword(dsn string) (pw string) {
+	defer func() { _ = recover() }()
+	if cfg, err := pgconn.ParseConfig(dsn); err == nil {
+		return cfg.Password
+	}
+	return ""
+}
+
+// FuzzMaskDSNPasswords asserts the masker never panics and that a password
+// pgx successfully parses never survives in the masked output.
+func FuzzMaskDSNPasswords(f *testing.F) {
+	for _, s := range []string{
+		"", "=", "'", "\\", "='\\", "password='abc\\", "password=",
+		"postgres://u:p@h/db?password=x", "host=h password=x",
+		"postgres://h/db?application_name=me@laptop&password=X",
+		" postgres://h/db password=X", "POSTGRES://h/db password=X",
+		"password='my SECRET&password=x'", "host=h\vpassword=x dbname=d",
+		"\xbf\xbf\xbf\xbf\xbfpAssword",
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		out := MaskDSNPasswords(s)
+		if pw := pgxPassword(s); len(pw) >= 4 && strings.Count(s, pw) == 1 && strings.Contains(out, pw) {
+			t.Fatalf("masked output still contains the password pgx loads (%q) for %q: %q", pw, s, out)
+		}
+	})
 }

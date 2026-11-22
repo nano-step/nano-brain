@@ -61,15 +61,15 @@ func isASCIISpace(b byte) bool {
 
 const dsnSpaceTrim = " \t\n\r\v\f"
 
-// MaskDSNPasswords masks every *password= value in a database DSN. URL-form
-// DSNs (a scalar that, trimmed, starts with postgres:// or postgresql://,
-// matched case-insensitively) are handled by maskURLDSN; everything else is
-// tokenized the same way pgx tokenizes a keyword/value DSN, so the masked
-// byte span is exactly the value pgx would load. Keys are matched
-// case-insensitively and must end in "password" so sslpassword= is covered.
+// MaskDSNPasswords masks every *password= value in a database DSN. The
+// URL-vs-keyword choice is pgx's own: a case-sensitive prefix test on the
+// untrimmed string (pgconn/config.go), so an upper-case or space-prefixed
+// scheme is tokenized as keyword/value exactly as pgx tokenizes it. The
+// masked byte span is then exactly the value pgx would load. Keys are
+// matched case-insensitively and must end in "password" so sslpassword= is
+// covered.
 func MaskDSNPasswords(dsn string) string {
-	lower := strings.ToLower(strings.TrimSpace(dsn))
-	if strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://") {
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
 		return maskURLDSN(dsn)
 	}
 	return maskKeywordDSN(dsn)
@@ -78,13 +78,21 @@ func MaskDSNPasswords(dsn string) string {
 // maskURLDSN masks the userinfo password and every *password= query
 // parameter of a URL-form DSN. pgx decodes query parameter names, so each
 // key is URL-unescaped before the suffix check and an undecodable key is
-// treated as sensitive. Everything else — other parameters and the fragment
-// (which pgx does not load) — is kept byte-for-byte.
+// treated as sensitive. The query is masked before the userinfo because an
+// '@' can legitimately sit inside a parameter (a user name like
+// alice@example.com); url.Parse splits the query off before it looks at the
+// authority, so the '@' there is not userinfo. Everything else — other
+// parameters and the fragment (which pgx does not load) — is kept
+// byte-for-byte.
 func maskURLDSN(dsn string) string {
-	dsn = maskDSNUserinfo(dsn)
 	q := strings.IndexByte(dsn, '?')
+	head := dsn
+	if q >= 0 {
+		head = dsn[:q]
+	}
+	out := maskDSNUserinfo(head)
 	if q < 0 {
-		return dsn
+		return out
 	}
 	end := len(dsn)
 	if h := strings.IndexByte(dsn[q+1:], '#'); h >= 0 {
@@ -101,21 +109,25 @@ func maskURLDSN(dsn string) string {
 			segments[i] = k + "=***"
 		}
 	}
-	return dsn[:q+1] + strings.Join(segments, "&") + dsn[end:]
+	return out + "?" + strings.Join(segments, "&") + dsn[end:]
 }
 
-// maskDSNUserinfo blanks the user:password part of a URL the way the pool log
-// always has: at the first '@', scan back for '//' and replace the segment
-// with ***:***.
+// maskDSNUserinfo blanks the user:password part of a URL the way the pool
+// log always has. As url.Parse does, the authority runs from after "://" to
+// the first '/', '?' or '#', and the userinfo ends at the last '@' inside
+// it, so an '@' in the path, query or fragment is left alone.
 func maskDSNUserinfo(dsn string) string {
-	for i := 0; i < len(dsn); i++ {
-		if dsn[i] == '@' {
-			for j := i - 1; j >= 0; j-- {
-				if dsn[j] == '/' && j > 0 && dsn[j-1] == '/' {
-					return dsn[:j+1] + "***:***" + dsn[i:]
-				}
-			}
-		}
+	scheme := strings.Index(dsn, "://")
+	if scheme < 0 {
+		return dsn
+	}
+	start := scheme + 3
+	end := len(dsn)
+	if i := strings.IndexAny(dsn[start:], "/?#"); i >= 0 {
+		end = start + i
+	}
+	if at := strings.LastIndexByte(dsn[start:end], '@'); at >= 0 {
+		return dsn[:start] + "***:***" + dsn[start+at:]
 	}
 	return dsn
 }
@@ -170,7 +182,7 @@ func maskKeywordDSN(dsn string) string {
 					end++
 				}
 			}
-			if end == len(inner) {
+			if end >= len(inner) {
 				return maskDSNFailClosed(dsn)
 			}
 			span = [2]int{valStart, valStart + end + 2}
@@ -200,7 +212,7 @@ func maskKeywordDSN(dsn string) string {
 // so the input is returned unchanged — a bare word like "password_hash" or a
 // URL path mentioning "password" must not be eaten.
 func maskDSNFailClosed(dsn string) string {
-	i := strings.Index(strings.ToLower(dsn), "password")
+	i := indexOfPassword(dsn)
 	if i < 0 {
 		return dsn
 	}
@@ -211,16 +223,20 @@ func maskDSNFailClosed(dsn string) string {
 	return dsn[:i+eq+1] + "***"
 }
 
-func maskPassword(dsn string) string {
-	dsn = MaskDSNPasswords(dsn)
-	for i, c := range dsn {
-		if c == '@' {
-			for j := i - 1; j >= 0; j-- {
-				if dsn[j] == '/' && j > 0 && dsn[j-1] == '/' {
-					return dsn[:j+1] + "***:***" + dsn[i:]
-				}
-			}
+// indexOfPassword locates the first case-insensitive "password" in s. It
+// compares fixed byte windows instead of lowering the whole string, because
+// strings.ToLower rewrites invalid UTF-8 as U+FFFD and can return a longer
+// string, which would leave an index that no longer applies to s.
+func indexOfPassword(s string) int {
+	const needle = "password"
+	for i := 0; i+len(needle) <= len(s); i++ {
+		if strings.EqualFold(s[i:i+len(needle)], needle) {
+			return i
 		}
 	}
-	return dsn
+	return -1
+}
+
+func maskPassword(dsn string) string {
+	return maskDSNUserinfo(MaskDSNPasswords(dsn))
 }

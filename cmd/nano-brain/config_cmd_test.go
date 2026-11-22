@@ -320,6 +320,12 @@ func TestConfigShow_DSNParserParity(t *testing.T) {
 		{"escaped space keyword value", "database:\n  url: \"host=h user=u password=ESC\\\\ TAILPW dbname=d\"\n", []string{"TAILPW"}},
 		{"encoded sslpassword param", "database:\n  url: \"postgres://u@h/d?sslpass%77ord=ENCSSLPW&password=FAKEPW\"\n", []string{"ENCSSLPW", "FAKEPW"}},
 		{"merge into database", "defs:\n  db: &db\n    url: \"host=h user='u'password=NOSPACEPW dbname=d\"\ndatabase:\n  <<: *db\n", []string{"NOSPACEPW"}},
+		{"at sign in query user", "database:\n  url: \"postgres://h:5432/d?user=alice@example.com&password=ATLEAKQ1\"\n", []string{"ATLEAKQ1"}},
+		{"at sign in query name", "database:\n  url: \"postgres://h/d?application_name=svc@host&password=ATLEAKQ2\"\n", []string{"ATLEAKQ2"}},
+		{"uppercase scheme is keyword form", "database:\n  url: \"POSTGRES://h/d?x=1 password=UPLEAKQ3\"\n", []string{"UPLEAKQ3"}},
+		{"leading space is keyword form", "database:\n  url: \" postgres://h/d?x=1 password=WSLEAKQ4\"\n", []string{"WSLEAKQ4"}},
+		{"unterminated quote with backslash", "database:\n  url: \"host=h password='abc\\\\\"\n", []string{"abc"}},
+		{"trailing backslash scalar", "embedding:\n  model: \"x='\\\\\"\n", nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

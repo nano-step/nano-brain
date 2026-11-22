@@ -128,8 +128,8 @@ func maskYAMLNode(node *yaml.Node) {
 			return
 		}
 		node.Value = maskURL.ReplaceAllStringFunc(
-			storage.MaskDSNPasswords(
-				maskPostgresPassword.ReplaceAllString(node.Value, "${1}***${3}")),
+			maskPostgresPassword.ReplaceAllString(
+				storage.MaskDSNPasswords(node.Value), "${1}***${3}"),
 			config.RedactURLCredentials)
 	}
 }
@@ -174,8 +174,8 @@ func maskSecretNode(node *yaml.Node) {
 
 func maskDatabaseURL(dsn string) string {
 	return maskURL.ReplaceAllStringFunc(
-		storage.MaskDSNPasswords(
-			maskPostgresPassword.ReplaceAllString(dsn, "${1}***${3}")),
+		maskPostgresPassword.ReplaceAllString(
+			storage.MaskDSNPasswords(dsn), "${1}***${3}"),
 		config.RedactURLCredentials)
 }
 
