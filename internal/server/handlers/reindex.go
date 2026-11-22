@@ -131,7 +131,7 @@ func triggerForceWipe(c echo.Context, queries ReindexQuerier, w *watcher.Watcher
 		go w.ReextractSymbolsForWorkspace(context.Background(), workspace)
 	}
 
-	publishReindex(pub, workspace, "completed", int(totalChunks), 0, 0, 0, "")
+	publishReindex(pub, workspace, "queued", int(totalChunks), 0, 0, 0, "")
 
 	reqLog := LoggerFromCtx(c, logger)
 	reqLog.Info().
@@ -290,7 +290,7 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 		}
 	}
 
-	publishReindex(pub, workspace, "completed", 0, 0, deleted, skipped, "")
+	publishReindex(pub, workspace, "queued", 0, 0, deleted, skipped, "")
 
 	reqLog := LoggerFromCtx(c, logger)
 	reqLog.Info().
