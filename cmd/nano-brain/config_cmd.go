@@ -1,12 +1,16 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/storage"
+	"gopkg.in/yaml.v3"
 )
 
 func runConfigCmd(args []string, configPath string) {
@@ -70,14 +74,109 @@ func runConfigCheck(configPath string, jsonFlag bool) {
 	runDoctorCmd(args, configPath)
 }
 
+var (
+	maskPostgresPassword = regexp.MustCompile(`(postgres(?:ql)?://[^:]+:)([^@]+)(@)`)
+	maskURL              = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'` + "`" + `]+`)
+)
+
+// maskSensitive parses YAML before masking so flow collections, quoted keys and
+// block scalars cannot put credentials outside a line-oriented regex's reach.
 func maskSensitive(s string) string {
-	re := regexp.MustCompile(`(postgres(?:ql)?://[^:]+:)([^@]+)(@)`)
-	s = re.ReplaceAllString(s, "${1}***${3}")
-	re2 := regexp.MustCompile(`(voyage_api_key:\s*).+`)
-	s = re2.ReplaceAllString(s, "${1}***")
-	re3 := regexp.MustCompile(`(api_key:\s*).+`)
-	s = re3.ReplaceAllString(s, "${1}***")
-	return s
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(s), &doc); err != nil {
+		return "<redacted: invalid YAML>\n"
+	}
+	maskYAMLNode(&doc)
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return "<redacted: invalid YAML>\n"
+	}
+	return string(out)
+}
+
+func maskYAMLNode(node *yaml.Node) {
+	// Comments are not part of the parsed config, and may themselves contain
+	// copied credentials; never echo them through the redacted view.
+	node.HeadComment, node.LineComment, node.FootComment = "", "", ""
+	switch node.Kind {
+	case yaml.DocumentNode, yaml.SequenceNode:
+		for _, child := range node.Content {
+			maskYAMLNode(child)
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			// The key's loaded name must be decided before the key node is
+			// rewritten: a !!binary key carries its name base64-encoded, and
+			// an alias key can point at an anchor the pass already masked.
+			name, known := mapKeyName(node.Content[i])
+			maskYAMLNode(node.Content[i])
+			value := node.Content[i+1]
+			// koanf/mapstructure match keys case-insensitively (a `Password_Hash`
+			// inside a users list item loads), so the check must be too.
+			if !known || name == "tokens" || name == "password_hash" || strings.HasSuffix(name, "api_key") {
+				value.HeadComment, value.LineComment, value.FootComment = "", "", ""
+				maskSecretNode(value)
+				continue
+			}
+			maskYAMLNode(value)
+		}
+	case yaml.ScalarNode:
+		// koanf decodes !!binary to the real value, so the base64 text itself
+		// is the secret; nothing inside it can be partially masked.
+		if node.Tag == "!!binary" {
+			node.Tag, node.Value = "!!str", "<redacted>"
+			return
+		}
+		node.Value = maskURL.ReplaceAllStringFunc(
+			maskPostgresPassword.ReplaceAllString(
+				storage.MaskDSNPasswords(node.Value), "${1}***${3}"),
+			config.RedactURLCredentials)
+	}
+}
+
+// mapKeyName returns the lower-cased name a mapping key loads under. Alias
+// keys are resolved to their anchor, and a !!binary key is base64-decoded —
+// koanf decodes it the same way before matching a config field. known=false
+// means the name cannot be determined (undecodable base64, or an anchor the
+// redaction pass has already rewritten to a sentinel), and the pair must be
+// masked.
+func mapKeyName(keyNode *yaml.Node) (name string, known bool) {
+	if keyNode.Kind == yaml.AliasNode && keyNode.Alias != nil {
+		keyNode = keyNode.Alias
+	}
+	switch {
+	case keyNode.Tag == "!!binary":
+		decoded, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(keyNode.Value), ""))
+		if err != nil {
+			return "", false
+		}
+		return strings.ToLower(string(decoded)), true
+	case keyNode.Value == "***" || keyNode.Value == "<redacted>":
+		return "", false
+	default:
+		return strings.ToLower(keyNode.Value), true
+	}
+}
+
+func maskSecretNode(node *yaml.Node) {
+	node.HeadComment, node.LineComment, node.FootComment = "", "", ""
+	if node.Kind == yaml.AliasNode && node.Alias != nil {
+		maskSecretNode(node.Alias)
+	}
+	if node.Kind == yaml.SequenceNode {
+		for _, child := range node.Content {
+			maskSecretNode(child)
+		}
+		return
+	}
+	node.Kind, node.Tag, node.Value, node.Content, node.Style = yaml.ScalarNode, "!!str", "***", nil, 0
+}
+
+func maskDatabaseURL(dsn string) string {
+	return maskURL.ReplaceAllStringFunc(
+		maskPostgresPassword.ReplaceAllString(
+			storage.MaskDSNPasswords(dsn), "${1}***${3}"),
+		config.RedactURLCredentials)
 }
 
 func configToMap(cfg *config.Config, configPath string) map[string]interface{} {
@@ -88,11 +187,11 @@ func configToMap(cfg *config.Config, configPath string) map[string]interface{} {
 			"port": cfg.Server.Port,
 		},
 		"database": map[string]interface{}{
-			"url": maskSensitive(cfg.Database.URL),
+			"url": maskDatabaseURL(cfg.Database.URL),
 		},
 		"embedding": map[string]interface{}{
 			"provider":    cfg.Embedding.Provider,
-			"url":         cfg.Embedding.URL,
+			"url":         config.RedactURLCredentials(cfg.Embedding.URL),
 			"model":       cfg.Embedding.Model,
 			"concurrency": cfg.Embedding.Concurrency,
 		},
@@ -111,9 +210,9 @@ func configToMap(cfg *config.Config, configPath string) map[string]interface{} {
 
 func printConfigDefaults(cfg *config.Config) {
 	fmt.Printf("server:\n  host: %s\n  port: %d\n\n", cfg.Server.Host, cfg.Server.Port)
-	fmt.Printf("database:\n  url: %s\n\n", maskSensitive(cfg.Database.URL))
+	fmt.Printf("database:\n  url: %s\n\n", maskDatabaseURL(cfg.Database.URL))
 	fmt.Printf("embedding:\n  provider: %s\n  url: %s\n  model: %s\n  concurrency: %d\n\n",
-		cfg.Embedding.Provider, cfg.Embedding.URL, cfg.Embedding.Model, cfg.Embedding.Concurrency)
+		cfg.Embedding.Provider, config.RedactURLCredentials(cfg.Embedding.URL), cfg.Embedding.Model, cfg.Embedding.Concurrency)
 	fmt.Printf("search:\n  rrf_k: %.0f\n  limit: %d\n\n", cfg.Search.RrfK, cfg.Search.Limit)
 	fmt.Printf("logging:\n  level: %s\n", cfg.Logging.Level)
 }

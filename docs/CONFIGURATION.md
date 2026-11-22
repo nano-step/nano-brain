@@ -98,9 +98,11 @@ Fixed, not configurable:
 | `server.auth.realm` | string | `nano-brain` | HTTP Basic Auth realm. Letters, digits, spaces, `.`, `_` and `-` only |
 | `server.auth.tokens` | []string | `[]` | Bearer tokens for API auth. Empty tokens are rejected |
 | `server.auth.users` | []object | `[]` | Basic Auth users (username + bcrypt hash). When auth is enabled, startup fails on an invalid entry |
-| `server.auth.users[].username` | string | — | Username. Must be non-empty, unique, without leading or trailing whitespace, and must not contain `:` |
-| `server.auth.users[].password_hash` | string | — | bcrypt hash of password. Must be a complete bcrypt hash, and every user must use the same bcrypt cost; generate one with `nano-brain auth hash <password>` |
+| `server.auth.users[].username` | string | — | Username. Must be non-empty, unique, without leading or trailing whitespace, and must not contain `:` or control or invisible characters (newline, zero-width space, BOM) |
+| `server.auth.users[].password_hash` | string | — | bcrypt hash of password. Must be a complete bcrypt hash, every user must use the same bcrypt cost, and the cost must not exceed 14; generate one with `nano-brain auth hash <password>` |
 | `server.auth.bypass_paths` | []string | `["/health", "/api/openapi.json"]` | Paths that skip auth. On a non-loopback bind, startup prints a warning for every entry other than `/health` and `/api/openapi.json` |
+
+`GET /api/v1/config` and `nano-brain config show` redact credentials embedded in URLs: the `user:password@` part and the values of the `api_key`, `key`, `token`, `access_token`, `secret` and `password` query parameters are shown as `<redacted>`.
 
 ---
 
@@ -449,8 +451,10 @@ nano-brain validates config on startup. Invalid config → startup fails with er
 | `auth.enabled` and a username containing `:` | `server.auth.users[N].username must not contain ':'` |
 | `auth.enabled` and a repeated username | `server.auth.users[N].username "X" is a duplicate` |
 | `auth.enabled` and a username with leading or trailing whitespace | `server.auth.users[N].username must not start or end with whitespace` |
+| `auth.enabled` and a username containing a control or format character (newline, NUL, zero-width space, BOM) | `server.auth.users[N].username must not contain control or invisible characters` |
 | `auth.enabled` and an incomplete or unparsable `password_hash` | `server.auth.users[N].password_hash is not a valid bcrypt hash` |
 | `auth.enabled` and users hashed at different bcrypt costs | `server.auth.users[N].password_hash has bcrypt cost X but an earlier user has cost Y` |
+| `auth.enabled` and a `password_hash` with a bcrypt cost above 14 | `server.auth.users[N].password_hash has bcrypt cost X; costs above 14 make every login attempt, including unauthenticated ones, very slow` |
 | `summarization.enabled` but no provider_url | `summarization.provider_url is required when enabled` |
 | `summarization.enabled` but concurrency < 1 | `summarization.concurrency must be >= 1 when enabled` |
 | `code_summarization.enabled` but no provider_url | `code_summarization.provider_url is required when enabled` |
