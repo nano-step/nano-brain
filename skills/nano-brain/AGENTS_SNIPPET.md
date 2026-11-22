@@ -15,7 +15,7 @@ This exports `NANO_BRAIN_WORKSPACE` so subsequent CLI calls do not need `--works
 
 ```bash
 npx @nano-step/nano-brain workspaces current --check 2>/dev/null \
-  || npx @nano-step/nano-brain init --root="$PWD"
+  || npx @nano-step/nano-brain init --root "$PWD"
 ```
 
 ### Quick Reference (CLI)
