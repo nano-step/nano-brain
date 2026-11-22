@@ -87,10 +87,10 @@ func (a *walkAdmitter) ignore(path string, isDir bool) bool {
 	a.stack.PopAbove(path)
 
 	if isDir {
-		if gi, err := compileRegularIgnore(filepath.Join(path, ".gitignore")); err == nil {
+		if gi, err := CompileRegularIgnore(filepath.Join(path, ".gitignore")); err == nil {
 			a.stack.Push(path, gi)
 		}
-		if li, err := compileRegularIgnore(filepath.Join(path, ".nano-brainignore")); err == nil {
+		if li, err := CompileRegularIgnore(filepath.Join(path, ".nano-brainignore")); err == nil {
 			a.stack.Push(path, li)
 		}
 	}
@@ -321,12 +321,12 @@ func NewFileFilter(rootDir string, excludePatterns, allowedExtensions []string, 
 		}
 	}
 
-	if gi, err := compileRegularIgnore(filepath.Join(rootDir, ".gitignore")); err == nil {
+	if gi, err := CompileRegularIgnore(filepath.Join(rootDir, ".gitignore")); err == nil {
 		f.gitignoreMatcher = gi
 	}
 
 	localIgnPath := filepath.Join(rootDir, ".nano-brainignore")
-	gi, err := compileRegularIgnore(localIgnPath)
+	gi, err := CompileRegularIgnore(localIgnPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return f, fmt.Errorf("load workspace .nano-brainignore at %s: %w", localIgnPath, err)
@@ -338,7 +338,12 @@ func NewFileFilter(rootDir string, excludePatterns, allowedExtensions []string, 
 	return f, nil
 }
 
-func compileRegularIgnore(path string) (*gitignore.GitIgnore, error) {
+// CompileRegularIgnore compiles the ignore file at path under the same bound
+// as the manifest and global-ignore reads: a regular file of at most
+// graph.MaxAuxFileSize bytes. A regular-but-unbounded pseudo file — a
+// committed symlink to /proc/self/pagemap reads hundreds of GiB on Linux —
+// is refused by the read cap (#675).
+func CompileRegularIgnore(path string) (*gitignore.GitIgnore, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
@@ -349,7 +354,16 @@ func compileRegularIgnore(path string) (*gitignore.GitIgnore, error) {
 		}
 		return nil, os.ErrNotExist
 	}
-	return gitignore.CompileIgnoreFile(path)
+	data, err := graph.ReadRegularFile(path, graph.MaxAuxFileSize)
+	if err != nil {
+		// An oversized, swapped or unreadable pseudo file is treated as
+		// absent; only a real permission failure stays an error.
+		if os.IsPermission(err) {
+			return nil, err
+		}
+		return nil, os.ErrNotExist
+	}
+	return gitignore.CompileIgnoreLines(strings.Split(string(data), "\n")...), nil
 }
 
 func (f *FileFilter) shouldSkip(absPath string, isDir bool) bool {

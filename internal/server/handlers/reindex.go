@@ -338,18 +338,21 @@ func walkCollectionFiles(col sqlc.Collection) (map[string]string, error) {
 			return nil
 		}
 		info, err := d.Info()
-		if err != nil || info.Size() > maxIncrementalFileSize {
+		if err != nil {
 			return nil
 		}
 		// Opening a FIFO blocks until a writer appears; sockets and devices are
-		// not content either (#675). A symlink is judged by its target.
+		// not content either (#675). A symlink is judged by its target, so the
+		// size check applies to the target, not to the link.
 		if !d.Type().IsRegular() {
 			if d.Type()&os.ModeSymlink == 0 {
 				return nil
 			}
-			if target, statErr := os.Stat(path); statErr != nil || !target.Mode().IsRegular() {
+			if target, statErr := os.Stat(path); statErr != nil || !target.Mode().IsRegular() || target.Size() > maxIncrementalFileSize {
 				return nil
 			}
+		} else if info.Size() > maxIncrementalFileSize {
+			return nil
 		}
 		f, err := os.Open(path)
 		if err != nil {
@@ -357,7 +360,11 @@ func walkCollectionFiles(col sqlc.Collection) (map[string]string, error) {
 		}
 		defer f.Close()
 		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
+		// The stat sizes are a hint only: a regular file that reports size 0
+		// (e.g. /proc/self/pagemap on Linux) reads without end, so the copy
+		// itself is bounded (#675).
+		n, err := io.Copy(h, io.LimitReader(f, maxIncrementalFileSize+1))
+		if err != nil || n > maxIncrementalFileSize {
 			return nil
 		}
 		result[path] = hex.EncodeToString(h.Sum(nil))

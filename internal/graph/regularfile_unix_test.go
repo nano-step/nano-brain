@@ -52,43 +52,53 @@ func fifoWriter(path string) func() {
 }
 
 func TestDetect_SkipsFIFOManifest(t *testing.T) {
-	root := t.TempDir()
-	fifo := filepath.Join(root, "go.mod")
-	if err := syscall.Mkfifo(fifo, 0o644); err != nil {
-		t.Skipf("mkfifo not available here: %v", err)
-	}
+	for _, name := range []string{"go.mod", "Gemfile", "package.json"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			fifo := filepath.Join(root, name)
+			if err := syscall.Mkfifo(fifo, 0o644); err != nil {
+				t.Skipf("mkfifo not available here: %v", err)
+			}
 
-	d := graph.NewFrameworkDetector(graph.DefaultRules)
-	runBounded(t, 2*time.Second, fifoWriter(fifo), func() {
-		if got := d.Detect(root); len(got) != 0 {
-			t.Errorf("Detect = %v, want no frameworks", got)
-		}
-	})
+			d := graph.NewFrameworkDetector(graph.DefaultRules)
+			runBounded(t, 2*time.Second, fifoWriter(fifo), func() {
+				if got := d.Detect(root); len(got) != 0 {
+					t.Errorf("Detect = %v, want no frameworks", got)
+				}
+			})
+		})
+	}
 }
 
 func TestDetect_SkipsDevZeroSymlinkManifest(t *testing.T) {
-	root := t.TempDir()
-	if err := os.Symlink("/dev/zero", filepath.Join(root, "go.mod")); err != nil {
-		t.Fatal(err)
-	}
+	for _, name := range []string{"go.mod", "Gemfile", "package.json"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.Symlink("/dev/zero", filepath.Join(root, name)); err != nil {
+				t.Fatal(err)
+			}
 
-	var before runtime.MemStats
-	runtime.ReadMemStats(&before)
+			runtime.GC()
+			var before runtime.MemStats
+			runtime.ReadMemStats(&before)
 
-	d := graph.NewFrameworkDetector(graph.DefaultRules)
-	runBounded(t, 2*time.Second, nil, func() {
-		if got := d.Detect(root); len(got) != 0 {
-			t.Errorf("Detect = %v, want no frameworks", got)
-		}
-	})
+			d := graph.NewFrameworkDetector(graph.DefaultRules)
+			runBounded(t, 2*time.Second, nil, func() {
+				if got := d.Detect(root); len(got) != 0 {
+					t.Errorf("Detect = %v, want no frameworks", got)
+				}
+			})
 
-	var after runtime.MemStats
-	runtime.ReadMemStats(&after)
-	// A symlinked /dev/zero read without the size cap grows heap without bound
-	// (measured ~500 MiB in 150ms). Allow generous headroom for test noise.
-	const maxGrowth = 64 << 20
-	if after.HeapAlloc-before.HeapAlloc > maxGrowth {
-		t.Errorf("Detect read an unbounded special file: heap grew by %d bytes", after.HeapAlloc-before.HeapAlloc)
+			var after runtime.MemStats
+			runtime.ReadMemStats(&after)
+			// A symlinked /dev/zero read without the size cap grows heap
+			// without bound (measured ~500 MiB in 150ms). The delta is signed:
+			// a GC mid-test shrinks the heap and a uint64 subtraction wraps.
+			const maxGrowth = 64 << 20
+			if growth := int64(after.HeapAlloc) - int64(before.HeapAlloc); growth > maxGrowth {
+				t.Errorf("Detect read an unbounded special file: heap grew by %d bytes", growth)
+			}
+		})
 	}
 }
 
@@ -133,9 +143,11 @@ func TestReadRegularFile(t *testing.T) {
 	if err := syscall.Mkfifo(fifo, 0o644); err != nil {
 		t.Skipf("mkfifo not available here: %v", err)
 	}
-	if _, err := graph.ReadRegularFile(fifo, graph.MaxAuxFileSize); err == nil {
-		t.Error("FIFO: expected error")
-	}
+	runBounded(t, 2*time.Second, fifoWriter(fifo), func() {
+		if _, err := graph.ReadRegularFile(fifo, graph.MaxAuxFileSize); err == nil {
+			t.Error("FIFO: expected error")
+		}
+	})
 
 	if err := os.Symlink("/dev/zero", filepath.Join(dir, "zero")); err != nil {
 		t.Fatal(err)

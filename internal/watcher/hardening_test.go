@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	gitignore "github.com/sabhiram/go-gitignore"
 )
 
 func TestIgnoreFiles_NonRegularDoNotBlock(t *testing.T) {
@@ -269,5 +272,57 @@ func TestCheckResolvedPath_RootInDifferentCase(t *testing.T) {
 	mustSymlink(t, filepath.Join(strings.ToUpper(onDisk), "DOCS", "NODE_MODULES", "X.MD"), filepath.Join(onDisk, "case-generated.md"))
 	if got := CheckResolvedPath(root, filter, filepath.Join(root, "case-generated.md")); !errors.Is(got, ErrTargetDenied) {
 		t.Errorf("case-variant excluded directory: got %v, want ErrTargetDenied", got)
+	}
+}
+
+// A FIFO or a symlink to a device at the global ignore path must be treated
+// as an absent file and return promptly (#675).
+func TestLoadGlobalIgnore_NonRegularDoNotBlock(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, path string)
+	}{
+		{"fifo", func(t *testing.T, path string) {
+			if _, err := exec.LookPath("mkfifo"); err != nil {
+				t.Skip("mkfifo unavailable")
+			}
+			if out, err := exec.Command("mkfifo", path).CombinedOutput(); err != nil {
+				t.Fatalf("mkfifo: %v: %s", err, out)
+			}
+		}},
+		{"symlink to /dev/zero", func(t *testing.T, path string) {
+			skipSymlinkTestOnWindows(t)
+			if _, err := os.Stat("/dev/zero"); err != nil {
+				t.Skip("/dev/zero unavailable")
+			}
+			mustSymlink(t, "/dev/zero", path)
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			gdir := filepath.Join(home, ".nano-brain")
+			if err := os.MkdirAll(gdir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			tc.setup(t, filepath.Join(gdir, ".nano-brainignore"))
+
+			done := make(chan struct{})
+			var gi *gitignore.GitIgnore
+			var err error
+			go func() {
+				defer close(done)
+				gi, _, err = LoadGlobalIgnore(home)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("LoadGlobalIgnore did not return; a non-regular file is being read")
+			}
+			if gi != nil {
+				t.Errorf("LoadGlobalIgnore returned an ignore for a non-regular file")
+			}
+			_ = err // absent, refused or error are all acceptable; blocking is not
+		})
 	}
 }

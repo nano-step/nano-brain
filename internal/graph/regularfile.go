@@ -14,11 +14,14 @@ const MaxAuxFileSize = 4 << 20
 // ReadRegularFile reads path only when it resolves to a regular file of at
 // most max bytes. Stat follows symlinks, so a symlink to a device, FIFO or
 // socket is refused up front; the opened descriptor is re-checked so a swap
-// between the two cannot slip a special file through (that window is the
-// documented stat-then-open race). Reads are capped at max+1 bytes so an
-// unbounded special file can never exhaust memory. Any failure — missing,
-// non-regular, oversized, read error — returns an error, so callers treat the
-// file exactly as they treat a missing one today.
+// that substitutes a device or socket is still refused. It does not close
+// the stat-then-open race: a swap that substitutes a FIFO blocks in open(2)
+// before the re-check runs, and that window is the documented residual gap.
+// Reads are capped at max+1 bytes so a regular file that reports size 0 —
+// /proc/self/pagemap on Linux reads for hundreds of GiB — cannot exhaust
+// memory. Any failure — missing, non-regular, oversized, read error —
+// returns an error, so callers treat the file exactly as they treat a
+// missing one today.
 func ReadRegularFile(path string, max int64) ([]byte, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -38,6 +41,9 @@ func ReadRegularFile(path string, max int64) ([]byte, error) {
 	}
 	if !fi.Mode().IsRegular() {
 		return nil, fmt.Errorf("not a regular file: %s", path)
+	}
+	if fi.Size() > max {
+		return nil, fmt.Errorf("file exceeds %d bytes: %s", max, path)
 	}
 	data, err := io.ReadAll(io.LimitReader(f, max+1))
 	if err != nil {
