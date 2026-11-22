@@ -428,6 +428,7 @@ WHERE s.workspace_hash = $1
   AND s.collection = $2
   AND s.metadata->>'source_type' = 'symbol'
   AND COALESCE(NULLIF(s.metadata->>'end_line', ''), '0') = '0'
+ORDER BY 1
 `
 
 type ListFilesWithStaleSymbolSpansParams struct {

@@ -106,7 +106,8 @@ FROM documents s
 WHERE s.workspace_hash = $1
   AND s.collection = $2
   AND s.metadata->>'source_type' = 'symbol'
-  AND COALESCE(NULLIF(s.metadata->>'end_line', ''), '0') = '0';
+  AND COALESCE(NULLIF(s.metadata->>'end_line', ''), '0') = '0'
+ORDER BY 1;
 
 -- name: DeleteStaleSymbolSpanDocs :execrows
 -- Removes pre-#539 symbol docs for one file after a backfill pass. Only

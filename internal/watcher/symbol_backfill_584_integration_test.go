@@ -344,8 +344,8 @@ func TestWatcherBackfillsStaleSymbolSpans(t *testing.T) {
 
 	// Converged state: a third start must not touch the converged file. A
 	// stale canary on the OTHER file gives a deterministic signal — its
-	// deletion means the backfill finished its only row, while handlers.ts
-	// had no stale docs at all and so was never re-extracted.
+	// deletion means the backfill finished its only row (the query orders
+	// by file_path), while handlers.ts had no stale docs at all.
 	canaryPath := otherPath + "?symbol=gone2&kind=function"
 	e.insertStaleSymbolDoc(t, otherPath, "gone2", "function")
 	e.start(t)
@@ -448,14 +448,13 @@ func TestWatcherBackfillKeepsStaleSymbolsWhenFileUnreadable(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Canary on a readable file: its deletion proves the backfill ran.
+	// ListFilesWithStaleSymbolSpans orders by file_path, and src/other.ts
+	// sorts after src/locked.ts, so the locked row was already visited.
 	canaryPath := otherPath + "?symbol=gone&kind=function"
 	e.insertStaleSymbolDoc(t, otherPath, "gone", "function")
 
 	e.start(t)
 	e.waitDocGone(t, canaryPath)
-	// Row order within the pass is arbitrary; a short settle guarantees the
-	// locked file's row has been visited before asserting on it.
-	time.Sleep(300 * time.Millisecond)
 	e.stop(t)
 
 	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
@@ -503,10 +502,9 @@ func TestWatcherBackfillKeepsStaleSymbolsWhenExtractorMissing(t *testing.T) {
 	e.reg = symbol.NewRegistry(goE)
 	e.start(t)
 	defer e.stop(t)
+	// ListFilesWithStaleSymbolSpans orders by file_path, and src/main.go
+	// sorts after src/handler.ts, so the .ts row was already visited.
 	e.waitDocGone(t, canaryPath)
-	// Row order within the pass is arbitrary; a short settle guarantees the
-	// .ts row has been visited before asserting on it.
-	time.Sleep(300 * time.Millisecond)
 
 	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
 		SourcePath:    tsSymPath,
