@@ -369,3 +369,66 @@ func TestTriggerUpdate(t *testing.T) {
 		t.Errorf("unexpected message: %s", msg)
 	}
 }
+
+func TestIncrementalReindex_PreservesUnchangedSymbolAndSchemeDocs(t *testing.T) {
+	dir := t.TempDir()
+	keepFile := filepath.Join(dir, "repo.js")
+	changedFile := filepath.Join(dir, "changed.js")
+	deletedFile := filepath.Join(dir, "gone.js")
+
+	if err := os.WriteFile(keepFile, []byte("export const a = () => 1;"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(changedFile, []byte("export const b = () => 2;"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	keepHash := fileHash(t, keepFile)
+
+	keepDocID := uuid.New()
+	keepSymID := uuid.New()
+	changedDocID := uuid.New()
+	changedSymID := uuid.New()
+	deletedDocID := uuid.New()
+	deletedSymID := uuid.New()
+	flowDocID := uuid.New()
+
+	mq := &mockReindexQuerier{
+		collections: []sqlc.Collection{{Name: "code", Path: dir}},
+		indexedDocs: map[string][]sqlc.ListDocumentSourcePathsAndHashesRow{
+			"code": {
+				{ID: keepDocID, SourcePath: keepFile, ContentHash: keepHash},
+				{ID: keepSymID, SourcePath: keepFile + "?symbol=a&kind=function", ContentHash: "sym-a"},
+				{ID: changedDocID, SourcePath: changedFile, ContentHash: "old-changed-hash"},
+				{ID: changedSymID, SourcePath: changedFile + "?symbol=oldB&kind=function", ContentHash: "sym-b"},
+				{ID: deletedDocID, SourcePath: deletedFile, ContentHash: "gone-hash"},
+				{ID: deletedSymID, SourcePath: deletedFile + "?symbol=goneFn&kind=function", ContentHash: "sym-gone"},
+				{ID: flowDocID, SourcePath: "flow://POST /api/orders", ContentHash: "flow-hash"},
+			},
+		},
+	}
+	w := newTestWatcherForHandler()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/reindex", strings.NewReader(`{"workspace":"ws123"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("workspace", "ws123")
+
+	if err := handlers.TriggerReindex(mq, w, nil, nil, zerolog.Nop())(c); err != nil {
+		t.Fatalf("TriggerReindex: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["deleted"] != float64(1) {
+		t.Errorf("deleted = %v, want 1 (only gone.js file doc)", resp["deleted"])
+	}
+	// Expected Document deletes: changedSymID + deletedSymID + deletedDocID = 3
+	// (keepSymID and flowDocID MUST NOT be deleted!)
+	if mq.deleteDocCalled != 3 {
+		t.Errorf("deleteDocCalled = %d, want 3 (changedSym + deletedSym + deletedDoc; keepSym + flowDoc preserved)", mq.deleteDocCalled)
+	}
+}

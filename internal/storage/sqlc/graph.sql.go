@@ -209,8 +209,10 @@ WHERE workspace_hash = $1
            AND NOT (target_node ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')
            AND split_part(target_node, '::', 2) = $2)
        OR (strpos($2::text, '::') > 0
-           AND NOT ($2 ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::')
-           AND target_node = split_part($2::text, '::', 2)))
+           AND (edge_type = 'http'
+                OR NOT ($2 ~ '^(?:(?:[^/]+/)*[^/]+\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts))::'))
+           AND (target_node = split_part($2::text, '::', 2)
+                OR (edge_type = 'http' AND split_part(target_node, '.', 2) = split_part($2::text, '::', 2)))))
   AND ($3::text = '' OR edge_type = $3)
 ORDER BY edge_type, source_node
 `

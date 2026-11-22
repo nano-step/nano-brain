@@ -10,9 +10,14 @@ import (
 
 const jsQuery = `
 (function_declaration name: (identifier) @name) @decl
+(generator_function_declaration name: (identifier) @name) @decl
 (method_definition name: (property_identifier) @name) @decl
 (class_declaration name: (identifier) @name) @decl
-(lexical_declaration (variable_declarator name: (identifier) @name value: (arrow_function))) @decl
+(lexical_declaration (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression)])) @decl
+(variable_declaration (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression)])) @decl
+(lexical_declaration (variable_declarator name: (identifier) @name value: (call_expression arguments: (arguments [(arrow_function) (function_expression)])))) @decl
+(pair key: (property_identifier) @name value: [(arrow_function) (function_expression)]) @decl
+(assignment_expression left: (member_expression property: (property_identifier) @name) right: [(arrow_function) (function_expression)]) @decl
 `
 
 type JavaScriptExtractor struct {
@@ -30,7 +35,12 @@ func NewJavaScriptExtractor() (*JavaScriptExtractor, error) {
 }
 
 func (e *JavaScriptExtractor) Supports(ext string) bool {
-	return ext == ".js"
+	switch ext {
+	case ".js", ".mjs", ".cjs", ".jsx":
+		return true
+	default:
+		return false
+	}
 }
 
 func (e *JavaScriptExtractor) Extract(filePath string, content []byte) ([]Symbol, error) {
@@ -82,13 +92,13 @@ func (e *JavaScriptExtractor) Extract(filePath string, content []byte) ([]Symbol
 
 func jsNodeKind(bt *gotreesitter.BoundTree, node *gotreesitter.Node) Kind {
 	switch bt.NodeType(node) {
-	case "function_declaration":
+	case "function_declaration", "generator_function_declaration":
 		return KindFunction
-	case "method_definition":
+	case "method_definition", "pair":
 		return KindMethod
 	case "class_declaration":
 		return KindType
-	case "lexical_declaration":
+	case "lexical_declaration", "variable_declaration", "assignment_expression":
 		return KindFunction
 	}
 	return KindFunction

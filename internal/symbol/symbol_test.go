@@ -185,15 +185,18 @@ func TestRegistry(t *testing.T) {
 	pyE, _ := symbol.NewPythonExtractor()
 	jsE, _ := symbol.NewJavaScriptExtractor()
 	rbE, _ := symbol.NewRubySymbolExtractor()
+	vueE, err := symbol.NewVueExtractor()
+	if err != nil {
+		t.Fatalf("NewVueExtractor: %v", err)
+	}
 
-	reg := symbol.NewRegistry(goE, tsE, pyE, jsE, rbE)
+	reg := symbol.NewRegistry(goE, tsE, pyE, jsE, rbE, vueE)
 
-	if !reg.Supports(".go") { t.Error("should support .go") }
-	if !reg.Supports(".ts") { t.Error("should support .ts") }
-	if !reg.Supports(".tsx") { t.Error("should support .tsx") }
-	if !reg.Supports(".py") { t.Error("should support .py") }
-	if !reg.Supports(".js") { t.Error("should support .js") }
-	if !reg.Supports(".rb") { t.Error("should support .rb") }
+	for _, ext := range []string{".go", ".ts", ".tsx", ".mts", ".cts", ".py", ".js", ".mjs", ".cjs", ".jsx", ".rb", ".vue"} {
+		if !reg.Supports(ext) {
+			t.Errorf("should support %s", ext)
+		}
+	}
 
 	syms, err := reg.Extract("main.go", []byte("package main\nfunc main() {}"))
 	if err != nil {
@@ -201,5 +204,111 @@ func TestRegistry(t *testing.T) {
 	}
 	if len(syms) == 0 {
 		t.Error("registry: expected symbols from .go file")
+	}
+}
+
+func TestJavaScriptExtractor_ExpressAndModuleIdioms(t *testing.T) {
+	e, err := symbol.NewJavaScriptExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	src := []byte(`
+export const createReserved = function (payload) { return payload; };
+const wrappedHandler = catchAsync(async (req, res) => res.json({ ok: true }));
+exports.legacyExport = (x) => x + 1;
+
+export default {
+  async getUserPendingCardVerifications(userId) {
+    return userId;
+  },
+  findById: async function (id) {
+    return id;
+  },
+  formatRow: (row) => row,
+};
+`)
+
+	for _, file := range []string{"repo.js", "repo.mjs", "repo.cjs", "view.jsx"} {
+		syms, err := e.Extract(file, src)
+		if err != nil {
+			t.Fatalf("Extract(%s): %v", file, err)
+		}
+		got := make(map[string]symbol.Kind)
+		for _, s := range syms {
+			got[s.Name] = s.Kind
+		}
+		want := map[string]symbol.Kind{
+			"createReserved":                  symbol.KindFunction,
+			"wrappedHandler":                  symbol.KindFunction,
+			"legacyExport":                    symbol.KindFunction,
+			"getUserPendingCardVerifications": symbol.KindMethod,
+			"findById":                        symbol.KindMethod,
+			"formatRow":                       symbol.KindMethod,
+		}
+		for name, kind := range want {
+			if got[name] != kind {
+				t.Errorf("%s: symbol %s = %q, want %q (all=%v)", file, name, got[name], kind, got)
+			}
+		}
+	}
+}
+
+func TestVueExtractor_ScriptSetupAndOptionsAPI(t *testing.T) {
+	e, err := symbol.NewVueExtractor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sfc := []byte(`<template>
+  <button @click="submitOrder">{{ totalFormatted }}</button>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
+interface OrderItem {
+  id: string
+  price: number
+}
+
+const totalFormatted = computed(() => '0.00')
+const addTradeLog = async (id: string) => id
+
+function submitOrder() {
+  return addTradeLog('1')
+}
+</script>
+`)
+
+	syms, err := e.Extract("components/CartPanel.vue", sfc)
+	if err != nil {
+		t.Fatalf("Extract vue: %v", err)
+	}
+	got := make(map[string]symbol.Symbol)
+	for _, s := range syms {
+		got[s.Name] = s
+	}
+
+	for name, wantKind := range map[string]symbol.Kind{
+		"OrderItem":      symbol.KindInterface,
+		"totalFormatted": symbol.KindFunction,
+		"addTradeLog":    symbol.KindFunction,
+		"submitOrder":    symbol.KindFunction,
+	} {
+		sym, ok := got[name]
+		if !ok {
+			t.Errorf("missing Vue symbol %q (got=%v)", name, got)
+			continue
+		}
+		if sym.Kind != wantKind {
+			t.Errorf("Vue symbol %q kind = %q, want %q", name, sym.Kind, wantKind)
+		}
+		if sym.Language != "vue" {
+			t.Errorf("Vue symbol %q language = %q, want vue", name, sym.Language)
+		}
+		if sym.Line < 5 {
+			t.Errorf("Vue symbol %q line = %d, expected >= 5 (after <template>)", name, sym.Line)
+		}
 	}
 }

@@ -11,11 +11,17 @@ import (
 
 const tsQuery = `
 (function_declaration name: (identifier) @name) @decl
+(generator_function_declaration name: (identifier) @name) @decl
 (method_definition name: (property_identifier) @name) @decl
 (interface_declaration name: (type_identifier) @name) @decl
 (type_alias_declaration name: (type_identifier) @name) @decl
+(enum_declaration name: (identifier) @name) @decl
 (class_declaration name: (type_identifier) @name) @decl
-(lexical_declaration (variable_declarator name: (identifier) @name value: (arrow_function))) @decl
+(lexical_declaration (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression)])) @decl
+(variable_declaration (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression)])) @decl
+(lexical_declaration (variable_declarator name: (identifier) @name value: (call_expression arguments: (arguments [(arrow_function) (function_expression)])))) @decl
+(pair key: (property_identifier) @name value: [(arrow_function) (function_expression)]) @decl
+(assignment_expression left: (member_expression property: (property_identifier) @name) right: [(arrow_function) (function_expression)]) @decl
 `
 
 type TypeScriptExtractor struct {
@@ -40,7 +46,12 @@ func NewTypeScriptExtractor() (*TypeScriptExtractor, error) {
 }
 
 func (e *TypeScriptExtractor) Supports(ext string) bool {
-	return ext == ".ts" || ext == ".tsx"
+	switch ext {
+	case ".ts", ".tsx", ".mts", ".cts":
+		return true
+	default:
+		return false
+	}
 }
 
 func (e *TypeScriptExtractor) Extract(filePath string, content []byte) ([]Symbol, error) {
@@ -97,17 +108,15 @@ func (e *TypeScriptExtractor) Extract(filePath string, content []byte) ([]Symbol
 
 func tsNodeKind(bt *gotreesitter.BoundTree, node *gotreesitter.Node) Kind {
 	switch bt.NodeType(node) {
-	case "function_declaration":
+	case "function_declaration", "generator_function_declaration":
 		return KindFunction
-	case "method_definition":
+	case "method_definition", "pair":
 		return KindMethod
 	case "interface_declaration":
 		return KindInterface
-	case "type_alias_declaration":
+	case "type_alias_declaration", "enum_declaration", "class_declaration":
 		return KindType
-	case "class_declaration":
-		return KindType
-	case "lexical_declaration":
+	case "lexical_declaration", "variable_declaration", "assignment_expression":
 		return KindFunction
 	}
 	return KindFunction
