@@ -194,13 +194,13 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 
 		if d.IsDir() {
 			giPath := filepath.Join(path, ".gitignore")
-			if info, statErr := os.Stat(giPath); statErr == nil && !info.IsDir() {
+			if info, statErr := os.Stat(giPath); statErr == nil && info.Mode().IsRegular() {
 				if gi, giErr := gitignore.CompileIgnoreFile(giPath); giErr == nil {
 					ignoreStack.Push(path, gi)
 				}
 			}
 			localIgnorePath := filepath.Join(path, ".nano-brainignore")
-			if info, statErr := os.Stat(localIgnorePath); statErr == nil && !info.IsDir() {
+			if info, statErr := os.Stat(localIgnorePath); statErr == nil && info.Mode().IsRegular() {
 				if li, liErr := gitignore.CompileIgnoreFile(localIgnorePath); liErr == nil {
 					ignoreStack.Push(path, li)
 				}

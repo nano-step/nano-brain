@@ -224,7 +224,7 @@ func BuildAliasIndex(workspaceRootAbs string) (*AliasIndex, error) {
 			return nil
 		}
 		relSlash := toWorkspaceRel(rel)
-		raw, readErr := os.ReadFile(p)
+		raw, readErr := ReadRegularFile(p, MaxAuxFileSize)
 		if readErr != nil {
 			return nil
 		}

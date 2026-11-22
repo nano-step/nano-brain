@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	gitignore "github.com/sabhiram/go-gitignore"
+
+	"github.com/nano-brain/nano-brain/internal/graph"
 )
 
 // GitignoreStack maintains a stack of .gitignore matchers discovered during
@@ -427,15 +429,21 @@ func (f *FileFilter) ShouldSkip(absPath string, isDir bool) bool {
 // pass os.UserHomeDir() result). See issue #263.
 func LoadGlobalIgnore(homeDir string) (*gitignore.GitIgnore, string, error) {
 	path := filepath.Join(homeDir, ".nano-brain", ".nano-brainignore")
-	if _, err := os.Stat(path); err != nil {
+	info, err := os.Stat(path)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, path, nil
 		}
 		return nil, path, err
 	}
-	gi, err := gitignore.CompileIgnoreFile(path)
+	// A FIFO or device at this path is treated as absent rather than parsed:
+	// opening it would block or read without bound (#675).
+	if !info.Mode().IsRegular() {
+		return nil, path, nil
+	}
+	data, err := graph.ReadRegularFile(path, graph.MaxAuxFileSize)
 	if err != nil {
 		return nil, path, err
 	}
-	return gi, path, nil
+	return gitignore.CompileIgnoreLines(strings.Split(string(data), "\n")...), path, nil
 }

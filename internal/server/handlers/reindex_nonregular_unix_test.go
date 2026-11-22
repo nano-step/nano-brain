@@ -48,7 +48,8 @@ func fifoTree(t *testing.T) (root, fifo string) {
 
 // serveOrFailOnBlock runs the handler and fails the test, instead of hanging
 // it, when the handler is still running after 5s. A blocked reader is released
-// by opening the FIFO's write end.
+// by opening the FIFO's write end; fifo may be empty when the blocking target
+// cannot be released (e.g. /dev/zero), in which case the wait is bounded.
 func serveOrFailOnBlock(t *testing.T, fifo string, h echo.HandlerFunc, c echo.Context) {
 	t.Helper()
 	done := make(chan error, 1)
@@ -62,12 +63,17 @@ func serveOrFailOnBlock(t *testing.T, fifo string, h echo.HandlerFunc, c echo.Co
 	case <-time.After(5 * time.Second):
 	}
 	t.Errorf("handler blocked on a non-regular file")
+	deadline := time.After(3 * time.Second)
 	for {
-		if f, err := os.OpenFile(fifo, os.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
-			f.Close()
+		if fifo != "" {
+			if f, err := os.OpenFile(fifo, os.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
+				f.Close()
+			}
 		}
 		select {
 		case <-done:
+			t.FailNow()
+		case <-deadline:
 			t.FailNow()
 		case <-time.After(50 * time.Millisecond):
 		}
@@ -102,6 +108,58 @@ func TestIncrementalReindex_SkipsNonRegularFiles(t *testing.T) {
 	// as files_pending_ingest and embedded stays 0.
 	if resp["files_pending_ingest"] != float64(3) || resp["embedded"] != float64(0) {
 		t.Errorf("files_pending_ingest = %v, embedded = %v; want 3 and 0 (the regular files and the alias of one)", resp["files_pending_ingest"], resp["embedded"])
+	}
+}
+
+// The full walk compiles nested .gitignore/.nano-brainignore files on the way
+// down. A FIFO there blocks the walk on open; a symlink to /dev/zero — which
+// git can create from a cloned repo — reads without bound (#675).
+func TestReindexCFG_FullWalk_SkipsNonRegularIgnoreFiles(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, sub string) (fifo string)
+	}{
+		{"fifo .gitignore", func(t *testing.T, sub string) string {
+			fifo := filepath.Join(sub, ".gitignore")
+			if err := syscall.Mkfifo(fifo, 0o644); err != nil {
+				t.Skipf("mkfifo not available here: %v", err)
+			}
+			return fifo
+		}},
+		{"fifo .nano-brainignore", func(t *testing.T, sub string) string {
+			fifo := filepath.Join(sub, ".nano-brainignore")
+			if err := syscall.Mkfifo(fifo, 0o644); err != nil {
+				t.Skipf("mkfifo not available here: %v", err)
+			}
+			return fifo
+		}},
+		{".gitignore -> /dev/zero", func(t *testing.T, sub string) string {
+			if err := os.Symlink("/dev/zero", filepath.Join(sub, ".gitignore")); err != nil {
+				t.Fatal(err)
+			}
+			return ""
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, _ := fifoTree(t)
+			fifo := tc.setup(t, filepath.Join(root, "sub"))
+
+			mq := &mockReindexCFGQuerier{collections: []sqlc.Collection{{Name: "code", Path: root}}}
+
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/reindex-cfg", strings.NewReader(`{"workspace":"ws123","full":true}`))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.Set("workspace", "ws123")
+
+			serveOrFailOnBlock(t, fifo, handlers.ReindexCFG(mq, graph.NewRegistry(), zerolog.Nop()), c)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 
