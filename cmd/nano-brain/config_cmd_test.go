@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -351,5 +353,138 @@ func TestConfigShow_DSNParserParity(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func captureOutput(t *testing.T, fn func()) (stdout, stderr string) {
+	t.Helper()
+	origOut, origErr := os.Stdout, os.Stderr
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe stdout: %v", err)
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe stderr: %v", err)
+	}
+	os.Stdout, os.Stderr = outW, errW
+
+	outCh := make(chan string, 1)
+	errCh := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(outR)
+		outCh <- buf.String()
+	}()
+	go func() {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(errR)
+		errCh <- buf.String()
+	}()
+
+	fn()
+
+	os.Stdout, os.Stderr = origOut, origErr
+	_ = outW.Close()
+	_ = errW.Close()
+	stdout = <-outCh
+	stderr = <-errCh
+	_ = outR.Close()
+	_ = errR.Close()
+	return stdout, stderr
+}
+
+func TestConfigShow_WarnsOnMissingExplicitConfig(t *testing.T) {
+	t.Run("env NANO_BRAIN_CONFIG missing emits WARNING on stderr", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "does-not-exist.yml")
+		t.Setenv("NANO_BRAIN_CONFIG", missing)
+
+		stdout, stderr := captureOutput(t, func() { runConfigShow("", false) })
+		if !strings.Contains(stderr, "WARNING:") || !strings.Contains(stderr, "NANO_BRAIN_CONFIG") || !strings.Contains(stderr, missing) {
+			t.Errorf("stderr = %q, want WARNING mentioning NANO_BRAIN_CONFIG and %q", stderr, missing)
+		}
+		if !strings.Contains(stdout, "# No config file at "+missing) {
+			t.Errorf("stdout = %q, want default fallback notice for %q", stdout, missing)
+		}
+	})
+
+	t.Run("explicit --config missing emits WARNING on stderr", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "flag-does-not-exist.yml")
+		t.Setenv("NANO_BRAIN_CONFIG", "")
+
+		stdout, stderr := captureOutput(t, func() { runConfigShow(missing, false) })
+		if !strings.Contains(stderr, "WARNING:") || !strings.Contains(stderr, "--config flag") || !strings.Contains(stderr, missing) {
+			t.Errorf("stderr = %q, want WARNING mentioning --config flag and %q", stderr, missing)
+		}
+		if !strings.Contains(stdout, "# No config file at "+missing) {
+			t.Errorf("stdout = %q, want default fallback notice for %q", stdout, missing)
+		}
+	})
+
+	t.Run("default config missing stays silent on stderr", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("NANO_BRAIN_CONFIG", "")
+
+		_, stderr := captureOutput(t, func() { runConfigShow("", false) })
+		if stderr != "" {
+			t.Errorf("stderr = %q, want empty when neither --config nor NANO_BRAIN_CONFIG is set", stderr)
+		}
+	})
+
+	t.Run("config check fails and warns when explicit config is missing", func(t *testing.T) {
+		dir := t.TempDir()
+		missing := filepath.Join(dir, "check-missing.yml")
+		stdout, stderr, code := invokeCLI(t, map[string]string{
+			"HOME":                          dir,
+			"NANO_BRAIN_CONFIG":             missing,
+			"DATABASE_URL":                  "",
+			"NANO_BRAIN_EMBEDDING_PROVIDER": "",
+		}, "config", "check", "--json")
+		if code == 0 {
+			t.Errorf("config check exit code = 0, want non-zero")
+		}
+		if !strings.Contains(stderr, "WARNING:") || !strings.Contains(stderr, missing) {
+			t.Errorf("config check stderr = %q, want WARNING for %q", stderr, missing)
+		}
+		if !strings.Contains(stdout, `"status": "fail"`) || !strings.Contains(stdout, "file does not exist") {
+			t.Errorf("config check stdout = %q, want Config fail with 'file does not exist'", stdout)
+		}
+	})
+}
+
+func TestConfigShow_TrimsFlagWhitespace(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(cfgPath, []byte("server:\n  host: 127.0.0.1\n  port: 3199\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NANO_BRAIN_CONFIG", "")
+	t.Setenv("NANO_BRAIN_SERVER_PORT", "")
+	os.Unsetenv("NANO_BRAIN_SERVER_PORT")
+
+	paddedFlag := "  " + cfgPath + "  "
+
+	stdout, stderr := captureOutput(t, func() { runConfigShow(paddedFlag, false) })
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty for valid padded --config path", stderr)
+	}
+	if strings.Contains(stdout, "No config file") {
+		t.Errorf("config show failed to load padded --config path:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "port: 3199") {
+		t.Errorf("stdout = %q, want loaded port 3199", stdout)
+	}
+
+	jsonOut, jsonErr := captureOutput(t, func() { runConfigShow(paddedFlag, true) })
+	if jsonErr != "" {
+		t.Errorf("stderr (--json) = %q, want empty", jsonErr)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonOut), &parsed); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", jsonOut, err)
+	}
+	if got := parsed["config_path"]; got != cfgPath {
+		t.Errorf("config_path = %v, want trimmed %q", got, cfgPath)
 	}
 }

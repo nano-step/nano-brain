@@ -23,11 +23,17 @@ func runDoctorCmd(args []string, configPath string) {
 		}
 	}
 
-	if configPath == "" {
-		configPath = config.ResolveConfigPath("")
-	}
+	var configWarn string
+	configPath, configWarn = resolveCLIConfigPath(configPath)
 
 	cfg, cfgErr := config.Load(configPath)
+	if cfgErr == nil && configWarn != "" {
+		if _, statErr := os.Stat(configPath); statErr != nil {
+			cfgErr = statErr
+		} else {
+			cfgErr = os.ErrNotExist
+		}
+	}
 	results := doctor.RunAll(configPath, cfg, cfgErr, resolveBinaryPath())
 
 	if onlineFlag {

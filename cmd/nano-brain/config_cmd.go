@@ -7,11 +7,61 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"gopkg.in/yaml.v3"
 )
+
+var (
+	clientConfigWarnMu   sync.Mutex
+	lastClientConfigWarn string
+)
+
+func resetClientConfigWarnState() {
+	clientConfigWarnMu.Lock()
+	lastClientConfigWarn = ""
+	clientConfigWarnMu.Unlock()
+}
+
+// resolveCLIConfigPath resolves the config file path via ResolveConfigPathStrict,
+// prints any missing-explicit-config warning to stderr, and updates deduplication
+// state (clearing it when warn is empty).
+func resolveCLIConfigPath(flagValue string) (string, string) {
+	path, warn := config.ResolveConfigPathStrict(flagValue)
+	clientConfigWarnMu.Lock()
+	lastClientConfigWarn = warn
+	clientConfigWarnMu.Unlock()
+	if warn != "" {
+		fmt.Fprintln(os.Stderr, warn)
+	}
+	return path, warn
+}
+
+// resolveConfigPathOnce resolves flagValue via ResolveConfigPathStrict and
+// emits any missing-explicit-config warning to stderr at most once per unique
+// warning string until cleared (by warn == "" or resetClientConfigWarnState).
+func resolveConfigPathOnce(flagValue string) string {
+	path, warn := config.ResolveConfigPathStrict(flagValue)
+	clientConfigWarnMu.Lock()
+	if warn == "" {
+		lastClientConfigWarn = ""
+		clientConfigWarnMu.Unlock()
+		return path
+	}
+	shouldPrint := warn != lastClientConfigWarn
+	lastClientConfigWarn = warn
+	clientConfigWarnMu.Unlock()
+	if shouldPrint {
+		fmt.Fprintln(os.Stderr, warn)
+	}
+	return path
+}
+
+func resolveClientConfigPath() string {
+	return resolveConfigPathOnce(cliConfigPath)
+}
 
 func runConfigCmd(args []string, configPath string) {
 	cliLog.Debug().Str("cmd", "config").Msg("cli command started")
@@ -39,9 +89,7 @@ func runConfigCmd(args []string, configPath string) {
 }
 
 func runConfigShow(configPath string, jsonFlag bool) {
-	if configPath == "" {
-		configPath = config.ResolveConfigPath("")
-	}
+	configPath, _ = resolveCLIConfigPath(configPath)
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)

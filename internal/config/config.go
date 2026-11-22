@@ -18,10 +18,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// expandTildeForConfig resolves "~/..." to absolute path. Local copy to avoid
-// internal/config → internal/summarize import cycle.
+// expandTildeForConfig resolves "~", "~/...", and "~\..." to absolute path.
+// "~otheruser/..." is returned unchanged so Load and ResolveConfigPath* agree.
+// Local copy to avoid internal/config → internal/summarize import cycle.
 func expandTildeForConfig(p string) (string, error) {
-	if !strings.HasPrefix(p, "~/") && p != "~" {
+	if p != "~" && !strings.HasPrefix(p, "~/") && !strings.HasPrefix(p, `~\`) {
 		return p, nil
 	}
 	home, err := os.UserHomeDir()
@@ -379,15 +380,13 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	// If config path is provided, load from file
+	configPath = strings.TrimSpace(configPath)
 	if configPath != "" {
-		// Expand tilde if present
-		if strings.HasPrefix(configPath, "~") {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get home directory: %w", err)
-			}
-			configPath = filepath.Join(home, configPath[1:])
+		expanded, err := expandTildeForConfig(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get home directory: %w", err)
 		}
+		configPath = expanded
 
 		// Only try to load if file exists
 		if _, err := os.Stat(configPath); err == nil {
@@ -754,19 +753,25 @@ func DefaultConfigPath() string {
 // ResolveConfigPathStrict when the caller needs a warning on missing files.
 func ResolveConfigPath(flagValue string) string {
 	if v := strings.TrimSpace(flagValue); v != "" {
+		if expanded, err := expandTildeForConfig(v); err == nil {
+			return expanded
+		}
 		return v
 	}
 	if v := strings.TrimSpace(os.Getenv("NANO_BRAIN_CONFIG")); v != "" {
+		if expanded, err := expandTildeForConfig(v); err == nil {
+			return expanded
+		}
 		return v
 	}
 	return DefaultConfigPath()
 }
 
-// ResolveConfigPathStrict behaves like ResolveConfigPath but ALSO emits a
-// warning to stderr (and returns the warning) when --config flag or
-// NANO_BRAIN_CONFIG env was set explicitly but the resolved file does not
-// exist. The path is still returned so the caller can fall through to
-// defaults — this is a warning, not a fatal error.
+// ResolveConfigPathStrict behaves like ResolveConfigPath but ALSO returns a
+// warning message when --config flag or NANO_BRAIN_CONFIG env was set
+// explicitly and the resolved file does not exist. The path is still returned
+// so the caller can fall through to defaults — this is a warning, not a fatal
+// error (unless a caller such as doctor chooses to fail on it).
 //
 // Returns (path, warning). warning is "" when no problem detected.
 func ResolveConfigPathStrict(flagValue string) (string, string) {
@@ -782,6 +787,9 @@ func ResolveConfigPathStrict(flagValue string) (string, string) {
 		path, source = envTrimmed, "NANO_BRAIN_CONFIG env"
 	default:
 		return DefaultConfigPath(), ""
+	}
+	if expanded, err := expandTildeForConfig(path); err == nil {
+		path = expanded
 	}
 
 	if _, err := os.Stat(path); err != nil {

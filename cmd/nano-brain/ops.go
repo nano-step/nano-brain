@@ -31,7 +31,7 @@ func defaultLogPath() string {
 }
 
 // runLogsCmd implements the "logs" CLI command.
-func runLogsCmd(args []string) {
+func runLogsCmd(args []string, configPath string) {
 	cliLog.Info().Str("cmd", "logs").Msg("cli command started")
 	count := 50
 	follow := false
@@ -61,7 +61,7 @@ func runLogsCmd(args []string) {
 		}
 	}
 
-	logPath := resolveLogPath()
+	logPath := resolveLogPath(configPath)
 
 	if follow {
 		if err := tailFollow(logPath, jsonFlag); err != nil {
@@ -98,8 +98,9 @@ func runLogsCmd(args []string) {
 }
 
 // resolveLogPath determines the log file path from config or defaults.
-func resolveLogPath() string {
-	cfg, err := config.Load(config.ResolveConfigPath(""))
+func resolveLogPath(configPath string) string {
+	resolvedPath, _ := resolveCLIConfigPath(configPath)
+	cfg, err := config.Load(resolvedPath)
 	if err == nil && cfg.Logging.File != "" {
 		p := cfg.Logging.File
 		if strings.HasPrefix(p, "~") {
@@ -468,8 +469,9 @@ func runStatusCmd(args []string) {
 }
 
 // runGooseMigrateCmd runs pending goose migrations from embedded SQL files.
-func runGooseMigrateCmd(jsonFlag bool) {
-	cfg, err := config.Load(config.ResolveConfigPath(""))
+func runGooseMigrateCmd(configPath string, jsonFlag bool) {
+	resolvedPath, _ := resolveCLIConfigPath(configPath)
+	cfg, err := config.Load(resolvedPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
