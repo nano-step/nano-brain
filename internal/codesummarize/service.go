@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
+	stdErrors "errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -27,6 +27,8 @@ type ServiceQuerier interface {
 	DeleteChunksByDocumentID(ctx context.Context, arg sqlc.DeleteChunksByDocumentIDParams) error
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 	UpsertCodeSummarizationFailure(ctx context.Context, arg sqlc.UpsertCodeSummarizationFailureParams) error
+	GetFailureBySymbol(ctx context.Context, arg sqlc.GetFailureBySymbolParams) (sqlc.GetFailureBySymbolRow, error)
+	ResolveFailure(ctx context.Context, id uuid.UUID) error
 	BulkGetCallerContext(ctx context.Context, arg sqlc.BulkGetCallerContextParams) ([]sqlc.BulkGetCallerContextRow, error)
 	BulkGetCalleeNodes(ctx context.Context, arg sqlc.BulkGetCalleeNodesParams) ([]sqlc.BulkGetCalleeNodesRow, error)
 	UpdateChunkGraphContextHash(ctx context.Context, arg sqlc.UpdateChunkGraphContextHashParams) error
@@ -53,6 +55,7 @@ type Service struct {
 	logger          zerolog.Logger
 	notifyCh        chan struct{}
 	processing      atomic.Bool
+	workspaceStart  atomic.Uint64
 }
 
 func NewService(
@@ -182,6 +185,36 @@ func (s *Service) splitAndSend(ctx context.Context, workspaceHash string, batch 
 		}
 
 		processed++
+		if failure, err := s.queries.GetFailureBySymbol(ctx, sqlc.GetFailureBySymbolParams{
+			WorkspaceHash: workspaceHash, ContentHash: matchedSymbol.ContentHash,
+			SourceFile: matchedSymbol.File, SymbolName: matchedSymbol.Name,
+		}); err == nil {
+			if err := s.queries.ResolveFailure(ctx, failure.ID); err != nil {
+				s.logger.Warn().Err(err).Str("symbol", matchedSymbol.Name).Msg("failed to resolve summarization failure")
+			}
+		} else if !stdErrors.Is(err, sql.ErrNoRows) {
+			s.logger.Warn().Err(err).Str("symbol", matchedSymbol.Name).Msg("failed to look up summarization failure")
+		}
+	}
+
+	for i, sym := range batch {
+		if matched[i] {
+			continue
+		}
+		s.logger.Warn().Str("symbol", sym.Name).Str("file", sym.File).
+			Msg("provider omitted requested symbol from successful batch")
+		if err := s.queries.UpsertCodeSummarizationFailure(ctx, sqlc.UpsertCodeSummarizationFailureParams{
+			WorkspaceHash: workspaceHash,
+			SymbolName:    sym.Name,
+			SymbolKind:    sql.NullString{String: sym.Kind, Valid: sym.Kind != ""},
+			SourceFile:    sym.File,
+			ContentHash:   sym.ContentHash,
+			ErrorReason:   "provider omitted requested symbol",
+			ErrorType:     "partial_omitted",
+		}); err != nil {
+			s.logger.Warn().Err(err).Str("symbol", sym.Name).Msg("failed to persist omitted symbol")
+		}
+		errors++
 	}
 
 	if err := s.budget.Increment(ctx, workspaceHash); err != nil {
@@ -192,6 +225,33 @@ func (s *Service) splitAndSend(ctx context.Context, workspaceHash string, batch 
 }
 
 func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed, skipped, errors int, err error) {
+	return s.runOnce(ctx, workspaceHash, 0, nil, false)
+}
+
+// RetryFailures bypasses automatic cooldown for explicitly selected
+// failures without letting unrelated pending symbols consume retry slots.
+func (s *Service) RetryFailures(ctx context.Context, workspaceHash string, ids []uuid.UUID) (processed, skipped, errors int, err error) {
+	if len(ids) == 0 {
+		return 0, 0, 0, nil
+	}
+	limit := s.cfg.MaxSummariesPerCycle
+	if limit <= 0 {
+		limit = 100
+	}
+	for start := 0; start < len(ids); start += limit {
+		end := min(start+limit, len(ids))
+		p, sk, e, runErr := s.runOnce(ctx, workspaceHash, 0, ids[start:end], false)
+		processed += p
+		skipped += sk
+		errors += e
+		if runErr != nil {
+			return processed, skipped, errors, runErr
+		}
+	}
+	return processed, skipped, errors, nil
+}
+
+func (s *Service) runOnce(ctx context.Context, workspaceHash string, workerLimit int, forceIDs []uuid.UUID, preferStale bool) (processed, skipped, errors int, err error) {
 	exhausted, err := s.budget.IsExhausted(ctx, workspaceHash, s.cfg.MaxRequestsPerDay)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("check budget: %w", err)
@@ -205,18 +265,34 @@ func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed,
 	if maxCycle <= 0 {
 		maxCycle = 100
 	}
+	if workerLimit > 0 && workerLimit < maxCycle {
+		maxCycle = workerLimit
+	}
+	if preferStale {
+		s.processGraphContextStale(ctx, workspaceHash, &processed, &errors, int32(maxCycle))
+		if processed+errors > 0 {
+			return processed, 0, errors, nil
+		}
+	}
 
 	rows, err := s.queries.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
 		WorkspaceHash: workspaceHash,
 		Limit:         int32(maxCycle),
+		ForceIds:      forceIDs,
 	})
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("get unsummarized symbols: %w", err)
 	}
 
 	if len(rows) == 0 {
-		s.logger.Info().Str("workspace", workspaceHash).Msg("no unsummarized symbols found")
-		return 0, 0, 0, nil
+		if len(forceIDs) == 0 {
+			staleLimit := int32(20)
+			if workerLimit > 0 {
+				staleLimit = int32(maxCycle)
+			}
+			s.processGraphContextStale(ctx, workspaceHash, &processed, &errors, staleLimit)
+		}
+		return processed, 0, errors, nil
 	}
 
 	symbols := make([]SymbolForSummary, 0, len(rows))
@@ -315,6 +391,9 @@ func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed,
 	}
 
 	for _, sym := range oversized {
+		if workerLimit > 0 && processed+errors > 0 {
+			break
+		}
 		exhausted, err := s.budget.IsExhausted(ctx, workspaceHash, s.cfg.MaxRequestsPerDay)
 		if err != nil {
 			s.logger.Warn().Err(err).Msg("failed to check budget for oversized symbol")
@@ -334,7 +413,9 @@ func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed,
 		errors += e
 	}
 
-	s.processGraphContextStale(ctx, workspaceHash, &processed, &errors)
+	if workerLimit == 0 && len(forceIDs) == 0 {
+		s.processGraphContextStale(ctx, workspaceHash, &processed, &errors, 20)
+	}
 
 	s.logger.Info().
 		Str("workspace", workspaceHash).
@@ -346,10 +427,10 @@ func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed,
 	return processed, skipped, errors, nil
 }
 
-func (s *Service) processGraphContextStale(ctx context.Context, workspaceHash string, processed, errors *int) {
+func (s *Service) processGraphContextStale(ctx context.Context, workspaceHash string, processed, errors *int, limit int32) {
 	staleRows, err := s.queries.GetSymbolChunksByGraphContextStale(ctx, sqlc.GetSymbolChunksByGraphContextStaleParams{
 		WorkspaceHash: workspaceHash,
-		Limit:         20,
+		Limit:         limit,
 	})
 	if err != nil {
 		s.logger.Warn().Err(err).Msg("failed to query graph-context-stale symbols")
@@ -596,14 +677,21 @@ func (s *Service) processAllWorkspaces(ctx context.Context, workerID int, curren
 		return 0
 	}
 
-	for _, ws := range workspaces {
+	batchLimit := s.cfg.BatchSize
+	if batchLimit <= 0 {
+		batchLimit = 5
+	}
+	sweep := s.workspaceStart.Add(1) - 1
+	start := int(sweep % uint64(max(1, len(workspaces))))
+	for i := range workspaces {
+		ws := workspaces[(start+i)%len(workspaces)]
 		if ctx.Err() != nil {
 			return 0
 		}
 
-		_, _, _, err := s.RunOnce(ctx, ws.Hash)
+		_, _, _, err := s.runOnce(ctx, ws.Hash, batchLimit, nil, sweep%2 == 1)
 		if err != nil {
-			if errors.Is(err, ErrBudgetExhausted) {
+			if stdErrors.Is(err, ErrBudgetExhausted) {
 				s.logger.Info().
 					Int("worker", workerID).
 					Str("workspace", ws.Hash).

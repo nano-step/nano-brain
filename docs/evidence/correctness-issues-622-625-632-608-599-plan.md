@@ -83,3 +83,37 @@ Each fix: OpenSpec proposal/design/spec/tasks before code, regression test,
 `go build ./...`, `go test -race -short ./...`, focused and full integration
 against `nanobrain_test`, independent review when available, and PR/CI.
 Never claim a fix without observed before/after behavior.
+
+## Summarization review follow-up (#599/#608)
+
+Independent reviews sent PR #693 back for retry-all truncation at the
+cycle limit, starvation of graph-stale work, same-hash symbols sharing
+failure state, incorrect success counts after partial budget exhaustion,
+and a persisted empty graph-context marker that could hide a later edge.
+
+Measured red/green regressions cover more retries than one cycle, fresh
+and stale queues competing, two files with the same symbol hash retaining
+independent failure rows, source-scoped summary existence, and a calls edge
+appearing after an edge-free interval. Migration 00031 changes only the
+partial unique index on unresolved failures, from workspace plus hash to
+workspace, hash, SHA-256(file) and SHA-256(symbol name). A 3.2 KiB
+noncompressible source path failed with PostgreSQL's btree tuple-size error;
+the fixed-UTF8 hash helper indexes it without changing the exact file/name
+matching predicates, and escaped text paths remain distinct. Explicit
+retries select failure IDs;
+successful summaries resolve the same identity. The stale selector now
+checks for relevant calls edges instead of storing a permanent empty hash.
+The legacy hash-keyed migration down is intentionally allowed to fail when
+distinct same-hash failures exist rather than deleting either record.
+An isolated upgrade test starts from v30 with a real failure, migrates
+to v31 and confirms that its ID survives while a second same-hash
+failure in another file can be inserted. A provider-backed test retries
+one of two same-hash failure IDs and confirms that the other remains
+unresolved and selectable.
+
+The provider-429 worker backoff gap predates this change and remains open
+for separate investigation. The full build, race/short and
+race/integration suites passed on `nanobrain_test` after the v31 change.
+Two independent reviewers returned MERGE for the
+symbol-identity revision and two more for the long-key index follow-up;
+the final PR head still requires a successful CI check before merge.
