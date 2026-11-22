@@ -666,3 +666,83 @@ func TestDoRequest_BodyBufferedForReplay(t *testing.T) {
 		t.Errorf("expected body forwarded once intact, got %v", bodies)
 	}
 }
+
+// Regression test for #623: the old two-pass parser never consumed --root's
+// value, so `init --root <path>` failed with "unexpected argument" in every
+// syntax form. A single-pass parser must consume values exactly once.
+func TestParseInitArgs(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    initFlags
+		wantErr string
+	}{
+		{
+			name: "root with separate value",
+			args: []string{"--root", "/path/to/dir"},
+			want: initFlags{hasRoot: true, root: "/path/to/dir"},
+		},
+		{
+			name: "root with all registration flags",
+			args: []string{"--root", "/p", "--workspace", "myws", "--json", "--force"},
+			want: initFlags{hasRoot: true, root: "/p", workspace: "myws", jsonFlag: true, forceFlag: true},
+		},
+		{
+			name: "yes plus root",
+			args: []string{"--yes", "--root", "/path/to/dir"},
+			want: initFlags{hasRoot: true, hasYes: true, root: "/path/to/dir"},
+		},
+		{
+			name: "install target",
+			args: []string{"--", "claude"},
+			want: initFlags{installTarget: "claude"},
+		},
+		{
+			name: "empty args",
+			args: nil,
+			want: initFlags{},
+		},
+		{
+			name:    "root missing value",
+			args:    []string{"--root"},
+			wantErr: "--root requires a value",
+		},
+		{
+			name:    "workspace missing value",
+			args:    []string{"--root", "/p", "--workspace"},
+			wantErr: "--workspace requires a value",
+		},
+		{
+			name:    "double dash missing target",
+			args:    []string{"--"},
+			wantErr: "-- requires an agent target",
+		},
+		{
+			name:    "unknown flag",
+			args:    []string{"--root=/p"},
+			wantErr: "unknown flag: --root=/p",
+		},
+		{
+			name:    "bare argument",
+			args:    []string{"/path/to/dir"},
+			wantErr: "unexpected argument: /path/to/dir",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseInitArgs(tt.args)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("parseInitArgs(%v) = %+v, want %+v", tt.args, got, tt.want)
+			}
+		})
+	}
+}

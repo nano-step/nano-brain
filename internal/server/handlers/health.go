@@ -103,8 +103,9 @@ type harvesterStatusResponse struct {
 		DBCount    int    `json:"db_count,omitempty"`
 	} `json:"opencode"`
 	ClaudeCode struct {
-		Enabled    bool   `json:"enabled"`
-		SessionDir string `json:"session_dir"`
+		Enabled     bool     `json:"enabled"`
+		SessionDir  string   `json:"session_dir"`
+		SessionDirs []string `json:"session_dirs,omitempty"`
 	} `json:"claude_code"`
 }
 
@@ -186,6 +187,7 @@ func (h *Health) Status(c echo.Context) error {
 	harvestStatus.OpenCode.DBCount = h.harvestStatus.DBCount
 	harvestStatus.ClaudeCode.Enabled = harvesterCfg.ClaudeCode.Enabled
 	harvestStatus.ClaudeCode.SessionDir = harvesterCfg.ClaudeCode.SessionDir
+	harvestStatus.ClaudeCode.SessionDirs = harvesterCfg.ClaudeCode.SessionDirsResolved()
 
 	resp := statusResponse{
 		PGStatus:            pgStatus,

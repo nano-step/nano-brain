@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/redact"
 	"github.com/rs/zerolog"
 )
 
@@ -28,12 +29,12 @@ type TimeFilter struct {
 }
 
 type PreprocessResult struct {
-	OriginalQuery string     `json:"original_query"`
-	EnglishQuery  string     `json:"english_query"`
-	Intent        Intent     `json:"intent"`
-	Expansions    []string   `json:"expansions"`
+	OriginalQuery string      `json:"original_query"`
+	EnglishQuery  string      `json:"english_query"`
+	Intent        Intent      `json:"intent"`
+	Expansions    []string    `json:"expansions"`
 	TimeFilter    *TimeFilter `json:"time_filter,omitempty"`
-	Language      string     `json:"language"`
+	Language      string      `json:"language"`
 }
 
 type Preprocessor struct {
@@ -109,11 +110,11 @@ type chatResponse struct {
 }
 
 type llmResponse struct {
-	Language    string   `json:"language"`
-	EnglishQuery string  `json:"english_query"`
-	Intent      string   `json:"intent"`
-	Expansions  []string `json:"expansions"`
-	TimeFilter  *struct {
+	Language     string   `json:"language"`
+	EnglishQuery string   `json:"english_query"`
+	Intent       string   `json:"intent"`
+	Expansions   []string `json:"expansions"`
+	TimeFilter   *struct {
 		After  string `json:"after,omitempty"`
 		Before string `json:"before,omitempty"`
 	} `json:"time_filter"`
@@ -124,7 +125,7 @@ func (p *Preprocessor) callLLM(ctx context.Context, query string) (*PreprocessRe
 		Model: p.model,
 		Messages: []chatMessage{
 			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: query},
+			{Role: "user", Content: redact.Scrub(query)},
 		},
 		Stream: false,
 	}

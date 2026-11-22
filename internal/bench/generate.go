@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nano-brain/nano-brain/internal/redact"
 )
 
 type DocumentRow struct {
@@ -111,6 +112,7 @@ func deriveQuery(doc DocumentRow) string {
 }
 
 func generateLLMQuery(ctx context.Context, cfg *BenchConfig, content string) (string, error) {
+	content = redact.Scrub(content)
 	if len(content) > 3000 {
 		content = content[:3000]
 	}
@@ -132,7 +134,7 @@ Document content:
 		"messages": []map[string]string{
 			{"role": "user", "content": prompt},
 		},
-		"max_tokens": maxTokens,
+		"max_tokens":  maxTokens,
 		"temperature": 0.3,
 	}
 

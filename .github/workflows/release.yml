@@ -64,7 +64,7 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
             echo "ERROR: invalid tag '$VERSION' (expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE)"
             exit 1
           fi
@@ -164,8 +164,8 @@ jobs:
           TARGET_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          if [[ ! "$TARGET_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "ERROR: invalid tag '$TARGET_TAG' (expected vMAJOR.MINOR.PATCH)"
+          if [[ ! "$TARGET_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "ERROR: invalid tag '$TARGET_TAG' (expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE)"
             exit 1
           fi
           if [[ "$TARGET_TAG" == *"-beta"* || "$TARGET_TAG" == *"-alpha"* || "$TARGET_TAG" == *"-rc"* ]]; then
@@ -176,15 +176,34 @@ jobs:
           npm version --no-git-tag-version "${TARGET_TAG#v}"
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
+      # A manual (workflow_dispatch) publish skips the `release` job, so nothing
+      # here has produced checksums. npm/postinstall.js refuses to install a
+      # binary it cannot verify, so publishing a version whose GitHub release
+      # has no SHA256SUMS would break every install of it (#676).
+      - name: Require SHA256SUMS on the GitHub release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if ! grep -qx SHA256SUMS <<<"$assets"; then
+            echo "ERROR: GitHub release '$TARGET_TAG' has no SHA256SUMS asset; refusing to publish to npm"
+            exit 1
+          fi
+
       - name: Publish @nano-step/nano-brain
+        env:
+          VER: ${{ steps.npm-tag.outputs.version }}
+          NPM_TAG: ${{ steps.npm-tag.outputs.tag }}
         run: |
           unset NODE_AUTH_TOKEN
-          VER="${{ steps.npm-tag.outputs.version }}"
           if npm view "@nano-step/nano-brain@${VER}" version >/dev/null 2>&1; then
             echo "@nano-step/nano-brain@${VER} already published; skipping."
             exit 0
           fi
-          npm publish --tag "${{ steps.npm-tag.outputs.tag }}" --access public
+          npm publish --tag "$NPM_TAG" --access public
 
   npm-publish-unscoped:
     needs: release
@@ -226,8 +245,8 @@ jobs:
           TARGET_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          if [[ ! "$TARGET_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "ERROR: invalid tag '$TARGET_TAG' (expected vMAJOR.MINOR.PATCH)"
+          if [[ ! "$TARGET_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "ERROR: invalid tag '$TARGET_TAG' (expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE)"
             exit 1
           fi
           if [[ "$TARGET_TAG" == *"-beta"* || "$TARGET_TAG" == *"-alpha"* || "$TARGET_TAG" == *"-rc"* ]]; then
@@ -238,13 +257,32 @@ jobs:
           npm version --no-git-tag-version "${TARGET_TAG#v}"
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
+      # A manual (workflow_dispatch) publish skips the `release` job, so nothing
+      # here has produced checksums. npm/postinstall.js refuses to install a
+      # binary it cannot verify, so publishing a version whose GitHub release
+      # has no SHA256SUMS would break every install of it (#676).
+      - name: Require SHA256SUMS on the GitHub release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if ! grep -qx SHA256SUMS <<<"$assets"; then
+            echo "ERROR: GitHub release '$TARGET_TAG' has no SHA256SUMS asset; refusing to publish to npm"
+            exit 1
+          fi
+
       - name: Publish nano-brain (unscoped alias)
+        env:
+          VER: ${{ steps.npm-tag.outputs.version }}
+          NPM_TAG: ${{ steps.npm-tag.outputs.tag }}
         run: |
           unset NODE_AUTH_TOKEN
-          VER="${{ steps.npm-tag.outputs.version }}"
           if npm view "nano-brain@${VER}" version >/dev/null 2>&1; then
             echo "nano-brain@${VER} already published; skipping."
             exit 0
           fi
           node -e "const p=require('./package.json'); p.name='nano-brain'; delete p.publishConfig; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
-          npm publish --tag "${{ steps.npm-tag.outputs.tag }}" --access public
+          npm publish --tag "$NPM_TAG" --access public

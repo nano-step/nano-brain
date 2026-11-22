@@ -93,16 +93,19 @@ test("platformExtension: defaults to current os.platform() when called with no a
   assert.strictEqual(platformExtension(), expected);
 });
 
-test("ensureBinary: accepts win32+x64 without 'Unsupported platform' (#637 regression)", async () => {
+test("ensureBinary: accepts win32+x64 without 'Unsupported platform' (#637 regression)", async (t) => {
   const realPlatform = os.platform;
   const realArch = os.arch;
   const realExists = fs.existsSync;
   os.platform = () => "win32";
   os.arch = () => "x64";
   // No existing binary at binaryPath() — force ensureBinary into the download
-  // path so getPlatformKey() runs end-to-end. ECONNREFUSED is acceptable; the
-  // assertion is that the failure is NOT the "Unsupported platform" branch.
+  // path so getPlatformKey() runs end-to-end. Every request (release asset and
+  // the api.github.com fallback) is answered 404 in memory, so the suite makes
+  // no real network request (#676); the assertion is that the failure is NOT
+  // the "Unsupported platform" branch.
   fs.existsSync = () => false;
+  const requested = stubHttps(t, () => ({ status: 404 }));
   try {
     await assert.rejects(() => ensureBinary(), (err) => {
       assert.ok(err instanceof Error);
@@ -112,6 +115,10 @@ test("ensureBinary: accepts win32+x64 without 'Unsupported platform' (#637 regre
       );
       return true;
     });
+    assert.ok(
+      requested.some((u) => u.endsWith("/nano-brain-windows-amd64.exe")),
+      `download path must be reached for the windows-amd64 asset, requested: ${requested.join(", ")}`,
+    );
   } finally {
     os.platform = realPlatform;
     os.arch = realArch;
