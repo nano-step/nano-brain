@@ -112,5 +112,8 @@ one of two same-hash failure IDs and confirms that the other remains
 unresolved and selectable.
 
 The provider-429 worker backoff gap predates this change and remains open
-for separate investigation. Validation and final independent review of
-the migration-bearing revision are required before merging #693.
+for separate investigation. The full build, race/short and
+race/integration suites passed on `nanobrain_test` after the v31 change.
+Two independent reviewers returned MERGE for the
+symbol-identity revision and two more for the long-key index follow-up;
+the final PR head still requires a successful CI check before merge.
