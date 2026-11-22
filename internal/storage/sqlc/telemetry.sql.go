@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
 const cleanupTelemetryLogs = `-- name: CleanupTelemetryLogs :execresult
@@ -38,6 +40,30 @@ func (q *Queries) InsertSearchTelemetry(ctx context.Context, arg InsertSearchTel
 		arg.ResultCount,
 		arg.LatencyMs,
 		arg.Collection,
+	)
+	return err
+}
+
+const insertToolTelemetry = `-- name: InsertToolTelemetry :exec
+INSERT INTO telemetry_logs (workspace_hash, event_type, query_text, result_count, latency_ms, payload)
+VALUES ($1, 'mcp_tool', $2, $3, $4, $5)
+`
+
+type InsertToolTelemetryParams struct {
+	WorkspaceHash string
+	QueryText     string
+	ResultCount   int32
+	LatencyMs     int32
+	Payload       pqtype.NullRawMessage
+}
+
+func (q *Queries) InsertToolTelemetry(ctx context.Context, arg InsertToolTelemetryParams) error {
+	_, err := q.db.ExecContext(ctx, insertToolTelemetry,
+		arg.WorkspaceHash,
+		arg.QueryText,
+		arg.ResultCount,
+		arg.LatencyMs,
+		arg.Payload,
 	)
 	return err
 }

@@ -17,6 +17,7 @@ MCP (Model Context Protocol) server — 16 tools for AI agent memory and code in
 | `tools.go` | most tool definitions + handlers + shared helpers |
 | `flowchart.go` | `memory_flowchart` tool — CFG lookup by `file::startLine-endLine` |
 | `streamable.go` | Streamable HTTP transport handler |
+| `telemetry.go` | Receiving middleware — records every `tools/call` as an `mcp_tool` row in `telemetry_logs` (async) |
 | `sse.go` | SSE transport handler (legacy) |
 
 ## Tools (registered in `RegisterTools`)
