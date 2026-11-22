@@ -4,7 +4,7 @@ description: Persistent memory + code intelligence for AI coding agents. Hybrid 
 compatibility: OpenCode, Claude Code, any MCP-aware agent
 metadata:
   author: nano-step
-  version: 3.2.0
+  version: 3.2.1
   upstream: https://github.com/nano-step/nano-brain
 ---
 
@@ -36,7 +36,7 @@ This file documents the MCP surface. Deeper references:
 | Walk call chain | `memory_trace` | Forward walk with cycle detect, depth 1-10 |
 | Find a symbol by name/kind | `memory_symbols` | Function/type/method/interface search |
 | List all tags | `memory_tags` | Tag inventory |
-| Force re-embed | `memory_update` | Re-queues workspace chunks |
+| Request workspace refresh | `memory_update` | Validates registration; returns `{"status":"accepted"}` |
 
 ## MCP tool schemas
 
@@ -199,10 +199,10 @@ Source: `internal/mcp/tools.go:1214-1308`. Requires prior `reindex` to populate 
 ### memory_impact — reverse impact BFS
 ```
 required: workspace, node
-optional: edge_type, max_depth (1-3, server-clamped, default 1), paths ("absolute" default | "relative")
-returns:  {node, impacted: [{node, depth, edge_type}]}
+optional: direction ("in" default | "out"), edge_type, max_depth (1-3, server-clamped, default 1), paths ("absolute" default | "relative")
+returns:  {node, impacted: [{node, depth, edge_type}], count, node_found}
 ```
-Source: `internal/mcp/tools.go:1395-1469`. Use before refactor — `impacted` is the set of nodes that would break if `node` changes. Same relative/absolute path support as `memory_graph`.
+Source: `internal/mcp/tools.go:2243-2385`. Use before refactor — `impacted` is always `[]` (never `null`) and lists nodes affected when `node` changes (`direction="in"`) or dependencies `node` uses (`direction="out"`). `node_found` (`true|false`) distinguishes an indexed leaf node with zero callers (`node_found: true`) from an unknown or unindexed node (`node_found: false`, #625). Same relative/absolute path support as `memory_graph`.
 
 ### memory_trace — forward call chain
 ```
@@ -227,12 +227,15 @@ returns:  array of tag/collection summaries (see tool schema)
 ```
 Source: `internal/mcp/tools.go:682-729`.
 
-### memory_update — force re-embed
+### memory_update — request workspace refresh
 ```
 required: workspace (must be registered)
-returns:  count of chunks re-queued
+returns:  {status: "accepted", message}
 ```
-Source: `internal/mcp/tools.go:765-789`. Rare — only useful after switching embedding model or fixing corrupt embeddings.
+Source: `internal/mcp/tools.go:1789-1813`. Note the distinct HTTP refresh endpoints (`internal/server/handlers/reindex.go`):
+- `POST /api/v1/reindex` (`{"workspace":"<hash>"}`) — incremental disk diff + async watcher rescan (`files_pending_ingest`, `watcher_triggered: true`).
+- `POST /api/v1/reindex` (`{"workspace":"<hash>","force_wipe":true}`) — resets embed status and re-enqueues existing persisted chunks.
+- `POST /api/v1/update` (`{"workspace":"<hash>"}`) — asynchronously re-extracts symbols, graph edges, and flowcharts on existing indexed files without wiping `memory`/`sessions` or re-embedding.
 
 ## Recipes
 
@@ -284,14 +287,23 @@ for ws in $registered_workspaces:
 ```
 Or use HTTP `GET /api/v1/workspaces` to list hashes, then iterate.
 
+## Cold workspace diagnostics
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `memory_workspaces_resolve` → `registered: false`; HTTP `/api/v1/*` → `404 workspace_not_found` (`"workspace %q is not registered; use POST /api/v1/init to register it first"`); MCP write tools → `isError` `workspace_not_registered` (or MCP read tools → `"workspace %q not found"` / `"no workspace matching prefix %q"`) | Workspace not registered (#309) — if `covered_by` is present (#565), an ancestor workspace already covers this path | Use `covered_by.use` when present; otherwise register via `POST /api/v1/init` (`{"root_path":"<abs_path>"}`) or `nano-brain init --root <path>` (omit `--yes`, which only writes config and ignores `--root`). Note: MCP read tools pass raw 64-hex hashes through without a DB check, so always call `memory_workspaces_resolve` first. |
+| Freshly registered workspace returns 0 hits, or incremental `POST /api/v1/reindex` returns `202` with `files_pending_ingest > 0`, `watcher_triggered: true`, `embedded: 0`, `chunks_enqueued: 0` | Asynchronous watcher ingestion in progress (#161, #622) — `init` registers default collections (`code`, `memory`, `sessions`) and attaches the watcher; incremental `reindex` schedules an async watcher scan, so `chunks_enqueued: 0` / `embedded: 0` at response time is normal (never treat it as unrecoverable) | Poll `GET /api/v1/stats?workspace=<hash>` (`docs_total`, `chunks_total`, `graph_edges_by_type`) and `memory_status` (`queue_pending`) until ingestion and embedding finish. Use `{"workspace":"<hash>","force_wipe":true}` (not `force: true`) only to re-embed already-persisted chunks. |
+| `docs_total > 0`, but symbol spans, `calls`/`imports` edges, or `function_flowcharts` are missing or out of date after upgrading nano-brain | Unchanged files skip re-extraction on content-hash check (#584, #703); both `memory_symbols` and `memory_impact` read PostgreSQL (neither reads unindexed files directly) | Call `POST /api/v1/update` (`{"workspace":"<hash>"}`) to re-extract symbols, graph edges, and flowcharts asynchronously on existing indexed files without wiping `memory`/`sessions` or re-embedding chunks. (`/api/v1/update` does not ingest new files — use `/api/v1/reindex` for new/changed files.) |
+| `memory_impact` or `POST /api/v1/graph/impact` returns `impacted: []` | Always `[]` (never `null`); either a leaf node with zero callers or an unknown/unindexed node (#304, #625) | Check `node_found` in the response: `node_found: true` = indexed node with no reverse callers/importers within `max_depth`/`edge_type`; `node_found: false` = unknown or unindexed node — disambiguate via `memory_symbols`, inspect `graph_edges_by_type` in `/api/v1/stats`, or run `/api/v1/reindex` (unindexed) / `/api/v1/update` (stale graph). |
+
 ## Common errors
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `cannot connect to daemon` | nano-brain not running on host | Operator action — start the daemon on the host (out of scope for agents). Then re-resolve MCP URL via `NANO_BRAIN_MCP_URL`. |
-| `workspace_not_found` (HTTP 404) | Workspace hash not in DB (#309 fix) | `POST /api/v1/init {root_path: …}` first |
-| `workspace_required` (HTTP 400) | Empty workspace field | Always pass `workspace` arg/body field |
-| `memory_search` returns 0 | Embedding queue still working | Check `memory_status.queue_pending`; new docs need embed before vector search hits them. BM25 lands immediately. |
+| `workspace_not_found` (HTTP 404) / `workspace_not_registered` (MCP `isError` or HTTP 400) | Workspace not registered in DB (#309) | Check `memory_workspaces_resolve` (`covered_by.use` if covered); otherwise `POST /api/v1/init {"root_path": "<abs_path>"}` or `nano-brain init --root <path>` |
+| `workspace_required` (HTTP 400 / MCP `isError`) | Empty workspace field | Always pass `workspace` arg/body field |
+| `memory_vsearch` / vector leg returns 0 on freshly written docs | Embedding queue still working | Check `memory_status.queue_pending`; vector search needs embeddings, whereas BM25 (`memory_search`) lands as soon as chunks are persisted (verify `chunks_total` via `GET /api/v1/stats?workspace=<hash>`). |
 | `chunk truncated before embedding` warns flood log (pre-v2026.6.0202) | Chunker emitted oversize chunks | Upgrade ≥v2026.6.0202 — #297 + #300 align chunker default with embed budget |
 | Title-only query returns 0 (pre-v2026.6.0201) | BM25 indexed only chunk content | Upgrade ≥v2026.6.0201 — migration 13 adds title to tsvector (#305) |
 | `memory_query` returns score=0 + empty title (pre-v2026.6.0107) | MCP serialization missing JSON tags | Upgrade ≥v2026.6.0107 — #303 added snake_case tags to search.Result |
@@ -319,5 +331,5 @@ For HTTP / config deep dives: load the matching `@references/` file.
 | MCP tool calls fail with connection error | Operator action — daemon is not running on the host. Out of scope for agents; surface the error to the user. |
 | MCP URL wrong in container | Export `NANO_BRAIN_MCP_URL=http://host.docker.internal:3100/mcp` before starting agent |
 | MCP URL wrong on bare-metal | Export `NANO_BRAIN_MCP_URL=http://localhost:3100/mcp` |
-| MCP tools return `workspace_not_found` | Call `memory_workspaces_resolve` first to resolve the project path to a registered workspace hash; if `registered: false`, the project has not been initialized. |
+| MCP/HTTP calls return `workspace_not_found`, `workspace_not_registered`, or `workspace "<name>" not found` | Call `memory_workspaces_resolve` first: if `covered_by` is returned, use `covered_by.use`; if `registered: false`, register with `POST /api/v1/init` (`{"root_path":"<abs_path>"}`) or `nano-brain init --root <path>`. |
 

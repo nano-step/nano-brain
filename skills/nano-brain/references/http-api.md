@@ -147,12 +147,38 @@ Watch `queue_pending` over time — if it grows without bound and `queue_status 
 # Force-run harvesters
 curl -s -X POST "$BASE/api/harvest" | jq
 
-# Reindex a workspace from disk
+# Reindex a workspace from disk (async 202)
 curl -s -X POST "$BASE/api/v1/reindex" \
+  -H 'Content-Type: application/json' \
   -d "{\"workspace\":\"$WS\",\"root\":\"$PWD\"}" | jq
+
+# Incremental reindex requests an asynchronous watcher rescan. A 202 response's
+# files_pending_ingest is an estimate, not persisted documents/chunks;
+# watcher_triggered is true when changes wake the watcher.
+# embedded/chunks_enqueued count completed/queued work at response time (0 for a
+# fresh/incremental scan — NOT an unrecoverable state). Verify progress with
+# GET /api/v1/stats?workspace=$WS (docs_total, chunks_total, graph_edges_by_type).
+# To requeue existing chunks use force_wipe:true, not force:true.
+
+# Re-extract symbols, graph edges, and flowcharts on already-indexed files
+# (async 202; does not ingest new files, wipe memory/sessions, or re-embed chunks)
+curl -s -X POST "$BASE/api/v1/update" \
+  -H 'Content-Type: application/json' \
+  -d "{\"workspace\":\"$WS\"}" | jq
 
 # Reload config without daemon restart
 curl -s -X POST "$BASE/api/reload-config" | jq
+```
+
+## Graph impact
+
+```bash
+# Reverse impact (what breaks if FnName changes); max_depth clamped 1-3
+# Returns {node, impacted: [...], node_found} — impacted is always [] (never null);
+# node_found distinguishes a known leaf node (true) from an unknown/unindexed node (false)
+curl -s -X POST "$BASE/api/v1/graph/impact" \
+  -H 'Content-Type: application/json' \
+  -d "{\"workspace\":\"$WS\",\"node\":\"FnName\",\"max_depth\":2}" | jq
 ```
 
 ## Error responses
@@ -162,12 +188,13 @@ All endpoints return JSON for both success and error:
 | HTTP | Meaning | Common cause |
 |---|---|---|
 | 200 | OK | — |
-| 400 | Bad request | Missing `workspace` or `query` field; invalid `source_path` URI |
-| 404 | Not found | Workspace hash unregistered |
-| 422 | Unprocessable | Schema validation (e.g. `max_depth > 3`) |
+| 202 | Accepted | Async operation queued (`/api/v1/reindex`, `/api/v1/update`) |
+| 400 | Bad request | Missing `workspace` (`workspace_required`) or `query` field; `workspace: "all"` on write route (`workspace_all_not_supported`) |
+| 404 | Not found | Unregistered workspace hash (`workspace_not_found`: `"workspace %q is not registered; use POST /api/v1/init to register it first"`, #309) |
+| 422 | Unprocessable | Schema validation |
 | 500 | Server error | PG down, ollama unreachable; check `/health` |
 
-Error body: `{"message":"<reason>"}`.
+Error body: `{"error":"<code>","message":"<reason>"}`.
 
 ## Streaming + MCP
 

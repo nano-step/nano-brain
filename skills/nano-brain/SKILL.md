@@ -4,7 +4,7 @@ description: Persistent memory + code intelligence for AI coding agents. Hybrid 
 compatibility: OpenCode, Claude Code, any MCP-aware agent
 metadata:
   author: nano-step
-  version: 3.1.1
+  version: 3.1.2
   repo: nano-step/nano-brain
 ---
 
@@ -76,10 +76,10 @@ The `/api/v1/workspaces/resolve` endpoint is **read-only**: it computes the dete
 
 ```bash
 npx nano-brain workspaces current --check 2>/dev/null \
-  || npx nano-brain init --root="$PWD"
+  || npx nano-brain init --root "$PWD"
 ```
 
-`workspaces current --check` exits **2** if the workspace is not yet registered. `init` is idempotent — safe to run multiple times.
+`workspaces current --check` exits **2** if the workspace is not yet registered. `init --root <path>` (space-separated flag; omit `--yes`, which only writes config and ignores `--root`) is idempotent — safe to run multiple times, and registers default collections (`code`, `memory`, `sessions`) + attaches the async file watcher (#161).
 
 **Success criterion:** `$NANO_BRAIN_WORKSPACE` is set AND `npx nano-brain workspaces current --check` exits 0.
 
@@ -129,7 +129,7 @@ Response: `{"results":[{"source_path","excerpt","score","tags",...}, ...]}`.
 | Error | Meaning | Recovery |
 |---|---|---|
 | 400 `workspace_required` | Missing `workspace` in body | Re-run Phase 1.2 |
-| 400 `workspace_not_registered` | Hash valid but not in DB | Re-run Phase 1.3 (`init`) |
+| 404 `workspace_not_found` / 400 `workspace_not_registered` | Hash valid but not in DB (#309) | Re-run Phase 1.3 (`init --root "$PWD"` or `POST /api/v1/init`) |
 | 500 | Server error | Read `nano-brain logs -n 50`, retry once |
 
 ### 3.2 BM25 keyword search — `POST /api/v1/search`
@@ -193,7 +193,7 @@ Returns `{summary, recent_memories}` — `summary` is a natural-language string 
 For deep code analysis, see [`references/code-intelligence.md`](references/code-intelligence.md). Three patterns:
 
 - **Symbol lookup:** `GET /api/v1/symbols?workspace=...&query=...&kind=...&limit=...` — find a function/type definition. Returns `{count, symbols: [{name, kind, language, signature, source_path}]}`.
-- **Impact analysis:** `POST /api/v1/graph/impact` body `{workspace, node, max_depth, edge_type}` — who depends on this symbol, transitively.
+- **Impact analysis:** `POST /api/v1/graph/impact` body `{workspace, node, max_depth, edge_type}` — who depends on this symbol, transitively. Returns `{node, impacted: [{node, depth, edge_type}], node_found}` (`impacted` is always `[]`, never `null`; `node_found` distinguishes an indexed leaf node from an unknown/unindexed node, #625).
 - **Call trace:** `POST /api/v1/graph/trace` body `{workspace, node, max_depth}` — what does this entry function call.
 - **Execution flow:** `POST /api/v1/graph/flow` body `{workspace, entry, max_depth, format}` (or MCP `memory_flow`) — for an HTTP entry point like `"POST /api/v1/write"`, returns the middleware → handler → downstream call chain plus an optional Mermaid flowchart. Requires `flow.enabled: true` in config (Go/Echo routes only; returns `found:false` when disabled or the entry isn't indexed).
 
@@ -215,13 +215,22 @@ Error catalog with deterministic recovery actions. Never retry more than 2 times
 |---|---|---|
 | `curl: (7) connection refused` | Server not running | Phase 1.1 recovery |
 | HTTP 400 `workspace_required` | Missing `workspace` field in body | Re-run Phase 1.2; verify `$NANO_BRAIN_WORKSPACE` is set |
-| HTTP 400 `workspace_not_registered` | Path valid but never `init`'d | `npx nano-brain init --root="$PWD"` |
+| HTTP 404 `workspace_not_found` / HTTP 400 `workspace_not_registered` | Path valid but never `init`'d (#309) | `POST /api/v1/init` (`{"root_path":"$PWD"}`) or `npx nano-brain init --root "$PWD"` |
 | HTTP 400 `path is required` | `/resolve` called with empty `path` | Pass an absolute path; default to `$PWD` |
 | HTTP 400 `invalid path` | Path could not be normalized | Check path exists and is absolute |
 | HTTP 503 | Server restarting / overload | Sleep 5s, retry **once** |
 | HTTP 500 | Server bug | `nano-brain logs -n 100`; report stack to user |
 | `workspace_all_not_supported` on write | Wrote with `workspace:"all"` | Use a specific registered hash |
-| Empty `results: []` | Topic not in memory | Try broader query OR `search` (exact) OR fall back to grep/ast-grep over the codebase |
+| Empty `results: []` | Topic not in memory or async scan still running | Check `GET /api/v1/stats?workspace=$NANO_BRAIN_WORKSPACE` (`docs_total`, `chunks_total`) and `GET /api/status` (`queue_pending`); if indexed, try broader query / `search` / native grep |
+
+### Cold workspace diagnostics
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `memory_workspaces_resolve` / `/api/v1/workspaces/resolve` → `registered: false`; HTTP `/api/v1/*` → `404 workspace_not_found` (`"workspace %q is not registered; use POST /api/v1/init to register it first"`); MCP write tools → `isError` `workspace_not_registered` (or MCP read tools → `"workspace %q not found"` / `"no workspace matching prefix %q"`) | Workspace not registered (#309) — if MCP `covered_by` is present (#565), an ancestor workspace already covers this path | Use `covered_by.use` when present; otherwise register via `POST /api/v1/init` (`{"root_path":"<abs_path>"}`) or `nano-brain init --root <path>` (omit `--yes`, which only writes config and ignores `--root`). Note: MCP read tools pass raw 64-hex hashes through without a DB check, so always resolve first. |
+| Freshly registered workspace returns 0 hits, or incremental `POST /api/v1/reindex` returns `202` with `files_pending_ingest > 0`, `watcher_triggered: true`, `embedded: 0`, `chunks_enqueued: 0` | Asynchronous watcher ingestion in progress (#161, #622) — `init` registers default collections (`code`, `memory`, `sessions`) and attaches the watcher; incremental `reindex` schedules an async watcher scan, so `chunks_enqueued: 0` / `embedded: 0` at response time is normal (never treat it as unrecoverable) | Poll `GET /api/v1/stats?workspace=<hash>` (`docs_total`, `chunks_total`, `graph_edges_by_type`) and `GET /api/status` / `memory_status` (`queue_pending`) until ingestion and embedding finish. Use `{"workspace":"<hash>","force_wipe":true}` (not `force: true`) only to re-embed already-persisted chunks. |
+| `docs_total > 0`, but symbol spans, `calls`/`imports` edges, or `function_flowcharts` are missing or out of date after upgrading nano-brain | Unchanged files skip re-extraction on content-hash check (#584, #703); both `memory_symbols` and `memory_impact` read PostgreSQL (neither reads unindexed files directly) | Call `POST /api/v1/update` (`{"workspace":"<hash>"}`) to re-extract symbols, graph edges, and flowcharts asynchronously on existing indexed files without wiping `memory`/`sessions` or re-embedding chunks. (`/api/v1/update` does not ingest new files — use `/api/v1/reindex` for new/changed files.) |
+| `memory_impact` or `POST /api/v1/graph/impact` returns `impacted: []` | Always `[]` (never `null`); either a leaf node with zero callers or an unknown/unindexed node (#304, #625) | Check `node_found` in the response: `node_found: true` = indexed node with no reverse callers/importers within `max_depth`/`edge_type`; `node_found: false` = unknown or unindexed node — disambiguate via `memory_symbols` (`GET /api/v1/symbols`), inspect `graph_edges_by_type` in `/api/v1/stats`, or run `/api/v1/reindex` (unindexed) / `/api/v1/update` (stale graph). |
 
 **Last resort fallback:** If nano-brain is unreachable for >2 retries, switch to native tools (grep / ast-grep / Read) and tell the user the limitation.
 
@@ -238,7 +247,7 @@ Error catalog with deterministic recovery actions. Never retry more than 2 times
 | `--path=<p>` | workspaces current | Override `$PWD` for resolution |
 | `--export` | workspaces current | Print `export NANO_BRAIN_WORKSPACE=<hash>` |
 | `--check` | workspaces current | Exit 2 if workspace not registered |
-| `--root=<p>` | init | Path to register; required |
+| `--root <p>` | init, reindex | Path to register or reindex (space-separated; required) |
 | `--force` | init, workspaces remove | Skip confirmation |
 
 ---
