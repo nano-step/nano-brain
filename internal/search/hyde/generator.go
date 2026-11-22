@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/redact"
 	"github.com/rs/zerolog"
 )
 
@@ -19,12 +20,12 @@ import (
 // It takes a search query, asks an LLM to "write a passage that would be the ideal answer to this query",
 // and returns that hypothetical document text for embedding.
 type Generator struct {
-	httpClient     *http.Client
-	providerURL    string
-	apiKey         string
-	model          string
-	logger         zerolog.Logger
-	contextHints   map[string]string
+	httpClient   *http.Client
+	providerURL  string
+	apiKey       string
+	model        string
+	logger       zerolog.Logger
+	contextHints map[string]string
 }
 
 func (g *Generator) SetContextHints(hints map[string]string) {
@@ -107,7 +108,7 @@ func (g *Generator) callLLM(ctx context.Context, query string, workspace string)
 		Model: g.model,
 		Messages: []chatMessage{
 			{Role: "system", Content: g.buildSystemPrompt(workspace)},
-			{Role: "user", Content: query},
+			{Role: "user", Content: redact.Scrub(query)},
 		},
 		Stream: false,
 	}

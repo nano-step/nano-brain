@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/redact"
 	"github.com/nano-brain/nano-brain/internal/search"
 	"github.com/rs/zerolog"
 )
@@ -130,10 +131,15 @@ func (r *apiReranker) Rerank(ctx context.Context, query string, docs []search.Re
 }
 
 func (r *apiReranker) callAPI(ctx context.Context, query string, documents []string, topN int) ([]int, []float64, error) {
+	scrubbed := make([]string, len(documents))
+	for i, d := range documents {
+		scrubbed[i] = redact.Scrub(d)
+	}
+
 	reqBody := map[string]interface{}{
 		"model":            r.model,
-		"query":            query,
-		"documents":        documents,
+		"query":            redact.Scrub(query),
+		"documents":        scrubbed,
 		"top_n":            topN,
 		"return_documents": false,
 	}

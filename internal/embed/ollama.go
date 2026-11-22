@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/nano-brain/nano-brain/internal/redact"
 )
 
 const defaultOllamaDimension = 768
@@ -34,6 +36,10 @@ func NewOllamaEmbedder(url, model string, dimension int) *OllamaEmbedder {
 }
 
 func (o *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	// Egress-only redaction (#660): stored content is untouched; only what
+	// reaches the provider is scrubbed.
+	text = redact.Scrub(text)
+
 	reqBody := struct {
 		Model string   `json:"model"`
 		Input []string `json:"input"`

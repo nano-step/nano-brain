@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -237,5 +238,64 @@ func TestVoyageAIEmbedder_Unauthorized(t *testing.T) {
 	_, err = ve.Embed(context.Background(), "hello")
 	if err == nil {
 		t.Fatal("expected error for 401 response")
+	}
+}
+
+func TestOllamaEmbedder_Embed_RedactsSecrets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(req.Input) != 1 {
+			t.Fatalf("input = %v, want 1 item", req.Input)
+		}
+		if strings.Contains(req.Input[0], "sk-ant-") || strings.Contains(req.Input[0], "ghp_") {
+			t.Errorf("secret leaked to provider: %q", req.Input[0])
+		}
+		if !strings.Contains(req.Input[0], "[REDACTED:") {
+			t.Errorf("expected redaction marker, got %q", req.Input[0])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string][][]float32{"embeddings": {{0.1}}})
+	}))
+	defer srv.Close()
+
+	e := NewOllamaEmbedder(srv.URL, "test-model", 0)
+	if _, err := e.Embed(context.Background(), "key sk-ant-api03-AbCdEfGhIjKlMnOp and ghp_16C7e42F292c6912E7710c838347Ae178B4a"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestVoyageAIEmbedder_Embed_RedactsSecrets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(req.Input) != 1 {
+			t.Fatalf("input = %v, want 1 item", req.Input)
+		}
+		if strings.Contains(req.Input[0], "AKIAIOSFODNN7EXAMPLE") {
+			t.Errorf("secret leaked to provider: %q", req.Input[0])
+		}
+		if !strings.Contains(req.Input[0], "[REDACTED:") {
+			t.Errorf("expected redaction marker, got %q", req.Input[0])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []map[string]interface{}{{"embedding": []float32{0.1}}}})
+	}))
+	defer srv.Close()
+
+	ve, err := NewVoyageAIEmbedder("test-key", "voyage-3", srv.URL, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := ve.Embed(context.Background(), "aws_access_key_id = AKIAIOSFODNN7EXAMPLE"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
