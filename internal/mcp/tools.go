@@ -1307,12 +1307,25 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 				filePart, symName := path[:sepIdx], path[sepIdx+2:]
 				// Graph nodes may carry a workspace-relative file part while
 				// symbol source_paths can be stored absolute or relative;
-				// match against both the raw and root-joined form.
-				filePartAbs := filePart
-				if !filepath.IsAbs(filePartAbs) {
-					if root := a.workspaceRoot(ctx, ws); root != "" {
-						filePartAbs = filepath.Join(root, filePart)
+				// match against both the raw and root-joined form. The join
+				// uses the workspace root, but watcher graph nodes are relative
+				// to each collection's dirPath — in a multi-collection
+				// workspace a colliding relative name could match the wrong
+				// symbol doc (narrow edge; exact relative match still wins
+				// first).
+				var filePartAbs string
+				absResolved := false
+				resolveAbs := func() string {
+					if !absResolved {
+						absResolved = true
+						filePartAbs = filePart
+						if !filepath.IsAbs(filePartAbs) {
+							if root := a.workspaceRoot(ctx, ws); root != "" {
+								filePartAbs = filepath.Join(root, filePart)
+							}
+						}
 					}
+					return filePartAbs
 				}
 				matches, rErr := a.queries.ResolveSymbolByName(ctx, sqlc.ResolveSymbolByNameParams{
 					WorkspaceHash: ws,
@@ -1324,7 +1337,7 @@ func registerMemoryGet(server *mcpsdk.Server, a *Adapter) {
 				for _, m := range matches {
 					if qi := strings.Index(m.SourcePath, "?"); qi >= 0 {
 						sp := m.SourcePath[:qi]
-						if sp == filePart || sp == filePartAbs {
+						if sp == filePart || sp == resolveAbs() {
 							doc, err = a.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 								SourcePath:    m.SourcePath,
 								WorkspaceHash: ws,

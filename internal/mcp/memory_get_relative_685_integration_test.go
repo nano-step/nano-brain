@@ -49,3 +49,35 @@ func TestMemoryGet_RelativePathResolvesAgainstWorkspaceRoot(t *testing.T) {
 		t.Fatal("expected error for a missing relative path")
 	}
 }
+
+// The file part of a "file::Symbol" graph node may also be workspace-relative.
+func TestMemoryGet_RelativeGraphNodeResolvesSymbol(t *testing.T) {
+	ctx, q, wsHash, callTool := setupFindingsMCP(t)
+
+	ws, err := q.GetWorkspaceByHash(ctx, wsHash)
+	if err != nil {
+		t.Fatalf("get workspace: %v", err)
+	}
+	absFile := filepath.Join(ws.Path, "internal", "graph", "node.go")
+	parentContent := "line1\nline2 func Foo() {}\nline3"
+	if _, err := q.UpsertDocument(ctx, sqlc.UpsertDocumentParams{
+		WorkspaceHash: wsHash,
+		ContentHash:   "hash-rel-node",
+		Title:         "node.go",
+		Content:       parentContent,
+		SourcePath:    absFile,
+		Collection:    "code",
+	}); err != nil {
+		t.Fatalf("upsert parent doc: %v", err)
+	}
+	upsertSymbolDoc(t, ctx, q, wsHash, absFile, "Foo", "function", "func Foo() {}", "2", "2")
+
+	res := callTool("memory_get", map[string]any{"workspace": wsHash, "path": "internal/graph/node.go::Foo"})
+	if res.IsError {
+		t.Fatalf("relative graph node lookup failed: %s", res.Content[0].(*mcpsdk.TextContent).Text)
+	}
+	resp := unmarshalGraphResp(t, res)
+	if !strings.Contains(resp["content"].(string), "func Foo() {}") {
+		t.Errorf("content = %q, want the symbol body", resp["content"])
+	}
+}
