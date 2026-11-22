@@ -42,6 +42,33 @@ integration database is `nanobrain_test`; test schemas must be isolated.
    the asynchronous watcher. Inspect watcher attachment/scan and reproduce
    registration -> reindex -> persisted document in an isolated test server
    before changing response semantics or ingest logic.
+   Measured on v30: `TestFreshWorkspaceReindexPersistsDocuments` runs real
+   `InitWorkspace`, `Watcher.Run` and `TriggerReindex` against a private schema;
+   a fresh source file and at least one chunk were persisted. An additional
+   HTTP server test exercised real routing/middleware and `GET /api/v1/stats`
+   with three files (`.js`, `.ts`, `.vue`): 3 documents and at least 3 chunks
+   appeared within 8 seconds. Those tests did not isolate reindex from the
+   initial registration scan, as independent reviewers noted. A new
+   `TestTriggerRescanWakesIdleWatcher` waits for an initial marker document
+   and an unregistered dirty sentinel that can only be drained after the
+   initial scan returns; its snapshot cannot contain the not-yet-created
+   file even if the sentinel scan has not returned. It then removes
+   fsnotify registration, creates a new file and proves that only the
+   explicit rescan wakes the watcher and persists it. Before the fix,
+   `TestTriggerRescanByName` failed because marking dirty emitted no wake-up;
+   `TriggerRescanByName` now uses the existing buffered registration signal.
+   The original v29 environment is still unavailable for exact reproduction.
+   Independently confirmed: with the watcher stopped, `reindex` reports
+   `embedded:2` and `chunks_enqueued:2` although neither document nor chunk
+   exists (red `TestIncrementalReindex_*`). Change incremental responses to
+   report `files_pending_ingest` and zero actual enqueue/embed counts.
+   Async SSE progress now reports `queued` rather than `completed` before
+   watcher ingestion. Keep the historical v29 issue open until its exact
+   failure is confirmed fixed with a full-server repro.
+   The reported request used `force:true`, but the API field is `force_wipe`;
+   empty `root` is valid and means all collections. `/update` only re-extracts
+   from already indexed files. `stats.collections` groups persisted documents
+   and is empty when there are none; it is not the registered collection list.
 4. **#599 and #608, summarization:** `GetUnsummarizedSymbols` has `LIMIT`
    without ordering or failure eligibility; `splitAndSend` records failures,
    while `processAllWorkspaces` visits workspaces in a fixed order, each of
