@@ -64,3 +64,19 @@ func checkBindSafety(host string, authEnabled bool) error {
 		host,
 	)
 }
+
+// unauthenticatedBypassPaths returns the server.auth.bypass_paths entries that
+// expose more than the two defaults to the network: auth is on and the bind is
+// not loopback, so each of them answers anyone who can reach the port.
+func unauthenticatedBypassPaths(host string, authEnabled bool, bypassPaths []string) []string {
+	if !authEnabled || isLoopback(host) {
+		return nil
+	}
+	var flagged []string
+	for _, p := range bypassPaths {
+		if p != "/health" && p != "/api/openapi.json" {
+			flagged = append(flagged, p)
+		}
+	}
+	return flagged
+}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -128,13 +127,10 @@ func writeSSEEvent(w interface{ Write([]byte) (int, error) }, ev eventbus.Event,
 	flusher.Flush()
 }
 
+// remoteIP is the connection peer. Forwarding headers are not consulted: the
+// client sets them, so they would let it evade the per-IP cap or fill another
+// address's bucket.
 func remoteIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if idx := strings.Index(xff, ","); idx >= 0 {
-			return strings.TrimSpace(xff[:idx])
-		}
-		return strings.TrimSpace(xff)
-	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

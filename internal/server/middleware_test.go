@@ -209,3 +209,34 @@ func TestVersionHeaderMiddleware_EmptyVersion(t *testing.T) {
 		t.Errorf("expected empty version header, got %q", got)
 	}
 }
+
+// The media type must be exactly application/json (parameters allowed), the
+// same rule echo's binder applies, so nothing passes here only to fail in
+// Bind with 400 (#673).
+func TestContentType_ExactMediaType(t *testing.T) {
+	tests := []struct {
+		contentType string
+		want        int
+	}{
+		{"application/json", http.StatusOK},
+		{"application/json; charset=utf-8", http.StatusOK},
+		{"application/json;charset=utf-8", http.StatusOK},
+		{"application/jsonx", http.StatusUnsupportedMediaType},
+		{"application/json-patch+json", http.StatusUnsupportedMediaType},
+		{"text/plain", http.StatusUnsupportedMediaType},
+		{"", http.StatusUnsupportedMediaType},
+	}
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
+			if tt.contentType != "" {
+				req.Header.Set(echo.HeaderContentType, tt.contentType)
+			}
+			rec := applyMiddleware(contentTypeMiddleware(), req)
+
+			if rec.Code != tt.want {
+				t.Errorf("Content-Type %q: status %d, want %d", tt.contentType, rec.Code, tt.want)
+			}
+		})
+	}
+}
