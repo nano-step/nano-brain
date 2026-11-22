@@ -4,6 +4,7 @@ package codesummarize
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -226,6 +227,88 @@ func TestRetryFailures_ProcessesBeyondCycleLimit(t *testing.T) {
 	remaining, err := q.GetUnresolvedFailures(ctx, workspace)
 	if err != nil || len(remaining) != 0 {
 		t.Fatalf("retry left failures: %v, err=%v", remaining, err)
+	}
+}
+
+func TestRetryFailures_SharedHashResolvesOnlySelectedSymbol(t *testing.T) {
+	pool := testutil.SetupTestDB(t)
+	db := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	q := sqlc.New(db)
+	workspace := uuid.NewString()
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: workspace, Name: "fixture", Path: "/tmp/fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{"a", "b"} {
+		path := "src/" + file + ".go"
+		doc, err := q.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+			WorkspaceHash: workspace, ContentHash: "file-" + file,
+			Content: "func Shared() {}", SourcePath: path, Collection: "code",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
+			DocumentID: doc.ID, WorkspaceHash: workspace, ContentHash: "symbol-shared",
+			Content: "func Shared() {}", ChunkType: "symbol",
+			SymbolName: sql.NullString{String: "Shared", Valid: true},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := q.UpsertCodeSummarizationFailure(ctx, sqlc.UpsertCodeSummarizationFailureParams{
+			WorkspaceHash: workspace, ContentHash: "symbol-shared",
+			SourceFile: path, SymbolName: "Shared",
+			ErrorType: "transient_exhausted", ErrorReason: "HTTP 524",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	failures, err := q.GetUnresolvedFailures(ctx, workspace)
+	if err != nil || len(failures) != 2 {
+		t.Fatalf("fixture failures: rows=%v err=%v", failures, err)
+	}
+	var selectedID, otherID uuid.UUID
+	for _, failure := range failures {
+		if failure.SourceFile == "src/a.go" {
+			selectedID = failure.ID
+		} else {
+			otherID = failure.ID
+		}
+	}
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req chatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			return
+		}
+		if strings.Contains(req.Messages[1].Content, "src/b.go") {
+			t.Errorf("retry sent unrelated same-hash symbol to provider")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []any{map[string]any{"message": map[string]string{
+				"content": `{"summaries":[{"name":"Shared","file":"src/a.go","summary":"Summarizes A"}]}`,
+			}}},
+		})
+	}))
+	defer provider.Close()
+	cfg := config.CodeSummarizationConfig{ProviderURL: provider.URL, Model: "fixture"}
+	s := NewService(cfg, NewLLMProvider(cfg, testutil.NopLogger()), NewBudgetTracker(q), q, nil, testutil.NopLogger())
+	processed, _, failed, err := s.RetryFailures(ctx, workspace, []uuid.UUID{selectedID})
+	if err != nil || processed != 1 || failed != 0 {
+		t.Fatalf("selected retry: processed=%d failed=%d err=%v", processed, failed, err)
+	}
+	remaining, err := q.GetUnresolvedFailures(ctx, workspace)
+	if err != nil || len(remaining) != 1 || remaining[0].ID != otherID {
+		t.Fatalf("retry resolved the wrong failure: rows=%v err=%v", remaining, err)
+	}
+	rows, err := q.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
+		WorkspaceHash: workspace, Limit: 10, ForceIds: []uuid.UUID{otherID},
+	})
+	if err != nil || len(rows) != 1 || rows[0].SourcePath != "src/b.go" {
+		t.Fatalf("other file's summary hid the pending failure: rows=%v err=%v", rows, err)
 	}
 }
 

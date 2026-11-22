@@ -101,6 +101,11 @@ successful summaries resolve the same identity. The stale selector now
 checks for relevant calls edges instead of storing a permanent empty hash.
 The legacy hash-keyed migration down is intentionally allowed to fail when
 distinct same-hash failures exist rather than deleting either record.
+An isolated upgrade test starts from v30 with a real failure, migrates
+to v31 and confirms that its ID survives while a second same-hash
+failure in another file can be inserted. A provider-backed test retries
+one of two same-hash failure IDs and confirms that the other remains
+unresolved and selectable.
 
 The provider-429 worker backoff gap predates this change and remains open
 for separate investigation. Validation and final independent review of
