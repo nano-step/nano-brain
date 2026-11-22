@@ -1,11 +1,11 @@
-FROM golang:1.26.11-alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /nano-brain ./cmd/nano-brain
 
-FROM alpine:3.21
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /nano-brain /usr/local/bin/nano-brain
 EXPOSE 3100
