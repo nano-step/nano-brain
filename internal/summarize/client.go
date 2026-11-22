@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/redact"
 	"github.com/rs/zerolog"
 	"golang.org/x/time/rate"
 )
@@ -105,6 +106,9 @@ func (c *Client) ChatCompletion(ctx context.Context, systemPrompt, userPrompt st
 	}
 
 	start := time.Now()
+
+	systemPrompt = redact.Scrub(systemPrompt)
+	userPrompt = redact.Scrub(userPrompt)
 
 	reqBody := chatRequest{
 		Model:     c.model,

@@ -20,6 +20,8 @@ Chunks enqueued by ID → buffered channel (cap 10,000) → N goroutine workers 
 
 Both providers implement `Embedder`. Ollama is local, no key required. VoyageAI requires `VOYAGE_API_KEY`; constructor returns error if absent. `dimension: 0` uses provider default (768 Ollama, 1024 Voyage).
 
+**Egress redaction (#660):** every `Embed` implementation scrubs credential-shaped substrings via `internal/redact.Scrub` before sending text to the provider — stored content stays intact; only provider-bound input is masked. Any new provider must do the same.
+
 ## Concurrency and Backoff
 
 - Semaphore limits concurrent embed calls to `concurrency` (default 4).

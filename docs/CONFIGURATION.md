@@ -117,6 +117,12 @@ Embedding provider configuration. Supports Ollama (local) and Voyage AI (cloud).
 | `embedding.max_chars` | int | `3000` | Max chars per embedding call. Keep ≤3000 for nomic-embed-text (2048 token window) |
 | `embedding.voyage_api_key` | string | `""` | Voyage AI API key (required when provider=voyage) |
 
+> **Privacy:** nano-brain applies *egress-only credential redaction* — every
+> request sent to an embedding, summarization, reranking, or LLM provider is
+> scrubbed by `internal/redact` (API keys, tokens, `.env` secrets, PEM blocks,
+> JWTs → `[REDACTED:<kind>]`). Content stored in the local database is **not**
+> altered, so local search and retrieval stay lossless.
+
 ---
 
 ## harvester
