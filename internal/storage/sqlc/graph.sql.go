@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 
 	"github.com/google/uuid"
@@ -419,6 +420,40 @@ func (q *Queries) GraphStats(ctx context.Context, workspaceHash string) (GraphSt
 	var i GraphStatsRow
 	err := row.Scan(&i.ContainsCount, &i.ImportsCount, &i.CallsCount)
 	return i, err
+}
+
+const impactNodeExists = `-- name: ImpactNodeExists :one
+SELECT EXISTS (
+    SELECT 1 FROM graph_nodes n
+    JOIN graph_edges ge ON ge.workspace_id = resolve_workspace_short_id($1::text)
+      AND (ge.source_node_id = n.id OR ge.target_node_id = n.id)
+    WHERE n.node_key = $2::text
+) OR EXISTS (
+    SELECT 1 FROM documents d
+    JOIN workspaces w ON w.hash = d.workspace_hash
+    WHERE d.workspace_hash = $1::text
+      AND (d.source_path = $2::text
+           OR d.source_path = w.path || '/' || $2::text
+           OR (strpos($2::text, '::') > 0
+               AND d.metadata->>'source_type' = 'symbol'
+               AND d.title = split_part($2::text, '::', 2)
+               AND (split_part(d.source_path, '?', 1) = split_part($2::text, '::', 1)
+                    OR split_part(d.source_path, '?', 1) = w.path || '/' || split_part($2::text, '::', 1))))
+) AS node_found
+`
+
+type ImpactNodeExistsParams struct {
+	WorkspaceHash string
+	Node          string
+}
+
+// A file or symbol with no edges is still a known node. Graph node keys are
+// global, so the edge and document probes must be workspace-scoped.
+func (q *Queries) ImpactNodeExists(ctx context.Context, arg ImpactNodeExistsParams) (sql.NullBool, error) {
+	row := q.db.QueryRowContext(ctx, impactNodeExists, arg.WorkspaceHash, arg.Node)
+	var node_found sql.NullBool
+	err := row.Scan(&node_found)
+	return node_found, err
 }
 
 const listAllEdgesByWorkspace = `-- name: ListAllEdgesByWorkspace :many

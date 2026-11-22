@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -13,6 +14,7 @@ import (
 type ImpactQuerier interface {
 	GetImpactors(ctx context.Context, arg sqlc.GetImpactorsParams) ([]sqlc.GetImpactorsRow, error)
 	GetImpactorsByTargets(ctx context.Context, arg sqlc.GetImpactorsByTargetsParams) ([]sqlc.GetImpactorsByTargetsRow, error)
+	ImpactNodeExists(ctx context.Context, arg sqlc.ImpactNodeExistsParams) (sql.NullBool, error)
 }
 
 type impactRequest struct {
@@ -28,13 +30,14 @@ type impactNode struct {
 }
 
 type impactResponse struct {
-	Node     string       `json:"node"`
-	Impacted []impactNode `json:"impacted"`
+	Node      string       `json:"node"`
+	Impacted  []impactNode `json:"impacted"`
+	NodeFound bool         `json:"node_found"`
 }
 
 // GraphImpact godoc
 // @Summary      Impact analysis for a graph node
-// @Description  Returns nodes that would be impacted (transitively depend on) a given node, up to max_depth
+// @Description  Returns nodes that would be impacted (transitively depend on) a given node, up to max_depth; node_found distinguishes an unknown node from a known node with zero impacted nodes
 // @Tags         graph
 // @Accept       json
 // @Produce      json
@@ -64,17 +67,23 @@ func GraphImpact(q ImpactQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			logger.Error().Err(err).Str("workspace", workspace).Str("node", req.Node).Msg("impact query failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "impact query failed")
 		}
+		found, err := q.ImpactNodeExists(ctx, sqlc.ImpactNodeExistsParams{WorkspaceHash: workspace, Node: req.Node})
+		if err != nil {
+			logger.Error().Err(err).Str("workspace", workspace).Str("node", req.Node).Msg("impact node lookup failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "impact query failed")
+		}
 
 		return c.JSON(http.StatusOK, impactResponse{
-			Node:     req.Node,
-			Impacted: impacted,
+			Node:      req.Node,
+			Impacted:  impacted,
+			NodeFound: found.Valid && found.Bool || len(impacted) > 0,
 		})
 	}
 }
 
 func collectImpact(ctx context.Context, q ImpactQuerier, workspace, node, edgeType string, maxDepth int) ([]impactNode, error) {
 	seen := map[string]bool{node: true}
-	var result []impactNode
+	result := []impactNode{}
 
 	// G1: expand with the bare symbol suffix of qualified nodes so calls-edge targets
 	// stored bare (e.g. "checkAccess") are also matched. See symbol.ExpandImpactFrontier.

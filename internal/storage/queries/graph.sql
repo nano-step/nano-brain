@@ -79,6 +79,27 @@ WHERE ge.workspace_id = resolve_workspace_short_id(@workspace_hash::text)
   AND (@column_3::text = '' OR ge.edge_type = @column_3::text)
 ORDER BY ge.edge_type, source_node;
 
+-- name: ImpactNodeExists :one
+-- A file or symbol with no edges is still a known node. Graph node keys are
+-- global, so the edge and document probes must be workspace-scoped.
+SELECT EXISTS (
+    SELECT 1 FROM graph_nodes n
+    JOIN graph_edges ge ON ge.workspace_id = resolve_workspace_short_id(@workspace_hash::text)
+      AND (ge.source_node_id = n.id OR ge.target_node_id = n.id)
+    WHERE n.node_key = @node::text
+) OR EXISTS (
+    SELECT 1 FROM documents d
+    JOIN workspaces w ON w.hash = d.workspace_hash
+    WHERE d.workspace_hash = @workspace_hash::text
+      AND (d.source_path = @node::text
+           OR d.source_path = w.path || '/' || @node::text
+           OR (strpos(@node::text, '::') > 0
+               AND d.metadata->>'source_type' = 'symbol'
+               AND d.title = split_part(@node::text, '::', 2)
+               AND (split_part(d.source_path, '?', 1) = split_part(@node::text, '::', 1)
+                    OR split_part(d.source_path, '?', 1) = w.path || '/' || split_part(@node::text, '::', 1))))
+) AS node_found;
+
 -- name: GetImpactorsByTargets :many
 SELECT DISTINCT sn.node_key AS source_node, tn.node_key AS target_node, ge.edge_type
 FROM graph_edges ge

@@ -2244,7 +2244,7 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_impact",
-			Description: "Pre-change blast-radius analysis. Use before editing/refactoring a file or symbol to find affected callers/importers/dependents via reverse import/call traversal. For direct one-hop relationships use memory_graph; for downstream calls use memory_trace. Node accepts workspace-relative or absolute paths.",
+			Description: "Pre-change blast-radius analysis. Use before editing/refactoring a file or symbol to find affected callers/importers/dependents via reverse import/call traversal. node_found distinguishes an unknown node from a known node with impacted:[]; count is the number of impacted nodes. For direct one-hop relationships use memory_graph; for downstream calls use memory_trace. Node accepts workspace-relative or absolute paths.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"workspace": {"type": "string", "description": "Workspace identifier — name (e.g. 'nano-brain') or full hash. Optional if the MCP connection was configured with a default workspace via the ?workspace= URL query param; otherwise required."},
 				"node":      {"type": "string", "description": "File path or file::symbol you plan to change. Use paths='relative' to save tokens in large workspaces."},
@@ -2294,7 +2294,7 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 				Depth    int    `json:"depth"`
 				EdgeType string `json:"edge_type"`
 			}
-			var impacted []impactItem
+			impacted := []impactItem{}
 
 			for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
 				switch direction {
@@ -2362,6 +2362,11 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 				}
 			}
 
+			found, err := a.queries.ImpactNodeExists(ctx, sqlc.ImpactNodeExistsParams{WorkspaceHash: ws, Node: node})
+			if err != nil {
+				return errResult(fmt.Sprintf("impact node lookup failed: %v", err)), nil
+			}
+
 			var wsRoot string
 			if pathStyle == "relative" {
 				wsRoot = lookupWorkspaceRoot(ctx, a.queries, ws)
@@ -2371,9 +2376,10 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			}
 
 			return textResult(map[string]any{
-				"node":     stripWorkspacePrefix(wsRoot, node),
-				"impacted": impacted,
-				"count":    len(impacted),
+				"node":       stripWorkspacePrefix(wsRoot, node),
+				"impacted":   impacted,
+				"count":      len(impacted),
+				"node_found": (found.Valid && found.Bool) || len(impacted) > 0,
 			})
 		},
 	)

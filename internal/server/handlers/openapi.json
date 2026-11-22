@@ -1024,6 +1024,9 @@
           },
           "node": {
             "type": "string"
+          },
+          "node_found": {
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -2879,7 +2882,7 @@
     },
     "/api/v1/graph/impact": {
       "post": {
-        "description": "Returns nodes that would be impacted (transitively depend on) a given node, up to max_depth",
+        "description": "Returns nodes that would be impacted (transitively depend on) a given node, up to max_depth; node_found distinguishes an unknown node from a known node with zero impacted nodes",
         "requestBody": {
           "content": {
             "application/json": {
