@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"gopkg.in/yaml.v3"
 )
 
 func runConfigCmd(args []string, configPath string) {
@@ -73,45 +74,72 @@ func runConfigCheck(configPath string, jsonFlag bool) {
 
 var (
 	maskPostgresPassword = regexp.MustCompile(`(postgres(?:ql)?://[^:]+:)([^@]+)(@)`)
-	maskAPIKey           = regexp.MustCompile(`(api_key:\s*).+`)
-	maskPasswordHash     = regexp.MustCompile(`(password_hash:\s*).+`)
 	maskDSNPassword      = regexp.MustCompile(`(?i)\b(password\s*=\s*)('(?:[^'\\]|\\.)*'|[^\s&"]+)`)
 	maskURL              = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'` + "`" + `]+`)
-	tokensKey            = regexp.MustCompile(`^(\s*(?:-\s+)?["']?tokens["']?\s*:)\s*(.*)$`)
-	tokensItem           = regexp.MustCompile(`^(\s*-\s+)\S.*$`)
 )
 
-// maskSensitive hides credentials in config YAML, one line at a time: API
-// keys, password hashes, auth tokens, DSN passwords, and the userinfo and
-// credential query parameters of any URL.
+// maskSensitive parses YAML before masking so flow collections, quoted keys and
+// block scalars cannot put credentials outside a line-oriented regex's reach.
 func maskSensitive(s string) string {
-	lines := strings.Split(s, "\n")
-	inTokens := false
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if m := tokensKey.FindStringSubmatch(line); m != nil {
-			// "tokens:" opens a block list; "tokens: [a, b]" carries the
-			// values on the same line.
-			inTokens = m[2] == "" || strings.HasPrefix(m[2], "#")
-			if !inTokens {
-				lines[i] = m[1] + " ***"
-			}
-			continue
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(s), &doc); err != nil {
+		return "<redacted: invalid YAML>\n"
+	}
+	maskYAMLNode(&doc)
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return "<redacted: invalid YAML>\n"
+	}
+	return string(out)
+}
+
+func maskYAMLNode(node *yaml.Node) {
+	// Comments are not part of the parsed config, and may themselves contain
+	// copied credentials; never echo them through the redacted view.
+	node.HeadComment, node.LineComment, node.FootComment = "", "", ""
+	switch node.Kind {
+	case yaml.DocumentNode, yaml.SequenceNode:
+		for _, child := range node.Content {
+			maskYAMLNode(child)
 		}
-		if inTokens && trimmed != "" && !strings.HasPrefix(trimmed, "#") {
-			if tokensItem.MatchString(line) {
-				lines[i] = tokensItem.ReplaceAllString(line, "${1}***")
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			maskYAMLNode(node.Content[i])
+			key, value := node.Content[i].Value, node.Content[i+1]
+			if key == "tokens" || key == "password_hash" || strings.HasSuffix(key, "api_key") {
+				value.HeadComment, value.LineComment, value.FootComment = "", "", ""
+				maskSecretNode(value)
 				continue
 			}
-			inTokens = false
+			maskYAMLNode(value)
 		}
-		line = maskPostgresPassword.ReplaceAllString(line, "${1}***${3}")
-		line = maskAPIKey.ReplaceAllString(line, "${1}***")
-		line = maskPasswordHash.ReplaceAllString(line, "${1}***")
-		line = maskDSNPassword.ReplaceAllString(line, "${1}***")
-		lines[i] = maskURL.ReplaceAllStringFunc(line, config.RedactURLCredentials)
+	case yaml.ScalarNode:
+		node.Value = maskURL.ReplaceAllStringFunc(
+			maskDSNPassword.ReplaceAllString(
+				maskPostgresPassword.ReplaceAllString(node.Value, "${1}***${3}"), "${1}***"),
+			config.RedactURLCredentials)
 	}
-	return strings.Join(lines, "\n")
+}
+
+func maskSecretNode(node *yaml.Node) {
+	node.HeadComment, node.LineComment, node.FootComment = "", "", ""
+	if node.Kind == yaml.AliasNode && node.Alias != nil {
+		maskSecretNode(node.Alias)
+	}
+	if node.Kind == yaml.SequenceNode {
+		for _, child := range node.Content {
+			maskSecretNode(child)
+		}
+		return
+	}
+	node.Kind, node.Tag, node.Value, node.Content, node.Style = yaml.ScalarNode, "!!str", "***", nil, 0
+}
+
+func maskDatabaseURL(dsn string) string {
+	return maskURL.ReplaceAllStringFunc(
+		maskDSNPassword.ReplaceAllString(
+			maskPostgresPassword.ReplaceAllString(dsn, "${1}***${3}"), "${1}***"),
+		config.RedactURLCredentials)
 }
 
 func configToMap(cfg *config.Config, configPath string) map[string]interface{} {
@@ -122,7 +150,7 @@ func configToMap(cfg *config.Config, configPath string) map[string]interface{} {
 			"port": cfg.Server.Port,
 		},
 		"database": map[string]interface{}{
-			"url": maskSensitive(cfg.Database.URL),
+			"url": maskDatabaseURL(cfg.Database.URL),
 		},
 		"embedding": map[string]interface{}{
 			"provider":    cfg.Embedding.Provider,
@@ -145,7 +173,7 @@ func configToMap(cfg *config.Config, configPath string) map[string]interface{} {
 
 func printConfigDefaults(cfg *config.Config) {
 	fmt.Printf("server:\n  host: %s\n  port: %d\n\n", cfg.Server.Host, cfg.Server.Port)
-	fmt.Printf("database:\n  url: %s\n\n", maskSensitive(cfg.Database.URL))
+	fmt.Printf("database:\n  url: %s\n\n", maskDatabaseURL(cfg.Database.URL))
 	fmt.Printf("embedding:\n  provider: %s\n  url: %s\n  model: %s\n  concurrency: %d\n\n",
 		cfg.Embedding.Provider, config.RedactURLCredentials(cfg.Embedding.URL), cfg.Embedding.Model, cfg.Embedding.Concurrency)
 	fmt.Printf("search:\n  rrf_k: %.0f\n  limit: %d\n\n", cfg.Search.RrfK, cfg.Search.Limit)

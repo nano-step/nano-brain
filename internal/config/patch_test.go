@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -150,5 +151,33 @@ func TestApplyPatch_RollsBackWhenTheConfigNoLongerLoads(t *testing.T) {
 				t.Errorf("invalid patch was not rolled back:\n%s", after)
 			}
 		})
+	}
+}
+
+func TestApplyPatch_ConcurrentRollbackDoesNotOverwriteValidPatch(t *testing.T) {
+	path := writePatchTestConfig(t)
+	for i := 0; i < 20; i++ {
+		var wg sync.WaitGroup
+		for j := 0; j < 8; j++ {
+			wg.Add(1)
+			go func(valid bool) {
+				defer wg.Done()
+				if valid {
+					if err := ApplyPatch(path, PatchRequest{Path: "search.limit", Value: float64(25)}); err != nil {
+						t.Errorf("valid patch: %v", err)
+					}
+				} else if err := ApplyPatch(path, PatchRequest{Path: "server.port", Value: float64(0)}); err == nil {
+					t.Error("invalid patch succeeded")
+				}
+			}(j%2 == 0)
+		}
+		wg.Wait()
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Server.Port != 3199 || cfg.Search.Limit != 25 {
+			t.Fatalf("iteration %d: port=%d limit=%d", i, cfg.Server.Port, cfg.Search.Limit)
+		}
 	}
 }

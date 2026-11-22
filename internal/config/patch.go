@@ -7,9 +7,12 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
+
+var patchMu sync.Mutex
 
 // PatchableFieldPaths lists every dot-path that the config PATCH endpoint
 // accepts. Fields not in this list are rejected.
@@ -69,6 +72,9 @@ func ApplyPatch(cfgPath string, patch PatchRequest) error {
 		return err
 	}
 
+	// Keep read/validate/write/rollback one transaction for concurrent API patches.
+	patchMu.Lock()
+	defer patchMu.Unlock()
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("read config: %w", err)
