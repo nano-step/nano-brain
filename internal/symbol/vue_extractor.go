@@ -3,6 +3,7 @@ package symbol
 import (
 	"fmt"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -15,25 +16,17 @@ const vueSymbolInjectionQuery = `
 `
 
 type VueExtractor struct {
-	ip     *gotreesitter.InjectionParser
-	tsLang *gotreesitter.Language
-	jsLang *gotreesitter.Language
-	tsQ    *gotreesitter.Query
-	jsQ    *gotreesitter.Query
+	vueLang *gotreesitter.Language
+	tsLang  *gotreesitter.Language
+	jsLang  *gotreesitter.Language
+	tsQ     *gotreesitter.Query
+	jsQ     *gotreesitter.Query
 }
 
 func NewVueExtractor() (*VueExtractor, error) {
 	vueLang := grammars.VueLanguage()
 	tsLang := grammars.TypescriptLanguage()
 	jsLang := grammars.JavascriptLanguage()
-
-	ip := gotreesitter.NewInjectionParser()
-	ip.RegisterLanguage("vue", vueLang)
-	ip.RegisterLanguage("typescript", tsLang)
-	ip.RegisterLanguage("javascript", jsLang)
-	if err := ip.RegisterInjectionQuery("vue", vueSymbolInjectionQuery); err != nil {
-		return nil, fmt.Errorf("vue symbol injection query: %w", err)
-	}
 
 	tsQ, err := gotreesitter.NewQuery(tsQuery, tsLang)
 	if err != nil {
@@ -44,13 +37,28 @@ func NewVueExtractor() (*VueExtractor, error) {
 		return nil, fmt.Errorf("vue js symbol query: %w", err)
 	}
 
-	return &VueExtractor{
-		ip:     ip,
-		tsLang: tsLang,
-		jsLang: jsLang,
-		tsQ:    tsQ,
-		jsQ:    jsQ,
-	}, nil
+	ex := &VueExtractor{
+		vueLang: vueLang,
+		tsLang:  tsLang,
+		jsLang:  jsLang,
+		tsQ:     tsQ,
+		jsQ:     jsQ,
+	}
+	if _, err := ex.newInjectionParser(); err != nil {
+		return nil, err
+	}
+	return ex, nil
+}
+
+func (e *VueExtractor) newInjectionParser() (*gotreesitter.InjectionParser, error) {
+	ip := tsparse.NewInjectionParser()
+	ip.RegisterLanguage("vue", e.vueLang)
+	ip.RegisterLanguage("typescript", e.tsLang)
+	ip.RegisterLanguage("javascript", e.jsLang)
+	if err := ip.RegisterInjectionQuery("vue", vueSymbolInjectionQuery); err != nil {
+		return nil, fmt.Errorf("vue symbol injection query: %w", err)
+	}
+	return ip, nil
 }
 
 func (e *VueExtractor) Supports(ext string) bool {
@@ -58,13 +66,25 @@ func (e *VueExtractor) Supports(ext string) bool {
 }
 
 func (e *VueExtractor) Extract(filePath string, content []byte) ([]Symbol, error) {
-	result, err := e.ip.Parse(content, "vue")
+	ip, err := e.newInjectionParser()
+	if err != nil {
+		return nil, err
+	}
+	result, err := ip.Parse(content, "vue")
 	if err != nil {
 		return nil, fmt.Errorf("parse vue sfc %s: %w", filePath, err)
 	}
+	if result == nil {
+		return nil, nil
+	}
 	defer func() {
-		if result != nil && result.Tree != nil {
+		if result.Tree != nil {
 			result.Tree.Release()
+		}
+		for _, inj := range result.Injections {
+			if inj.Tree != nil {
+				inj.Tree.Release()
+			}
 		}
 	}()
 

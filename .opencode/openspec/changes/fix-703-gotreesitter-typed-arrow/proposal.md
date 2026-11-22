@@ -19,12 +19,20 @@ symbols.
 
 - Upgrade `github.com/odvcencio/gotreesitter` from `v0.19.1` to `v0.57.0`
   (>7 days old per supply-chain cooldown policy).
-- Add regression tests across `internal/symbol`, `internal/graph`
-  (`TypeScriptGraphExtractor`, `VueSFCExtractor`,
+- Add `tsparse.NewInjectionParser()` bounded by `tsparse.DefaultTimeout` and
+  switch `symbol.VueExtractor` and `graph.VueSFCExtractor` from a shared
+  unguarded `*gotreesitter.InjectionParser` to per-call bounded instances so
+  concurrent `.vue` extraction (e.g. during `POST /api/v1/update` or watcher
+  rescans) is race-free and cannot spin unbounded.
+- Add regression tests across `internal/tsparse`, `internal/symbol`,
+  `internal/graph` (`TypeScriptGraphExtractor`, `VueSFCExtractor`,
   `JSControlFlowExtractor`), and `internal/chunker` (`SymbolAwareChunker`)
   covering non-async typed-first-parameter arrows in `.ts`, `.tsx`, and
   `.vue`, outer async functions containing inner typed `.map(...)`
-  callbacks, and 5000-line `.js` files.
-- Document recovery for already-indexed workspaces (`POST /api/v1/update`
-  for symbols, graph edges, and CFGs without re-embedding; reset + reindex
-  if parent-file raw chunks need re-chunking).
+  callbacks, 5000-line `.js` files, bounded `InjectionParser` timeouts, and
+  concurrent `.vue` extraction under `-race`.
+- Document safe recovery for already-indexed workspaces: `POST /api/v1/update`
+  backfills symbol documents (`?symbol=...`), `graph_edges`, and
+  `function_flowcharts` on unchanged files without touching `memory` or
+  `sessions` collections or re-embedding; parent-file symbol chunks refresh
+  naturally as files are edited on disk.

@@ -3,6 +3,7 @@ package symbol_test
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/nano-brain/nano-brain/internal/symbol"
@@ -191,7 +192,7 @@ func TestRegistry_LargeJavaScriptFileNoEarlyStopDrop_703(t *testing.T) {
 		b.WriteString("  if (!payload.a) {\n")
 		b.WriteString("    return res.status(400).json({ error: 'bad_request', payload });\n")
 		b.WriteString("  }\n")
-		b.WriteString("  const out = Object.entries(payload).reduce((acc, [k, v]) => ({ ...acc, [k]: v }), {});\n")
+		b.WriteString("  const out = Object.assign({}, Object.entries(payload).reduce((acc, [k, v]) => ({ ...acc, [k]: v }), {}));\n")
 		b.WriteString("  next(null, out);\n")
 		b.WriteString("  return out;\n")
 		b.WriteString("};\n\n")
@@ -207,6 +208,9 @@ func TestRegistry_LargeJavaScriptFileNoEarlyStopDrop_703(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Extract(src/large_service.js): %v", err)
 	}
+	if len(syms) != 500 {
+		t.Fatalf("expected 500 symbols, got %d", len(syms))
+	}
 
 	var tail *symbol.Symbol
 	for i := range syms {
@@ -220,5 +224,57 @@ func TestRegistry_LargeJavaScriptFileNoEarlyStopDrop_703(t *testing.T) {
 	}
 	if tail.Line <= 4900 {
 		t.Fatalf("expected fn499 line > 4900, got %d", tail.Line)
+	}
+}
+
+func TestVueExtractor_ConcurrentExtract_703(t *testing.T) {
+	reg := newProdSymbolRegistry(t)
+
+	vueA := []byte("<template>\n  <div>{{ alpha }}</div>\n</template>\n\n<script setup lang=\"ts\">\nexport const alphaHandler = (req: Request): Response => {\n  const ids = items.map((x: Item) => x.id);\n  return buildAlpha(req, ids);\n};\n</script>\n")
+	vueB := []byte("<template>\n  <section>{{ beta }}</section>\n</template>\n\n<script setup lang=\"ts\">\nexport const betaHandler = ({ id, name }: Payload): Result => {\n  return computeBeta(id, name);\n};\n</script>\n")
+
+	const goroutines = 8
+	const iterations = 30
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errCh := make(chan error, goroutines*iterations)
+
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+			<-start
+			for i := 0; i < iterations; i++ {
+				file, src, want := "src/Alpha.vue", vueA, "alphaHandler"
+				if (worker+i)%2 == 1 {
+					file, src, want = "src/Beta.vue", vueB, "betaHandler"
+				}
+				syms, err := reg.Extract(file, src)
+				if err != nil {
+					errCh <- fmt.Errorf("worker %d iter %d Extract(%s): %w", worker, i, file, err)
+					return
+				}
+				found := false
+				for _, s := range syms {
+					if s.Name == want && s.Kind == symbol.KindFunction {
+						found = true
+						break
+					}
+				}
+				if !found {
+					errCh <- fmt.Errorf("worker %d iter %d Extract(%s): missing %s in %+v", worker, i, file, want, syms)
+					return
+				}
+			}
+		}(g)
+	}
+
+	close(start)
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Error(err)
 	}
 }

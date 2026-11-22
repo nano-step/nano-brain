@@ -15,6 +15,30 @@ files complete with `root=program`, `hasErr=false`, and
 minimum 7-day release age supply-chain requirement while staying on a pure
 Go (`CGO_ENABLED=0`) build.
 
+## Bounded & Concurrency-Safe Vue SFC Parsing
+
+Every single-language extractor in `internal/symbol`, `internal/graph`, and
+`internal/chunker` constructs a fresh per-call `*gotreesitter.Parser` via
+`tsparse.NewParser`, whereas `symbol.VueExtractor` and `graph.VueSFCExtractor`
+previously stored a single shared `*gotreesitter.InjectionParser` on the
+extractor struct with no timeout configured. `gotreesitter.InjectionParser` is
+explicitly not concurrency-safe — `Parse` mutates `ip.parsers` and calls
+`releaseResult(ip.prevResult)`, freeing the previous caller's parse trees — so
+concurrent `.vue` extraction (including concurrent `POST /api/v1/update`
+invocations) triggered deterministic `DATA RACE` and `SIGSEGV` crashes.
+
+- `tsparse.NewInjectionParser()` wraps `gotreesitter.NewInjectionParser()` and
+  applies `SetTimeoutMicros(uint64(DefaultTimeout / time.Microsecond))`
+  (newly exposed in `gotreesitter` v0.57.0) so both root and nested injected
+  parses respect `DefaultTimeout`.
+- `symbol.VueExtractor` and `graph.VueSFCExtractor` pre-compile their
+  immutable `*gotreesitter.Language` and `*gotreesitter.Query` values at
+  construction time, validate `newInjectionParser()` once in the constructor,
+  and create a fresh per-call `InjectionParser` in `Extract`, `ExtractEdges`,
+  and `ExtractEdgesWithImportContext`, releasing both `result.Tree` and all
+  injected child trees in `defer`. Per-call construction is lock-free and
+  benchmarked faster than reusing `ip.prevResult` across distinct files.
+
 ## Existing Workspace Recovery
 
 Unchanged `.ts`, `.tsx`, `.vue`, and `.js` files in already-indexed
@@ -29,17 +53,17 @@ re-parsing every JS/TS/Vue source file.
   runs `Watcher.ReextractEdgesForWorkspace` (replacing `graph_edges` and,
   when `flow.enabled` is true, `function_flowcharts`) and
   `Watcher.ReextractSymbolsForWorkspace` (re-running `extractAndUpsertSymbols`
-  for every admitted file), bypassing the `content_hash` early exit without
-  wiping or re-embedding existing parent-file chunks.
+  for every admitted file), safely backfilling symbol documents
+  (`?symbol=...`), `graph_edges`, and `function_flowcharts` on unchanged files
+  without touching `memory`/`sessions` documents or re-embedding.
 - **Parent-file symbol chunks:** `SymbolAwareChunker` chunks stored on an
-  unchanged parent `documents` row (`chunk_type = 'raw'` fallback when zero
-  symbols parsed) are refreshed automatically when the file next changes on
-  disk, or across a workspace via `POST /api/v1/reset-workspace` followed
-  by `POST /api/v1/reindex` (`embedding_vectors` deduplicated by content
-  blob reuse cached vectors for unchanged chunk text). Note that
-  `POST /api/v1/reindex` with `force_wipe: true` resets chunk embed status
-  and re-extracts symbol docs, while unchanged parent file documents still
-  hit the `content_hash` skip in `processFile`.
+  unchanged parent `documents` row (`ChunkTypeSymbol` vs `raw` fallback when
+  zero symbols parsed) refresh naturally as files are edited on disk. Do NOT
+  recommend `POST /api/v1/reset-workspace` + `POST /api/v1/reindex` as a
+  recovery recipe: `ResetWorkspace` deletes all workspace documents
+  (including `memory` and `sessions` collections), and neither
+  `ResetWorkspace` nor `TriggerRescanByName` clears `Watcher.fileCache` on a
+  live server, leaving unchanged files un-reindexed until restart or edit.
 
 ## Non-Goals
 

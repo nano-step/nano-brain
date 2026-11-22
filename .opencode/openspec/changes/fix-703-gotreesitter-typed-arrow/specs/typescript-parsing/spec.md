@@ -29,11 +29,11 @@ then the outer function symbol is emitted with its complete multi-line
 Given `.ts`, `.tsx`, and `.vue` `<script setup lang="ts">` files declaring
 `export const handler = (req: Request): Response => { return helper(req); }`
 and a multi-branch non-async typed arrow in `.ts`/`.tsx`,
-when `TypeScriptGraphExtractor`, `VueSFCExtractor`, and
-`JSControlFlowExtractor` run,
-then `contains` and `calls` edges (`file -> file::handler` and
-`file::handler -> helper`) and a complete CFG with decision and terminal
-nodes are emitted.
+when `TypeScriptGraphExtractor` and `VueSFCExtractor` run via both
+`ExtractEdges` and `ExtractEdgesWithImportContext`, and
+`JSControlFlowExtractor` runs,
+then `contains`, `imports`, and `calls` edges (raw and `ImportContext`-resolved)
+and a complete CFG with decision and terminal nodes are emitted.
 
 ### Requirement: Large JavaScript files complete without early budget truncation
 JavaScript symbol extraction SHALL parse multi-thousand-line `.js` files
@@ -41,7 +41,22 @@ without prematurely dropping declarations near the end of the file due to
 parser memory-budget truncation.
 
 #### Scenario: Symbols past line 4900 in a 5000-line JavaScript file
-Given a 5000-line `.js` module declaring exported arrow functions through
+Given a 5000-line `.js` module declaring 500 exported arrow functions through
 the end of the file,
 when `symbol.Registry` extracts symbols,
-then functions declared past line 4900 are emitted.
+then all 500 functions including those declared past line 4900 are emitted.
+
+### Requirement: Bounded and concurrency-safe Vue SFC injection parsing
+Vue SFC symbol and graph extractors SHALL construct per-call timeout-bounded
+`InjectionParser` instances via `tsparse.NewInjectionParser` so concurrent
+extractions do not share mutable parser state or run without a timeout bound.
+
+#### Scenario: InjectionParser created by tsparse is timeout-bounded
+Given `tsparse.NewInjectionParser()`,
+when inspected and executed under a tight timeout on a large `.vue` `<script setup lang="ts">` input,
+then its configured timeout matches `tsparse.DefaultTimeout` (non-zero) and an over-budget parse stops early instead of running unbounded.
+
+#### Scenario: Concurrent Vue SFC symbol and graph extraction is race-free
+Given shared `symbol.Registry` (`VueExtractor`) and `graph.VueSFCExtractor` instances,
+when multiple goroutines concurrently call `Extract`, `ExtractEdges`, and `ExtractEdgesWithImportContext` on `.vue` `<script setup lang="ts">` files containing typed-parameter arrow functions,
+then every call returns the expected symbols and edges with zero data races or panics under `-race`.
