@@ -82,3 +82,23 @@ func TestDaemonLogTail(t *testing.T) {
 		}
 	})
 }
+
+func TestReportDaemonStartFailure_RemovesPIDFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".nano-brain")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pidPath := filepath.Join(dir, "nano-brain.pid")
+	if err := os.WriteFile(pidPath, []byte("4321\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(t.TempDir(), "nano-brain.log")
+
+	reportDaemonStartFailure(4321, logPath, 0)
+
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Errorf("PID file still exists after child death: %v", err)
+	}
+}

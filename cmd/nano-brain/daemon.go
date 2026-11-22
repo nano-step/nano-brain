@@ -155,16 +155,7 @@ func runServeDaemon(configPath string) {
 	}
 	healthy := func() bool { return probeServer(fmt.Sprintf("localhost:%d", resolvePort())) }
 	if waitDaemonStart(childExited, healthy, daemonStartTimeout, daemonStartPollInterval) == daemonStartExited {
-		_ = os.Remove(pidFilePath())
-		fmt.Fprintf(os.Stderr, "nano-brain failed to start (PID %d exited during startup)\n", childPID)
-		if lines := daemonLogTail(logPath, logStart, daemonLogTailLines); len(lines) > 0 {
-			fmt.Fprintf(os.Stderr, "Last lines of %s:\n", logPath)
-			for _, line := range lines {
-				fmt.Fprintf(os.Stderr, "  %s\n", line)
-			}
-		} else {
-			fmt.Fprintf(os.Stderr, "Logs: %s\n", logPath)
-		}
+		reportDaemonStartFailure(childPID, logPath, logStart)
 		os.Exit(1)
 	}
 
@@ -204,6 +195,21 @@ func waitDaemonStart(childExited, healthy func() bool, timeout, interval time.Du
 			return daemonStartUnknown
 		}
 		time.Sleep(interval)
+	}
+}
+
+// reportDaemonStartFailure removes the PID file of a child that died during
+// startup and prints the failure with the tail of its log.
+func reportDaemonStartFailure(childPID int, logPath string, logStart int64) {
+	_ = os.Remove(pidFilePath())
+	fmt.Fprintf(os.Stderr, "nano-brain failed to start (PID %d exited during startup)\n", childPID)
+	if lines := daemonLogTail(logPath, logStart, daemonLogTailLines); len(lines) > 0 {
+		fmt.Fprintf(os.Stderr, "Last lines of %s:\n", logPath)
+		for _, line := range lines {
+			fmt.Fprintf(os.Stderr, "  %s\n", line)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "Logs: %s\n", logPath)
 	}
 }
 

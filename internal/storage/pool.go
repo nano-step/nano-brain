@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -49,11 +50,36 @@ func ClosePool(pool *pgxpool.Pool) {
 
 // keywordPassword matches the password of a keyword/value DSN
 // (host=... password=secret, value optionally single-quoted with backslash
-// escapes) and a password= query parameter of a URL DSN.
-var keywordPassword = regexp.MustCompile(`(?i)\b(password\s*=\s*)('(?:[^'\\]|\\.)*'|[^\s&]+)`)
+// escapes) and a password= query parameter of a URL DSN. The key must end in
+// "password" so sslpassword= is covered too, and an unquoted value runs to
+// the next whitespace so `&` and `"` inside it cannot leak the tail.
+var keywordPassword = regexp.MustCompile(`(?i)(^|[\s?&])(\w*password\s*=\s*)('(?:[^'\\]|\\.)*'|[^\s]+)`)
+
+// dsnParamStart finds a `&key=` parameter boundary inside a matched
+// keyword-DSN value so the tail is preserved rather than eaten as password
+// text.
+var dsnParamStart = regexp.MustCompile(`&[A-Za-z0-9_]+=`)
+
+// maskDSNValue builds the replacement for a keyword-DSN password match: the
+// key stays, the value becomes ***, and a `&key=` tail (a URL query parameter
+// or the next keyword pair) is kept.
+func maskDSNValue(m string) string {
+	g := keywordPassword.FindStringSubmatchIndex(m)
+	if g == nil || g[6] < 0 {
+		return m
+	}
+	v := m[g[6]:g[7]]
+	tail := ""
+	if !strings.HasPrefix(v, "'") {
+		if loc := dsnParamStart.FindStringIndex(v); loc != nil {
+			tail = v[loc[0]:]
+		}
+	}
+	return m[:g[6]] + "***" + tail
+}
 
 func maskPassword(dsn string) string {
-	dsn = keywordPassword.ReplaceAllString(dsn, "${1}***")
+	dsn = keywordPassword.ReplaceAllStringFunc(dsn, maskDSNValue)
 	for i, c := range dsn {
 		if c == '@' {
 			for j := i - 1; j >= 0; j-- {

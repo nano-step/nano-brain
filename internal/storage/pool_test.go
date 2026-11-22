@@ -70,6 +70,22 @@ func TestMaskPassword(t *testing.T) {
 			want: "postgres://localhost:5432/db?user=nb&password=***&sslmode=disable",
 		},
 		{
+			in:   "host=localhost user=nb sslpassword=hunter2 dbname=db",
+			want: "host=localhost user=nb sslpassword=*** dbname=db",
+		},
+		{
+			in:   "host=localhost password=ab&cd dbname=db",
+			want: "host=localhost password=*** dbname=db",
+		},
+		{
+			in:   `host=localhost password=ab"cd dbname=db`,
+			want: "host=localhost password=*** dbname=db",
+		},
+		{
+			in:   "host=localhost password='a b&c' dbname=db",
+			want: "host=localhost password=*** dbname=db",
+		},
+		{
 			in:   "host=localhost user=nb dbname=db",
 			want: "host=localhost user=nb dbname=db",
 		},

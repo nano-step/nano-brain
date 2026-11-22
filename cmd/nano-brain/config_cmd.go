@@ -74,8 +74,15 @@ func runConfigCheck(configPath string, jsonFlag bool) {
 
 var (
 	maskPostgresPassword = regexp.MustCompile(`(postgres(?:ql)?://[^:]+:)([^@]+)(@)`)
-	maskDSNPassword      = regexp.MustCompile(`(?i)\b(password\s*=\s*)('(?:[^'\\]|\\.)*'|[^\s&"]+)`)
-	maskURL              = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'` + "`" + `]+`)
+	// The key must end in "password" (sslpassword included) and start after
+	// whitespace or a URL query delimiter; an unquoted value runs to the next
+	// whitespace so `&` and `"` inside it are masked too.
+	maskDSNPassword = regexp.MustCompile(`(?i)(^|[\s?&])(\w*password\s*=\s*)('(?:[^'\\]|\\.)*'|[^\s]+)`)
+	// dsnParamStart finds a `&key=` parameter boundary inside a matched
+	// keyword-DSN value so the tail is preserved rather than eaten as
+	// password text.
+	dsnParamStart = regexp.MustCompile(`&[A-Za-z0-9_]+=`)
+	maskURL       = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'` + "`" + `]+`)
 )
 
 // maskSensitive parses YAML before masking so flow collections, quoted keys and
@@ -105,7 +112,13 @@ func maskYAMLNode(node *yaml.Node) {
 	case yaml.MappingNode:
 		for i := 0; i+1 < len(node.Content); i += 2 {
 			maskYAMLNode(node.Content[i])
-			key, value := node.Content[i].Value, node.Content[i+1]
+			keyNode := node.Content[i]
+			if keyNode.Kind == yaml.AliasNode && keyNode.Alias != nil {
+				keyNode = keyNode.Alias
+			}
+			// koanf/mapstructure match keys case-insensitively (a `Password_Hash`
+			// inside a users list item loads), so the check must be too.
+			key, value := strings.ToLower(keyNode.Value), node.Content[i+1]
 			if key == "tokens" || key == "password_hash" || strings.HasSuffix(key, "api_key") {
 				value.HeadComment, value.LineComment, value.FootComment = "", "", ""
 				maskSecretNode(value)
@@ -114,11 +127,35 @@ func maskYAMLNode(node *yaml.Node) {
 			maskYAMLNode(value)
 		}
 	case yaml.ScalarNode:
+		// koanf decodes !!binary to the real value, so the base64 text itself
+		// is the secret; nothing inside it can be partially masked.
+		if node.Tag == "!!binary" {
+			node.Tag, node.Value = "!!str", "<redacted>"
+			return
+		}
 		node.Value = maskURL.ReplaceAllStringFunc(
-			maskDSNPassword.ReplaceAllString(
-				maskPostgresPassword.ReplaceAllString(node.Value, "${1}***${3}"), "${1}***"),
+			maskDSNPassword.ReplaceAllStringFunc(
+				maskPostgresPassword.ReplaceAllString(node.Value, "${1}***${3}"), maskDSNValue),
 			config.RedactURLCredentials)
 	}
+}
+
+// maskDSNValue builds the replacement for a keyword-DSN password match: the
+// key stays, the value becomes ***, and a `&key=` tail (a URL query parameter
+// or the next keyword pair) is kept.
+func maskDSNValue(m string) string {
+	g := maskDSNPassword.FindStringSubmatchIndex(m)
+	if g == nil || g[6] < 0 {
+		return m
+	}
+	v := m[g[6]:g[7]]
+	tail := ""
+	if !strings.HasPrefix(v, "'") {
+		if loc := dsnParamStart.FindStringIndex(v); loc != nil {
+			tail = v[loc[0]:]
+		}
+	}
+	return m[:g[6]] + "***" + tail
 }
 
 func maskSecretNode(node *yaml.Node) {
@@ -137,8 +174,8 @@ func maskSecretNode(node *yaml.Node) {
 
 func maskDatabaseURL(dsn string) string {
 	return maskURL.ReplaceAllStringFunc(
-		maskDSNPassword.ReplaceAllString(
-			maskPostgresPassword.ReplaceAllString(dsn, "${1}***${3}"), "${1}***"),
+		maskDSNPassword.ReplaceAllStringFunc(
+			maskPostgresPassword.ReplaceAllString(dsn, "${1}***${3}"), maskDSNValue),
 		config.RedactURLCredentials)
 }
 

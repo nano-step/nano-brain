@@ -43,6 +43,8 @@ func TestApplyPatch_TypeCheck(t *testing.T) {
 		{"string field, number", "server.host", `1`, `field "server.host" expects a string, got a number`},
 		{"string field, null", "embedding.url", `null`, `field "embedding.url" expects a string, got null`},
 		{"int field, integer", "server.port", `3198`, ""},
+		{"int field, huge", "server.port", `1e300`, `field "server.port" expects an integer, got a number`},
+		{"int field, past int64", "server.port", `9223372036854775807`, `field "server.port" expects an integer, got a number`},
 		{"int field, string", "server.port", `"3198"`, `field "server.port" expects an integer, got a string`},
 		{"int field, fraction", "search.limit", `2.5`, `field "search.limit" expects an integer, got a number`},
 		{"int field, bool", "search.limit", `true`, `field "search.limit" expects an integer, got a boolean`},

@@ -20,7 +20,12 @@ func TestMaskSensitive(t *testing.T) {
 		{"postgres URL", `  url: postgres://nb:hunter2@localhost:5432/db?sslmode=disable`, `  url: postgres://<redacted>@localhost:5432/db?sslmode=disable`},
 		{"quoted postgres URL", `  url: "postgresql://nb:hunter2@localhost/db"`, `  url: "postgresql://<redacted>@localhost/db"`},
 		{"keyword DSN", `  url: host=localhost user=nb password=hunter2 dbname=db`, `  url: host=localhost user=nb password=*** dbname=db`},
+		{"sslpassword keyword DSN", `  url: host=localhost sslpassword=hunter2 dbname=db`, `  url: host=localhost sslpassword=*** dbname=db`},
+		{"keyword DSN password with ampersand", `  url: "host=x password=ab&cd dbname=db"`, `  url: "host=x password=*** dbname=db"`},
+		{"keyword DSN password with quote", `  url: "host=x password=ab\"cd dbname=db"`, `  url: "host=x password=*** dbname=db"`},
+		{"keyword DSN password keeps next params", `  url: "postgres://h/db?password=hunter2&sslmode=disable"`, `  url: "postgres://h/db?password=<redacted>&sslmode=disable"`},
 		{"quoted keyword DSN", `  url: "host=localhost password='hun ter2' dbname=db"`, `  url: "host=localhost password=*** dbname=db"`},
+		{"quoted DSN value with ampersand", `  url: "host=x password='a b&c' dbname=db"`, `  url: "host=x password=*** dbname=db"`},
 		{"api_key", `  api_key: sk-abc123`, `  api_key: '***'`},
 		{"voyage_api_key", `  voyage_api_key: "pa-abc123"`, `  voyage_api_key: '***'`},
 		{"password_hash", `      password_hash: "$2a$10$abcdefghijklmnopqrstuv"`, `      password_hash: '***'`},
@@ -144,6 +149,9 @@ func TestMaskSensitive_YAMLLayouts(t *testing.T) {
 		{"JSON style", `{"server":{"auth":{"tokens":["JSONSECRET"]}}}`, "JSONSECRET"},
 		{"anchor list", "tokens: &t\n  - ANCHORSECRET\n", "ANCHORSECRET"},
 		{"alias from elsewhere", "other: &t [ALIASSECRET]\ntokens: *t\n", "ALIASSECRET"},
+		{"alias as key", "keys: &k password_hash\nusers:\n  - *k : ALIASKEYSECRET\n", "ALIASKEYSECRET"},
+		{"case variant key in list item", "users:\n  - Password_Hash: CASEKEYSECRET\n", "CASEKEYSECRET"},
+		{"commented out key", "# api_key: sk-COMMENTEDSECRET\napi_key: x\n", "COMMENTEDSECRET"},
 		{"folded token", "tokens:\n  - >-\n    FOLDEDSECRET\n", "FOLDEDSECRET"},
 		{"quoted key", "\"password_hash\": HASHSECRET\n", "HASHSECRET"},
 		{"block scalar", "api_key: |-\n  BLOCKSECRET\n", "BLOCKSECRET"},
@@ -193,5 +201,25 @@ func TestConfigShowRedactsURLsInJSONAndDefaults(t *testing.T) {
 		if strings.Contains(string(output), secret) {
 			t.Errorf("defaults output leaked %s", secret)
 		}
+	}
+}
+
+func TestMaskSensitive_BinaryTag(t *testing.T) {
+	// koanf decodes !!binary before the value ever reaches a field, so the
+	// base64 text itself is the credential and must be replaced wholesale.
+	in := "database:\n  url: !!binary cG9zdGdyZXM6Ly91OlNFQ1JFVERERUBsb2NhbGhvc3Q6NTQzMi9kYg==\n"
+	got := maskSensitive(in)
+	if strings.Contains(got, "cG9zdGdyZXM6") || !strings.Contains(got, "<redacted>") {
+		t.Errorf("maskSensitive() did not redact !!binary scalar: %q", got)
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(got), &doc); err != nil {
+		t.Fatalf("redacted output is not YAML: %v", err)
+	}
+}
+
+func TestMaskSensitive_InvalidYAML(t *testing.T) {
+	if got := maskSensitive("api_key: sk-LEAKEDSECRET\n\t[unclosed\n"); got != "<redacted: invalid YAML>\n" {
+		t.Fatalf("maskSensitive() = %q, want %q", got, "<redacted: invalid YAML>\n")
 	}
 }

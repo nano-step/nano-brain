@@ -14,13 +14,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nano-brain/nano-brain/internal/chunker"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/nano-brain/nano-brain/internal/chunker"
 	"github.com/nano-brain/nano-brain/internal/codesummarize"
-	"github.com/nano-brain/nano-brain/internal/flow"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/eventbus"
+	"github.com/nano-brain/nano-brain/internal/flow"
 	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/harvest"
 	"github.com/nano-brain/nano-brain/internal/health"
@@ -30,7 +31,6 @@ import (
 	"github.com/nano-brain/nano-brain/internal/summarize"
 	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/nano-brain/nano-brain/internal/watcher"
-	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 )
@@ -200,7 +200,7 @@ func initCLILog(configPath string) {
 		return
 	}
 	applyVerbose(&cfg.Logging)
-	
+
 	// Parse log level
 	level := zerolog.InfoLevel
 	switch strings.ToLower(strings.TrimSpace(cfg.Logging.Level)) {
@@ -215,7 +215,7 @@ func initCLILog(configPath string) {
 	case "error":
 		level = zerolog.ErrorLevel
 	}
-	
+
 	// CLI logger writes to stderr to avoid polluting stdout (where JSON responses go)
 	cliLog = zerolog.New(os.Stderr).
 		With().
@@ -495,7 +495,8 @@ func startServer(configPath string) {
 	if cfg.Embedding.Provider != "" {
 		e, embedErr := embed.NewFromConfig(cfg.Embedding)
 		if embedErr != nil {
-			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", config.RedactURLCredentials(cfg.Embedding.URL)).Msg("embedding provider init failed")
+			provider, embedURL := embedInitLogFields(cfg.Embedding)
+			logger.Error().Err(embedErr).Str("provider", provider).Str("url", embedURL).Msg("embedding provider init failed")
 		} else {
 			embedder = e
 			if cfg.Server.ServeOnly {
@@ -751,6 +752,12 @@ func startServer(configPath string) {
 	}
 }
 
+// embedInitLogFields returns the fields logged when an embedding provider
+// fails to initialise; the URL is redacted because it can carry credentials.
+func embedInitLogFields(ec config.EmbeddingConfig) (provider, url string) {
+	return ec.Provider, config.RedactURLCredentials(ec.URL)
+}
+
 // buildOpenCodeHarvesters constructs OpenCode harvesters in priority order:
 //
 //  1. db_root — scan for per-project SQLite DBs matching registered workspaces
@@ -871,4 +878,3 @@ func buildHarvestSummarizer(cfg *config.Config, db *sql.DB, eq *embed.Queue, log
 	}
 	return summarize.NewHarvestSummarizer(pipeline, persister, logger)
 }
-

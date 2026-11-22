@@ -152,7 +152,12 @@ func checkPatchValueType(path string, value interface{}) error {
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		want = "an integer"
-		if n, ok := value.(float64); ok && n == math.Trunc(n) {
+		// The number must be integral and fit the int type: mapstructure
+		// saturates out-of-range floats instead of erroring, so 1e300 would
+		// otherwise be stored as MaxInt64. The upper bound is exclusive
+		// because float64(math.MaxInt) rounds up to 2^63.
+		bound := math.Ldexp(1, int(t.Bits())-1)
+		if n, ok := value.(float64); ok && n == math.Trunc(n) && n >= -bound && n < bound {
 			return nil
 		}
 	case reflect.Float32, reflect.Float64:
