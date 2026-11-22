@@ -90,6 +90,10 @@ func runServeDaemon(configPath string) {
 		fmt.Fprintf(os.Stderr, "cannot open log file %s: %v\n", logPath, err)
 		os.Exit(1)
 	}
+	var logStart int64
+	if info, err := logFile.Stat(); err == nil {
+		logStart = info.Size()
+	}
 
 	childArgs := []string{exe, "--daemon-child"}
 	if configPath != "" {
@@ -131,13 +135,101 @@ func runServeDaemon(configPath string) {
 		os.Exit(1)
 	}
 
-	_ = proc.Release()
 	_ = logFile.Close()
 	_ = devNull.Close()
+
+	// A child that dies during startup (invalid config, port in use) must not
+	// be reported as started. Wait reaps it, so its exit is observable.
+	exited := make(chan struct{})
+	go func() {
+		_, _ = proc.Wait()
+		close(exited)
+	}()
+	childExited := func() bool {
+		select {
+		case <-exited:
+			return true
+		default:
+			return false
+		}
+	}
+	healthy := func() bool { return probeServer(fmt.Sprintf("localhost:%d", resolvePort())) }
+	if waitDaemonStart(childExited, healthy, daemonStartTimeout, daemonStartPollInterval) == daemonStartExited {
+		reportDaemonStartFailure(childPID, logPath, logStart)
+		os.Exit(1)
+	}
 
 	fmt.Printf("nano-brain started (PID: %d)\n", childPID)
 	fmt.Printf("Logs: %s\n", logPath)
 	cliLog.Debug().Str("cmd", "serve").Int("pid", childPID).Str("pid_file", pidFilePath()).Msg("daemon started")
+}
+
+const (
+	daemonStartTimeout      = 3 * time.Second
+	daemonStartPollInterval = 100 * time.Millisecond
+	daemonLogTailLines      = 20
+)
+
+type daemonStartOutcome int
+
+const (
+	// daemonStartUnknown: the child is alive but not answering yet.
+	daemonStartUnknown daemonStartOutcome = iota
+	daemonStartHealthy
+	daemonStartExited
+)
+
+// waitDaemonStart polls until the child has exited, the server answers, or
+// timeout elapses. An exit is checked first, so a server that answers on the
+// port while the child is already dead is not mistaken for the child.
+func waitDaemonStart(childExited, healthy func() bool, timeout, interval time.Duration) daemonStartOutcome {
+	deadline := time.Now().Add(timeout)
+	for {
+		if childExited() {
+			return daemonStartExited
+		}
+		if healthy() {
+			return daemonStartHealthy
+		}
+		if !time.Now().Before(deadline) {
+			return daemonStartUnknown
+		}
+		time.Sleep(interval)
+	}
+}
+
+// reportDaemonStartFailure removes the PID file of a child that died during
+// startup and prints the failure with the tail of its log.
+func reportDaemonStartFailure(childPID int, logPath string, logStart int64) {
+	_ = os.Remove(pidFilePath())
+	fmt.Fprintf(os.Stderr, "nano-brain failed to start (PID %d exited during startup)\n", childPID)
+	if lines := daemonLogTail(logPath, logStart, daemonLogTailLines); len(lines) > 0 {
+		fmt.Fprintf(os.Stderr, "Last lines of %s:\n", logPath)
+		for _, line := range lines {
+			fmt.Fprintf(os.Stderr, "  %s\n", line)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "Logs: %s\n", logPath)
+	}
+}
+
+// daemonLogTail returns the last n non-empty lines written to the log file
+// at path after byte offset start, i.e. what this child wrote.
+func daemonLogTail(path string, start int64, n int) []string {
+	data, err := os.ReadFile(path)
+	if err != nil || start > int64(len(data)) {
+		return nil
+	}
+	var lines []string
+	for _, line := range strings.Split(string(data[start:]), "\n") {
+		if line = strings.TrimRight(line, "\r"); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return lines
 }
 
 func runStopCmd() {
