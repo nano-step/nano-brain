@@ -625,3 +625,55 @@ func TestWatcherBackfillKeepsStaleSymbolsWhenExtractorMissing(t *testing.T) {
 		t.Fatalf("stale doc for unsupported extension must be kept, got err=%v", err)
 	}
 }
+
+// TestWatcherBackfillKeepsStaleSymbolsWhenNotAdmittedByScan covers the F4
+// leak: a file the initial scan could not admit — here because its
+// directory can be traversed but not listed, so the walk never visits it
+// and the file doc survives — must keep its stale docs and must not be
+// read for new symbols.
+func TestWatcherBackfillKeepsStaleSymbolsWhenNotAdmittedByScan(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory read permissions")
+	}
+	e := newEnv584(t)
+	secDir := filepath.Join(e.root, "src", "sec")
+	xPath := e.writeFile(t, "src/sec/x.ts", "export function oldName() {\n  return 1;\n}\n")
+	otherPath := e.writeFile(t, "src/zzz.ts", "export function bar(x: number): number {\n  return x * 2;\n}\n")
+	oldPath := xPath + "?symbol=oldName&kind=function"
+	leakedPath := xPath + "?symbol=leakedSecretName&kind=function"
+
+	e.start(t)
+	e.waitSpan(t, oldPath)
+	e.stop(t)
+
+	e.stripSpans(t, xPath)
+	e.writeFile(t, "src/sec/.gitignore", "x.ts\n")
+	e.writeFile(t, "src/sec/x.ts", "export function leakedSecretName() {\n  return 2;\n}\n")
+	if err := os.Chmod(secDir, 0o311); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(secDir, 0o755) })
+	// src/sec/x.ts sorts before src/zzz.ts, so the canary deletion means the
+	// unadmitted row was already visited.
+	canaryPath := otherPath + "?symbol=gone&kind=function"
+	e.insertStaleSymbolDoc(t, otherPath, "gone", "function")
+
+	e.start(t)
+	e.waitDocGone(t, canaryPath)
+	e.stop(t)
+
+	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    oldPath,
+		WorkspaceHash: e.ws,
+	}); err != nil {
+		t.Fatalf("stale doc for scan-unadmitted file must be kept, got err=%v", err)
+	}
+	if _, err := e.q.GetDocumentBySourcePath(e.ctx, sqlc.GetDocumentBySourcePathParams{
+		SourcePath:    leakedPath,
+		WorkspaceHash: e.ws,
+	}); err == nil {
+		t.Fatal("unadmitted file must not be read for symbols: leakedSecretName was indexed")
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatal(err)
+	}
+}

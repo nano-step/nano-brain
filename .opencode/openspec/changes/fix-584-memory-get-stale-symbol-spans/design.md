@@ -32,8 +32,14 @@ record — a plain `ShouldSkip` cannot see nested ignore files and would
 silently re-index and embed the ignored content. Once the parent doc is
 gone, the row is cleaned up on a later start.
 
-With the parent present, keep the docs — Debug log, no delete — on every
-other outcome, in order: the filter skips the path, `skipResolved` skips
+With the parent present, the file must also have been admitted by the
+same run's initial scan — `startupAdmitted` records every path the walk
+reaches past `adm.ignore`, because a surviving file doc does not prove
+admission (the walk may never have reached the file, and a transient
+`cleanupIgnoredDocument` failure leaves the doc behind). Rows outside
+that set are kept unread. Beyond that, keep the docs — Debug log, no
+delete — on every other outcome, in order: the filter skips the path,
+`skipResolved` skips
 (purge or not — a file the scan no longer serves may still be indexed
 again later), `os.Stat` fails for any reason including `fs.ErrNotExist`
 (the file may return unchanged; the hash path never re-extracts it), the

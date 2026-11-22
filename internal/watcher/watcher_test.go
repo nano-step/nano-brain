@@ -1191,9 +1191,15 @@ func TestBackfillKeepsStaleDocsWhenSymbolUpsertFails(t *testing.T) {
 	if err := w.Watch("code", dir, "workspace", "**/*"); err != nil {
 		t.Fatal(err)
 	}
+	// backfillSymbolSpans only re-extracts files the initial scan admitted;
+	// this test invokes it directly, so mark the file admitted by hand.
+	w.startupAdmitted = map[string]map[string]bool{dir: {path: true}}
 
 	w.backfillSymbolSpans(context.Background())
 
+	if got := mq.upsertDocCalls.Load(); got == 0 {
+		t.Fatal("backfill never reached the upsert: file must be admitted and extracted")
+	}
 	if got := mq.deleteStaleCalls.Load(); got != 0 {
 		t.Fatalf("DeleteStaleSymbolSpanDocs calls = %d, want 0: failed upserts must keep stale docs", got)
 	}

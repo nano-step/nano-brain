@@ -130,6 +130,12 @@ type Watcher struct {
 	// fsnotify is non-recursive, so each subdirectory must be added individually
 	// for edits inside it to fire events (issue #497). Guarded by mu.
 	watchedDirs map[string]bool
+	// startupAdmitted records, per collection dirPath, the files the initial
+	// scan admitted — set before the first processAll and released after
+	// backfillSymbolSpans, so poll ticks never grow it. A surviving file doc
+	// does not prove a file is admitted (the walk may not have reached it),
+	// but this set does (issue #584).
+	startupAdmitted map[string]map[string]bool
 	// hotRegisterCh signals Run() that a workspace was registered at runtime so
 	// the dirty map should be processed without waiting for fsnotify events.
 	// Buffered=1 so WatchWithFilter never blocks. See issue #308.
@@ -380,8 +386,14 @@ func (w *Watcher) Run(ctx context.Context) error {
 		Int("poll_interval_s", w.pollInterval).
 		Msg("file watcher started")
 
+	w.mu.Lock()
+	w.startupAdmitted = make(map[string]map[string]bool)
+	w.mu.Unlock()
 	w.processAll(ctx)
 	w.backfillSymbolSpans(ctx)
+	w.mu.Lock()
+	w.startupAdmitted = nil
+	w.mu.Unlock()
 
 	for {
 		select {
@@ -604,6 +616,25 @@ func (w *Watcher) warmFileCacheFromDB(ctx context.Context, col watchedCollection
 	w.logger.Debug().Str("collection", col.name).Int("warmed", count).Msg("warmed file cache from DB")
 }
 
+// recordStartupAdmission marks path as admitted by the initial scan so
+// backfillSymbolSpans can distinguish files the scan really processed from
+// files whose docs merely survived an unreachable subtree (issue #584).
+// No-op outside the startup pass — startupAdmitted is nil after the
+// backfill, so poll-tick scans never grow it.
+func (w *Watcher) recordStartupAdmission(col watchedCollection, path string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.startupAdmitted == nil {
+		return
+	}
+	set := w.startupAdmitted[col.dirPath]
+	if set == nil {
+		set = make(map[string]bool)
+		w.startupAdmitted[col.dirPath] = set
+	}
+	set[path] = true
+}
+
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 	w.warmFileCacheFromDB(ctx, col)
 	col = col.withRealRoot()
@@ -631,6 +662,7 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 		if d.IsDir() {
 			w.watchDir(path)
 		} else {
+			w.recordStartupAdmission(col, path)
 			w.processFile(ctx, col, path)
 		}
 		return nil
@@ -1398,7 +1430,18 @@ func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
 				continue
 			}
 			// The file doc exists, so only a complete re-extraction proves
-			// the stale docs are orphans. Everything else keeps them.
+			// the stale docs are orphans. Everything else keeps them —
+			// starting with files the initial scan never admitted at all:
+			// their doc survived because the walk could not reach them
+			// (unreadable parent, transient cleanup failure), not because
+			// they passed admission.
+			w.mu.Lock()
+			admittedByScan := w.startupAdmitted[col.dirPath][path]
+			w.mu.Unlock()
+			if !admittedByScan {
+				keep("not admitted by initial scan")
+				continue
+			}
 			if col.filter != nil && col.filter.ShouldSkip(path, false) {
 				keep("ignored by collection filter")
 				continue
