@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/tsparse"
 	gotreesitter "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -19,31 +20,23 @@ const vueInjectionQuery = `
 var _ Extractor = (*VueSFCExtractor)(nil)
 
 type VueSFCExtractor struct {
-	ip            *gotreesitter.InjectionParser
-	tsImportQ     *gotreesitter.Query
-	tsContainsQ   *gotreesitter.Query
-	tsCallFuncQ   *gotreesitter.Query
-	tsCallExprQ   *gotreesitter.Query
-	jsImportQ     *gotreesitter.Query
-	jsContainsQ   *gotreesitter.Query
-	jsCallFuncQ   *gotreesitter.Query
-	jsCallExprQ   *gotreesitter.Query
-	tsLang        *gotreesitter.Language
-	jsLang        *gotreesitter.Language
+	vueLang     *gotreesitter.Language
+	tsImportQ   *gotreesitter.Query
+	tsContainsQ *gotreesitter.Query
+	tsCallFuncQ *gotreesitter.Query
+	tsCallExprQ *gotreesitter.Query
+	jsImportQ   *gotreesitter.Query
+	jsContainsQ *gotreesitter.Query
+	jsCallFuncQ *gotreesitter.Query
+	jsCallExprQ *gotreesitter.Query
+	tsLang      *gotreesitter.Language
+	jsLang      *gotreesitter.Language
 }
 
 func NewVueSFCExtractor() (*VueSFCExtractor, error) {
 	vueLang := grammars.VueLanguage()
 	tsLang := grammars.TypescriptLanguage()
 	jsLang := grammars.JavascriptLanguage()
-
-	ip := gotreesitter.NewInjectionParser()
-	ip.RegisterLanguage("vue", vueLang)
-	ip.RegisterLanguage("typescript", tsLang)
-	ip.RegisterLanguage("javascript", jsLang)
-	if err := ip.RegisterInjectionQuery("vue", vueInjectionQuery); err != nil {
-		return nil, fmt.Errorf("vue injection query: %w", err)
-	}
 
 	tsImportQ, err := gotreesitter.NewQuery(tsImportQuery, tsLang)
 	if err != nil {
@@ -79,8 +72,8 @@ func NewVueSFCExtractor() (*VueSFCExtractor, error) {
 		return nil, fmt.Errorf("js call expr query: %w", err)
 	}
 
-	return &VueSFCExtractor{
-		ip:          ip,
+	ex := &VueSFCExtractor{
+		vueLang:     vueLang,
 		tsImportQ:   tsImportQ,
 		tsContainsQ: tsContainsQ,
 		tsCallFuncQ: tsCallFuncQ,
@@ -91,7 +84,36 @@ func NewVueSFCExtractor() (*VueSFCExtractor, error) {
 		jsCallExprQ: jsCallExprQ,
 		tsLang:      tsLang,
 		jsLang:      jsLang,
-	}, nil
+	}
+	if _, err := ex.newInjectionParser(); err != nil {
+		return nil, err
+	}
+	return ex, nil
+}
+
+func (e *VueSFCExtractor) newInjectionParser() (*gotreesitter.InjectionParser, error) {
+	ip := tsparse.NewInjectionParser()
+	ip.RegisterLanguage("vue", e.vueLang)
+	ip.RegisterLanguage("typescript", e.tsLang)
+	ip.RegisterLanguage("javascript", e.jsLang)
+	if err := ip.RegisterInjectionQuery("vue", vueInjectionQuery); err != nil {
+		return nil, fmt.Errorf("vue injection query: %w", err)
+	}
+	return ip, nil
+}
+
+func releaseVueResult(result *gotreesitter.InjectionResult) {
+	if result == nil {
+		return
+	}
+	if result.Tree != nil {
+		result.Tree.Release()
+	}
+	for _, inj := range result.Injections {
+		if inj.Tree != nil {
+			inj.Tree.Release()
+		}
+	}
 }
 
 func (e *VueSFCExtractor) Supports(ext string) bool {
@@ -101,15 +123,18 @@ func (e *VueSFCExtractor) Supports(ext string) bool {
 var _ ImportResolvingExtractor = (*VueSFCExtractor)(nil)
 
 func (e *VueSFCExtractor) ExtractEdges(filePath string, content []byte) ([]Edge, error) {
-	result, err := e.ip.Parse(content, "vue")
+	ip, err := e.newInjectionParser()
+	if err != nil {
+		return nil, err
+	}
+	result, err := ip.Parse(content, "vue")
 	if err != nil {
 		return nil, fmt.Errorf("parse vue sfc %s: %w", filePath, err)
 	}
-	defer func() {
-		if result != nil {
-			result.Tree.Release()
-		}
-	}()
+	if result == nil {
+		return nil, nil
+	}
+	defer releaseVueResult(result)
 
 	relFile := filepath.ToSlash(filePath)
 
@@ -140,15 +165,18 @@ func (e *VueSFCExtractor) ExtractEdges(filePath string, content []byte) ([]Edge,
 // edges are resolved via ic (see ImportResolvingExtractor). ExtractEdges
 // itself is untouched so existing callers/tests keep seeing raw specifiers.
 func (e *VueSFCExtractor) ExtractEdgesWithImportContext(filePath string, content []byte, ic ImportContext) ([]Edge, error) {
-	result, err := e.ip.Parse(content, "vue")
+	ip, err := e.newInjectionParser()
+	if err != nil {
+		return nil, err
+	}
+	result, err := ip.Parse(content, "vue")
 	if err != nil {
 		return nil, fmt.Errorf("parse vue sfc %s: %w", filePath, err)
 	}
-	defer func() {
-		if result != nil {
-			result.Tree.Release()
-		}
-	}()
+	if result == nil {
+		return nil, nil
+	}
+	defer releaseVueResult(result)
 
 	relFile := filepath.ToSlash(filePath)
 

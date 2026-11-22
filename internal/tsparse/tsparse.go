@@ -10,12 +10,14 @@ import (
 
 // DefaultTimeout bounds one file's parse.
 //
-// gotreesitter caps a parse's memory (512MB by default, see
-// GOT_PARSE_MEMORY_BUDGET_MB) but not its running time: SetTimeoutMicros(0)
-// disables the check and Parser.reset leaves it at 0. Its GLR stack merging can
-// spin in node-equivalence lookups without allocating past that budget, which
-// is how a single input held a core for 30 hours. The timeout is tested once
-// per iteration of the parse loop, so it ends that spin.
+// gotreesitter caps a parse's memory — a scaled soft budget (max of 512 MiB and
+// 512 B per source byte, overridable via GOT_PARSE_MEMORY_BUDGET_MB) backed by
+// a 2 GiB hard heap-growth ceiling (GOT_PARSE_MEMORY_HARD_CEILING_MB, scaled to
+// 2x the soft budget when larger) — but not its running time:
+// SetTimeoutMicros(0) disables the check and Parser.reset leaves it at 0. Its
+// GLR stack merging can spin in node-equivalence lookups without allocating
+// past that budget, which is how a single input held a core for 30 hours. The
+// timeout is tested once per iteration of the parse loop, so it ends that spin.
 //
 // The value is deliberately loose. This is a backstop for a parse that will
 // never finish, not a latency target, and it is wall-clock — so it has to stay
@@ -33,4 +35,15 @@ func NewParser(lang *gotreesitter.Language) *gotreesitter.Parser {
 	parser := gotreesitter.NewParser(lang)
 	parser.SetTimeoutMicros(uint64(DefaultTimeout / time.Microsecond))
 	return parser
+}
+
+// NewInjectionParser returns an InjectionParser whose root and nested child
+// parses each stop after DefaultTimeout.
+//
+// InjectionParser is not safe for concurrent use; construct one per parse (or
+// synchronize externally) rather than sharing an instance across goroutines.
+func NewInjectionParser() *gotreesitter.InjectionParser {
+	ip := gotreesitter.NewInjectionParser()
+	ip.SetTimeoutMicros(uint64(DefaultTimeout / time.Microsecond))
+	return ip
 }
