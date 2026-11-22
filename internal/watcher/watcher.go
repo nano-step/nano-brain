@@ -50,6 +50,7 @@ type WatcherQuerier interface {
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 	PreloadFileStateByWorkspace(ctx context.Context, arg sqlc.PreloadFileStateByWorkspaceParams) ([]sqlc.PreloadFileStateByWorkspaceRow, error)
 	UpdateDocumentFileState(ctx context.Context, arg sqlc.UpdateDocumentFileStateParams) error
+	ListFilesWithStaleSymbolSpans(ctx context.Context, arg sqlc.ListFilesWithStaleSymbolSpansParams) ([]string, error)
 }
 
 type watchedCollection struct {
@@ -379,6 +380,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 		Msg("file watcher started")
 
 	w.processAll(ctx)
+	w.backfillSymbolSpans(ctx)
 
 	for {
 		select {
@@ -1335,6 +1337,62 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 		})
 	}
 	return count
+}
+
+// backfillSymbolSpans re-extracts symbols from files whose symbol documents
+// lack line/end_line metadata — written before #539 added the span. Those
+// files hit the content-hash early exit in processFile on every scan, so a
+// restart alone never repairs them; one DB query returns just their parents
+// instead of re-extracting every file (issue #584). Runs once at startup,
+// after the initial processAll.
+func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
+	if w.symbolRegistry == nil {
+		return
+	}
+
+	w.mu.Lock()
+	cols := make([]watchedCollection, 0, len(w.collections))
+	for _, col := range w.collections {
+		cols = append(cols, col)
+	}
+	w.mu.Unlock()
+
+	for _, col := range cols {
+		col = col.withRealRoot()
+		paths, err := w.queries.ListFilesWithStaleSymbolSpans(ctx, sqlc.ListFilesWithStaleSymbolSpansParams{
+			WorkspaceHash: col.workspaceHash,
+			Collection:    col.name,
+		})
+		if err != nil {
+			w.logger.Warn().Err(err).Str("collection", col.name).Msg("stale symbol span query failed")
+			continue
+		}
+		var count int
+		for _, path := range paths {
+			if ctx.Err() != nil {
+				return
+			}
+			if col.filter != nil && col.filter.ShouldSkip(path, false) {
+				continue
+			}
+			if skip, _ := w.skipResolved(col, path); skip {
+				continue
+			}
+			info, err := os.Stat(path)
+			if err != nil || !info.Mode().IsRegular() || info.Size() > w.maxFileSize {
+				continue
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			w.extractAndUpsertSymbols(ctx, col, path, content)
+			count++
+		}
+		if count > 0 {
+			w.logger.Info().Str("collection", col.name).Int("files", count).Msg("backfilled stale symbol line spans")
+		}
+	}
 }
 
 // ReextractEdgesForWorkspace re-runs graph edge extraction for every file in

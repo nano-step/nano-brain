@@ -392,6 +392,45 @@ func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash st
 	return items, nil
 }
 
+const listFilesWithStaleSymbolSpans = `-- name: ListFilesWithStaleSymbolSpans :many
+SELECT DISTINCT split_part(source_path, '?symbol=', 1)::text AS file_path
+FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND metadata->>'source_type' = 'symbol'
+  AND COALESCE(NULLIF(metadata->>'end_line', ''), '0') = '0'
+`
+
+type ListFilesWithStaleSymbolSpansParams struct {
+	WorkspaceHash string
+	Collection    string
+}
+
+// Parent files of symbol docs written before line/end_line metadata existed
+// (#539); unchanged files are never re-extracted, so they need a one-off backfill.
+func (q *Queries) ListFilesWithStaleSymbolSpans(ctx context.Context, arg ListFilesWithStaleSymbolSpansParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listFilesWithStaleSymbolSpans, arg.WorkspaceHash, arg.Collection)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var file_path string
+		if err := rows.Scan(&file_path); err != nil {
+			return nil, err
+		}
+		items = append(items, file_path)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSessionDocumentsByWorkspace = `-- name: ListSessionDocumentsByWorkspace :many
 SELECT d.id, d.workspace_hash, d.content_hash, d.title, d.source_path, d.collection, d.tags, cb.content, d.created_at, d.updated_at
 FROM documents d
@@ -686,6 +725,13 @@ FROM documents
 WHERE workspace_hash = $1
   AND metadata->>'source_type' = 'symbol'
   AND title = $2::text
+ORDER BY CASE metadata->>'kind'
+           WHEN 'function' THEN 0
+           WHEN 'struct' THEN 1 WHEN 'type' THEN 1 WHEN 'interface' THEN 1
+           WHEN 'const' THEN 2 WHEN 'var' THEN 2
+           WHEN 'method' THEN 3
+           ELSE 4 END,
+         source_path
 `
 
 type ResolveSymbolByNameParams struct {
@@ -701,6 +747,8 @@ type ResolveSymbolByNameRow struct {
 // Resolves a bare symbol name (e.g. a calls-edge target, which graph.sql
 // stores unqualified) to its defining symbol document(s), so callers can
 // requalify it as "<file>::<name>" for further graph traversal.
+// Kind order breaks same-name ties deterministically (#584): a same-file
+// object-property method must not shadow the top-level function.
 func (q *Queries) ResolveSymbolByName(ctx context.Context, arg ResolveSymbolByNameParams) ([]ResolveSymbolByNameRow, error) {
 	rows, err := q.db.QueryContext(ctx, resolveSymbolByName, arg.WorkspaceHash, arg.Column2)
 	if err != nil {

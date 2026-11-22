@@ -77,11 +77,30 @@ UPDATE documents SET collection = $2 WHERE collection = $1 AND workspace_hash = 
 -- Resolves a bare symbol name (e.g. a calls-edge target, which graph.sql
 -- stores unqualified) to its defining symbol document(s), so callers can
 -- requalify it as "<file>::<name>" for further graph traversal.
+-- Kind order breaks same-name ties deterministically (#584): a same-file
+-- object-property method must not shadow the top-level function.
 SELECT source_path, metadata
 FROM documents
 WHERE workspace_hash = $1
   AND metadata->>'source_type' = 'symbol'
-  AND title = $2::text;
+  AND title = $2::text
+ORDER BY CASE metadata->>'kind'
+           WHEN 'function' THEN 0
+           WHEN 'struct' THEN 1 WHEN 'type' THEN 1 WHEN 'interface' THEN 1
+           WHEN 'const' THEN 2 WHEN 'var' THEN 2
+           WHEN 'method' THEN 3
+           ELSE 4 END,
+         source_path;
+
+-- name: ListFilesWithStaleSymbolSpans :many
+-- Parent files of symbol docs written before line/end_line metadata existed
+-- (#539); unchanged files are never re-extracted, so they need a one-off backfill.
+SELECT DISTINCT split_part(source_path, '?symbol=', 1)::text AS file_path
+FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND metadata->>'source_type' = 'symbol'
+  AND COALESCE(NULLIF(metadata->>'end_line', ''), '0') = '0';
 
 -- name: ListSymbolsByWorkspace :many
 SELECT id, workspace_hash, content_hash, title, source_path, collection, tags, metadata, created_at, updated_at

@@ -96,6 +96,10 @@ func (m *mockQuerier) UpdateDocumentFileState(_ context.Context, _ sqlc.UpdateDo
 	return nil
 }
 
+func (m *mockQuerier) ListFilesWithStaleSymbolSpans(_ context.Context, _ sqlc.ListFilesWithStaleSymbolSpansParams) ([]string, error) {
+	return nil, nil
+}
+
 func testConfig(debounceMs, pollSec int) config.Config {
 	return config.Config{
 		Watcher: config.WatcherConfig{
