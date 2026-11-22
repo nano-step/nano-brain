@@ -312,6 +312,16 @@ func walkCollectionFiles(col sqlc.Collection) (map[string]string, error) {
 		if err != nil || info.Size() > maxIncrementalFileSize {
 			return nil
 		}
+		// Opening a FIFO blocks until a writer appears; sockets and devices are
+		// not content either (#675). A symlink is judged by its target.
+		if !d.Type().IsRegular() {
+			if d.Type()&os.ModeSymlink == 0 {
+				return nil
+			}
+			if target, statErr := os.Stat(path); statErr != nil || !target.Mode().IsRegular() {
+				return nil
+			}
+		}
 		f, err := os.Open(path)
 		if err != nil {
 			return nil

@@ -252,6 +252,10 @@ func processFile(ctx context.Context, workspace, absPath, codeRoot string, filte
 	if cerr := watcher.CheckResolvedPath(codeRoot, filter, absPath); cerr != nil {
 		return fmt.Errorf("skipped: %w", cerr)
 	}
+	// Reading a FIFO blocks until a writer appears (#675).
+	if info, serr := os.Stat(absPath); serr == nil && !info.Mode().IsRegular() {
+		return fmt.Errorf("skipped: not a regular file")
+	}
 
 	content, err := os.ReadFile(absPath)
 	if err != nil {

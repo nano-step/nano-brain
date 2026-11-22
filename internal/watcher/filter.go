@@ -195,8 +195,13 @@ var credentialFileNames = map[string]bool{
 	".s3cfg":           true,
 	".boto":            true,
 	"kubeconfig":       true,
+	"kubeconfig.yaml":  true,
+	"kubeconfig.yml":   true,
+	"htpasswd":         true,
 	"credentials":      true, // as in ~/.aws/credentials
 	"credentials.json": true,
+	"credentials.yml":  true,
+	"credentials.yaml": true,
 	"secrets.yml":      true,
 	"secrets.yaml":     true,
 	"secrets.json":     true,
@@ -205,12 +210,29 @@ var credentialFileNames = map[string]bool{
 // credentialFileSuffixes deny any base name ending in one of them (*.pem, …).
 var credentialFileSuffixes = []string{
 	".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".ppk", ".kdbx", ".ovpn",
-	".tfstate", ".tfstate.backup", ".tfvars",
+	".tfstate", ".tfstate.backup", ".tfvars", ".tfvars.json",
+	".pem.bak", ".key.bak",
 }
 
 // sshKeyPrefixes deny any base name starting with one of them (id_rsa,
-// id_rsa.bak, id_rsa_github, id_ed25519_sk) except "*.pub" public keys.
+// id_rsa.bak, id_rsa_github, id_ed25519_sk) except "*.pub" public keys and
+// names whose final extension is in sshKeySourceExts.
 var sshKeyPrefixes = []string{"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
+
+// sshKeySourceExts are the final extensions that mark an id_rsa*-style name as
+// source code or documentation (id_rsa_test.go, id_dsa.md) rather than a key.
+// Data and text extensions (.txt, .json, .yml, …) are left out on purpose:
+// id_rsa.txt is a plausible key backup.
+var sshKeySourceExts = map[string]bool{
+	".go": true, ".py": true, ".js": true, ".ts": true, ".tsx": true, ".jsx": true,
+	".rb": true, ".rs": true, ".java": true, ".kt": true, ".c": true, ".h": true,
+	".cpp": true, ".cs": true, ".php": true, ".swift": true, ".sh": true,
+	".html": true, ".css": true, ".md": true,
+}
+
+// credentialJSONPrefixes deny "<prefix>*.json": OAuth client secrets and cloud
+// service-account keys (client_secret_123.apps.googleusercontent.com.json).
+var credentialJSONPrefixes = []string{"client_secret", "service-account", "service_account"}
 
 // envDocWords mark an env file as documentation rather than secrets:
 // ".env.<word>" / ".env.production.<word>" and "<word>.env" / "app.<word>.env".
@@ -230,8 +252,24 @@ func isCredentialFile(base string) bool {
 	}
 	for _, prefix := range sshKeyPrefixes {
 		if strings.HasPrefix(name, prefix) {
-			return !strings.HasSuffix(name, ".pub")
+			return !strings.HasSuffix(name, ".pub") && !sshKeySourceExts[filepath.Ext(name)]
 		}
+	}
+	if strings.HasSuffix(name, ".json") {
+		for _, prefix := range credentialJSONPrefixes {
+			if strings.HasPrefix(name, prefix) {
+				return true
+			}
+		}
+	}
+	// .env-* / .env_* (.env-production, .env_local)
+	if strings.HasPrefix(name, ".env-") || strings.HasPrefix(name, ".env_") {
+		for _, word := range envDocWords {
+			if strings.HasSuffix(name, "."+word) || strings.HasSuffix(name, "-"+word) || strings.HasSuffix(name, "_"+word) {
+				return false
+			}
+		}
+		return true
 	}
 	// .env.* (.env.local, .env.production)
 	if strings.HasPrefix(name, ".env.") {

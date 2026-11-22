@@ -239,7 +239,9 @@ func TestCheckResolvedPath(t *testing.T) {
 		{"alias of a credential file, symlinked root", filepath.Join(base, "root-link"), linkFilter, filepath.Join(base, "root-link", "sub", "setup.md"), ErrTargetDenied},
 		{"alias of a gitignored file", root, filter, filepath.Join(root, "readme2.md"), ErrTargetDenied},
 		{"alias of a gitignored file, symlinked root", filepath.Join(base, "root-link"), linkFilter, filepath.Join(base, "root-link", "readme2.md"), ErrTargetDenied},
-		{"alias of a gitignored file, no filter", root, nil, filepath.Join(root, "readme2.md"), nil},
+		// The walk applies ignore files with or without a filter, so the target
+		// check does too (#675).
+		{"alias of a gitignored file, no filter", root, nil, filepath.Join(root, "readme2.md"), ErrTargetDenied},
 		{"broken symlink", root, filter, filepath.Join(root, "broken.md"), fs.ErrNotExist},
 		{"symlink loop", root, filter, filepath.Join(root, "loop.md"), errAny},
 		{"missing root", filepath.Join(base, "absent"), nil, filepath.Join(root, "sub", "in.md"), fs.ErrNotExist},
