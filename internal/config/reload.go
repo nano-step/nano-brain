@@ -56,6 +56,7 @@ func Reload(configPath string, current *Config) (*Config, *ReloadResult, error) 
 		{"harvester.opencode.session_dir", false, newCfg.Harvester.OpenCode.SessionDir != current.Harvester.OpenCode.SessionDir},
 		{"harvester.claudecode.enabled", false, newCfg.Harvester.ClaudeCode.Enabled != current.Harvester.ClaudeCode.Enabled},
 		{"harvester.claudecode.session_dir", false, newCfg.Harvester.ClaudeCode.SessionDir != current.Harvester.ClaudeCode.SessionDir},
+		{"harvester.claudecode.session_dirs", false, !slices.Equal(newCfg.Harvester.ClaudeCode.SessionDirs, current.Harvester.ClaudeCode.SessionDirs)},
 	}
 
 	for _, f := range fields {
