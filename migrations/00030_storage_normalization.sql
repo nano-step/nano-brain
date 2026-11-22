@@ -1,5 +1,14 @@
 -- +goose Up
 
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF to_regtype('halfvec') IS NULL THEN
+        RAISE EXCEPTION 'nano-brain migration 00030 requires pgvector >= 0.7.0 (halfvec type missing). Upgrade pgvector (e.g. pgvector/pgvector:pg17) and run: ALTER EXTENSION vector UPDATE;';
+    END IF;
+END $$;
+-- +goose StatementEnd
+
 CREATE TABLE IF NOT EXISTS workspace_ids (
     short_id SERIAL PRIMARY KEY,
     workspace_hash TEXT NOT NULL UNIQUE REFERENCES workspaces(hash) ON DELETE CASCADE
