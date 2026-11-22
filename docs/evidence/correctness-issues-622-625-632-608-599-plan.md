@@ -21,6 +21,17 @@ integration database is `nanobrain_test`; test schemas must be isolated.
    tests named for migration 11 that migrated through v30 and used columns
    removed in v30. Their fixture must stop at v11 and insert using its actual
    schema, not current sqlc-generated upserts.
+   Independent review: two reviewers verified the changed helpers and focused
+   tests. One raised a scope concern: several pre-existing, separate test
+   helpers still derive deterministic schema names and drop schemas at setup
+   (`cmd/nano-brain/pi_init_test.go`,
+   `internal/storage/storage_normalization_integration_test.go`,
+   `internal/summarize/persist_test.go`). The adjudicator checked #632's
+   observed failing tests and OpenSpec contract: both require isolation of
+   `SetupTestDB` invocations, which this PR provides. Verdict MERGE for #691;
+   residual cross-process collision in the other helpers needs separate
+   tracking. Passing integration tests do not prove simultaneous full-suite
+   processes cannot collide in those legacy helpers.
 2. **#625, impact contract:** REST `collectImpact` and MCP `memory_impact`
    initialize their result slices as nil; empty results serialize to `null`.
    Distinguish unknown nodes from existing leaf nodes with a workspace-scoped
