@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/nano-brain/nano-brain/internal/redact"
 )
 
 const (
@@ -45,6 +47,10 @@ func NewVoyageAIEmbedder(apiKey, model, url string, dimension int) (*VoyageAIEmb
 }
 
 func (v *VoyageAIEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	// Egress-only redaction (#660): stored content is untouched; only what
+	// reaches the provider is scrubbed.
+	text = redact.Scrub(text)
+
 	reqBody := struct {
 		Model string   `json:"model"`
 		Input []string `json:"input"`

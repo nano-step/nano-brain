@@ -1265,3 +1265,60 @@ func TestLoadTrimsHostWhitespace(t *testing.T) {
 		t.Errorf("Server.Host = %q, want %q", cfg.Server.Host, "127.0.0.1")
 	}
 }
+
+func TestClaudeCodeHarvesterConfig_SessionDirsResolved(t *testing.T) {
+	tmp := t.TempDir()
+	instA := filepath.Join(tmp, "instances", "alpha", "projects")
+	instB := filepath.Join(tmp, "instances", "beta", "projects")
+	plain := filepath.Join(tmp, "plain")
+	for _, d := range []string{instA, instB, plain} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tests := []struct {
+		name string
+		cfg  ClaudeCodeHarvesterConfig
+		want []string
+	}{
+		{
+			name: "legacy session_dir only",
+			cfg:  ClaudeCodeHarvesterConfig{SessionDir: plain},
+			want: []string{plain},
+		},
+		{
+			name: "session_dirs glob expands every instance",
+			cfg:  ClaudeCodeHarvesterConfig{SessionDirs: []string{filepath.Join(tmp, "instances", "*", "projects")}},
+			want: []string{instA, instB},
+		},
+		{
+			name: "session_dir union session_dirs dedupes",
+			cfg:  ClaudeCodeHarvesterConfig{SessionDir: plain, SessionDirs: []string{plain, instA}},
+			want: []string{plain, instA},
+		},
+		{
+			name: "glob matching nothing is dropped",
+			cfg:  ClaudeCodeHarvesterConfig{SessionDirs: []string{filepath.Join(tmp, "nope-*")}},
+			want: nil,
+		},
+		{
+			name: "empty",
+			cfg:  ClaudeCodeHarvesterConfig{},
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.cfg.SessionDirsResolved()
+			if len(got) != len(tt.want) {
+				t.Fatalf("SessionDirsResolved() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("SessionDirsResolved() = %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}

@@ -10,50 +10,83 @@ import (
 	"github.com/nano-brain/nano-brain/internal/storage"
 )
 
-func runInitCmd(args []string, configPath string) {
-	cliLog.Info().Str("cmd", "init").Msg("cli command started")
-	hasRoot := false
-	hasYes := false
-	installTarget := ""
+// initFlags holds the parsed flags for `nano-brain init`. Parsing is a single
+// pass so every flag's value is consumed exactly once; the previous two-pass
+// design scanned args for --root/--yes before consuming --root's value, which
+// made `init --root <path>` fail with "unexpected argument" in every form
+// (#623).
+type initFlags struct {
+	root          string
+	workspace     string
+	installTarget string
+	hasRoot       bool
+	hasYes        bool
+	jsonFlag      bool
+	forceFlag     bool
+}
 
+func parseInitArgs(args []string) (initFlags, error) {
+	var f initFlags
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "-- requires an agent target")
-				os.Exit(1)
+				return f, fmt.Errorf("-- requires an agent target")
 			}
 			i++
-			installTarget = args[i]
+			f.installTarget = args[i]
 		case "--root":
-			hasRoot = true
+			if i+1 >= len(args) {
+				return f, fmt.Errorf("--root requires a value")
+			}
+			i++
+			f.hasRoot = true
+			f.root = args[i]
+		case "--workspace":
+			if i+1 >= len(args) {
+				return f, fmt.Errorf("--workspace requires a value")
+			}
+			i++
+			f.workspace = args[i]
 		case "--yes":
-			hasYes = true
+			f.hasYes = true
+		case "--json":
+			f.jsonFlag = true
+		case "--force":
+			f.forceFlag = true
 		default:
 			if strings.HasPrefix(args[i], "--") {
-				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
-				os.Exit(1)
+				return f, fmt.Errorf("unknown flag: %s", args[i])
 			}
-			fmt.Fprintf(os.Stderr, "unexpected argument: %s\n", args[i])
-			os.Exit(1)
+			return f, fmt.Errorf("unexpected argument: %s", args[i])
 		}
 	}
+	return f, nil
+}
 
-	if installTarget != "" {
-		if hasRoot || hasYes {
+func runInitCmd(args []string, configPath string) {
+	cliLog.Info().Str("cmd", "init").Msg("cli command started")
+	flags, err := parseInitArgs(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if flags.installTarget != "" {
+		if flags.hasRoot || flags.hasYes {
 			fmt.Fprintln(os.Stderr, "Error: init -- <agent> cannot be combined with --root or --yes")
 			os.Exit(1)
 		}
-		runInitInstallCmd(installTarget)
-		cliLog.Info().Str("cmd", "init").Str("target", installTarget).Msg("cli command completed")
+		runInitInstallCmd(flags.installTarget)
+		cliLog.Info().Str("cmd", "init").Str("target", flags.installTarget).Msg("cli command completed")
 		return
 	}
 
 	// D-08: --yes takes the fully non-interactive path (zero prompts) even
 	// when a TTY is attached — it is a distinct contract from the bare
 	// no-args path, which is TTY-gated and interactive.
-	if hasYes {
-		if hasRoot {
+	if flags.hasYes {
+		if flags.hasRoot {
 			fmt.Fprintln(os.Stderr, "Note: --yes only writes config; --root is ignored. To register a workspace, run 'nano-brain init --root <path>' without --yes (needs a running server).")
 		}
 		runNonInteractiveInit(configPath)
@@ -61,44 +94,16 @@ func runInitCmd(args []string, configPath string) {
 		return
 	}
 
-	if !hasRoot {
+	if !flags.hasRoot {
 		runInteractiveInit(configPath)
 		cliLog.Info().Str("cmd", "init").Msg("cli command completed")
 		return
 	}
 
-	var root, workspace string
-	var jsonFlag, forceFlag bool
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--root":
-			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "--root requires a value\n")
-				os.Exit(1)
-			}
-			i++
-			root = args[i]
-		case "--workspace":
-			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "--workspace requires a value\n")
-				os.Exit(1)
-			}
-			i++
-			workspace = args[i]
-		case "--json":
-			jsonFlag = true
-		case "--force":
-			forceFlag = true
-		default:
-			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
-			os.Exit(1)
-		}
-	}
-
-	if forceFlag && root != "" {
-		hash, err := storage.WorkspaceHash(root)
+	if flags.forceFlag && flags.root != "" {
+		hash, err := storage.WorkspaceHash(flags.root)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: could not resolve workspace for path %q: %v\n", root, err)
+			fmt.Fprintf(os.Stderr, "Error: could not resolve workspace for path %q: %v\n", flags.root, err)
 			os.Exit(1)
 		}
 		resetData, _ := json.Marshal(map[string]string{"workspace": hash})
@@ -116,7 +121,7 @@ func runInitCmd(args []string, configPath string) {
 		}
 	}
 
-	result, err := registerWorkspace(root, workspace, jsonFlag)
+	result, err := registerWorkspace(flags.root, flags.workspace, flags.jsonFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		cliLog.Error().Err(err).Str("cmd", "init").Msg("init request failed")

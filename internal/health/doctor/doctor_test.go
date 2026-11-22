@@ -106,6 +106,54 @@ func TestCheckMCPReachable_404(t *testing.T) {
 	}
 }
 
+// Regression test for #633: the stateless streamable transport answers
+// GET /mcp with 405, so the probe must POST a JSON-RPC initialize and treat
+// a well-formed JSON-RPC payload (SSE or plain JSON) as reachable.
+func TestCheckMCPReachable_OK_SSE(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"serverInfo\":{\"name\":\"nano-brain\"}}}\n\n"))
+	}))
+	defer srv.Close()
+
+	c := doctor.CheckMCPReachable(srv.URL + "/mcp")
+	if c.Status != "ok" {
+		t.Errorf("status = %q, want ok (hint: %s)", c.Status, c.Hint)
+	}
+}
+
+func TestCheckMCPReachable_OK_JSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"nano-brain"}}}`))
+	}))
+	defer srv.Close()
+
+	c := doctor.CheckMCPReachable(srv.URL + "/mcp")
+	if c.Status != "ok" {
+		t.Errorf("status = %q, want ok (hint: %s)", c.Status, c.Hint)
+	}
+}
+
+func TestCheckMCPReachable_200_Malformed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<html>not jsonrpc</html>`))
+	}))
+	defer srv.Close()
+
+	c := doctor.CheckMCPReachable(srv.URL + "/mcp")
+	if c.Status != "fail" {
+		t.Errorf("status = %q, want fail", c.Status)
+	}
+}
+
 func TestCheckEmbeddingProvider_Disabled(t *testing.T) {
 	c, body := doctor.CheckEmbeddingProvider(config.EmbeddingConfig{Provider: ""})
 	if c.Status != "skip" {

@@ -18,7 +18,7 @@ Custom dispatcher (no cobra). `main.go` switches on `os.Args[1]`; each command r
 | `init.go` | `runInteractiveInit` — guided wizard for workspace registration |
 | `config_cmd.go` | `runConfigCmd` — show/validate config |
 | `doctor.go` | `runDoctorCmd` — prerequisite checks (PG, pgvector, Ollama, model) |
-| `detect.go` | `detectOpenCodeStorageDir`, `detectOpenCodeDBPath`, `detectClaudeCodeStorageDir` |
+| `detect.go` | `detectOpenCodeStorageDir`, `detectOpenCodeDBPath`, `detectClaudeCodeStorageDirs` |
 | `migrate.go` | `runDBMigrateCmd` — goose migrations + V1 SQLite import |
 | `bench.go` | `runBenchCmd` — generate/run/compare/stress benchmark suite |
 | `cmd_reset_embeddings.go` | `runResetEmbeddingsCmd` — clear embedding state |

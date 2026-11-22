@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/codesummarize"
 	"github.com/nano-brain/nano-brain/internal/config"
@@ -24,6 +25,7 @@ type CodeSummarizeResponse struct {
 
 type CodeSummarizer interface {
 	RunOnce(ctx context.Context, workspaceHash string) (processed, skipped, errors int, err error)
+	RetryFailures(ctx context.Context, workspaceHash string, ids []uuid.UUID) (processed, skipped, errors int, err error)
 }
 
 // TriggerCodeSummarize godoc

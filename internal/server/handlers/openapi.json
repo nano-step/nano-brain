@@ -924,6 +924,12 @@
               },
               "session_dir": {
                 "type": "string"
+              },
+              "session_dirs": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               }
             },
             "type": "object"
@@ -1018,6 +1024,9 @@
           },
           "node": {
             "type": "string"
+          },
+          "node_found": {
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -1295,6 +1304,9 @@
             "type": "integer"
           },
           "embedded": {
+            "type": "integer"
+          },
+          "files_pending_ingest": {
             "type": "integer"
           },
           "message": {
@@ -2873,7 +2885,7 @@
     },
     "/api/v1/graph/impact": {
       "post": {
-        "description": "Returns nodes that would be impacted (transitively depend on) a given node, up to max_depth",
+        "description": "Returns nodes that would be impacted (transitively depend on) a given node, up to max_depth; node_found distinguishes an unknown node from a known node with zero impacted nodes",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3477,7 +3489,7 @@
     },
     "/api/v1/reindex": {
       "post": {
-        "description": "Rescans collections for a workspace, enqueueing changed/new files for embedding; force_wipe clears and re-embeds everything",
+        "description": "Requests an asynchronous watcher rescan; files_pending_ingest estimates changed files, while embedded and chunks_enqueued count completed/queued work at response time. force_wipe requeues existing chunks.",
         "requestBody": {
           "content": {
             "application/json": {

@@ -63,6 +63,7 @@ func RedactSecrets(cfg *Config) *Config {
 
 	cp.Server.AllowedHosts = slices.Clone(cfg.Server.AllowedHosts)
 	cp.Server.Auth.BypassPaths = slices.Clone(cfg.Server.Auth.BypassPaths)
+	cp.Harvester.ClaudeCode.SessionDirs = slices.Clone(cfg.Harvester.ClaudeCode.SessionDirs)
 	cp.Harvester.ClaudeCode.TicketPatterns = slices.Clone(cfg.Harvester.ClaudeCode.TicketPatterns)
 	cp.Watcher.ExcludePatterns = slices.Clone(cfg.Watcher.ExcludePatterns)
 	cp.Watcher.AllowedExtensions = slices.Clone(cfg.Watcher.AllowedExtensions)
@@ -82,7 +83,7 @@ func RedactSecrets(cfg *Config) *Config {
 
 // credentialQueryParams are the query parameter names whose values
 // RedactURLCredentials replaces. Names are compared case-insensitively.
-var credentialQueryParams = []string{"api_key", "key", "token", "access_token", "secret", "password"}
+var credentialQueryParams = []string{"api_key", "apikey", "api-key", "x-api-key", "key", "token", "access_token", "refresh_token", "secret", "client_secret", "password", "sig", "signature", "code"}
 
 var urlSchemePrefix = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*://`)
 

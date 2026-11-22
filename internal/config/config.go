@@ -132,12 +132,63 @@ type OpenCodeHarvesterConfig struct {
 
 // ClaudeCodeHarvesterConfig holds ClaudeCode harvester configuration.
 type ClaudeCodeHarvesterConfig struct {
-	Enabled        bool     `koanf:"enabled" json:"enabled"`
-	SessionDir     string   `koanf:"session_dir" json:"session_dir"`
+	Enabled    bool   `koanf:"enabled" json:"enabled"`
+	SessionDir string `koanf:"session_dir" json:"session_dir"`
+	// SessionDirs lists Claude Code projects directories to harvest from.
+	// Claude Code can write transcripts under more than one projects dir on
+	// the same machine (e.g. ~/.claude/projects plus one
+	// ~/.ccs/instances/<name>/projects per profile-manager instance), so a
+	// single session_dir silently drops every other source (#643). Entries
+	// support "~" expansion and glob patterns (e.g.
+	// ~/.ccs/instances/star/projects). SessionDir keeps working and is
+	// treated as one more entry.
+	SessionDirs []string `koanf:"session_dirs" json:"session_dirs"`
 	// TicketPatterns is a slice of Go regex strings used by the ticket extractor
 	// to identify ticket IDs in session content and branch names. Zero value
 	// means the extractor uses its built-in defaults ([A-Z]+-\d+ and #\d+).
 	TicketPatterns []string `koanf:"ticket_patterns" json:"ticket_patterns"`
+}
+
+// SessionDirsResolved expands SessionDirs plus the legacy single SessionDir
+// into concrete directories: "~" prefixes resolve to the home directory and
+// glob patterns expand via filepath.Glob. Results are deduplicated in
+// first-seen order; empty entries and globs that match nothing are dropped.
+func (c ClaudeCodeHarvesterConfig) SessionDirsResolved() []string {
+	raw := make([]string, 0, len(c.SessionDirs)+1)
+	if c.SessionDir != "" {
+		raw = append(raw, c.SessionDir)
+	}
+	raw = append(raw, c.SessionDirs...)
+
+	seen := make(map[string]struct{}, len(raw))
+	var out []string
+	add := func(p string) {
+		if p == "" {
+			return
+		}
+		if _, dup := seen[p]; dup {
+			return
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	for _, entry := range raw {
+		if expanded, err := expandTildeForConfig(entry); err == nil {
+			entry = expanded
+		}
+		if strings.ContainsAny(entry, "*?[") {
+			matches, err := filepath.Glob(entry)
+			if err != nil {
+				continue
+			}
+			for _, m := range matches {
+				add(m)
+			}
+			continue
+		}
+		add(entry)
+	}
+	return out
 }
 
 // PiHarvesterConfig holds Pi CLI agent harvester configuration. SessionDir has
