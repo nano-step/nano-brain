@@ -24,3 +24,8 @@ the endpoints compare unresolved rows after the call instead of marking
 every requested failure successful. Tests cover SQL eligibility/order,
 targeted retry, partial responses, and worker quota/rotation using a local
 stubbed provider and isolated test schemas.
+
+Graph-context-stale symbols use the same failure eligibility; otherwise the
+automatic worker would retry the same stale summary on every empty-backlog
+sweep. Explicit retries must also select stale symbols that already have an
+old summary document.

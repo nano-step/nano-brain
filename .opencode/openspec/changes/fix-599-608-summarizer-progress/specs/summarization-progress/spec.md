@@ -18,10 +18,16 @@ expired cooldown,
 when no unattempted symbols remain,
 then it is eligible for retry.
 
+#### Scenario: Stale graph-context summary
+Given an existing summary whose graph context needs recomputation,
+when its latest attempt failed and is still cooling down,
+then the automatic worker does not reselect it on every idle sweep.
+
 #### Scenario: Explicit retry
-Given a parked symbol,
-when its failure is resolved by the retry endpoint,
-then it is eligible as a never-attempted symbol again.
+Given a parked symbol with an unresolved failure,
+when its failure ID is passed to the retry endpoint,
+then only the selected symbol bypasses the cooldown and its failure is
+resolved only after a successful summary.
 
 ### Requirement: Bounded worker occupancy
 The automatic worker SHALL give each registered workspace at most one

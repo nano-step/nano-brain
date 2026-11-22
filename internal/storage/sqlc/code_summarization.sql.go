@@ -224,6 +224,10 @@ SELECT
 FROM chunks c
 JOIN content_blobs cb ON cb.id = c.blob_id
 LEFT JOIN documents d ON d.id = c.document_id
+LEFT JOIN code_summarization_failures f
+  ON f.workspace_hash = c.workspace_hash
+ AND f.content_hash = c.content_hash
+ AND f.resolved_at IS NULL
 WHERE c.workspace_hash = $1
   AND c.chunk_type = 'symbol'
   AND c.symbol_name IS NOT NULL
@@ -236,6 +240,15 @@ WHERE c.workspace_hash = $1
         AND doc.tags @> ARRAY['symbol-summary']::text[]
         AND doc.metadata->>'source_content_hash' = c.content_hash
   )
+  AND (
+      f.id IS NULL
+      OR (f.error_type IN ('transient_exhausted', 'partial_omitted')
+          AND f.attempts < 8
+          AND f.last_attempt_at <= NOW() - make_interval(
+              hours => LEAST(24, power(2::numeric, LEAST(GREATEST(f.attempts - 1, 0), 5))::int)
+          ))
+  )
+ORDER BY (f.id IS NOT NULL), f.last_attempt_at ASC NULLS FIRST, c.id
 LIMIT $2
 `
 
@@ -364,13 +377,14 @@ WHERE c.workspace_hash = $1
   AND c.chunk_type = 'symbol'
   AND c.symbol_name IS NOT NULL
   AND c.symbol_name != ''
-  AND NOT EXISTS (
-      SELECT 1
-      FROM documents doc
-      WHERE doc.workspace_hash = c.workspace_hash
-        AND doc.tags @> ARRAY['symbol-summary']::text[]
-        AND doc.metadata->>'source_content_hash' = c.content_hash
-  )
+  AND (COALESCE(cardinality($3::text[]), 0) > 0
+       OR NOT EXISTS (
+           SELECT 1
+           FROM documents doc
+           WHERE doc.workspace_hash = c.workspace_hash
+             AND doc.tags @> ARRAY['symbol-summary']::text[]
+             AND doc.metadata->>'source_content_hash' = c.content_hash
+       ))
   AND (
       COALESCE(cardinality($3::text[]), 0) > 0
       OR f.id IS NULL
