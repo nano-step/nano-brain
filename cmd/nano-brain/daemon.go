@@ -95,11 +95,25 @@ func runServeDaemon(configPath string) {
 		logStart = info.Size()
 	}
 
-	_ = resolveConfigPathOnce(configPath)
+	resolvedChildPath := resolveConfigPathOnce(configPath)
 
+	var childEnv []string
 	childArgs := []string{exe, "--daemon-child"}
-	if trimmed := strings.TrimSpace(configPath); trimmed != "" {
-		childArgs = append(childArgs, "--config", trimmed)
+	if strings.TrimSpace(configPath) != "" {
+		if abs, err := filepath.Abs(resolvedChildPath); err == nil {
+			resolvedChildPath = abs
+		}
+		childArgs = append(childArgs, "--config", resolvedChildPath)
+	} else if strings.TrimSpace(os.Getenv("NANO_BRAIN_CONFIG")) != "" {
+		if abs, err := filepath.Abs(resolvedChildPath); err == nil {
+			childEnv = make([]string, 0, len(os.Environ())+1)
+			for _, kv := range os.Environ() {
+				if !strings.HasPrefix(kv, "NANO_BRAIN_CONFIG=") {
+					childEnv = append(childEnv, kv)
+				}
+			}
+			childEnv = append(childEnv, "NANO_BRAIN_CONFIG="+abs)
+		}
 	}
 	if unsafeNoAuth {
 		childArgs = append(childArgs, "--unsafe-no-auth")
@@ -116,6 +130,7 @@ func runServeDaemon(configPath string) {
 
 	attr := &os.ProcAttr{
 		Dir:   "/",
+		Env:   childEnv,
 		Files: []*os.File{devNull, logFile, logFile},
 		Sys:   &syscall.SysProcAttr{Setsid: true},
 	}
