@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/nano-brain/nano-brain/internal/codesummarize"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
@@ -41,6 +42,7 @@ func (q *retryFailureQuerier) UpdateCodeSummarizationFailure(context.Context, sq
 type retrySummarizer struct {
 	queries *retryFailureQuerier
 	hashes  []string
+	err     error
 }
 
 func (*retrySummarizer) RunOnce(context.Context, string) (int, int, int, error) {
@@ -50,7 +52,53 @@ func (*retrySummarizer) RunOnce(context.Context, string) (int, int, int, error) 
 func (s *retrySummarizer) RetryContentHashes(_ context.Context, _ string, hashes []string) (int, int, int, error) {
 	s.hashes = hashes
 	s.queries.retried = true
-	return 0, 0, 1, nil
+	return 0, 0, 1, s.err
+}
+
+func TestRetryCodeSummarize_BudgetExhaustionPreservesPartialSuccess(t *testing.T) {
+	first := sqlc.GetUnresolvedFailuresRow{ID: uuid.New(), WorkspaceHash: "ws", ContentHash: "symbol-A"}
+	second := sqlc.GetUnresolvedFailuresRow{ID: uuid.New(), WorkspaceHash: "ws", ContentHash: "symbol-B"}
+	for _, tc := range []struct {
+		name, path, body string
+		all              bool
+	}{
+		{"selected", "/api/v1/code/summarize/retry",
+			`{"failure_ids":["` + first.ID.String() + `","` + second.ID.String() + `"]}`, false},
+		{"all", "/api/v1/code/summarize/retry-all", `{}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			queries := &retryFailureQuerier{
+				before: []sqlc.GetUnresolvedFailuresRow{first, second},
+				after:  []sqlc.GetUnresolvedFailuresRow{second},
+			}
+			s := &retrySummarizer{queries: queries, err: codesummarize.ErrBudgetExhausted}
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.Set("workspace", "ws")
+			get := func() handlers.CodeSummarizer { return s }
+			cfg := config.CodeSummarizationConfig{Enabled: true}
+			var h echo.HandlerFunc
+			if tc.all {
+				h = handlers.RetryAllCodeSummarize(get, queries, cfg, zerolog.Nop())
+			} else {
+				h = handlers.RetryCodeSummarize(get, queries, cfg, zerolog.Nop())
+			}
+			if err := h(c); err != nil {
+				t.Fatal(err)
+			}
+			var response map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if rec.Code != http.StatusOK || response["succeeded"] != float64(1) ||
+				response["failed"] != float64(1) || !strings.Contains(response["message"].(string), "budget") {
+				t.Fatalf("partial budget retry result: %v", response)
+			}
+		})
+	}
 }
 
 func TestRetryCodeSummarize_OnlyReportsResolvedFailuresAsSucceeded(t *testing.T) {

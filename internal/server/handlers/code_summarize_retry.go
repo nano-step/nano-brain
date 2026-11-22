@@ -116,16 +116,8 @@ func RetryCodeSummarize(
 			hashes = append(hashes, f.ContentHash)
 		}
 		_, _, _, err = summarizer.RetryContentHashes(ctx, workspace, hashes)
-		if err != nil {
-			if errors.Is(err, codesummarize.ErrBudgetExhausted) {
-				return c.JSON(http.StatusOK, RetryResponse{
-					Retried:   len(failuresToRetry),
-					Succeeded: 0,
-					Failed:    len(failuresToRetry),
-					Message:   "daily code summarization budget exhausted",
-				})
-			}
-
+		budgetExhausted := errors.Is(err, codesummarize.ErrBudgetExhausted)
+		if err != nil && !budgetExhausted {
 			reqLog.Error().Err(err).Msg("code summarization retry failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "code summarization retry failed")
 		}
@@ -145,6 +137,10 @@ func RetryCodeSummarize(
 			}
 		}
 		failed := len(failuresToRetry) - succeeded
+		message := ""
+		if budgetExhausted {
+			message = "daily code summarization budget exhausted"
+		}
 
 		reqLog.Info().
 			Int("retried", len(failuresToRetry)).
@@ -156,6 +152,7 @@ func RetryCodeSummarize(
 			Retried:   len(failuresToRetry),
 			Succeeded: succeeded,
 			Failed:    failed,
+			Message:   message,
 		})
 	}
 }
@@ -222,16 +219,8 @@ func RetryAllCodeSummarize(
 			hashes = append(hashes, f.ContentHash)
 		}
 		_, _, _, err = summarizer.RetryContentHashes(ctx, workspace, hashes)
-		if err != nil {
-			if errors.Is(err, codesummarize.ErrBudgetExhausted) {
-				return c.JSON(http.StatusOK, RetryResponse{
-					Retried:   len(failures),
-					Succeeded: 0,
-					Failed:    len(failures),
-					Message:   "daily code summarization budget exhausted",
-				})
-			}
-
+		budgetExhausted := errors.Is(err, codesummarize.ErrBudgetExhausted)
+		if err != nil && !budgetExhausted {
 			reqLog.Error().Err(err).Msg("code summarization retry-all failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "code summarization retry-all failed")
 		}
@@ -251,6 +240,10 @@ func RetryAllCodeSummarize(
 			}
 		}
 		failed := len(failures) - succeeded
+		message := ""
+		if budgetExhausted {
+			message = "daily code summarization budget exhausted"
+		}
 
 		reqLog.Info().
 			Int("retried", len(failures)).
@@ -262,6 +255,7 @@ func RetryAllCodeSummarize(
 			Retried:   len(failures),
 			Succeeded: succeeded,
 			Failed:    failed,
+			Message:   message,
 		})
 	}
 }

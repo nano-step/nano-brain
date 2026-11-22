@@ -45,3 +45,14 @@ chance. A stale sweep only takes its one bounded batch when it has eligible
 work; otherwise it falls through to normal selection. The pre-existing
 provider-429 error propagation still needs separate follow-up: a failed
 batch becomes failure rows and does not reach the worker's outer 429 backoff.
+
+A second independent review found that the cooldown still applied to
+*unrelated* symbols sharing a content hash. Both automatic selection
+queries now join failure state by workspace, hash, source file and symbol
+name; the existing unique failure row remains keyed by workspace and hash.
+The retry handlers also verify unresolved rows after a budget-exhausted
+partial run, preserving successes from earlier batches. Finally,
+graph-context-stale rows with no graph edges now persist a non-NULL empty
+hash to record that they were checked; NULL still means stale. Without
+that marker a first page of no-context rows could starve later changed
+symbols forever. Regression tests captured each case red before correction.

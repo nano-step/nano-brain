@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/testutil"
 	"github.com/sqlc-dev/pqtype"
@@ -184,10 +185,69 @@ func TestExplicitRetry_OnlySelectsFailedSymbolWhenContentHashShared(t *testing.T
 	}); err != nil {
 		t.Fatal(err)
 	}
+	automatic, err := q.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
+		WorkspaceHash: workspace, Limit: 10,
+	})
+	if err != nil || len(automatic) != 1 || automatic[0].SourcePath != "src/Other.go" {
+		t.Fatalf("failed symbol parked unrelated same-hash symbol: rows=%v err=%v", automatic, err)
+	}
 	rows, err := q.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
 		WorkspaceHash: workspace, Limit: 10, ForceHashes: []string{"symbol-Failed"},
 	})
 	if err != nil || len(rows) != 1 || rows[0].SourcePath != "src/Failed.go" {
 		t.Fatalf("retry selected unrelated symbol sharing hash: rows=%v err=%v", rows, err)
+	}
+}
+
+func TestGraphStale_NoContextDoesNotBlockLaterSymbols(t *testing.T) {
+	pool := testutil.SetupTestDB(t)
+	db := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	q := sqlc.New(db)
+	workspace := uuid.NewString()
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: workspace, Name: "fixture", Path: "/tmp/fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"One", "Two"} {
+		seedPendingSymbol(t, ctx, q, workspace, name)
+		if _, err := q.UpsertDocument(ctx, sqlc.UpsertDocumentParams{
+			WorkspaceHash: workspace, ContentHash: "summary-" + name,
+			Content: "Old summary", SourcePath: "src/" + name + ".go?summary=true",
+			Collection: "code", Tags: []string{"symbol-summary"},
+			Metadata: pqtype.NullRawMessage{
+				RawMessage: []byte(`{"source_content_hash":"symbol-` + name + `"}`), Valid: true,
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	firstPage, err := q.GetSymbolChunksByGraphContextStale(ctx, sqlc.GetSymbolChunksByGraphContextStaleParams{
+		WorkspaceHash: workspace, Limit: 2,
+	})
+	if err != nil || len(firstPage) != 2 {
+		t.Fatalf("stale fixture: rows=%v err=%v", firstPage, err)
+	}
+	changed := firstPage[1]
+	if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+		WorkspaceHash: workspace, SourceNode: "src/Caller.go::Caller",
+		TargetNode: changed.SourcePath + "::" + changed.SymbolName.String,
+		EdgeType:   "calls", SourceFile: "src/Caller.go", Metadata: []byte("{}"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(config.CodeSummarizationConfig{}, nil, NewBudgetTracker(q), q, nil, testutil.NopLogger())
+	processed, failed := 0, 0
+	service.processGraphContextStale(ctx, workspace, &processed, &failed, 1)
+	nextPage, err := q.GetSymbolChunksByGraphContextStale(ctx, sqlc.GetSymbolChunksByGraphContextStaleParams{
+		WorkspaceHash: workspace, Limit: 1,
+	})
+	if err != nil || len(nextPage) != 1 || nextPage[0].ID != changed.ID {
+		t.Fatalf("no-context first row blocked the changed symbol: rows=%v err=%v", nextPage, err)
+	}
+	if processed != 0 || failed != 0 {
+		t.Fatalf("no-context symbol should not call provider: processed=%d failed=%d", processed, failed)
 	}
 }

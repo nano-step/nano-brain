@@ -486,7 +486,8 @@ func (s *Service) processGraphContextStale(ctx context.Context, workspaceHash st
 
 		if newHash != oldHash {
 			needsResummarize = append(needsResummarize, sym)
-		} else if newHash != "" {
+		} else {
+			// Empty but non-NULL means checked with no graph context; NULL means stale.
 			if err := s.queries.UpdateChunkGraphContextHash(ctx, sqlc.UpdateChunkGraphContextHashParams{
 				ID:               sym.ChunkID,
 				GraphContextHash: sql.NullString{String: newHash, Valid: true},

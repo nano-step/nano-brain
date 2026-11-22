@@ -23,6 +23,8 @@ LEFT JOIN documents d ON d.id = c.document_id
 LEFT JOIN code_summarization_failures f
   ON f.workspace_hash = c.workspace_hash
  AND f.content_hash = c.content_hash
+ AND f.source_file = COALESCE(d.source_path, '')
+ AND f.symbol_name = c.symbol_name
  AND f.resolved_at IS NULL
 WHERE c.workspace_hash = $1
   AND (COALESCE(cardinality(@force_hashes::text[]), 0) = 0 OR c.content_hash = ANY(@force_hashes::text[]))
@@ -142,6 +144,8 @@ LEFT JOIN documents d ON d.id = c.document_id
 LEFT JOIN code_summarization_failures f
   ON f.workspace_hash = c.workspace_hash
  AND f.content_hash = c.content_hash
+ AND f.source_file = COALESCE(d.source_path, '')
+ AND f.symbol_name = c.symbol_name
  AND f.resolved_at IS NULL
 WHERE c.workspace_hash = $1
   AND c.chunk_type = 'symbol'

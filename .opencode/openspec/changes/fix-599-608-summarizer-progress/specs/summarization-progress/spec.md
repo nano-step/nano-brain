@@ -39,6 +39,17 @@ Given two symbols sharing a content hash but only one failure record,
 when that failure is retried,
 then only the recorded file and symbol name are submitted.
 
+#### Scenario: Failure state is scoped to the attempted symbol
+Given two symbols with the same content hash in different files,
+when only one has an unresolved failure and cooldown,
+then the other remains eligible for automatic selection.
+
+#### Scenario: Daily budget is exhausted during retry-all
+Given multiple retry batches and a budget that expires after the first,
+when retry-all returns,
+then previously resolved failures count as succeeded and the response
+reports that the budget was exhausted.
+
 ### Requirement: Bounded worker occupancy
 The automatic worker SHALL give each registered workspace at most one
 configured batch before advancing to the next workspace; it SHALL rotate
@@ -55,6 +66,13 @@ Given an existing summary needing graph-context refresh and fresh
 unsummarized symbols arriving on successive sweeps,
 when the worker keeps polling,
 then a stale summary gets a bounded turn even while fresh work remains.
+
+#### Scenario: Graph-stale page contains symbols without edges
+Given a first page of stale symbols with no graph context and a later
+symbol with changed graph edges,
+when the worker checks the page,
+then the no-context symbols are marked current and the later symbol can
+be selected on the next stale turn.
 
 ### Requirement: Partial model response
 Missing members of a successful model batch SHALL be reported and cooled
