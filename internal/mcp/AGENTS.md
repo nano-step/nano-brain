@@ -1,6 +1,6 @@
 # internal/mcp — MCP Protocol Server
 
-MCP (Model Context Protocol) server — 16 tools for AI agent memory and code intelligence access.
+MCP (Model Context Protocol) server — 19 tools for AI agent memory and code intelligence access.
 
 ## Transport
 
@@ -40,6 +40,9 @@ MCP (Model Context Protocol) server — 16 tools for AI agent memory and code in
 | `memory_flow` | Execution flow for an HTTP entry (chain + Mermaid) |
 | `memory_flowchart` | Control-flow graph for a function (`file::startLine-endLine`) |
 | `memory_workspaces_resolve` | Resolve a workspace name to its hash |
+| `memory_workspaces_list` | List registered workspaces |
+| `memory_delete` | Delete a document |
+| `memory_ticket` | Sessions tagged with a ticket ID across all workspaces |
 
 ## tools.go Structure
 
@@ -53,10 +56,10 @@ Shared helpers: `toolSchema`, `textResult`, `errResult`, `argString`, `argInt`, 
 
 ## Adding a New Tool
 
-1. Add a `registerMemoryFoo(server, a)` call in `RegisterTools` (tools.go:21-35)
+1. Add a `registerMemoryFoo(server, a)` call in `RegisterTools` (tools.go:34-52)
 2. Implement the `register*` function with schema + handler closure
 3. No separate files needed — all tools live in tools.go
 
 ## Warning
 
-**tools.go is 1206 lines.** Always use targeted `Edit` tool patches. Never rewrite the whole file.
+**tools.go is ~3000 lines.** Always use targeted `Edit` tool patches. Never rewrite the whole file.
