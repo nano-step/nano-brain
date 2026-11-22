@@ -38,7 +38,7 @@ func registerMiddleware(s *Server) {
 		return mcp.HostGuard(allowedHosts, authEnabled, next)
 	}))
 	s.echo.Use(middleware.CSRF(fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)))
-	s.echo.Use(bodyLimitMiddleware(maxRequestBodyBytes))
+	s.echo.Use(bodyLimitMiddleware())
 	s.echo.Use(middleware.Auth(authSnapshotFromConfig(s.fullCfg.Server.Auth), s.logger))
 	s.echo.HTTPErrorHandler = httpErrorHandler(s)
 }
@@ -119,24 +119,60 @@ func requestLoggingMiddleware(logger zerolog.Logger) echo.MiddlewareFunc {
 	}
 }
 
-// maxRequestBodyBytes bounds every request body. The middleware is global, so
-// it also fronts /mcp and must not be lower than the cap the MCP transport
-// sets for itself (memory_write accepts 5 MB of content). It is far above the
-// largest REST payload (a document write is limited to defaultMaxFileSize).
-const maxRequestBodyBytes = 32 << 20 // 32 MiB
+// Request body limits. The middleware is global, so it also fronts /mcp and
+// /sse, where it must not be lower than the cap the MCP transport sets for
+// itself (memory_write accepts 5 MB of content). Every other route gets the
+// REST limit: the largest legitimate REST body is a document write, limited to
+// defaultMaxFileSize of content, which stays under 2 MiB once JSON-escaped.
+const (
+	maxMCPBodyBytes  = 32 << 20 // 32 MiB
+	maxRESTBodyBytes = 4 << 20  // 4 MiB
+)
 
-// bodyLimitMiddleware refuses a body larger than limit before any handler or
-// middleware buffers it. A declared Content-Length over the limit is answered
-// with 413 at once; a body without one is cut off at the limit as it is read.
-func bodyLimitMiddleware(limit int64) echo.MiddlewareFunc {
+func bodyLimitFor(path string) int64 {
+	if path == "/mcp" || path == "/sse" {
+		return maxMCPBodyBytes
+	}
+	return maxRESTBodyBytes
+}
+
+// limitedBody notes when the http.MaxBytesReader it wraps refuses to read
+// past the limit, so bodyLimitMiddleware can answer 413 whatever status the
+// reader of the body chose for the failed read.
+type limitedBody struct {
+	io.ReadCloser
+	tripped bool
+}
+
+func (b *limitedBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		b.tripped = true
+	}
+	return n, err
+}
+
+// bodyLimitMiddleware refuses a body larger than the route's limit before any
+// handler or middleware buffers it. A declared Content-Length over the limit
+// is answered with 413 at once; a body without one is cut off at the limit as
+// it is read, and the request is answered with 413 unless the handler has
+// already written a response.
+func bodyLimitMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			req := c.Request()
+			limit := bodyLimitFor(req.URL.Path)
 			if req.ContentLength > limit {
 				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "request body too large")
 			}
-			req.Body = http.MaxBytesReader(c.Response().Writer, req.Body, limit)
-			return next(c)
+			body := &limitedBody{ReadCloser: http.MaxBytesReader(c.Response().Writer, req.Body, limit)}
+			req.Body = body
+			err := next(c)
+			if body.tripped && !c.Response().Committed {
+				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "request body too large")
+			}
+			return err
 		}
 	}
 }
@@ -159,10 +195,6 @@ func workspaceMiddleware(db *sql.DB) echo.MiddlewareFunc {
 			if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
 				body, err := io.ReadAll(c.Request().Body)
 				if err != nil {
-					var tooLarge *http.MaxBytesError
-					if errors.As(err, &tooLarge) {
-						return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "request body too large")
-					}
 					return echo.NewHTTPError(http.StatusBadRequest, "failed to read request body")
 				}
 				c.Request().Body = io.NopCloser(bytes.NewReader(body))
@@ -226,8 +258,11 @@ func contentTypeMiddleware() echo.MiddlewareFunc {
 				return next(c)
 			}
 
-			ct := r.Header.Get(echo.HeaderContentType)
-			if !strings.HasPrefix(ct, "application/json") {
+			// Same rule as echo's DefaultBinder: the media type must be exactly
+			// application/json, parameters allowed. A prefix match would let
+			// application/json-patch+json through to a 400 from Bind.
+			base, _, _ := strings.Cut(r.Header.Get(echo.HeaderContentType), ";")
+			if strings.TrimSpace(base) != echo.MIMEApplicationJSON {
 				return c.JSON(http.StatusUnsupportedMediaType, map[string]string{
 					"error":   "unsupported_media_type",
 					"message": ErrUnsupportedMediaType.Error(),

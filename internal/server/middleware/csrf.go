@@ -95,6 +95,32 @@ func CSRF(boundAddr string) echo.MiddlewareFunc {
 	}
 }
 
+// SameOrigin returns Echo middleware for routes that act without reading a
+// body, where CSRF's leniency towards any loopback port (rule 4) would let a
+// page served from another local port trigger the action. It rejects with 403
+// a request whose Sec-Fetch-Site is neither same-origin nor none, and one
+// whose Origin is not exactly the request's own Host. Clients that send
+// neither header (CLI, curl) pass. Apply it behind CSRF, not instead of it.
+func SameOrigin() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			req := c.Request()
+			// A cross-origin page cannot set a custom header without a
+			// preflight, and preflights get no CORS headers here.
+			if req.Header.Get("X-Requested-With") == "nano-brain-ui" {
+				return next(c)
+			}
+			if site := req.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+				return echo.NewHTTPError(http.StatusForbidden, "CSRF: cross-site request rejected")
+			}
+			if origin := req.Header.Get("Origin"); origin != "" && !strings.EqualFold(extractHost(origin), req.Host) {
+				return echo.NewHTTPError(http.StatusForbidden, "CSRF: origin mismatch")
+			}
+			return next(c)
+		}
+	}
+}
+
 func extractHost(raw string) string {
 	if raw == "" {
 		return ""
