@@ -83,7 +83,7 @@ func RedactSecrets(cfg *Config) *Config {
 
 // credentialQueryParams are the query parameter names whose values
 // RedactURLCredentials replaces. Names are compared case-insensitively.
-var credentialQueryParams = []string{"api_key", "apikey", "api-key", "x-api-key", "key", "token", "access_token", "refresh_token", "secret", "client_secret", "password", "sig", "signature", "code", "auth"}
+var credentialQueryParams = []string{"api_key", "apikey", "api-key", "x-api-key", "key", "token", "access_token", "refresh_token", "secret", "client_secret", "password", "sslpassword", "sig", "signature", "code", "auth"}
 
 var urlSchemePrefix = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*://`)
 

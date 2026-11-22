@@ -310,3 +310,40 @@ func TestConfigShow_BinaryKeysLoadAndStayHidden(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigShow_DSNParserParity(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		secrets []string
+	}{
+		{"escaped space keyword value", "database:\n  url: \"host=h user=u password=ESC\\\\ TAILPW dbname=d\"\n", []string{"TAILPW"}},
+		{"encoded sslpassword param", "database:\n  url: \"postgres://u@h/d?sslpass%77ord=ENCSSLPW&password=FAKEPW\"\n", []string{"ENCSSLPW", "FAKEPW"}},
+		{"merge into database", "defs:\n  db: &db\n    url: \"host=h user='u'password=NOSPACEPW dbname=d\"\ndatabase:\n  <<: *db\n", []string{"NOSPACEPW"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yml")
+			if err := os.WriteFile(path, []byte(tc.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Load(path)
+			if err != nil {
+				t.Fatalf("config.Load() failed: %v", err)
+			}
+			for _, s := range tc.secrets {
+				if !strings.Contains(cfg.Database.URL, s) {
+					t.Fatalf("config did not load the secret %q into database.url: %q", s, cfg.Database.URL)
+				}
+			}
+			for _, jsonFlag := range []bool{false, true} {
+				out := captureStdout(t, func() { runConfigShow(path, jsonFlag) })
+				for _, s := range tc.secrets {
+					if strings.Contains(out, s) {
+						t.Errorf("config show --json=%v leaked %s:\n%s", jsonFlag, s, out)
+					}
+				}
+			}
+		})
+	}
+}

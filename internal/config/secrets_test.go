@@ -140,6 +140,7 @@ func TestRedactURLCredentials(t *testing.T) {
 		{"access_token", "https://host/v1?access_token=abc123", "https://host/v1?access_token=<redacted>"},
 		{"secret", "https://host/v1?secret=abc123", "https://host/v1?secret=<redacted>"},
 		{"password", "https://host/v1?password=abc123", "https://host/v1?password=<redacted>"},
+		{"sslpassword", "https://host/v1?sslpassword=abc123", "https://host/v1?sslpassword=<redacted>"},
 		{"upper-case name", "https://host/v1?API_KEY=abc123", "https://host/v1?API_KEY=<redacted>"},
 		{"percent-encoded name", "https://host/v1?api%5Fkey=abc123", "https://host/v1?api%5Fkey=<redacted>"},
 		{"repeated parameter", "https://host/v1?key=abc&key=def", "https://host/v1?key=<redacted>&key=<redacted>"},
