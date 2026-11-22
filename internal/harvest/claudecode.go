@@ -117,7 +117,10 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 	// It runs first for that reason: the parse, render and hash below are pure
 	// waste on the skip path, which is every already-harvested session on every
 	// cycle. Ordering matches OpenCodeSQLiteHarvester.HarvestAll.
-	sessionID := strings.TrimSuffix(filepath.Base(sessionFile), ".jsonl")
+	// A file name is not guaranteed to be valid UTF-8. sessionFile stays raw
+	// for opening the file; the id used for the source path, title and
+	// metadata is sanitized once here so the lookup and the write agree.
+	sessionID := sanitizeID(strings.TrimSuffix(filepath.Base(sessionFile), ".jsonl"))
 	sourcePath := "summary://claude/" + sessionID
 
 	queries := sqlc.New(h.db)
@@ -145,13 +148,13 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 		if dw, ok := h.summarizer.(interface {
 			EnsureSummaryOnDisk(context.Context, string, SummaryMeta)
 		}); ok {
-			dw.EnsureSummaryOnDisk(ctx, existing.Content, SummaryMeta{
+			dw.EnsureSummaryOnDisk(ctx, existing.Content, sanitizeSummaryMeta(SummaryMeta{
 				Source:        "claude",
 				SessionID:     sessionID,
 				Title:         "Claude Code Session " + sessionID,
 				CreatedAt:     existing.CreatedAt,
 				WorkspaceHash: h.workspace,
-			})
+			}))
 		}
 		return harvestSkipped, nil
 	}
@@ -187,13 +190,13 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 	title := "Claude Code Session " + sessionID
 
 	if h.summarizer != nil {
-		smeta := SummaryMeta{
+		smeta := sanitizeSummaryMeta(SummaryMeta{
 			Source:        "claude",
 			SessionID:     sessionID,
 			Title:         title,
 			CreatedAt:     createdAt,
 			WorkspaceHash: h.workspace,
-		}
+		})
 		if sumErr := h.summarizer.SummarizeAndPersist(ctx, md, smeta); sumErr != nil {
 			h.logger.Warn().Err(sumErr).Str("session", sessionID).Msg("summarization failed, falling back to raw")
 			if fbErr := h.writeRawFallback(ctx, sessionID, md, contentHash, title, sourcePath, len(msgs), enqueuer); fbErr != nil {
@@ -216,16 +219,17 @@ func (h *ClaudeCodeHarvester) writeRawFallback(
 	messageCount int,
 	enqueuer ChunkEnqueuer,
 ) error {
-	metaBytes, _ := json.Marshal(map[string]any{
+	metaBytes, _ := json.Marshal(sanitizeMetadata(map[string]any{
 		"source":        "claude",
 		"session_id":    sessionID,
 		"message_count": messageCount,
 		"fallback":      true,
-	})
+	}))
 	meta := pqtype.NullRawMessage{RawMessage: metaBytes, Valid: true}
 
+	md = sanitizeText(md)
 	chunks := chunk.Split(md, chunk.DefaultConfig())
-	params := sqlc.UpsertDocumentBySourcePathParams{
+	params := sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: h.workspace,
 		ContentHash:   contentHash,
 		Title:         title,
@@ -234,7 +238,7 @@ func (h *ClaudeCodeHarvester) writeRawFallback(
 		Collection:    "sessions",
 		Tags:          []string{"claude_code", "session", "fallback"},
 		Metadata:      meta,
-	}
+	})
 
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {

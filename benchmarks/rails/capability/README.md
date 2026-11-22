@@ -7,7 +7,7 @@ This benchmark focuses on print/upload/status/order pipeline questions — the k
 ## Prerequisites
 
 - nano-brain server running and indexed on a real Rails workspace
-- Go 1.23+
+- Go 1.26+
 
 ## Running
 

@@ -24,7 +24,8 @@ services:
     volumes:
       - nanobrain-ollama:/root/.ollama
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider http://localhost:11434/api/tags"]
+      # The ollama binary is guaranteed in the image; wget may not be.
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -56,7 +57,9 @@ services:
       NANO_BRAIN_SERVER_HOST: "0.0.0.0"
       # Names this container answers to. Without auth the daemon rejects any
       # other Host header, so a container reaching it by service or container
-      # name must be listed here.
+      # name must be listed here. A configured list REPLACES the built-in
+      # defaults rather than adding to them, so the four default loopback
+      # names are listed on purpose — dropping them would 403 host access.
       NANO_BRAIN_SERVER_ALLOWED_HOSTS: "localhost,127.0.0.1,::1,host.docker.internal,nano-brain,nanobrain"
       NANO_BRAIN_DATABASE_URL: "postgres://nanobrain:nanobrain@postgres:5432/nanobrain_dev"
       NANO_BRAIN_EMBEDDING_URL: "http://ollama:11434"

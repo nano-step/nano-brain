@@ -7,7 +7,7 @@ This benchmark focuses on components, composables, pages, stores, and utilities 
 ## Prerequisites
 
 - nano-brain server running and indexed on a real Vue workspace
-- Go 1.23+
+- Go 1.26+
 
 ## Running
 

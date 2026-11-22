@@ -14,7 +14,7 @@ Step-by-step guide to run nano-brain vs competitors on your host machine.
 |-------------|---------|-------|
 | Docker + Docker Compose | latest | For Qdrant, Neo4j, Zep services |
 | Python 3.10+ | 3.10+ | For benchmark scripts |
-| Go 1.23+ | 1.23+ | To build nano-brain (or use npm install) |
+| Go 1.26+ | 1.26+ | To build nano-brain (or use npm install) |
 | PostgreSQL 17 + pgvector | 17 + 0.8.2 | nano-brain backend |
 | OpenAI API key | — | For embeddings (Mem0, LlamaIndex) |
 | 8GB+ RAM recommended | — | Qdrant + Neo4j + Zep + nano-brain |

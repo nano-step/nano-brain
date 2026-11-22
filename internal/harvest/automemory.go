@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nano-brain/nano-brain/internal/chunk"
 	"github.com/nano-brain/nano-brain/internal/links"
@@ -58,7 +59,12 @@ type extractedMemory struct {
 }
 
 func (e *AutoMemoryExtractor) ExtractAndStore(ctx context.Context, sessionID, sessionContent string, enqueuer ChunkEnqueuer) int {
-	memories := extractMemories(sessionContent)
+	// Both reach Postgres (source path, JSONB metadata, title, content), so
+	// they are sanitized before anything is derived from them: the content
+	// hash, the source path used for the dedup lookup and the stored row then
+	// all describe the same sanitized text.
+	sessionID = sanitizeID(sessionID)
+	memories := extractMemories(sanitizeText(sessionContent))
 	if len(memories) == 0 {
 		return 0
 	}
@@ -94,7 +100,7 @@ memoryLoop:
 		}
 
 		tq := sqlc.New(tx)
-		docRow, err := tq.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+		docRow, err := tq.UpsertDocumentBySourcePath(ctx, sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 			WorkspaceHash: e.workspace,
 			ContentHash:   contentHash,
 			Title:         titleFromContent(m.content),
@@ -103,7 +109,7 @@ memoryLoop:
 			Collection:    "memory",
 			Tags:          append([]string{"auto-memory", string(m.kind)}, m.tags...),
 			Metadata:      pqtype.NullRawMessage{RawMessage: meta, Valid: true},
-		})
+		}))
 		if err != nil {
 			tx.Rollback() //nolint:errcheck
 			e.logger.Warn().Err(err).Str("session", sessionID).Msg("auto-memory upsert failed")
@@ -258,7 +264,13 @@ func titleFromContent(s string) string {
 	lines := strings.SplitN(s, "\n", 2)
 	title := strings.TrimSpace(lines[0])
 	if len(title) > 80 {
-		title = title[:77] + "..."
+		// Cut on a rune boundary: slicing a multi-byte rune in half would
+		// produce invalid UTF-8, which Postgres rejects.
+		cut := 77
+		for cut > 0 && !utf8.RuneStart(title[cut]) {
+			cut--
+		}
+		title = title[:cut] + "..."
 	}
 	return title
 }

@@ -117,8 +117,8 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     environment:
@@ -132,8 +132,8 @@ services:
   neo4j:
     image: neo4j:5-community
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
     environment:
       NEO4J_AUTH: neo4j/comparison-bench
       NEO4J_PLUGINS: '["graph-data-science"]'
@@ -148,7 +148,7 @@ services:
   zep:
     image: ghcr.io/getzep/zep:latest
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       ZEP_STORAGE_POSTGRES_URL: "postgres://zep:zep@zep-postgres:5432/zep?sslmode=disable"
       ZEP_AUTH_SECRET: "comparison-bench-secret"
@@ -159,7 +159,7 @@ services:
   zep-postgres:
     image: postgres:17
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     environment:
       POSTGRES_USER: zep
       POSTGRES_PASSWORD: zep

@@ -99,7 +99,7 @@ func (g *GitHarvester) harvestRepo(
 		return 0, 0, fmt.Errorf("get last SHA: %w", err)
 	}
 
-	commits, err := g.gitLog(repoPath, lastSHA, g.maxCommits)
+	commits, tip, err := g.gitLogRecovering(repoPath, lastSHA, g.maxCommits)
 	if err != nil {
 		return 0, 0, fmt.Errorf("git log: %w", err)
 	}
@@ -126,7 +126,8 @@ func (g *GitHarvester) harvestRepo(
 		sum := sha256.Sum256([]byte(md))
 		contentHash := hex.EncodeToString(sum[:])
 
-		sourcePath := fmt.Sprintf("git://commit/%s", commit.SHA)
+		// The dedup lookup and the write use the same sanitized source path.
+		sourcePath := "git://commit/" + sanitizeText(commit.SHA)
 		existing, err := g.queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
 			SourcePath:    sourcePath,
 			WorkspaceHash: workspaceHash,
@@ -147,9 +148,11 @@ func (g *GitHarvester) harvestRepo(
 		harvested++
 	}
 
+	// The marker is the batch end git itself reported (rev-list/rev-parse), not
+	// a hash parsed out of the log body: a commit message can embed the record
+	// separators and forge a "commit" with any SHA (#675).
 	if len(commits) > 0 {
-		latestSHA := commits[len(commits)-1].SHA
-		if err := g.updateLastHarvestedSHA(ctx, workspaceHash, latestSHA); err != nil {
+		if err := g.updateLastHarvestedSHA(ctx, workspaceHash, tip); err != nil {
 			return harvested, skipped, fmt.Errorf("update marker: %w", err)
 		}
 	}
@@ -178,7 +181,8 @@ func (g *GitHarvester) upsertCommit(
 	semanticTags := InferSemanticTags(md, commit.Subject)
 	tags = append(tags, semanticTags...)
 
-	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+	md = sanitizeText(md)
+	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: workspaceHash,
 		ContentHash:   contentHash,
 		Title:         commit.Subject,
@@ -187,7 +191,7 @@ func (g *GitHarvester) upsertCommit(
 		Collection:    "git-history",
 		Tags:          tags,
 		Metadata:      meta,
-	})
+	}))
 	if err != nil {
 		return fmt.Errorf("upsert document: %w", err)
 	}
@@ -255,7 +259,7 @@ func (g *GitHarvester) updateLastHarvestedSHA(ctx context.Context, workspaceHash
 	contentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(sha)))
 	meta := pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true}
 
-	_, err := g.queries.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+	_, err := g.queries.UpsertDocumentBySourcePath(ctx, sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: workspaceHash,
 		ContentHash:   contentHash,
 		Title:         "Last Harvested Commit",
@@ -264,7 +268,7 @@ func (g *GitHarvester) updateLastHarvestedSHA(ctx context.Context, workspaceHash
 		Collection:    "git-history",
 		Tags:          []string{"git", "meta"},
 		Metadata:      meta,
-	})
+	}))
 	if err != nil {
 		return fmt.Errorf("upsert marker: %w", err)
 	}
@@ -273,20 +277,38 @@ func (g *GitHarvester) updateLastHarvestedSHA(ctx context.Context, workspaceHash
 
 var gitObjectID = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
 
-func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]gitCommit, error) {
-	// Use %x1e (record separator) to delimit commits, %x1f (unit separator) for fields.
-	// --name-only output appears after the format string for each commit.
-	args := []string{
-		"log",
-		"--format=%x1e%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b",
-		"--name-only",
-		"--reverse",
+// gitLogRecovering is gitLog with one repair: a marker that is a well-formed
+// object id but names no commit in this repository (rewritten history, a
+// hand-edited marker) makes every "git log <id>..HEAD" fail, so the marker
+// would never advance again. In that case the harvest restarts from the
+// beginning; commits already stored are skipped by their content hash. Any
+// other git failure is returned unchanged.
+func (g *GitHarvester) gitLogRecovering(repoPath string, since string, maxCommits int) ([]gitCommit, string, error) {
+	commits, tip, err := g.gitLog(repoPath, since, maxCommits)
+	if err == nil || !gitCommitMissing(repoPath, since) {
+		return commits, tip, err
 	}
+	g.logger.Warn().Str("repo", repoPath).Str("since", since).Msg("last-harvested marker is not a commit in this repository, harvesting from the start")
+	return g.gitLog(repoPath, "", maxCommits)
+}
 
-	if maxCommits > 0 {
-		args = append(args, fmt.Sprintf("-n%d", maxCommits))
+// gitCommitMissing reports whether id is a well-formed object id that git
+// cannot resolve to a commit in repoPath. It is false when id is empty or
+// malformed (gitLog already ignores those) and when git itself cannot be run.
+func gitCommitMissing(repoPath, id string) bool {
+	if !gitObjectID.MatchString(id) {
+		return false
 	}
+	cmd := exec.Command("git", "cat-file", "-e", id+"^{commit}")
+	cmd.Dir = repoPath
+	_, isExit := cmd.Run().(*exec.ExitError)
+	return isExit
+}
 
+// gitLog returns the batch of pending commits oldest-first and the batch end
+// git itself reported (the marker to store): the Nth pending commit when a
+// limit applies, HEAD otherwise — never a hash parsed out of the log body.
+func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]gitCommit, string, error) {
 	// since comes from a stored document. Anything that is not an object id
 	// is dropped rather than handed to git, where a value starting with "-"
 	// would be parsed as an option.
@@ -294,22 +316,192 @@ func (g *GitHarvester) gitLog(repoPath string, since string, maxCommits int) ([]
 		g.logger.Warn().Str("since", since).Msg("last-harvested marker is not a commit id, harvesting from the start")
 		since = ""
 	}
+
+	// HEAD is resolved once per cycle and the resulting SHA bounds every
+	// range below — the batch log, the record filter, the Nth-commit pick
+	// and the stored marker. A commit landing mid-cycle stays outside those
+	// ranges and the next cycle picks it up; re-reading HEAD later in the
+	// cycle would move the marker past a commit that was never batched.
+	head, err := gitHeadSHA(repoPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// With a limit, the batch must be the OLDEST pending commits: "-nN" keeps
+	// the newest N, and the marker then jumps to HEAD and skips the rest for
+	// good. So the batch's upper bound is the Nth pending commit, and the
+	// marker advances contiguously from one cycle to the next.
+	until := head
+	if maxCommits > 0 {
+		if until, err = gitNthPendingCommit(repoPath, since, head, maxCommits); err != nil {
+			return nil, "", err
+		}
+		if until == "" {
+			return nil, "", nil
+		}
+	}
+
+	revSpec := until
 	if since != "" {
-		args = append(args, since+"..HEAD")
+		revSpec = since + ".." + until
+	}
+
+	// Use %x1e (record separator) to delimit commits, %x1f (unit separator) for fields.
+	// --name-only output appears after the format string for each commit.
+	args := []string{
+		"log",
+		"--format=%x1e%H%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b",
+		"--name-only",
+		"--reverse",
+		revSpec,
+		"--",
+	}
+
+	output, err := runGitLog(repoPath, args)
+	if err != nil {
+		return nil, "", err
+	}
+	commits, err := parseGitLog(output)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(commits) == 0 {
+		return nil, "", nil
+	}
+
+	// A commit message may itself contain \x1e/\x1f, so a parsed "record" can
+	// be a forgery embedded in another commit's body and would overwrite that
+	// hash's document. Keep only records whose hash is a real commit of this
+	// range, and drop every hash that appears more than once: git lists each
+	// commit exactly once, so a duplicate means at least one forged record.
+	validIDs, err := gitRevListSHAs(repoPath, revSpec)
+	if err != nil {
+		return nil, "", err
+	}
+	counts := make(map[string]int, len(commits))
+	for _, c := range commits {
+		counts[c.SHA]++
+	}
+	real := commits[:0]
+	for _, c := range commits {
+		if _, ok := validIDs[c.SHA]; !ok {
+			g.logger.Warn().Str("sha", c.SHA).Msg("dropping forged git-log record: hash is not a commit in this range")
+			continue
+		}
+		if counts[c.SHA] > 1 {
+			g.logger.Warn().Str("sha", c.SHA).Msg("dropping duplicated git-log record: hash is ambiguous")
+			continue
+		}
+		real = append(real, c)
+	}
+	if len(real) == 0 {
+		return nil, "", nil
+	}
+
+	// The marker comes from git output, not the parsed records: the head
+	// resolved at the start of the cycle, or the batch end derived from it.
+	return real, until, nil
+}
+
+// gitRevListSHAs returns the full hex ids of every commit in revSpec.
+func gitRevListSHAs(repoPath, revSpec string) (map[string]struct{}, error) {
+	output, err := runGitLog(repoPath, []string{"rev-list", revSpec, "--"})
+	if err != nil {
+		return nil, err
+	}
+	ids := make(map[string]struct{})
+	for _, id := range strings.Fields(output) {
+		ids[id] = struct{}{}
+	}
+	return ids, nil
+}
+
+// gitIsAncestor reports whether ancestor is an ancestor of head in repoPath.
+// A git failure — including ancestor naming no object — counts as "not an
+// ancestor", which puts the caller on the plain-walk fallback.
+func gitIsAncestor(repoPath, ancestor, head string) bool {
+	cmd := exec.Command("git", "merge-base", "--is-ancestor", ancestor, head)
+	cmd.Dir = repoPath
+	return cmd.Run() == nil
+}
+
+// gitHeadSHA returns HEAD's full commit id, or an error for an empty or
+// missing HEAD (an unborn branch has nothing to harvest anyway).
+func gitHeadSHA(repoPath string) (string, error) {
+	output, err := runGitLog(repoPath, []string{"rev-parse", "HEAD"})
+	if err != nil {
+		return "", err
+	}
+	id := strings.TrimSpace(output)
+	if !gitObjectID.MatchString(id) {
+		return "", fmt.Errorf("git rev-parse HEAD returned %q, which is not a commit id", id)
+	}
+	return id, nil
+}
+
+// gitNthPendingCommit returns the id of the nth pending commit, oldest first,
+// or the newest pending commit when fewer than n are pending. It returns ""
+// when nothing is pending. head is the HEAD commit the caller resolved at the
+// start of the cycle.
+//
+// With a marker that is an ancestor of head the walk is --ancestry-path
+// since..head: it visits only commits that descend from the marker, so the
+// returned batch end is always a descendant of the marker and the marker can
+// only move forward. Plain since..head would let the Nth commit sit on a
+// branch that forked BEFORE the marker; storing it regresses the marker,
+// re-lists since's ancestors every cycle and never reaches HEAD on merge
+// history. The cost: the batch since..<batchEnd> may exceed n when a large
+// side branch merges into the chosen commit — the limit bounds the ancestry
+// path, not the whole batch.
+//
+// A marker that exists but is NOT an ancestor of head — after a force-push,
+// rebase, amend or a switch to a branch that forked before the marker — makes
+// --ancestry-path empty and would stall the harvester for good, so the walk
+// falls back to plain since..head for that cycle. The batch end is then an
+// ancestor of head, so every later cycle is back on the ancestry path.
+// Without a marker the plain head walk and the nth-in-topo-order cut are
+// kept: commits not yet reachable stay pending for a later cycle.
+func gitNthPendingCommit(repoPath, since, head string, n int) (string, error) {
+	args := []string{"log", "--format=%H", "--reverse", "--topo-order"}
+	if since != "" {
+		if gitIsAncestor(repoPath, since, head) {
+			args = append(args, "--ancestry-path", since+".."+head)
+		} else {
+			args = append(args, since+".."+head)
+		}
+	} else {
+		args = append(args, head)
 	}
 	args = append(args, "--")
+	output, err := runGitLog(repoPath, args)
+	if err != nil {
+		return "", err
+	}
+	ids := strings.Fields(output)
+	if len(ids) == 0 {
+		return "", nil
+	}
+	if len(ids) > n {
+		ids = ids[:n]
+	}
+	id := ids[len(ids)-1]
+	if !gitObjectID.MatchString(id) {
+		return "", fmt.Errorf("git log returned %q, which is not a commit id", id)
+	}
+	return id, nil
+}
 
+func runGitLog(repoPath string, args []string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repoPath
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("git log failed: %s", string(exitErr.Stderr))
+			return "", fmt.Errorf("git log failed: %s", string(exitErr.Stderr))
 		}
-		return nil, fmt.Errorf("git log failed: %w", err)
+		return "", fmt.Errorf("git log failed: %w", err)
 	}
-
-	return parseGitLog(string(output))
+	return string(output), nil
 }
 
 func parseGitLog(output string) ([]gitCommit, error) {
@@ -403,7 +595,10 @@ func renderCommitMarkdown(c gitCommit) string {
 		}
 	}
 
-	return b.String()
+	// Commit subjects, authors and file names come from the repository and
+	// need not be UTF-8, so the whole document is sanitized like the session
+	// renderers.
+	return sanitizeText(b.String())
 }
 
 func isBotCommit(author, email string) bool {

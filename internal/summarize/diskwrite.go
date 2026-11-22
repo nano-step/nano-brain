@@ -16,16 +16,18 @@ func EnsureDir(filePath string) error {
 	return os.MkdirAll(dir, 0o700)
 }
 
-// writeFileAtomic writes content to path atomically: write to path+".tmp"
-// (created with mode 0o600), fsync the tmp file, then os.Rename to final
-// path. Prevents partial files on crash. Caller must ensure parent dir exists
-// (call ensureDir first).
+// writeFileAtomic writes content to path atomically: write to a uniquely
+// named hidden temp file in the same directory (os.CreateTemp, mode 0o600,
+// O_EXCL), fsync it, then os.Rename to the final path. Prevents partial files
+// on crash, and a pre-planted path+".tmp" symlink is never opened — the temp
+// name is not predictable. Caller must ensure parent dir exists (call
+// ensureDir first).
 func WriteFileAtomic(path string, content []byte) error {
-	tmpPath := path + ".tmp"
-	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("create tmp: %w", err)
 	}
+	tmpPath := f.Name()
 	if _, err := f.Write(content); err != nil {
 		f.Close()
 		os.Remove(tmpPath)

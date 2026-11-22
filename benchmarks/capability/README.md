@@ -5,7 +5,7 @@ Static end-to-end benchmark that measures how well the live nano-brain server he
 ## Prerequisites
 
 - nano-brain server running and indexed on the nano-brain repo
-- Go 1.23+
+- Go 1.26+
 
 ## Running
 

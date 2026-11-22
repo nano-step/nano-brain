@@ -34,8 +34,11 @@ func NewLogger(cfg config.LoggingConfig) (zerolog.Logger, error) {
 		logPath = filepath.Join(home, logPath[1:])
 	}
 
+	// Session and harvest logs can contain sensitive text, so new log
+	// directories are owner-only; MkdirAll does not chmod one that already
+	// exists.
 	logDir := filepath.Dir(logPath)
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
+	if err := os.MkdirAll(logDir, 0o700); err != nil {
 		return zerolog.Logger{}, fmt.Errorf("failed to create log directory: %w", err)
 	}
 

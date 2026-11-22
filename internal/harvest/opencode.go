@@ -111,9 +111,13 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 	sum := sha256.Sum256([]byte(md))
 	contentHash := hex.EncodeToString(sum[:])
 
+	// sessionFile is used raw to open the file; the stored source path is the
+	// sanitized form, and the lookup uses the same value as the write.
+	sourcePath := sanitizeID(sessionFile)
+
 	queries := sqlc.New(h.db)
 	existing, err := queries.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
-		SourcePath:    sessionFile,
+		SourcePath:    sourcePath,
 		WorkspaceHash: h.workspace,
 	})
 	if err == nil && existing.ContentHash == contentHash {
@@ -132,16 +136,16 @@ func (h *OpenCodeHarvester) harvestSession(ctx context.Context, sessionFile stri
 	semanticTags := InferSemanticTags(md, sess.Title)
 	tags = append(tags, semanticTags...)
 
-	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+	docRow, err := tq.UpsertDocumentBySourcePath(ctx, sanitizeDocParams(sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: h.workspace,
 		ContentHash:   contentHash,
 		Title:         sess.Title,
 		Content:       md,
-		SourcePath:    sessionFile,
+		SourcePath:    sourcePath,
 		Collection:    "sessions",
 		Tags:          tags,
 		Metadata:      meta,
-	})
+	}))
 	if err != nil {
 		return false, fmt.Errorf("upsert document: %w", err)
 	}

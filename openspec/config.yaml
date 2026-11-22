@@ -1,7 +1,7 @@
 schema: spec-driven
 
 context: |
-  Tech stack: Go 1.23, PostgreSQL 17, pgvector 0.8.2, Echo v4, sqlc, goose v3
+  Tech stack: Go 1.26, PostgreSQL 17, pgvector 0.8.2, Echo v4, sqlc, goose v3
   HTTP server (REST + MCP) + CLI tool
   Single static binary (CGO_ENABLED=0), npm wrapper for npx distribution
   Performance-sensitive: runs as persistent memory server for AI agents
