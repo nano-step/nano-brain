@@ -62,8 +62,10 @@ type ServerConfig struct {
 	Host string     `koanf:"host" json:"host"`
 	Port int        `koanf:"port" json:"port"`
 	Auth AuthConfig `koanf:"auth" json:"auth"`
-	// AllowedHosts is the Host-header allowlist for the MCP endpoints
-	// (/mcp, /sse), guarding against DNS rebinding. Empty means the built-in
+	// AllowedHosts is the Host-header allowlist for every route (REST API,
+	// /health, /mcp, /sse), guarding against DNS rebinding. It is enforced on
+	// loopback connections, and on every connection while auth is disabled.
+	// Empty means the built-in
 	// set: localhost, 127.0.0.1, ::1, host.docker.internal. A non-empty list
 	// replaces that set, so list every hostname that must keep working.
 	AllowedHosts []string `koanf:"allowed_hosts" json:"allowed_hosts"`

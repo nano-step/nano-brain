@@ -53,7 +53,7 @@ func resolveHostPort() (string, int) {
 		if isContainerFn() {
 			host = "host.docker.internal"
 		} else if cfg != nil && cfg.Server.Host != "" {
-			host = cfg.Server.Host
+			host = dialHost(cfg.Server.Host)
 		} else {
 			host = "localhost"
 		}
@@ -69,6 +69,19 @@ func resolveHostPort() (string, int) {
 	}
 	
 	return host, port
+}
+
+// dialHost maps a wildcard bind address from server.host to localhost. A
+// wildcard is an address to listen on, not one to connect to, and a request
+// sent to it carries a Host header ("0.0.0.0:3100") that the server's Host
+// guard rejects; localhost reaches the same listener and is in the default
+// server.allowed_hosts.
+func dialHost(host string) string {
+	switch host {
+	case "0.0.0.0", "::", "[::]":
+		return "localhost"
+	}
+	return host
 }
 
 func getBaseURL() string {

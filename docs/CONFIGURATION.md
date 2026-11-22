@@ -78,7 +78,7 @@ Server binding and authentication.
 |-----|------|---------|-------------|
 | `server.host` | string | `localhost` | Bind address. Use `0.0.0.0` for remote access |
 | `server.port` | int | `3100` | HTTP port (1-65535) |
-| `server.allowed_hosts` | []string | built-in set | `Host` headers accepted on `/mcp` and `/sse` for connections that arrive on a loopback address (DNS-rebinding guard). Built-in set: `localhost`, `127.0.0.1`, `::1`, `host.docker.internal`. A non-empty list **replaces** the built-in set. Needed when a reverse proxy or tunnel on the same host forwards the public hostname. Env: `NANO_BRAIN_SERVER_ALLOWED_HOSTS` (comma-separated). Requires a restart |
+| `server.allowed_hosts` | []string | built-in set | `Host` headers accepted on **all routes** (REST API, `/health`, `/mcp`, `/sse`) — a DNS-rebinding guard; any other `Host` gets `403`. Enforced for connections that arrive on a loopback address, and for **every** connection while `server.auth.enabled` is `false` (e.g. the Docker deployment, where the published port lands on the container address); skipped only for non-loopback connections with auth enabled. Separately, state-changing requests (`POST`/`PUT`/`PATCH`/`DELETE`) on any route that carry a foreign `Origin` (or `Referer`) are rejected with `403`; requests with neither header (CLI, curl, MCP clients) are unaffected. Built-in set: `localhost`, `127.0.0.1`, `::1`, `host.docker.internal`. A non-empty list **replaces** the built-in set. Needed when a reverse proxy or tunnel on the same host forwards the public hostname. Env: `NANO_BRAIN_SERVER_ALLOWED_HOSTS` (comma-separated). Requires a restart |
 | `server.serve_only` | bool | `false` | Disable all background workers (embed queue, watcher, harvester). Use for proxy containers sharing a DB with a primary instance |
 
 ### server.auth
@@ -177,6 +177,35 @@ File system watcher for auto-reindexing.
 | `watcher.chunk_overlap` | int | `600` | Character overlap between chunks |
 | `watcher.exclude_patterns` | []string | `[]` | Global glob patterns to exclude |
 | `watcher.allowed_extensions` | []string | `[]` | Global allowed file extensions (empty = all) |
+
+### Built-in safety filters
+
+These always apply. There is no opt-out: `exclude_patterns`, `allowed_extensions`, `.gitignore` and `.nano-brainignore` (including `!` negations) cannot turn them off.
+
+**Symlinks.** A symlinked file is read only if its real path (all symlinks resolved) lies inside the real path of the collection root *and* the file it resolves to would itself be indexed:
+
+- A symlink that leaves the root is not indexed. It is logged at `warn` the first time it is seen in a process and at `debug` afterwards. To index shared files that live elsewhere, register their directory as its own collection.
+- A symlink to a file on the credential deny list below is not indexed, whatever the link is called (`docs/setup.md -> ../.env`).
+- A symlink to a file excluded by the built-in directory/lockfile excludes, the global or root-level `.nano-brainignore`, the root `.gitignore`, `exclude_patterns` or `allowed_extensions` is not indexed either (`readme2.md -> tok.txt` with `tok.txt` gitignored). `.gitignore` and `.nano-brainignore` files in subdirectories are not consulted for the link's target.
+- A symlink to another indexable file inside the root is indexed as usual.
+- A broken symlink is skipped. Symlinked directories are not followed.
+
+A document indexed by an earlier version for a symlink in one of the skipped cases is removed on the next scan of its collection.
+
+**Credential files.** Not indexed, matched on the file's base name, case-insensitively, at any depth:
+
+| Denied | Still indexed |
+|--------|---------------|
+| `.env`, `.env.*`, `*.env` (`prod.env`), `.envrc` | names marked `example`, `sample`, `template` or `dist`: `.env.example`, `.env.production.sample`, `example.env`, `app.example.env` |
+| any name starting with `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519` (`id_rsa`, `id_rsa.bak`, `id_rsa_github`, `id_ed25519_sk`) | the same names ending in `.pub` (`id_ed25519.pub`) |
+| `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.ppk`, `*.kdbx`, `*.ovpn` | |
+| `.npmrc`, `.netrc`, `.pgpass`, `.htpasswd`, `.git-credentials`, `.pypirc`, `.dockercfg`, `.vault-token`, `.my.cnf`, `.s3cfg`, `.boto`, `kubeconfig` | `kubeconfig.md`, … (exact names only) |
+| `credentials`, `credentials.json`, `secrets.yml`, `secrets.yaml`, `secrets.json` | `credentials.md`, `secrets.md`, … (exact names only) |
+| `*.tfstate`, `*.tfstate.backup`, `*.tfvars` | `terraform.tfvars.example` |
+
+The match is by name only, so it also excludes files that are not secrets: public certificates and CA bundles (`*.pem`), Keynote presentations (`*.key`), an `.npmrc` holding only registry settings, and source files whose name starts with an SSH key name (`id_rsa_test.go`). Rename such a file if it must be searchable.
+
+A document indexed for a denied file by an earlier version is removed on the next scan of its collection.
 
 ### Per-workspace overrides
 

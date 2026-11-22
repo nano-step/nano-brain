@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/mcp"
 	"github.com/nano-brain/nano-brain/internal/server/middleware"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
@@ -28,6 +29,16 @@ const (
 func registerMiddleware(s *Server) {
 	s.echo.Use(requestLoggingMiddleware(s.logger))
 	s.echo.Use(versionHeaderMiddleware(s.version))
+	// Host guard, then CSRF, both ahead of auth: a DNS-rebinding or
+	// cross-origin request from a web page is refused with 403 on every route
+	// before anything else looks at it. See internal/mcp/hostguard.go.
+	allowedHosts := s.fullCfg.Server.AllowedHosts
+	authEnabled := s.fullCfg.Server.Auth.Enabled
+	s.echo.Use(echo.WrapMiddleware(func(next http.Handler) http.Handler {
+		return mcp.HostGuard(allowedHosts, authEnabled, next)
+	}))
+	s.echo.Use(middleware.CSRF(fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)))
+	s.echo.Use(bodyLimitMiddleware(maxRequestBodyBytes))
 	s.echo.Use(middleware.Auth(authSnapshotFromConfig(s.fullCfg.Server.Auth), s.logger))
 	s.echo.HTTPErrorHandler = httpErrorHandler(s)
 }
@@ -108,6 +119,28 @@ func requestLoggingMiddleware(logger zerolog.Logger) echo.MiddlewareFunc {
 	}
 }
 
+// maxRequestBodyBytes bounds every request body. The middleware is global, so
+// it also fronts /mcp and must not be lower than the cap the MCP transport
+// sets for itself (memory_write accepts 5 MB of content). It is far above the
+// largest REST payload (a document write is limited to defaultMaxFileSize).
+const maxRequestBodyBytes = 32 << 20 // 32 MiB
+
+// bodyLimitMiddleware refuses a body larger than limit before any handler or
+// middleware buffers it. A declared Content-Length over the limit is answered
+// with 413 at once; a body without one is cut off at the limit as it is read.
+func bodyLimitMiddleware(limit int64) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			req := c.Request()
+			if req.ContentLength > limit {
+				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "request body too large")
+			}
+			req.Body = http.MaxBytesReader(c.Response().Writer, req.Body, limit)
+			return next(c)
+		}
+	}
+}
+
 func versionHeaderMiddleware(version string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -126,6 +159,10 @@ func workspaceMiddleware(db *sql.DB) echo.MiddlewareFunc {
 			if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
 				body, err := io.ReadAll(c.Request().Body)
 				if err != nil {
+					var tooLarge *http.MaxBytesError
+					if errors.As(err, &tooLarge) {
+						return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "request body too large")
+					}
 					return echo.NewHTTPError(http.StatusBadRequest, "failed to read request body")
 				}
 				c.Request().Body = io.NopCloser(bytes.NewReader(body))

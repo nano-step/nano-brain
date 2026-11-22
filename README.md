@@ -4,7 +4,7 @@
 
 Agent-oriented memory and code intelligence over MCP. AI agents don't read docs — they call tools. nano-brain gives them structured context, symbol lookup, call-chain tracing, and change-impact analysis across sessions and repos.
 
-[![Go 1.23](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go)](https://go.dev/)
+[![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-nano--step%2Fnano--brain-181717?logo=github)](https://github.com/nano-step/nano-brain)
 [![npm](https://img.shields.io/badge/npm-@nano--step%2Fnano--brain-CC3533?logo=npm)](https://www.npmjs.com/package/@nano-step/nano-brain)
@@ -207,7 +207,7 @@ Run them: see the per-suite READMEs under [`benchmarks/`](benchmarks/).
 
 ## Tech stack
 
-Go 1.23 (single static binary, `CGO_ENABLED=0`) · PostgreSQL 17 + pgvector 0.8.2 (HNSW) · Echo v4 · sqlc · goose · zerolog · koanf · fsnotify · Ollama (or any OpenAI-compatible embeddings provider).
+Go 1.26 (single static binary, `CGO_ENABLED=0`) · PostgreSQL 17 + pgvector 0.8.2 (HNSW) · Echo v4 · sqlc · goose · zerolog · koanf · fsnotify · Ollama (or any OpenAI-compatible embeddings provider).
 
 ## Configuration
 

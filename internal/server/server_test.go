@@ -41,7 +41,7 @@ func newTestServer(pool *mockPool) *server.Server {
 func TestHealthEndpointHealthyDB(t *testing.T) {
 	s := newTestServer(&mockPool{})
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:3100/health", nil)
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
 
@@ -68,7 +68,7 @@ func TestHealthEndpointHealthyDB(t *testing.T) {
 func TestHealthEndpointUnreachableDB(t *testing.T) {
 	s := newTestServer(&mockPool{pingErr: errors.New("connection refused")})
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:3100/health", nil)
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
 
@@ -95,7 +95,7 @@ func TestHealthEndpointUnreachableDB(t *testing.T) {
 func TestStatusEndpointShape(t *testing.T) {
 	s := newTestServer(&mockPool{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:3100/api/status", nil)
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
 
@@ -123,7 +123,7 @@ func TestStatusEndpointShape(t *testing.T) {
 func TestVersionHeader(t *testing.T) {
 	s := newTestServer(&mockPool{})
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:3100/health", nil)
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
 
@@ -139,7 +139,7 @@ func TestHTTPErrorHandlerMapsErrWorkspaceRequired(t *testing.T) {
 		return server.ErrWorkspaceRequired
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/test-err", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:3100/test-err", nil)
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
 
@@ -179,7 +179,7 @@ func TestRouteRegistration(t *testing.T) {
 func TestResolveWorkspaceRouteSkipsWorkspaceMiddleware(t *testing.T) {
 	s := newTestServer(&mockPool{})
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/workspaces/resolve", strings.NewReader(`{"path":""}`))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:3100/api/v1/workspaces/resolve", strings.NewReader(`{"path":""}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
@@ -197,8 +197,9 @@ func TestResolveWorkspaceRouteSkipsWorkspaceMiddleware(t *testing.T) {
 }
 
 // The MCP endpoints must sit behind mcp.HostGuard: the SDK's own
-// DNS-rebinding check is disabled, so the wrap in registerRoutes is the only
-// protection. This pins the wiring, not just the guard function (#630).
+// DNS-rebinding check is disabled, so the guard registered server-wide in
+// registerMiddleware is the only protection. This pins the wiring, not just
+// the guard function (#630).
 func TestMCPRoutesRejectForeignHost(t *testing.T) {
 	s := newTestServer(&mockPool{})
 	const initialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`

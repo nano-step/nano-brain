@@ -37,7 +37,7 @@ func TestHostGuard_AllowsDocumentedContainerHost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := mcp.HostGuard(nil, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			h := mcp.HostGuard(nil, false, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
 
@@ -53,31 +53,38 @@ func TestHostGuard_AllowsDocumentedContainerHost(t *testing.T) {
 	}
 }
 
-// TestHostGuard_OnlyGuardsLoopbackConnections pins the gating that keeps
-// VPS/reverse-proxy deployments working. The guard must fire for a connection
-// accepted on loopback (the DNS-rebinding case: a browser resolves the
-// attacker's hostname to 127.0.0.1 and connects there) and must NOT fire for
-// one accepted on a public address, where the SDK never guarded either and
-// where firing would 403 deployments that worked before the upgrade.
-func TestHostGuard_OnlyGuardsLoopbackConnections(t *testing.T) {
+// TestHostGuard_GuardCondition pins when the guard fires: on a connection
+// accepted on loopback (the DNS-rebinding case on a host install), and on any
+// connection while auth is disabled (the Docker case: the daemon binds 0.0.0.0
+// in the container, so a browser rebinding to the published port arrives on
+// the container IP). It must NOT fire for a non-loopback connection with auth
+// enabled, where a rebinding page has no credentials and firing would 403 the
+// VPS/reverse-proxy deployments reached under their own hostname.
+func TestHostGuard_GuardCondition(t *testing.T) {
 	tests := []struct {
-		name      string
-		localAddr net.Addr
-		want      int
+		name        string
+		localAddr   net.Addr
+		authEnabled bool
+		want        int
 	}{
-		{"loopback v4 connection guards", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3100}, http.StatusForbidden},
-		{"loopback v6 connection guards", &net.TCPAddr{IP: net.ParseIP("::1"), Port: 3100}, http.StatusForbidden},
-		{"public connection does not guard", &net.TCPAddr{IP: net.ParseIP("203.0.113.7"), Port: 3100}, http.StatusOK},
-		{"lan connection does not guard", &net.TCPAddr{IP: net.ParseIP("192.168.1.10"), Port: 3100}, http.StatusOK},
+		{"auth on, loopback v4 connection guards", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3100}, true, http.StatusForbidden},
+		{"auth on, loopback v6 connection guards", &net.TCPAddr{IP: net.ParseIP("::1"), Port: 3100}, true, http.StatusForbidden},
+		{"auth on, public connection does not guard", &net.TCPAddr{IP: net.ParseIP("203.0.113.7"), Port: 3100}, true, http.StatusOK},
+		{"auth on, lan connection does not guard", &net.TCPAddr{IP: net.ParseIP("192.168.1.10"), Port: 3100}, true, http.StatusOK},
 		// Fail closed when the local address is unknowable.
-		{"absent local addr guards", nil, http.StatusForbidden},
-		{"unspecified v4 guards", &net.TCPAddr{IP: net.IPv4zero, Port: 3100}, http.StatusForbidden},
-		{"unspecified v6 guards", &net.TCPAddr{IP: net.IPv6zero, Port: 3100}, http.StatusForbidden},
+		{"auth on, absent local addr guards", nil, true, http.StatusForbidden},
+		{"auth on, unspecified v4 guards", &net.TCPAddr{IP: net.IPv4zero, Port: 3100}, true, http.StatusForbidden},
+		{"auth on, unspecified v6 guards", &net.TCPAddr{IP: net.IPv6zero, Port: 3100}, true, http.StatusForbidden},
+		// Auth disabled: every reachable address is attackable.
+		{"auth off, loopback connection guards", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3100}, false, http.StatusForbidden},
+		{"auth off, container connection guards", &net.TCPAddr{IP: net.ParseIP("172.17.0.2"), Port: 3100}, false, http.StatusForbidden},
+		{"auth off, public connection guards", &net.TCPAddr{IP: net.ParseIP("203.0.113.7"), Port: 3100}, false, http.StatusForbidden},
+		{"auth off, absent local addr guards", nil, false, http.StatusForbidden},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := mcp.HostGuard(nil, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			h := mcp.HostGuard(nil, tt.authEnabled, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
 
@@ -90,7 +97,29 @@ func TestHostGuard_OnlyGuardsLoopbackConnections(t *testing.T) {
 			h.ServeHTTP(rec, req)
 
 			if rec.Code != tt.want {
-				t.Errorf("localAddr %v: got %d, want %d", tt.localAddr, rec.Code, tt.want)
+				t.Errorf("localAddr %v authEnabled %v: got %d, want %d", tt.localAddr, tt.authEnabled, rec.Code, tt.want)
+			}
+		})
+	}
+}
+
+// TestHostGuard_AuthDisabledAllowsListedHostOnAnyAddress covers the Docker
+// access path: auth off, connection on the container IP, Host from the
+// allowlist — the guard is enforced but must still admit the listed hosts.
+func TestHostGuard_AuthDisabledAllowsListedHostOnAnyAddress(t *testing.T) {
+	for _, host := range []string{"localhost:3100", "127.0.0.1:3100", "host.docker.internal:3100"} {
+		t.Run(host, func(t *testing.T) {
+			h := mcp.HostGuard(nil, false, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+			req.Host = host
+			req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey,
+				&net.TCPAddr{IP: net.ParseIP("172.17.0.2"), Port: 3100}))
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("Host %q: got %d, want 200", host, rec.Code)
 			}
 		})
 	}
@@ -122,7 +151,7 @@ func TestHostGuard_MalformedAllowlist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := mcp.HostGuard(tt.allowed, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			h := mcp.HostGuard(tt.allowed, false, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
 			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
@@ -140,7 +169,7 @@ func TestHostGuard_MalformedAllowlist(t *testing.T) {
 // and VPS deployments AuthConfig documents: an operator terminating on their
 // own hostname must be able to add it.
 func TestHostGuard_ConfiguredAllowlistReplacesDefault(t *testing.T) {
-	h := mcp.HostGuard([]string{"brain.example.com", "localhost"},
+	h := mcp.HostGuard([]string{"brain.example.com", "localhost"}, false,
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))

@@ -18,24 +18,35 @@ var loopbackHosts = map[string]bool{
 }
 
 // CSRF returns Echo middleware implementing a 7-step origin-check decision
-// order. It protects POST/PUT/DELETE under /api/v1/* from cross-origin
+// order. It is registered server-wide and protects every POST/PUT/PATCH/DELETE
+// route (REST API, /mcp, /sse) from cross-origin
 // browser-initiated requests while allowing CLI/curl/MCP (no Origin header).
 //
 // 7-step rules (first match wins):
 //  1. X-Requested-With: nano-brain-ui → ALLOW
 //  2. Both Origin and Referer absent → ALLOW (CLI/curl/MCP)
 //  3. Origin: null → REJECT 403
-//  4. Origin present + host matches boundAddr → ALLOW
-//  5. Origin present + host mismatches → REJECT 403
-//  6. Origin absent + Referer present + host matches → ALLOW
+//  4. Origin present + host matches boundAddr or the request's Host → ALLOW
+//  5. Origin present + host mismatches both → REJECT 403
+//  6. Origin absent + Referer present + host matches boundAddr or Host → ALLOW
 //  7. Else → REJECT 403
+//
+// Matching the request's own Host header is what lets a same-origin page work
+// when the daemon is bound to a wildcard address (0.0.0.0 in Docker), where
+// boundAddr names no host a browser can be on. It is only sound because the
+// Host guard (mcp.HostGuard, registered ahead of this middleware in
+// registerMiddleware) has already rejected a Host outside
+// server.allowed_hosts: a page on evil.example calling localhost has Origin
+// evil.example ≠ Host localhost and is rejected here, and a DNS-rebinding
+// page, whose Host and Origin are both evil.example, never gets this far.
+// This middleware must not be registered without, or ahead of, that guard.
 func CSRF(boundAddr string) echo.MiddlewareFunc {
 	boundHost := extractHost(boundAddr)
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			method := c.Request().Method
-			if method != http.MethodPost && method != http.MethodPut && method != http.MethodDelete {
+			if method != http.MethodPost && method != http.MethodPut && method != http.MethodPatch && method != http.MethodDelete {
 				return next(c)
 			}
 
@@ -57,10 +68,14 @@ func CSRF(boundAddr string) echo.MiddlewareFunc {
 				return echo.NewHTTPError(http.StatusForbidden, "CSRF: null origin rejected")
 			}
 
+			reqHost := extractHost(c.Request().Host)
+			trusted := func(host string) bool {
+				return hostsMatch(host, boundHost) || (reqHost != "" && hostsMatch(host, reqHost))
+			}
+
 			if origin != "" {
-				originHost := extractHost(origin)
 				// Rule 4 & 5: Origin host match
-				if hostsMatch(originHost, boundHost) {
+				if trusted(extractHost(origin)) {
 					return next(c)
 				}
 				return echo.NewHTTPError(http.StatusForbidden, "CSRF: origin mismatch")
@@ -68,9 +83,8 @@ func CSRF(boundAddr string) echo.MiddlewareFunc {
 
 			// Origin absent, Referer present
 			if referer != "" {
-				refHost := extractHost(referer)
 				// Rule 6: Referer host match
-				if hostsMatch(refHost, boundHost) {
+				if trusted(extractHost(referer)) {
 					return next(c)
 				}
 			}
