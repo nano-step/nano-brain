@@ -187,6 +187,7 @@ func (s *Service) splitAndSend(ctx context.Context, workspaceHash string, batch 
 		processed++
 		if failure, err := s.queries.GetFailureBySymbol(ctx, sqlc.GetFailureBySymbolParams{
 			WorkspaceHash: workspaceHash, ContentHash: matchedSymbol.ContentHash,
+			SourceFile: matchedSymbol.File, SymbolName: matchedSymbol.Name,
 		}); err == nil {
 			if err := s.queries.ResolveFailure(ctx, failure.ID); err != nil {
 				s.logger.Warn().Err(err).Str("symbol", matchedSymbol.Name).Msg("failed to resolve summarization failure")
@@ -227,19 +228,19 @@ func (s *Service) RunOnce(ctx context.Context, workspaceHash string) (processed,
 	return s.runOnce(ctx, workspaceHash, 0, nil, false)
 }
 
-// RetryContentHashes bypasses automatic cooldown for explicitly selected
+// RetryFailures bypasses automatic cooldown for explicitly selected
 // failures without letting unrelated pending symbols consume retry slots.
-func (s *Service) RetryContentHashes(ctx context.Context, workspaceHash string, hashes []string) (processed, skipped, errors int, err error) {
-	if len(hashes) == 0 {
+func (s *Service) RetryFailures(ctx context.Context, workspaceHash string, ids []uuid.UUID) (processed, skipped, errors int, err error) {
+	if len(ids) == 0 {
 		return 0, 0, 0, nil
 	}
 	limit := s.cfg.MaxSummariesPerCycle
 	if limit <= 0 {
 		limit = 100
 	}
-	for start := 0; start < len(hashes); start += limit {
-		end := min(start+limit, len(hashes))
-		p, sk, e, runErr := s.runOnce(ctx, workspaceHash, 0, hashes[start:end], false)
+	for start := 0; start < len(ids); start += limit {
+		end := min(start+limit, len(ids))
+		p, sk, e, runErr := s.runOnce(ctx, workspaceHash, 0, ids[start:end], false)
 		processed += p
 		skipped += sk
 		errors += e
@@ -250,7 +251,7 @@ func (s *Service) RetryContentHashes(ctx context.Context, workspaceHash string, 
 	return processed, skipped, errors, nil
 }
 
-func (s *Service) runOnce(ctx context.Context, workspaceHash string, workerLimit int, forceHashes []string, preferStale bool) (processed, skipped, errors int, err error) {
+func (s *Service) runOnce(ctx context.Context, workspaceHash string, workerLimit int, forceIDs []uuid.UUID, preferStale bool) (processed, skipped, errors int, err error) {
 	exhausted, err := s.budget.IsExhausted(ctx, workspaceHash, s.cfg.MaxRequestsPerDay)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("check budget: %w", err)
@@ -277,14 +278,14 @@ func (s *Service) runOnce(ctx context.Context, workspaceHash string, workerLimit
 	rows, err := s.queries.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
 		WorkspaceHash: workspaceHash,
 		Limit:         int32(maxCycle),
-		ForceHashes:   forceHashes,
+		ForceIds:      forceIDs,
 	})
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("get unsummarized symbols: %w", err)
 	}
 
 	if len(rows) == 0 {
-		if len(forceHashes) == 0 {
+		if len(forceIDs) == 0 {
 			staleLimit := int32(20)
 			if workerLimit > 0 {
 				staleLimit = int32(maxCycle)
@@ -412,7 +413,7 @@ func (s *Service) runOnce(ctx context.Context, workspaceHash string, workerLimit
 		errors += e
 	}
 
-	if workerLimit == 0 && len(forceHashes) == 0 {
+	if workerLimit == 0 && len(forceIDs) == 0 {
 		s.processGraphContextStale(ctx, workspaceHash, &processed, &errors, 20)
 	}
 
@@ -486,8 +487,7 @@ func (s *Service) processGraphContextStale(ctx context.Context, workspaceHash st
 
 		if newHash != oldHash {
 			needsResummarize = append(needsResummarize, sym)
-		} else {
-			// Empty but non-NULL means checked with no graph context; NULL means stale.
+		} else if newHash != "" {
 			if err := s.queries.UpdateChunkGraphContextHash(ctx, sqlc.UpdateChunkGraphContextHashParams{
 				ID:               sym.ChunkID,
 				GraphContextHash: sql.NullString{String: newHash, Valid: true},

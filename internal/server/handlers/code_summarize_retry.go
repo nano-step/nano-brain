@@ -111,11 +111,11 @@ func RetryCodeSummarize(
 			})
 		}
 
-		hashes := make([]string, 0, len(failuresToRetry))
-		for _, f := range failuresToRetry {
-			hashes = append(hashes, f.ContentHash)
+		ids := make([]uuid.UUID, 0, len(failuresToRetry))
+		for id := range failuresToRetry {
+			ids = append(ids, id)
 		}
-		_, _, _, err = summarizer.RetryContentHashes(ctx, workspace, hashes)
+		_, _, _, err = summarizer.RetryFailures(ctx, workspace, ids)
 		budgetExhausted := errors.Is(err, codesummarize.ErrBudgetExhausted)
 		if err != nil && !budgetExhausted {
 			reqLog.Error().Err(err).Msg("code summarization retry failed")
@@ -214,11 +214,11 @@ func RetryAllCodeSummarize(
 			})
 		}
 
-		hashes := make([]string, 0, len(failures))
+		ids := make([]uuid.UUID, 0, len(failures))
 		for _, f := range failures {
-			hashes = append(hashes, f.ContentHash)
+			ids = append(ids, f.ID)
 		}
-		_, _, _, err = summarizer.RetryContentHashes(ctx, workspace, hashes)
+		_, _, _, err = summarizer.RetryFailures(ctx, workspace, ids)
 		budgetExhausted := errors.Is(err, codesummarize.ErrBudgetExhausted)
 		if err != nil && !budgetExhausted {
 			reqLog.Error().Err(err).Msg("code summarization retry-all failed")

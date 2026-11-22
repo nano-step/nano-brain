@@ -41,7 +41,7 @@ func (q *retryFailureQuerier) UpdateCodeSummarizationFailure(context.Context, sq
 
 type retrySummarizer struct {
 	queries *retryFailureQuerier
-	hashes  []string
+	ids     []uuid.UUID
 	err     error
 }
 
@@ -49,8 +49,8 @@ func (*retrySummarizer) RunOnce(context.Context, string) (int, int, int, error) 
 	panic("manual retry must not call the unfiltered scheduler")
 }
 
-func (s *retrySummarizer) RetryContentHashes(_ context.Context, _ string, hashes []string) (int, int, int, error) {
-	s.hashes = hashes
+func (s *retrySummarizer) RetryFailures(_ context.Context, _ string, ids []uuid.UUID) (int, int, int, error) {
+	s.ids = ids
 	s.queries.retried = true
 	return 0, 0, 1, s.err
 }
@@ -136,8 +136,8 @@ func TestRetryCodeSummarize_OnlyReportsResolvedFailuresAsSucceeded(t *testing.T)
 			}
 			if rec.Code != http.StatusOK || response["succeeded"] != tc.wantOK ||
 				response["failed"] != 1-tc.wantOK || queries.resolved ||
-				len(s.hashes) != 1 || s.hashes[0] != "symbol-hash" {
-				t.Fatalf("retry result=%v, resolved=%v, requested=%v", response, queries.resolved, s.hashes)
+				len(s.ids) != 1 || s.ids[0] != id {
+				t.Fatalf("retry result=%v, resolved=%v, requested=%v", response, queries.resolved, s.ids)
 			}
 		})
 	}

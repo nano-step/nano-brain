@@ -27,24 +27,22 @@ LEFT JOIN code_summarization_failures f
  AND f.symbol_name = c.symbol_name
  AND f.resolved_at IS NULL
 WHERE c.workspace_hash = $1
-  AND (COALESCE(cardinality(@force_hashes::text[]), 0) = 0 OR c.content_hash = ANY(@force_hashes::text[]))
+  AND (COALESCE(cardinality(@force_ids::uuid[]), 0) = 0 OR f.id = ANY(@force_ids::uuid[]))
   AND c.chunk_type = 'symbol'
   AND c.symbol_name IS NOT NULL
   AND c.symbol_name != ''
-  AND (COALESCE(cardinality(@force_hashes::text[]), 0) = 0
-       OR (f.id IS NOT NULL
-           AND f.source_file = COALESCE(d.source_path, '')
-           AND f.symbol_name = c.symbol_name))
-  AND (COALESCE(cardinality(@force_hashes::text[]), 0) > 0
+  AND (COALESCE(cardinality(@force_ids::uuid[]), 0) > 0
        OR NOT EXISTS (
            SELECT 1
            FROM documents doc
            WHERE doc.workspace_hash = c.workspace_hash
              AND doc.tags @> ARRAY['symbol-summary']::text[]
              AND doc.metadata->>'source_content_hash' = c.content_hash
+             AND doc.metadata->>'source_file' = COALESCE(d.source_path, '')
+             AND doc.metadata->>'symbol_name' = c.symbol_name
        ))
   AND (
-      COALESCE(cardinality(@force_hashes::text[]), 0) > 0
+      COALESCE(cardinality(@force_ids::uuid[]), 0) > 0
       OR f.id IS NULL
       OR (f.error_type IN ('transient_exhausted', 'partial_omitted')
           AND f.attempts < 8
@@ -58,7 +56,7 @@ LIMIT $2;
 -- name: UpsertCodeSummarizationFailure :exec
 INSERT INTO code_summarization_failures (workspace_hash, symbol_name, symbol_kind, source_file, content_hash, error_reason, error_type, attempts, last_attempt_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, 1, NOW())
-ON CONFLICT (workspace_hash, content_hash) WHERE resolved_at IS NULL
+ON CONFLICT (workspace_hash, content_hash, source_file, symbol_name) WHERE resolved_at IS NULL
 DO UPDATE SET
     attempts = code_summarization_failures.attempts + 1,
     error_reason = EXCLUDED.error_reason,
@@ -89,7 +87,8 @@ SELECT
 
 -- name: GetFailureBySymbol :one
 SELECT id, attempts FROM code_summarization_failures
-WHERE workspace_hash = $1 AND content_hash = $2 AND resolved_at IS NULL
+WHERE workspace_hash = $1 AND content_hash = $2
+  AND source_file = $3 AND symbol_name = $4 AND resolved_at IS NULL
 LIMIT 1;
 
 -- name: DeleteCodeSummarizationUsageByWorkspace :exec
@@ -153,11 +152,21 @@ WHERE c.workspace_hash = $1
   AND c.symbol_name != ''
   AND c.graph_context_hash IS NULL
   AND EXISTS (
+      SELECT 1 FROM graph_edge_views ge
+      WHERE ge.workspace_hash = c.workspace_hash
+        AND ge.edge_type = 'calls'
+        AND ge.target_node <> '<unresolved>'
+        AND (ge.source_node = COALESCE(d.source_path, '') || '::' || c.symbol_name
+             OR ge.target_node = COALESCE(d.source_path, '') || '::' || c.symbol_name)
+  )
+  AND EXISTS (
       SELECT 1
       FROM documents doc
       WHERE doc.workspace_hash = c.workspace_hash
         AND doc.tags @> ARRAY['symbol-summary']::text[]
         AND doc.metadata->>'source_content_hash' = c.content_hash
+        AND doc.metadata->>'source_file' = COALESCE(d.source_path, '')
+        AND doc.metadata->>'symbol_name' = c.symbol_name
   )
   AND (
       f.id IS NULL

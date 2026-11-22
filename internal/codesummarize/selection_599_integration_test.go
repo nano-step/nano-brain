@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/testutil"
 	"github.com/sqlc-dev/pqtype"
@@ -111,8 +110,15 @@ func TestGetGraphContextStaleSymbols_RespectsFailureCooldown(t *testing.T) {
 		Content: "Old summary", SourcePath: "src/Stale.go?summary=true",
 		Collection: "code", Tags: []string{"symbol-summary"},
 		Metadata: pqtype.NullRawMessage{
-			RawMessage: []byte(`{"source_content_hash":"symbol-Stale"}`), Valid: true,
+			RawMessage: []byte(`{"source_content_hash":"symbol-Stale","source_file":"src/Stale.go","symbol_name":"Stale"}`), Valid: true,
 		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+		WorkspaceHash: workspace, SourceNode: "src/Caller.go::Caller",
+		TargetNode: "src/Stale.go::Stale", EdgeType: "calls",
+		SourceFile: "src/Caller.go", Metadata: []byte("{}"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -136,8 +142,12 @@ func TestGetGraphContextStaleSymbols_RespectsFailureCooldown(t *testing.T) {
 	if rows := fetch(); len(rows) != 0 {
 		t.Fatalf("stale summary failure reselected before cooldown: %+v", rows)
 	}
+	failures, err := q.GetUnresolvedFailures(ctx, workspace)
+	if err != nil || len(failures) != 1 {
+		t.Fatalf("stale failure fixture: rows=%v err=%v", failures, err)
+	}
 	forced, err := q.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
-		WorkspaceHash: workspace, Limit: 10, ForceHashes: []string{"symbol-Stale"},
+		WorkspaceHash: workspace, Limit: 10, ForceIds: []uuid.UUID{failures[0].ID},
 	})
 	if err != nil || len(forced) != 1 || forced[0].ContentHash != "symbol-Stale" {
 		t.Fatalf("explicit retry must bypass cooldown and the old summary: %+v, err=%v", forced, err)
@@ -191,15 +201,104 @@ func TestExplicitRetry_OnlySelectsFailedSymbolWhenContentHashShared(t *testing.T
 	if err != nil || len(automatic) != 1 || automatic[0].SourcePath != "src/Other.go" {
 		t.Fatalf("failed symbol parked unrelated same-hash symbol: rows=%v err=%v", automatic, err)
 	}
+	failures, err := q.GetUnresolvedFailures(ctx, workspace)
+	if err != nil || len(failures) != 1 {
+		t.Fatalf("shared-hash failure fixture: rows=%v err=%v", failures, err)
+	}
 	rows, err := q.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
-		WorkspaceHash: workspace, Limit: 10, ForceHashes: []string{"symbol-Failed"},
+		WorkspaceHash: workspace, Limit: 10, ForceIds: []uuid.UUID{failures[0].ID},
 	})
 	if err != nil || len(rows) != 1 || rows[0].SourcePath != "src/Failed.go" {
 		t.Fatalf("retry selected unrelated symbol sharing hash: rows=%v err=%v", rows, err)
 	}
 }
 
-func TestGraphStale_NoContextDoesNotBlockLaterSymbols(t *testing.T) {
+func TestFailuresWithSharedHashAreIndependentPerSymbol(t *testing.T) {
+	pool := testutil.SetupTestDB(t)
+	db := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	q := sqlc.New(db)
+	workspace := uuid.NewString()
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: workspace, Name: "fixture", Path: "/tmp/fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{"a", "b"} {
+		path := "src/" + file + ".go"
+		doc, err := q.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+			WorkspaceHash: workspace, ContentHash: "file-" + file,
+			Content: "func Shared() {}", SourcePath: path, Collection: "code",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := q.UpsertChunk(ctx, sqlc.UpsertChunkParams{
+			DocumentID: doc.ID, WorkspaceHash: workspace, ContentHash: "symbol-shared",
+			Content: "func Shared() {}", ChunkType: "symbol",
+			SymbolName: sql.NullString{String: "Shared", Valid: true},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := q.UpsertCodeSummarizationFailure(ctx, sqlc.UpsertCodeSummarizationFailureParams{
+			WorkspaceHash: workspace, ContentHash: "symbol-shared",
+			SourceFile: path, SymbolName: "Shared",
+			ErrorType: "transient_exhausted", ErrorReason: "HTTP 524",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	failures, err := q.GetUnresolvedFailures(ctx, workspace)
+	if err != nil || len(failures) != 2 {
+		t.Fatalf("same-hash failures merged across files: rows=%v err=%v", failures, err)
+	}
+	for _, failure := range failures {
+		if failure.SourceFile == "src/a.go" {
+			if err := q.ResolveFailure(ctx, failure.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	rows, err := q.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
+		WorkspaceHash: workspace, Limit: 10,
+	})
+	if err != nil || len(rows) != 1 || rows[0].SourcePath != "src/a.go" {
+		t.Fatalf("resolving one symbol changed the other's cooldown: rows=%v err=%v", rows, err)
+	}
+	if _, err := q.UpsertDocument(ctx, sqlc.UpsertDocumentParams{
+		WorkspaceHash: workspace, ContentHash: "summary-a", Content: "Summary for A",
+		SourcePath: "src/a.go?symbol=Shared&summary=true", Collection: "code",
+		Tags: []string{"symbol-summary"},
+		Metadata: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"source_content_hash":"symbol-shared","source_file":"src/a.go","symbol_name":"Shared"}`), Valid: true,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, failure := range failures {
+		if failure.SourceFile != "src/b.go" {
+			continue
+		}
+		forced, err := q.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
+			WorkspaceHash: workspace, Limit: 10, ForceIds: []uuid.UUID{failure.ID},
+		})
+		if err != nil || len(forced) != 1 || forced[0].SourcePath != "src/b.go" {
+			t.Fatalf("retry ID included unrelated same-hash summary: rows=%v err=%v", forced, err)
+		}
+		if err := q.ResolveFailure(ctx, failure.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err = q.GetUnsummarizedSymbols(ctx, sqlc.GetUnsummarizedSymbolsParams{
+		WorkspaceHash: workspace, Limit: 10,
+	})
+	if err != nil || len(rows) != 1 || rows[0].SourcePath != "src/b.go" {
+		t.Fatalf("other file's summary suppressed unsummarized symbol: rows=%v err=%v", rows, err)
+	}
+}
+
+func TestGraphStale_NewEdgeMakesPreviouslyEmptyContextEligible(t *testing.T) {
 	pool := testutil.SetupTestDB(t)
 	db := stdlib.OpenDBFromPool(pool)
 	t.Cleanup(func() { _ = db.Close() })
@@ -218,36 +317,30 @@ func TestGraphStale_NoContextDoesNotBlockLaterSymbols(t *testing.T) {
 			Content: "Old summary", SourcePath: "src/" + name + ".go?summary=true",
 			Collection: "code", Tags: []string{"symbol-summary"},
 			Metadata: pqtype.NullRawMessage{
-				RawMessage: []byte(`{"source_content_hash":"symbol-` + name + `"}`), Valid: true,
+				RawMessage: []byte(`{"source_content_hash":"symbol-` + name +
+					`","source_file":"src/` + name + `.go","symbol_name":"` + name + `"}`), Valid: true,
 			},
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	firstPage, err := q.GetSymbolChunksByGraphContextStale(ctx, sqlc.GetSymbolChunksByGraphContextStaleParams{
+	before, err := q.GetSymbolChunksByGraphContextStale(ctx, sqlc.GetSymbolChunksByGraphContextStaleParams{
 		WorkspaceHash: workspace, Limit: 2,
 	})
-	if err != nil || len(firstPage) != 2 {
-		t.Fatalf("stale fixture: rows=%v err=%v", firstPage, err)
+	if err != nil || len(before) != 0 {
+		t.Fatalf("symbols without graph context should not block the stale page: rows=%v err=%v", before, err)
 	}
-	changed := firstPage[1]
 	if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
 		WorkspaceHash: workspace, SourceNode: "src/Caller.go::Caller",
-		TargetNode: changed.SourcePath + "::" + changed.SymbolName.String,
+		TargetNode: "src/Two.go::Two",
 		EdgeType:   "calls", SourceFile: "src/Caller.go", Metadata: []byte("{}"),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(config.CodeSummarizationConfig{}, nil, NewBudgetTracker(q), q, nil, testutil.NopLogger())
-	processed, failed := 0, 0
-	service.processGraphContextStale(ctx, workspace, &processed, &failed, 1)
 	nextPage, err := q.GetSymbolChunksByGraphContextStale(ctx, sqlc.GetSymbolChunksByGraphContextStaleParams{
 		WorkspaceHash: workspace, Limit: 1,
 	})
-	if err != nil || len(nextPage) != 1 || nextPage[0].ID != changed.ID {
-		t.Fatalf("no-context first row blocked the changed symbol: rows=%v err=%v", nextPage, err)
-	}
-	if processed != 0 || failed != 0 {
-		t.Fatalf("no-context symbol should not call provider: processed=%d failed=%d", processed, failed)
+	if err != nil || len(nextPage) != 1 || nextPage[0].SymbolName.String != "Two" {
+		t.Fatalf("new edge did not make the symbol eligible: rows=%v err=%v", nextPage, err)
 	}
 }

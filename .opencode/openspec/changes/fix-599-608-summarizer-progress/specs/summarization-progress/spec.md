@@ -35,9 +35,10 @@ when retry-all runs,
 then it attempts every selected failure in successive bounded cycles.
 
 #### Scenario: Identical content hashes across files
-Given two symbols sharing a content hash but only one failure record,
-when that failure is retried,
-then only the recorded file and symbol name are submitted.
+Given two symbols sharing a content hash in different files,
+when both fail and one failure ID is retried,
+then each retains its own cooldown state and only the selected failure
+is submitted and resolved. A summary for one does not suppress the other.
 
 #### Scenario: Failure state is scoped to the attempted symbol
 Given two symbols with the same content hash in different files,
@@ -67,12 +68,11 @@ unsummarized symbols arriving on successive sweeps,
 when the worker keeps polling,
 then a stale summary gets a bounded turn even while fresh work remains.
 
-#### Scenario: Graph-stale page contains symbols without edges
-Given a first page of stale symbols with no graph context and a later
-symbol with changed graph edges,
-when the worker checks the page,
-then the no-context symbols are marked current and the later symbol can
-be selected on the next stale turn.
+#### Scenario: Graph context appears after a no-edge interval
+Given a summarized symbol with no graph edges,
+when a new calls edge involving that symbol appears,
+then it becomes eligible for graph-context refresh without a code change.
+No-edge symbols do not monopolize the bounded stale page.
 
 ### Requirement: Partial model response
 Missing members of a successful model batch SHALL be reported and cooled

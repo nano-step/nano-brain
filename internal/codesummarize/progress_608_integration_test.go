@@ -120,7 +120,7 @@ func TestWorkerSweep_OneBatchPerWorkspaceAndRotates(t *testing.T) {
 	}
 }
 
-func TestRetryContentHashes_BypassesCooldownWithoutSelectingOtherSymbols(t *testing.T) {
+func TestRetryFailures_BypassesCooldownWithoutSelectingOtherSymbols(t *testing.T) {
 	pool := testutil.SetupTestDB(t)
 	db := stdlib.OpenDBFromPool(pool)
 	t.Cleanup(func() { _ = db.Close() })
@@ -141,6 +141,10 @@ func TestRetryContentHashes_BypassesCooldownWithoutSelectingOtherSymbols(t *test
 	if _, err := db.ExecContext(ctx, `UPDATE code_summarization_failures SET attempts = 8 WHERE workspace_hash = $1`, workspace); err != nil {
 		t.Fatal(err)
 	}
+	selected, err := q.GetUnresolvedFailures(ctx, workspace)
+	if err != nil || len(selected) != 1 {
+		t.Fatalf("retry fixture: rows=%v err=%v", selected, err)
+	}
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req chatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -159,7 +163,7 @@ func TestRetryContentHashes_BypassesCooldownWithoutSelectingOtherSymbols(t *test
 	defer provider.Close()
 	cfg := config.CodeSummarizationConfig{ProviderURL: provider.URL, Model: "fixture"}
 	s := NewService(cfg, NewLLMProvider(cfg, testutil.NopLogger()), NewBudgetTracker(q), q, nil, testutil.NopLogger())
-	processed, _, failed, err := s.RetryContentHashes(ctx, workspace, []string{"symbol-Failed"})
+	processed, _, failed, err := s.RetryFailures(ctx, workspace, []uuid.UUID{selected[0].ID})
 	if err != nil || processed != 1 || failed != 0 {
 		t.Fatalf("manual retry: processed=%d failed=%d err=%v", processed, failed, err)
 	}
@@ -169,7 +173,7 @@ func TestRetryContentHashes_BypassesCooldownWithoutSelectingOtherSymbols(t *test
 	}
 }
 
-func TestRetryContentHashes_ProcessesBeyondCycleLimit(t *testing.T) {
+func TestRetryFailures_ProcessesBeyondCycleLimit(t *testing.T) {
 	pool := testutil.SetupTestDB(t)
 	db := stdlib.OpenDBFromPool(pool)
 	t.Cleanup(func() { _ = db.Close() })
@@ -181,10 +185,8 @@ func TestRetryContentHashes_ProcessesBeyondCycleLimit(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	var hashes []string
 	for _, name := range []string{"A", "B", "C"} {
 		seedPendingSymbol(t, ctx, q, workspace, name)
-		hashes = append(hashes, "symbol-"+name)
 		if err := q.UpsertCodeSummarizationFailure(ctx, sqlc.UpsertCodeSummarizationFailureParams{
 			WorkspaceHash: workspace, SymbolName: name, SourceFile: "src/" + name + ".go",
 			ContentHash: "symbol-" + name, ErrorReason: "HTTP 524", ErrorType: "transient_exhausted",
@@ -208,8 +210,16 @@ func TestRetryContentHashes_ProcessesBeyondCycleLimit(t *testing.T) {
 	cfg := config.CodeSummarizationConfig{
 		ProviderURL: provider.URL, Model: "fixture", MaxSummariesPerCycle: 2,
 	}
+	selected, err := q.GetUnresolvedFailures(ctx, workspace)
+	if err != nil || len(selected) != 3 {
+		t.Fatalf("retry fixture: rows=%v err=%v", selected, err)
+	}
+	ids := make([]uuid.UUID, 0, len(selected))
+	for _, failure := range selected {
+		ids = append(ids, failure.ID)
+	}
 	s := NewService(cfg, NewLLMProvider(cfg, testutil.NopLogger()), NewBudgetTracker(q), q, nil, testutil.NopLogger())
-	processed, _, failed, err := s.RetryContentHashes(ctx, workspace, hashes)
+	processed, _, failed, err := s.RetryFailures(ctx, workspace, ids)
 	if err != nil || processed != 3 || failed != 0 || calls != 2 {
 		t.Fatalf("retry beyond cycle limit: processed=%d failed=%d calls=%d err=%v", processed, failed, calls, err)
 	}
@@ -239,7 +249,7 @@ func TestWorkerSweep_GraphStaleProgressesWithNewBacklog(t *testing.T) {
 		SourcePath: "src/Stale.go?summary=true", Collection: "code",
 		Tags: []string{"symbol-summary"},
 		Metadata: pqtype.NullRawMessage{
-			RawMessage: []byte(`{"source_content_hash":"symbol-Stale"}`), Valid: true,
+			RawMessage: []byte(`{"source_content_hash":"symbol-Stale","source_file":"src/Stale.go","symbol_name":"Stale"}`), Valid: true,
 		},
 	}); err != nil {
 		t.Fatal(err)

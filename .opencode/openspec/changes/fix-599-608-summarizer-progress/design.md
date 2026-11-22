@@ -1,7 +1,7 @@
 # Design
 
-Selection joins `code_summarization_failures` by workspace and content hash,
-restricted to unresolved rows. It first returns symbols without failures;
+Selection joins unresolved `code_summarization_failures` by workspace,
+content hash, source file and symbol name. It first returns symbols without failures;
 transient failures become eligible after an exponential 1/2/4/8/16/24-hour
 cooldown, up to 8 cross-cycle failures. Permanent and capped failures remain
 visible through the failures API and can be explicitly requeued via
@@ -17,8 +17,8 @@ partial response records omitted requested symbols with error_type
 `partial_omitted` so they are cooled down rather than selected immediately.
 Existing per-request retry remains unchanged.
 
-The explicit retry endpoints pass selected content hashes to
-`RetryContentHashes`, bypassing the automatic cooldown/cap without selecting
+The explicit retry endpoints pass selected failure IDs to
+`RetryFailures`, bypassing the automatic cooldown/cap without selecting
 unrelated backlog. Successful summaries resolve their own failure rows;
 the endpoints compare unresolved rows after the call instead of marking
 every requested failure successful. Tests cover SQL eligibility/order,
@@ -26,14 +26,15 @@ targeted retry, partial responses, and worker quota/rotation using a local
 stubbed provider and isolated test schemas.
 
 Independent reviewers found that retry-all selected only the first cycle of
-failures. Explicit retry now chunks requested hashes by
+failures. Explicit retry now chunks requested failure IDs by
 `max_summaries_per_cycle` so a request larger than one cycle still attempts
-every failure. The persisted failure row identifies a symbol by source file
-and name as well as content hash; forced selection must match that identity
-to avoid sending unrelated symbols with duplicate hashes. The unresolved
-failure table remains keyed by workspace and content hash, so separate
-same-hash failures still share retry state; changing that schema is out of
-scope for this fix.
+every failure. Migration 00031 changes the unresolved-failure unique index
+from (workspace, hash) to (workspace, hash, source file, symbol name) without
+altering or deleting existing rows. It cannot be rolled back after new
+same-hash failures are persisted unless those duplicate rows are resolved.
+Forced selection by failure ID prevents a retry of one symbol from submitting
+other symbols with the same hash. Summary-existence checks match hash, file
+and symbol name, so one symbol's summary cannot hide another.
 
 Graph-context-stale symbols use the same failure eligibility; otherwise the
 automatic worker would retry the same stale summary on every empty-backlog
@@ -49,10 +50,12 @@ batch becomes failure rows and does not reach the worker's outer 429 backoff.
 A second independent review found that the cooldown still applied to
 *unrelated* symbols sharing a content hash. Both automatic selection
 queries now join failure state by workspace, hash, source file and symbol
-name; the existing unique failure row remains keyed by workspace and hash.
+name; the source-file and symbol-name predicates also apply when persisting
+and resolving failures after migration 00031.
 The retry handlers also verify unresolved rows after a budget-exhausted
-partial run, preserving successes from earlier batches. Finally,
-graph-context-stale rows with no graph edges now persist a non-NULL empty
-hash to record that they were checked; NULL still means stale. Without
-that marker a first page of no-context rows could starve later changed
-symbols forever. Regression tests captured each case red before correction.
+partial run, preserving successes from earlier batches. Graph-context-stale
+selection now requires a relevant calls edge rather than persisting an
+empty hash for no-context symbols. The NULL hash remains eligible when
+a new edge arrives; no-context rows cannot monopolize the first page.
+Regression tests captured both the previous first-page stall and the
+later-edge lifecycle issue.
