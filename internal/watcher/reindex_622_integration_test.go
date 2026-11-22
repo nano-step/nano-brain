@@ -25,6 +25,10 @@ func TestTriggerRescanWakesIdleWatcher(t *testing.T) {
 	ctx := context.Background()
 	q := sqlc.New(db)
 	root := t.TempDir()
+	initialPath := filepath.Join(root, "initial.go")
+	if err := os.WriteFile(initialPath, []byte("package fixture\nfunc Initial() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	workspace := "ws-reindex-wakeup"
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
 		Hash: workspace, Name: "fixture", Path: root,
@@ -49,26 +53,43 @@ func TestTriggerRescanWakesIdleWatcher(t *testing.T) {
 		}
 	})
 
-	// Wait for the initial scan to install its watch, then remove only the
-	// fsnotify registration so file creation cannot wake the idle watcher.
+	// Seeing the initial document alone is not a barrier: the initial scan
+	// may still be in progress. The sentinel is consumed by Run only after
+	// processAll returns, establishing that the first pass has finished.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		w.mu.Lock()
-		ready := w.fsw != nil && w.watchedDirs[root]
-		if ready {
-			err := w.fsw.Remove(root)
-			delete(w.watchedDirs, root)
-			w.mu.Unlock()
-			if err != nil {
-				t.Fatal(err)
-			}
+		_, err := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
+			SourcePath: initialPath, WorkspaceHash: workspace,
+		})
+		if err == nil {
 			break
 		}
-		w.mu.Unlock()
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatal(err)
+		}
 		if time.Now().After(deadline) {
-			t.Fatal("initial watcher scan did not register the source root")
+			t.Fatal("initial watcher scan did not ingest its marker file")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	w.hotRegisterCh <- struct{}{}
+	deadline = time.Now().Add(5 * time.Second)
+	for len(w.hotRegisterCh) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("initial watcher scan did not complete")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	w.mu.Lock()
+	if w.fsw == nil || !w.watchedDirs[root] {
+		w.mu.Unlock()
+		t.Fatal("watcher did not register source root")
+	}
+	err := w.fsw.Remove(root)
+	delete(w.watchedDirs, root)
+	w.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	path := filepath.Join(root, "late.go")

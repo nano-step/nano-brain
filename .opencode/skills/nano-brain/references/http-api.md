@@ -164,7 +164,6 @@ curl -s -X POST "$BASE/api/v1/reindex" \
 # embedded/chunks_enqueued count completed/queued work at response time (usually
 # zero for a new workspace). Verify with GET /api/v1/stats?workspace=$WS.
 # The SSE reindex event reports queued at this point, not completed ingestion.
-# The SSE reindex event reports queued at this point, not completed ingestion.
 # To requeue existing chunks use force_wipe:true, not force:true.
 # POST /api/v1/update only re-extracts edges/symbols from existing indexed files;
 # it does not ingest new files.

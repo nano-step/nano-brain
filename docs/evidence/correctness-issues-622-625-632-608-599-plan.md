@@ -49,9 +49,11 @@ integration database is `nanobrain_test`; test schemas must be isolated.
    with three files (`.js`, `.ts`, `.vue`): 3 documents and at least 3 chunks
    appeared within 8 seconds. Those tests did not isolate reindex from the
    initial registration scan, as independent reviewers noted. A new
-   `TestTriggerRescanWakesIdleWatcher` removes fsnotify registration after
-   the initial empty scan, creates a new file and proves that only the
-   explicit rescan wakes the watcher and persists it. Before the fix,
+   `TestTriggerRescanWakesIdleWatcher` waits for an initial marker document
+   and a watcher-loop sentinel that can only be consumed after the initial
+   scan returns. It then removes fsnotify registration, creates a new file
+   and proves that only the explicit rescan wakes the watcher and persists
+   it. Before the fix,
    `TestTriggerRescanByName` failed because marking dirty emitted no wake-up;
    `TriggerRescanByName` now uses the existing buffered registration signal.
    The original v29 environment is still unavailable for exact reproduction.
