@@ -109,9 +109,22 @@ function nextRedirectURL(currentUrl, location, redirectsLeft) {
 // file.close(() => …) so the partial file is gone (and not re-opened by a
 // racing redirect) before we act — otherwise Windows unlink fails with EPERM
 // while the fd is open, and a raw request error would leak the write stream.
+//
+// dest is opened with "wx": exclusive create, mode 0600. It must be a fresh
+// unique staging name (see stagingPath), so an existing file is never
+// truncated and a planted symlink is never followed; the redirect recursion
+// below reopens the same name only after unlinking it, which is still "wx".
 function download(url, dest, redirectsLeft = MAX_REDIRECTS) {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
+    const file = fs.createWriteStream(dest, { flags: "wx", mode: 0o600 });
+    // The stream itself can fail (EEXIST on a planted file, EACCES, ENOSPC).
+    // Without a listener that error is an unhandled 'error' event.
+    file.on("error", (err) => {
+      file.close(() => {
+        safeUnlink(dest);
+        reject(err);
+      });
+    });
     https.get(url, (res) => {
       if (REDIRECT_STATUSES.has(res.statusCode)) {
         let next, redirectErr;
@@ -158,8 +171,14 @@ function download(url, dest, redirectsLeft = MAX_REDIRECTS) {
 
 function downloadWithHash(url, dest, redirectsLeft = MAX_REDIRECTS) {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
+    const file = fs.createWriteStream(dest, { flags: "wx", mode: 0o600 });
     const hash = crypto.createHash("sha256");
+    file.on("error", (err) => {
+      file.close(() => {
+        safeUnlink(dest);
+        reject(err);
+      });
+    });
     https.get(url, (res) => {
       if (REDIRECT_STATUSES.has(res.statusCode)) {
         let next, redirectErr;
@@ -391,6 +410,14 @@ function binaryMatchesVersion(output, expectedVersion) {
   return output.includes(expectedVersion);
 }
 
+// Unique per-attempt staging name for the binary download (and, by derivation,
+// its SHA256SUMS temp file). pid + random so a concurrent installer cannot
+// predict it, collide with it, or rename it away mid-download (#676).
+function stagingPath(binPath) {
+  const rand = crypto.randomBytes(6).toString("hex");
+  return `${binPath}.${process.pid}.${rand}.partial`;
+}
+
 // Download-and-verify the platform binary to binaryPath() and return that path.
 // THROWS on failure (never calls process.exit) so both the install-time caller
 // (main) and the run-time caller (run.js) can choose their own exit behavior.
@@ -427,15 +454,22 @@ async function ensureBinary() {
   const assetName = `nano-brain-${platformKey}${platformExtension()}`;
   let lastErr;
 
-  // The binary is downloaded to <binPath>.partial and only renamed into place
-  // after it is downloaded whole and — unless verification is skipped — its
-  // SHA-256 matches the release's SHA256SUMS. binPath itself therefore never
-  // holds an unverified or truncated file; the existing-binary check above
-  // already unlinked any stale binPath, so the rename lands cleanly (a rename
-  // over an existing file would fail on Windows).
-  const partialPath = `${binPath}.partial`;
+  // Each attempt stages its download under a name unique to this process and
+  // attempt (<binPath>.<pid>.<random>.partial), opened exclusively with mode
+  // 0600 (see download/downloadWithHash), and renames it into place only after
+  // it is downloaded whole and — unless verification is skipped — its SHA-256
+  // matches the release's SHA256SUMS. A shared staging name would let a second
+  // installer O_TRUNC the file out from under the first, whose verified rename
+  // would then install a corrupt binary; unique names keep binPath never
+  // holding an unverified or truncated file even when installs overlap. The
+  // SHA256SUMS temp path is derived from this unique name, so it is per-
+  // attempt too. On Windows fs.renameSync still replaces an existing binPath
+  // (MoveFileExW with MOVEFILE_REPLACE_EXISTING); it only fails when the file
+  // is locked — a running nano-brain.exe — and the stale-binary unlink above
+  // covers the usual case.
   const attempt = async (tag, suffix) => {
     const url = `https://github.com/${REPO}/releases/download/${tag}/${assetName}`;
+    const partialPath = stagingPath(binPath);
     try {
       if (skipVerify) {
         await download(url, partialPath);
