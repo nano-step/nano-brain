@@ -1303,6 +1303,9 @@
           "embedded": {
             "type": "integer"
           },
+          "files_pending_ingest": {
+            "type": "integer"
+          },
           "message": {
             "type": "string"
           },
@@ -3483,7 +3486,7 @@
     },
     "/api/v1/reindex": {
       "post": {
-        "description": "Rescans collections for a workspace, enqueueing changed/new files for embedding; force_wipe clears and re-embeds everything",
+        "description": "Requests an asynchronous watcher rescan; files_pending_ingest estimates changed files, while embedded and chunks_enqueued count completed/queued work at response time. force_wipe requeues existing chunks.",
         "requestBody": {
           "content": {
             "application/json": {

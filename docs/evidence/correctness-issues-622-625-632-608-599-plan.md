@@ -31,6 +31,22 @@ integration database is `nanobrain_test`; test schemas must be isolated.
    the asynchronous watcher. Inspect watcher attachment/scan and reproduce
    registration -> reindex -> persisted document in an isolated test server
    before changing response semantics or ingest logic.
+   Measured on v30: `TestFreshWorkspaceReindexPersistsDocuments` runs real
+   `InitWorkspace`, `Watcher.Run` and `TriggerReindex` against a private schema;
+   a fresh source file and at least one chunk were persisted. An additional
+   HTTP server test exercised real routing/middleware and `GET /api/v1/stats`
+   with three files (`.js`, `.ts`, `.vue`): 3 documents and at least 3 chunks
+   appeared within 8 seconds. The original v29 ingestion failure did not
+   reproduce; no speculative watcher rewrite.
+   Independently confirmed: with the watcher stopped, `reindex` reports
+   `embedded:2` and `chunks_enqueued:2` although neither document nor chunk
+   exists (red `TestIncrementalReindex_*`). Change incremental responses to
+   report `files_pending_ingest` and zero actual enqueue/embed counts; keep
+   the original ingestion issue open until a full-server repro is available.
+   The reported request used `force:true`, but the API field is `force_wipe`;
+   empty `root` is valid and means all collections. `/update` only re-extracts
+   from already indexed files. `stats.collections` groups persisted documents
+   and is empty when there are none; it is not the registered collection list.
 4. **#599 and #608, summarization:** `GetUnsummarizedSymbols` has `LIMIT`
    without ordering or failure eligibility; `splitAndSend` records failures,
    while `processAllWorkspaces` visits workspaces in a fixed order, each of

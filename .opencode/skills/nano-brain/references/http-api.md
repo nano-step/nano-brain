@@ -159,6 +159,14 @@ curl -s -X POST "$BASE/api/v1/reindex" \
   -H 'Content-Type: application/json' \
   -d "{\"workspace\":\"$WS\",\"root\":\"$PWD\"}" | jq
 
+# Incremental reindex requests an asynchronous watcher rescan. A 202 response's
+# files_pending_ingest is an estimate, not persisted documents/chunks.
+# embedded/chunks_enqueued count completed/queued work at response time (usually
+# zero for a new workspace). Verify with GET /api/v1/stats?workspace=$WS.
+# To requeue existing chunks use force_wipe:true, not force:true.
+# POST /api/v1/update only re-extracts edges/symbols from existing indexed files;
+# it does not ingest new files.
+
 # Reload config without daemon restart
 curl -s -X POST "$BASE/api/reload-config" | jq
 ```
