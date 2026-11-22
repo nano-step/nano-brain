@@ -50,10 +50,11 @@ integration database is `nanobrain_test`; test schemas must be isolated.
    appeared within 8 seconds. Those tests did not isolate reindex from the
    initial registration scan, as independent reviewers noted. A new
    `TestTriggerRescanWakesIdleWatcher` waits for an initial marker document
-   and a watcher-loop sentinel that can only be consumed after the initial
-   scan returns. It then removes fsnotify registration, creates a new file
-   and proves that only the explicit rescan wakes the watcher and persists
-   it. Before the fix,
+   and an unregistered dirty sentinel that can only be drained after the
+   initial scan returns; its snapshot cannot contain the not-yet-created
+   file even if the sentinel scan has not returned. It then removes
+   fsnotify registration, creates a new file and proves that only the
+   explicit rescan wakes the watcher and persists it. Before the fix,
    `TestTriggerRescanByName` failed because marking dirty emitted no wake-up;
    `TriggerRescanByName` now uses the existing buffered registration signal.
    The original v29 environment is still unavailable for exact reproduction.

@@ -54,8 +54,9 @@ func TestTriggerRescanWakesIdleWatcher(t *testing.T) {
 	})
 
 	// Seeing the initial document alone is not a barrier: the initial scan
-	// may still be in progress. The sentinel is consumed by Run only after
-	// processAll returns, establishing that the first pass has finished.
+	// may still be in progress. A sentinel dirty entry is drained only after
+	// processAll returns. Its snapshot contains no late root work even if
+	// processDirty has not yet returned when the next file is created.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		_, err := q.GetDocumentBySourcePath(ctx, sqlc.GetDocumentBySourcePathParams{
@@ -72,11 +73,21 @@ func TestTriggerRescanWakesIdleWatcher(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	sentinel := filepath.Join(root, "unregistered-sentinel")
+	w.mu.Lock()
+	w.dirty[sentinel] = true
+	w.mu.Unlock()
 	w.hotRegisterCh <- struct{}{}
 	deadline = time.Now().Add(5 * time.Second)
-	for len(w.hotRegisterCh) != 0 {
+	for {
+		w.mu.Lock()
+		_, pending := w.dirty[sentinel]
+		w.mu.Unlock()
+		if !pending {
+			break
+		}
 		if time.Now().After(deadline) {
-			t.Fatal("initial watcher scan did not complete")
+			t.Fatal("watcher did not drain the post-initial-scan sentinel")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

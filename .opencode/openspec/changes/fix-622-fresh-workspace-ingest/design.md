@@ -12,10 +12,11 @@ only marked the directory dirty. On an idle watcher with no filesystem
 events, neither the debounce timer nor the long polling path consumed that
 flag. Use the existing buffered hot-registration signal to wake `Run`
 after marking dirty. The regression waits for the initial scan's marker
-document, then sends a sentinel consumed only after that scan returns,
-removes the filesystem watch, creates a file and proves the explicit rescan
-alone persists it. The initial registration tests did not establish this
-causality.
+document, then waits for an unregistered dirty sentinel to be drained by
+the watcher loop. That drain happens after the initial scan and snapshots
+the dirty work before the late file exists. It removes the filesystem
+watch, creates a file and proves the explicit rescan alone persists it.
+The initial registration tests did not establish this causality.
 
 The confirmed bug is in the response: incremental reindex calls the
 asynchronous watcher, but counts changed files as `embedded` and
