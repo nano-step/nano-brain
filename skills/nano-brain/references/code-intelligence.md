@@ -7,14 +7,14 @@ description: Use nano-brain CLI context, code-impact, and detect-changes for sym
 
 ## Overview
 
-Run code intelligence when symbol relationships, impact analysis, or diff-to-symbol mapping is needed. Ensure indexing is done before using these tools — run `npx @nano-step/nano-brain reindex` **with `workdir` set to the workspace root** (the `--root` flag is silently ignored).
+Run code intelligence when symbol relationships, impact analysis, or diff-to-symbol mapping is needed. Ensure the workspace is registered (`POST /api/v1/init` or `nano-brain init --root <path>`) and indexed — request an async watcher scan with `npx @nano-step/nano-brain reindex --root <path>` (space-separated `--root <path>` is required; verify ingestion via `GET /api/v1/stats?workspace=<hash>`). To re-extract symbols, graph edges, and flowcharts on already-indexed files after an upgrade without re-embedding, call `POST /api/v1/update` (`{"workspace":"<hash>"}`).
 
 ```bash
-# ✅ Correct
-bash(command="npx @nano-step/nano-brain reindex", workdir="/path/to/workspace")
+# ✅ Correct (space-separated --root <path>)
+npx @nano-step/nano-brain reindex --root /data/workspaces/next-app
 
-# ❌ Wrong (reindexes the CALLER's CWD)
-npx @nano-step/nano-brain reindex --root=/path/to/workspace
+# ❌ Wrong (--root=<path> is rejected as an unknown flag)
+npx @nano-step/nano-brain reindex --root=/data/workspaces/next-app
 ```
 
 ## code_context — 360-degree symbol view
@@ -62,14 +62,14 @@ Scopes: `unstaged`, `staged`, `all` (default).
 | "Find exact string in code" | grep / ast-grep |
 | "How does auth work conceptually?" | `npx @nano-step/nano-brain vsearch "..."` |
 
-Code intelligence requires indexing. Run `npx @nano-step/nano-brain reindex` (with `workdir` set to the workspace) first if the workspace has not been indexed.
+Code intelligence requires indexing. Run `npx @nano-step/nano-brain reindex --root <path>` first if the workspace has not been indexed, and poll `GET /api/v1/stats?workspace=<hash>` until `docs_total` and `graph_edges_by_type` populate.
 
 ## HTTP API equivalents
 
 | CLI | HTTP endpoint | Body shape |
 |---|---|---|
 | `context <name>` | `POST /api/v1/graph/query` | `{"workspace":"<hash>","node":"<name>","direction":"out","edge_type":"calls"}` |
-| `code-impact <name>` | `POST /api/v1/graph/impact` | `{"workspace":"<hash>","node":"<name>","edge_type":"calls","max_depth":2}` |
+| `code-impact <name>` | `POST /api/v1/graph/impact` | `{"workspace":"<hash>","node":"<name>","edge_type":"calls","max_depth":2}` → `{node, impacted: [], node_found}` (`impacted` is never `null`; `node_found` distinguishes a leaf node from an unknown/unindexed node, #625) |
 | `detect-changes` | Client-side git diff + parallel `graph/query` calls | (computed by CLI) |
 
 `direction`: `in` (callers, who depends on this) or `out` (callees, what this depends on). The CLI maps `--direction=upstream` → `direction=in` and `--direction=downstream` → `direction=out`.

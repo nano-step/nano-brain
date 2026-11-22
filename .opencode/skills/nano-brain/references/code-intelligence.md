@@ -39,10 +39,16 @@ Source: `internal/mcp/tools.go:916-1007`. Use this for quick "who touches this?"
 
 ```
 required: workspace, node
-optional: edge_type ("calls" | "imports" | empty for all)
+optional: direction ("in" default | "out")
+          edge_type ("calls" | "imports" | empty for all)
           max_depth (1-3, server-clamped, default 1)
-returns:  {node, impacted: [{node, depth, edge_type}]}
+          paths ("absolute" default | "relative")
+returns:  {node, impacted: [{node, depth, edge_type}], count, node_found}
 ```
+
+`impacted` is always `[]` (never `null`). When `impacted` is empty, inspect `node_found` (#625):
+- `node_found: true` → known symbol/file with zero reverse callers/importers within `max_depth` / `edge_type` (leaf or entry node)
+- `node_found: false` → unknown or unindexed node in this workspace (disambiguate via `memory_symbols`, or check indexing/graph status via `GET /api/v1/stats?workspace=<hash>`)
 
 Read the `impacted` array length as a rough risk signal:
 - `<5` → LOW (localized change)
@@ -102,7 +108,7 @@ For scripts, dashboards, or non-MCP clients:
 | `memory_graph` | `POST /api/v1/graph/query` | `{"workspace":"<hash>","node":"<name>","direction":"out","edge_type":"calls"}` |
 | `memory_impact` | `POST /api/v1/graph/impact` | `{"workspace":"<hash>","node":"<name>","edge_type":"calls","max_depth":2}` |
 | `memory_trace` | `POST /api/v1/graph/trace` | `{"workspace":"<hash>","node":"<name>","max_depth":5}` |
-| `memory_symbols` | `POST /api/v1/symbols` | `{"workspace":"<hash>","query":"<substr>","kind":"function","limit":50}` |
+| `memory_symbols` | `GET /api/v1/symbols` | Query string: `?workspace=<hash>&query=<substr>&kind=function&limit=50` |
 
 Workspace overview (top-N most-connected nodes) is HTTP-only: `POST /api/v1/graph/overview` with `{"workspace":"<hash>","mode":"code","limit":50}`.
 
@@ -113,7 +119,7 @@ Workspace overview (top-N most-connected nodes) is HTTP-only: `POST /api/v1/grap
 - `max_depth` on `memory_trace` is clamped to `[1, 10]` with cycle detection.
 - Graph is built from Tree-sitter AST extractors for: Go, TypeScript, JavaScript, Python (as of PR #197). Other languages return empty result sets.
 - Cross-file graph edges require the source file to be in the workspace's indexed scope (respects `.gitignore`).
-- If the graph is empty for a recently-added file, the watcher may still be processing it — wait, or trigger a reindex via `POST /api/v1/reindex`.
+- If the graph is empty for a recently-added file, the watcher may still be processing it — check `GET /api/v1/stats?workspace=<hash>` (`docs_total`, `graph_edges_by_type`) or request an async watcher scan via `POST /api/v1/reindex`. If documents are already indexed (`docs_total > 0`) but symbols/edges/flowcharts are stale after a daemon upgrade, call `POST /api/v1/update` (`{"workspace":"<hash>"}`) to re-extract them without re-embedding.
 
 
 ## Symbol disambiguation
