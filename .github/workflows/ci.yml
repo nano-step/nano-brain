@@ -37,3 +37,55 @@ jobs:
 
       - name: Test
         run: go test -race -short -count=1 ./...
+
+  # npm/postinstall.test.js is the only thing pinning the installer's
+  # fail-closed checksum and redirect behaviour (#676). The suite stubs
+  # https.get, so it needs no network and no `npm install`.
+  npm-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Test npm wrapper
+        run: node --test npm/postinstall.test.js
+
+  govulncheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.11"
+
+      # Fails only for vulnerabilities this code calls AND that have a fixed
+      # version to upgrade to. Called advisories with no fix (today: echo
+      # GO-2026-6875 / GO-2026-6872) are printed but do not turn CI red.
+      - name: govulncheck
+        run: |
+          set -euo pipefail
+          out="$(mktemp)"
+          # `-format json` always exits 0 when the scan itself succeeds, so the
+          # verdict is computed here from the findings.
+          go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -format json ./... > "$out"
+          jq -es 'any(.[]; .config != null)' "$out" > /dev/null || { echo "ERROR: govulncheck produced no report"; exit 1; }
+          # A finding whose first trace frame names a function is one this code calls.
+          called='select(.finding.trace[0].function != null) | .finding'
+          unfixed="$(jq -r "$called"' | select((.fixed_version // "") == "") | "\(.osv) \(.trace[0].module)"' "$out" | sort -u)"
+          fixable="$(jq -r "$called"' | select((.fixed_version // "") != "") | "\(.osv) \(.trace[0].module) fixed in \(.fixed_version)"' "$out" | sort -u)"
+          if [ -n "$unfixed" ]; then
+            echo "Called vulnerabilities with no fixed version (not failing the job):"
+            echo "$unfixed"
+          fi
+          if [ -n "$fixable" ]; then
+            echo "::error::Called vulnerabilities with a fix available — upgrade the module:"
+            echo "$fixable"
+            exit 1
+          fi
+          echo "govulncheck: no called vulnerability has a fix available."

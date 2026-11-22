@@ -118,6 +118,32 @@ func (q *Queries) DeleteStaleRawOpenCodeDocs(ctx context.Context) (int64, error)
 	return result.RowsAffected()
 }
 
+const deleteStaleSymbolSpanDocs = `-- name: DeleteStaleSymbolSpanDocs :execrows
+DELETE FROM documents
+WHERE workspace_hash = $1
+  AND collection = $2
+  AND starts_with(source_path, $3::text || '?symbol=')
+  AND metadata->>'source_type' = 'symbol'
+  AND COALESCE(NULLIF(metadata->>'end_line', ''), '0') = '0'
+`
+
+type DeleteStaleSymbolSpanDocsParams struct {
+	WorkspaceHash string
+	Collection    string
+	FilePath      string
+}
+
+// Removes pre-#539 symbol docs for one file after a backfill pass. Only
+// docs still lacking end_line match, so freshly re-emitted symbols survive
+// and whatever is deleted was an orphan.
+func (q *Queries) DeleteStaleSymbolSpanDocs(ctx context.Context, arg DeleteStaleSymbolSpanDocsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteStaleSymbolSpanDocs, arg.WorkspaceHash, arg.Collection, arg.FilePath)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteSymbolDocumentsByCollection = `-- name: DeleteSymbolDocumentsByCollection :exec
 DELETE FROM documents
 WHERE workspace_hash = $1
@@ -379,6 +405,57 @@ func (q *Queries) ListDocumentsByWorkspace(ctx context.Context, workspaceHash st
 			&i.SupersedesID,
 			&i.SupersededByID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFilesWithStaleSymbolSpans = `-- name: ListFilesWithStaleSymbolSpans :many
+SELECT DISTINCT split_part(s.source_path, '?symbol=', 1)::text AS file_path,
+       EXISTS (SELECT 1 FROM documents p
+               WHERE p.workspace_hash = s.workspace_hash
+                 AND p.source_path = split_part(s.source_path, '?symbol=', 1))::bool AS parent_indexed
+FROM documents s
+WHERE s.workspace_hash = $1
+  AND s.collection = $2
+  AND s.metadata->>'source_type' = 'symbol'
+  AND COALESCE(NULLIF(s.metadata->>'end_line', ''), '0') = '0'
+ORDER BY 1
+`
+
+type ListFilesWithStaleSymbolSpansParams struct {
+	WorkspaceHash string
+	Collection    string
+}
+
+type ListFilesWithStaleSymbolSpansRow struct {
+	FilePath      string
+	ParentIndexed bool
+}
+
+// Parent files of symbol docs written before line/end_line metadata existed
+// (#539); unchanged files are never re-extracted, so they need a one-off
+// backfill. parent_indexed reports whether the initial scan still indexes
+// the parent file — deleted or ignored files lose their file doc, which is
+// the admission signal for dropping stale symbols without a read.
+func (q *Queries) ListFilesWithStaleSymbolSpans(ctx context.Context, arg ListFilesWithStaleSymbolSpansParams) ([]ListFilesWithStaleSymbolSpansRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFilesWithStaleSymbolSpans, arg.WorkspaceHash, arg.Collection)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFilesWithStaleSymbolSpansRow
+	for rows.Next() {
+		var i ListFilesWithStaleSymbolSpansRow
+		if err := rows.Scan(&i.FilePath, &i.ParentIndexed); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -686,6 +763,13 @@ FROM documents
 WHERE workspace_hash = $1
   AND metadata->>'source_type' = 'symbol'
   AND title = $2::text
+ORDER BY CASE metadata->>'kind'
+           WHEN 'function' THEN 0
+           WHEN 'struct' THEN 1 WHEN 'type' THEN 1 WHEN 'interface' THEN 1
+           WHEN 'const' THEN 2 WHEN 'var' THEN 2
+           WHEN 'method' THEN 3
+           ELSE 4 END,
+         source_path
 `
 
 type ResolveSymbolByNameParams struct {
@@ -701,6 +785,8 @@ type ResolveSymbolByNameRow struct {
 // Resolves a bare symbol name (e.g. a calls-edge target, which graph.sql
 // stores unqualified) to its defining symbol document(s), so callers can
 // requalify it as "<file>::<name>" for further graph traversal.
+// Kind order breaks same-name ties deterministically (#584): a same-file
+// object-property method must not shadow the top-level function.
 func (q *Queries) ResolveSymbolByName(ctx context.Context, arg ResolveSymbolByNameParams) ([]ResolveSymbolByNameRow, error) {
 	rows, err := q.db.QueryContext(ctx, resolveSymbolByName, arg.WorkspaceHash, arg.Column2)
 	if err != nil {

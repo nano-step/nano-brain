@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +24,9 @@ import (
 )
 
 type mockQuerier struct {
+	upsertErr               error
+	staleRows               []sqlc.ListFilesWithStaleSymbolSpansRow
+	deleteStaleCalls        atomic.Int64
 	upsertDocCalls          atomic.Int64
 	upsertChunkCalls        atomic.Int64
 	deleteChunkCalls        atomic.Int64
@@ -38,6 +42,9 @@ func newMockQuerier() *mockQuerier {
 
 func (m *mockQuerier) UpsertDocumentBySourcePath(_ context.Context, arg sqlc.UpsertDocumentBySourcePathParams) (sqlc.UpsertDocumentBySourcePathRow, error) {
 	m.upsertDocCalls.Add(1)
+	if m.upsertErr != nil {
+		return sqlc.UpsertDocumentBySourcePathRow{}, m.upsertErr
+	}
 	m.sourcePathHash[arg.SourcePath] = arg.ContentHash
 	return sqlc.UpsertDocumentBySourcePathRow{
 		ID:            uuid.New(),
@@ -94,6 +101,15 @@ func (m *mockQuerier) PreloadFileStateByWorkspace(_ context.Context, _ sqlc.Prel
 func (m *mockQuerier) UpdateDocumentFileState(_ context.Context, _ sqlc.UpdateDocumentFileStateParams) error {
 	m.updateFileStateCalls.Add(1)
 	return nil
+}
+
+func (m *mockQuerier) ListFilesWithStaleSymbolSpans(_ context.Context, _ sqlc.ListFilesWithStaleSymbolSpansParams) ([]sqlc.ListFilesWithStaleSymbolSpansRow, error) {
+	return m.staleRows, nil
+}
+
+func (m *mockQuerier) DeleteStaleSymbolSpanDocs(_ context.Context, _ sqlc.DeleteStaleSymbolSpanDocsParams) (int64, error) {
+	m.deleteStaleCalls.Add(1)
+	return 0, nil
 }
 
 func testConfig(debounceMs, pollSec int) config.Config {
@@ -463,6 +479,11 @@ func TestTriggerRescanByName(t *testing.T) {
 		t.Fatal("expected directory to be marked dirty")
 	}
 	w.mu.Unlock()
+	select {
+	case <-w.hotRegisterCh:
+	default:
+		t.Fatal("reindex must wake an idle watcher to process its dirty collection")
+	}
 
 	notFound := w.TriggerRescanByName("other", "ws42")
 	if notFound {
@@ -1149,5 +1170,37 @@ func TestScanCollection_CredentialFilesNotIndexed(t *testing.T) {
 	}
 	if got := mq.deleteDocCalls.Load(); got != 1 {
 		t.Errorf("document deletes = %d, want 1 (the previously indexed .env)", got)
+	}
+}
+
+// TestBackfillKeepsStaleDocsWhenSymbolUpsertFails covers the transient
+// failure half of the #584 rework: when a symbol upsert fails the file's
+// stale docs are not provably orphaned, so the backfill must leave them for
+// the next start instead of deleting them.
+func TestBackfillKeepsStaleDocsWhenSymbolUpsertFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ok.go")
+	if err := os.WriteFile(path, []byte("package x\n\nfunc Foo() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mq := newMockQuerier()
+	mq.staleRows = []sqlc.ListFilesWithStaleSymbolSpansRow{{FilePath: path, ParentIndexed: true}}
+	mq.upsertErr = errors.New("upsert failed")
+	w := newTestWatcher(mq, 100, 3600)
+	w.WithSymbolRegistry(symbol.NewRegistry(fakeExtractor{ext: ".go"}))
+	if err := w.Watch("code", dir, "workspace", "**/*"); err != nil {
+		t.Fatal(err)
+	}
+	// backfillSymbolSpans only re-extracts files the initial scan admitted;
+	// this test invokes it directly, so mark the file admitted by hand.
+	w.startupAdmitted = map[string]map[string]bool{dir: {path: true}}
+
+	w.backfillSymbolSpans(context.Background())
+
+	if got := mq.upsertDocCalls.Load(); got == 0 {
+		t.Fatal("backfill never reached the upsert: file must be admitted and extracted")
+	}
+	if got := mq.deleteStaleCalls.Load(); got != 0 {
+		t.Fatalf("DeleteStaleSymbolSpanDocs calls = %d, want 0: failed upserts must keep stale docs", got)
 	}
 }

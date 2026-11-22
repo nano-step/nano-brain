@@ -33,6 +33,11 @@ type PoolChecker interface {
 	Ping(ctx context.Context) error
 }
 
+const (
+	readHeaderTimeout = 10 * time.Second
+	idleTimeout       = 120 * time.Second
+)
+
 type Server struct {
 	echo           *echo.Echo
 	pool           PoolChecker
@@ -81,6 +86,10 @@ func New(fullCfg *config.Config, configPath string, pool PoolChecker, db *sql.DB
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
+	// No ReadTimeout/WriteTimeout: /sse, /api/v1/events and long MCP calls
+	// stream for longer than any fixed deadline.
+	e.Server.ReadHeaderTimeout = readHeaderTimeout
+	e.Server.IdleTimeout = idleTimeout
 
 	var ss *search.SearchService
 	if queries != nil {

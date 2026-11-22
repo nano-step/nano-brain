@@ -16,7 +16,6 @@ import (
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
 	"github.com/rs/zerolog"
-	gitignore "github.com/sabhiram/go-gitignore"
 )
 
 type ReindexCFGQuerier interface {
@@ -193,17 +192,14 @@ func fullWalkAndExtract(ctx context.Context, workspace, codeRoot string, graphRe
 		ignoreStack.PopAbove(path)
 
 		if d.IsDir() {
-			giPath := filepath.Join(path, ".gitignore")
-			if info, statErr := os.Stat(giPath); statErr == nil && !info.IsDir() {
-				if gi, giErr := gitignore.CompileIgnoreFile(giPath); giErr == nil {
-					ignoreStack.Push(path, gi)
-				}
+			// Non-regular ignore files are skipped and the read is bounded,
+			// so a FIFO cannot block the walk and a symlink to an
+			// unbounded file cannot exhaust memory (#675).
+			if gi, giErr := watcher.CompileRegularIgnore(filepath.Join(path, ".gitignore")); giErr == nil {
+				ignoreStack.Push(path, gi)
 			}
-			localIgnorePath := filepath.Join(path, ".nano-brainignore")
-			if info, statErr := os.Stat(localIgnorePath); statErr == nil && !info.IsDir() {
-				if li, liErr := gitignore.CompileIgnoreFile(localIgnorePath); liErr == nil {
-					ignoreStack.Push(path, li)
-				}
+			if li, liErr := watcher.CompileRegularIgnore(filepath.Join(path, ".nano-brainignore")); liErr == nil {
+				ignoreStack.Push(path, li)
 			}
 		}
 
@@ -251,6 +247,10 @@ func processFile(ctx context.Context, workspace, absPath, codeRoot string, filte
 	// a symlink leaving the root. The returned error says which case applied.
 	if cerr := watcher.CheckResolvedPath(codeRoot, filter, absPath); cerr != nil {
 		return fmt.Errorf("skipped: %w", cerr)
+	}
+	// Reading a FIFO blocks until a writer appears (#675).
+	if info, serr := os.Stat(absPath); serr == nil && !info.Mode().IsRegular() {
+		return fmt.Errorf("skipped: not a regular file")
 	}
 
 	content, err := os.ReadFile(absPath)

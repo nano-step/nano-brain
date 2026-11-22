@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/eventbus"
 	"github.com/nano-brain/nano-brain/internal/server/handlers"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/nano-brain/nano-brain/internal/watcher"
@@ -22,13 +23,19 @@ import (
 )
 
 type mockReindexQuerier struct {
-	collections              []sqlc.Collection
-	indexedDocs              map[string][]sqlc.ListDocumentSourcePathsAndHashesRow
-	deleteChunksCalled       int
-	deleteDocCalled          int
-	forceWipeIDs             []uuid.UUID
-	forceWipeCalled          bool
-	forceWipeLastParams      sqlc.ResetAndReturnChunkIDsByCollectionParams
+	collections         []sqlc.Collection
+	indexedDocs         map[string][]sqlc.ListDocumentSourcePathsAndHashesRow
+	deleteChunksCalled  int
+	deleteDocCalled     int
+	forceWipeIDs        []uuid.UUID
+	forceWipeCalled     bool
+	forceWipeLastParams sqlc.ResetAndReturnChunkIDsByCollectionParams
+}
+
+type reindexEventRecorder struct{ events []eventbus.Event }
+
+func (r *reindexEventRecorder) Publish(event eventbus.Event) {
+	r.events = append(r.events, event)
 }
 
 func (m *mockReindexQuerier) ListCollections(_ context.Context, _ string) ([]sqlc.Collection, error) {
@@ -109,7 +116,8 @@ func TestIncrementalReindex_NewFile(t *testing.T) {
 	}
 	w := newTestWatcherForHandler()
 
-	h := handlers.TriggerReindex(mq, w, nil, nil, zerolog.Nop())
+	events := &reindexEventRecorder{}
+	h := handlers.TriggerReindex(mq, w, nil, events, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -121,8 +129,15 @@ func TestIncrementalReindex_NewFile(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp["embedded"] != float64(1) {
-		t.Errorf("expected embedded=1, got %v", resp["embedded"])
+	if resp["files_pending_ingest"] != float64(1) || resp["embedded"] != float64(0) || resp["chunks_enqueued"] != float64(0) {
+		t.Errorf("expected one pending file, no persisted embeds or enqueued chunks, got %v", resp)
+	}
+	if len(events.events) != 2 {
+		t.Fatalf("reindex events = %d, want started and queued", len(events.events))
+	}
+	var progress map[string]any
+	if err := json.Unmarshal(events.events[1].Payload, &progress); err != nil || progress["state"] != "queued" {
+		t.Fatalf("asynchronous rescan event claimed completion: %v, err=%v", progress, err)
 	}
 	if resp["skipped"] != float64(0) {
 		t.Errorf("expected skipped=0, got %v", resp["skipped"])
@@ -213,8 +228,8 @@ func TestIncrementalReindex_ChangedFile(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp["embedded"] != float64(1) {
-		t.Errorf("expected embedded=1, got %v", resp["embedded"])
+	if resp["files_pending_ingest"] != float64(1) || resp["embedded"] != float64(0) || resp["chunks_enqueued"] != float64(0) {
+		t.Errorf("expected one pending file, no persisted embeds or enqueued chunks, got %v", resp)
 	}
 	if mq.deleteChunksCalled != 1 {
 		t.Errorf("expected 1 DeleteChunks call, got %d", mq.deleteChunksCalled)
@@ -302,8 +317,8 @@ func TestTriggerReindex_ForceWipe(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp["chunks_enqueued"] != float64(5) {
-		t.Errorf("expected chunks_enqueued=5, got %v", resp["chunks_enqueued"])
+	if resp["chunks_enqueued"] != float64(0) {
+		t.Errorf("no embed queue is running; expected chunks_enqueued=0, got %v", resp["chunks_enqueued"])
 	}
 }
 

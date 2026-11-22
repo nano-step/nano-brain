@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	gitignore "github.com/sabhiram/go-gitignore"
+
+	"github.com/nano-brain/nano-brain/internal/graph"
 )
 
 // GitignoreStack maintains a stack of .gitignore matchers discovered during
@@ -85,13 +87,10 @@ func (a *walkAdmitter) ignore(path string, isDir bool) bool {
 	a.stack.PopAbove(path)
 
 	if isDir {
-		// Compile directly and check the error rather than os.Stat-ing first — a
-		// missing/unreadable/dir path just fails to compile and is skipped, and we
-		// avoid a redundant syscall (repo convention).
-		if gi, err := gitignore.CompileIgnoreFile(filepath.Join(path, ".gitignore")); err == nil {
+		if gi, err := CompileRegularIgnore(filepath.Join(path, ".gitignore")); err == nil {
 			a.stack.Push(path, gi)
 		}
-		if li, err := gitignore.CompileIgnoreFile(filepath.Join(path, ".nano-brainignore")); err == nil {
+		if li, err := CompileRegularIgnore(filepath.Join(path, ".nano-brainignore")); err == nil {
 			a.stack.Push(path, li)
 		}
 	}
@@ -114,31 +113,31 @@ func collRelFile(dirPath, filePath string) string {
 }
 
 var defaultExcludeDirs = map[string]bool{
-	"node_modules": true,
-	".git":         true,
-	".hg":          true,
-	".svn":         true,
-	"dist":         true,
-	"build":        true,
-	"out":          true,
-	".next":        true,
-	".nuxt":        true,
-	"vendor":       true,
-	"__pycache__":  true,
+	"node_modules":  true,
+	".git":          true,
+	".hg":           true,
+	".svn":          true,
+	"dist":          true,
+	"build":         true,
+	"out":           true,
+	".next":         true,
+	".nuxt":         true,
+	"vendor":        true,
+	"__pycache__":   true,
 	".pytest_cache": true,
-	".mypy_cache":  true,
-	".tox":         true,
-	"venv":         true,
-	".venv":        true,
-	"env":          true,
-	".cache":       true,
-	"coverage":     true,
-	".terraform":   true,
-	"target":       true,
-	".worktrees":   true,
-	".pr-reviews":  true,
-	".opencode":    true,
-	".output":      true,
+	".mypy_cache":   true,
+	".tox":          true,
+	"venv":          true,
+	".venv":         true,
+	"env":           true,
+	".cache":        true,
+	"coverage":      true,
+	".terraform":    true,
+	"target":        true,
+	".worktrees":    true,
+	".pr-reviews":   true,
+	".opencode":     true,
+	".output":       true,
 	// Common framework build/vendor output dirs (Nuxt/Next/Svelte/Angular/
 	// Astro/Turbo/Vercel/Netlify/Parcel and legacy JS package dirs).
 	"_nuxt":            true,
@@ -160,17 +159,17 @@ var defaultExcludeDirs = map[string]bool{
 // excluded (covers yarn.lock, Cargo.lock, Gemfile.lock, composer.lock,
 // poetry.lock, Pipfile.lock, pubspec.lock, mix.lock, flake.lock, …).
 var defaultExcludeFiles = map[string]bool{
-	"package-lock.json":    true, // npm
-	"npm-shrinkwrap.json":  true, // npm
-	"pnpm-lock.yaml":       true, // pnpm
-	"bun.lockb":            true, // bun
-	"packages.lock.json":   true, // .NET
-	"go.sum":               true, // Go
-	"Package.resolved":     true, // Swift
-	"gradle.lockfile":      true, // Gradle
-	".terraform.lock.hcl":  true, // Terraform
-	"Podfile.lock":         true, // CocoaPods (also .lock, kept explicit)
-	"composer.lock":        true, // PHP (also .lock)
+	"package-lock.json":   true, // npm
+	"npm-shrinkwrap.json": true, // npm
+	"pnpm-lock.yaml":      true, // pnpm
+	"bun.lockb":           true, // bun
+	"packages.lock.json":  true, // .NET
+	"go.sum":              true, // Go
+	"Package.resolved":    true, // Swift
+	"gradle.lockfile":     true, // Gradle
+	".terraform.lock.hcl": true, // Terraform
+	"Podfile.lock":        true, // CocoaPods (also .lock, kept explicit)
+	"composer.lock":       true, // PHP (also .lock)
 }
 
 // Built-in credential deny list (issue #655). A file whose base name matches is
@@ -195,8 +194,13 @@ var credentialFileNames = map[string]bool{
 	".s3cfg":           true,
 	".boto":            true,
 	"kubeconfig":       true,
+	"kubeconfig.yaml":  true,
+	"kubeconfig.yml":   true,
+	"htpasswd":         true,
 	"credentials":      true, // as in ~/.aws/credentials
 	"credentials.json": true,
+	"credentials.yml":  true,
+	"credentials.yaml": true,
 	"secrets.yml":      true,
 	"secrets.yaml":     true,
 	"secrets.json":     true,
@@ -205,12 +209,29 @@ var credentialFileNames = map[string]bool{
 // credentialFileSuffixes deny any base name ending in one of them (*.pem, …).
 var credentialFileSuffixes = []string{
 	".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".ppk", ".kdbx", ".ovpn",
-	".tfstate", ".tfstate.backup", ".tfvars",
+	".tfstate", ".tfstate.backup", ".tfvars", ".tfvars.json",
+	".pem.bak", ".key.bak",
 }
 
 // sshKeyPrefixes deny any base name starting with one of them (id_rsa,
-// id_rsa.bak, id_rsa_github, id_ed25519_sk) except "*.pub" public keys.
+// id_rsa.bak, id_rsa_github, id_ed25519_sk) except "*.pub" public keys and
+// names whose final extension is in sshKeySourceExts.
 var sshKeyPrefixes = []string{"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
+
+// sshKeySourceExts are the final extensions that mark an id_rsa*-style name as
+// source code or documentation (id_rsa_test.go, id_dsa.md) rather than a key.
+// Data and text extensions (.txt, .json, .yml, …) are left out on purpose:
+// id_rsa.txt is a plausible key backup.
+var sshKeySourceExts = map[string]bool{
+	".go": true, ".py": true, ".js": true, ".ts": true, ".tsx": true, ".jsx": true,
+	".rb": true, ".rs": true, ".java": true, ".kt": true, ".c": true, ".h": true,
+	".cpp": true, ".cs": true, ".php": true, ".swift": true, ".sh": true,
+	".html": true, ".css": true, ".md": true,
+}
+
+// credentialJSONPrefixes deny "<prefix>*.json": OAuth client secrets and cloud
+// service-account keys (client_secret_123.apps.googleusercontent.com.json).
+var credentialJSONPrefixes = []string{"client_secret", "service-account", "service_account"}
 
 // envDocWords mark an env file as documentation rather than secrets:
 // ".env.<word>" / ".env.production.<word>" and "<word>.env" / "app.<word>.env".
@@ -230,8 +251,24 @@ func isCredentialFile(base string) bool {
 	}
 	for _, prefix := range sshKeyPrefixes {
 		if strings.HasPrefix(name, prefix) {
-			return !strings.HasSuffix(name, ".pub")
+			return !strings.HasSuffix(name, ".pub") && !sshKeySourceExts[filepath.Ext(name)]
 		}
+	}
+	if strings.HasSuffix(name, ".json") {
+		for _, prefix := range credentialJSONPrefixes {
+			if strings.HasPrefix(name, prefix) {
+				return true
+			}
+		}
+	}
+	// .env-* / .env_* (.env-production, .env_local)
+	if strings.HasPrefix(name, ".env-") || strings.HasPrefix(name, ".env_") {
+		for _, word := range envDocWords {
+			if strings.HasSuffix(name, "."+word) || strings.HasSuffix(name, "-"+word) || strings.HasSuffix(name, "_"+word) {
+				return false
+			}
+		}
+		return true
 	}
 	// .env.* (.env.local, .env.production)
 	if strings.HasPrefix(name, ".env.") {
@@ -284,15 +321,12 @@ func NewFileFilter(rootDir string, excludePatterns, allowedExtensions []string, 
 		}
 	}
 
-	gitignorePath := filepath.Join(rootDir, ".gitignore")
-	if _, err := os.Stat(gitignorePath); err == nil {
-		if gi, err := gitignore.CompileIgnoreFile(gitignorePath); err == nil {
-			f.gitignoreMatcher = gi
-		}
+	if gi, err := CompileRegularIgnore(filepath.Join(rootDir, ".gitignore")); err == nil {
+		f.gitignoreMatcher = gi
 	}
 
 	localIgnPath := filepath.Join(rootDir, ".nano-brainignore")
-	gi, err := gitignore.CompileIgnoreFile(localIgnPath)
+	gi, err := CompileRegularIgnore(localIgnPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return f, fmt.Errorf("load workspace .nano-brainignore at %s: %w", localIgnPath, err)
@@ -302,6 +336,34 @@ func NewFileFilter(rootDir string, excludePatterns, allowedExtensions []string, 
 	}
 
 	return f, nil
+}
+
+// CompileRegularIgnore compiles the ignore file at path under the same bound
+// as the manifest and global-ignore reads: a regular file of at most
+// graph.MaxAuxFileSize bytes. A regular-but-unbounded pseudo file — a
+// committed symlink to /proc/self/pagemap reads hundreds of GiB on Linux —
+// is refused by the read cap (#675).
+func CompileRegularIgnore(path string) (*gitignore.GitIgnore, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		if info.IsDir() {
+			return nil, fmt.Errorf("ignore file is a directory: %s", path)
+		}
+		return nil, os.ErrNotExist
+	}
+	data, err := graph.ReadRegularFile(path, graph.MaxAuxFileSize)
+	if err != nil {
+		// An oversized, swapped or unreadable pseudo file is treated as
+		// absent; only a real permission failure stays an error.
+		if os.IsPermission(err) {
+			return nil, err
+		}
+		return nil, os.ErrNotExist
+	}
+	return gitignore.CompileIgnoreLines(strings.Split(string(data), "\n")...), nil
 }
 
 func (f *FileFilter) shouldSkip(absPath string, isDir bool) bool {
@@ -381,15 +443,21 @@ func (f *FileFilter) ShouldSkip(absPath string, isDir bool) bool {
 // pass os.UserHomeDir() result). See issue #263.
 func LoadGlobalIgnore(homeDir string) (*gitignore.GitIgnore, string, error) {
 	path := filepath.Join(homeDir, ".nano-brain", ".nano-brainignore")
-	if _, err := os.Stat(path); err != nil {
+	info, err := os.Stat(path)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, path, nil
 		}
 		return nil, path, err
 	}
-	gi, err := gitignore.CompileIgnoreFile(path)
+	// A FIFO or device at this path is treated as absent rather than parsed:
+	// opening it would block or read without bound (#675).
+	if !info.Mode().IsRegular() {
+		return nil, path, nil
+	}
+	data, err := graph.ReadRegularFile(path, graph.MaxAuxFileSize)
 	if err != nil {
 		return nil, path, err
 	}
-	return gi, path, nil
+	return gitignore.CompileIgnoreLines(strings.Split(string(data), "\n")...), path, nil
 }

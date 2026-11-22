@@ -11,16 +11,17 @@ import (
 	"time"
 
 	"github.com/nano-brain/nano-brain/internal/config"
+	"github.com/nano-brain/nano-brain/internal/redact"
 	"github.com/rs/zerolog"
 )
 
 type LLMProvider struct {
-	httpClient     *http.Client
-	providerURL    string
-	apiKey         string
-	model          string
+	httpClient      *http.Client
+	providerURL     string
+	apiKey          string
+	model           string
 	maxOutputTokens int
-	logger         zerolog.Logger
+	logger          zerolog.Logger
 }
 
 func NewLLMProvider(cfg config.CodeSummarizationConfig, logger zerolog.Logger) *LLMProvider {
@@ -69,7 +70,7 @@ func (p *LLMProvider) SummarizeBatch(ctx context.Context, symbols []SymbolForSum
 		return nil, nil
 	}
 
-	prompt := BuildBatchPromptWithContext(symbols, graphContexts)
+	prompt := redact.Scrub(BuildBatchPromptWithContext(symbols, graphContexts))
 
 	reqBody := chatRequest{
 		Model: p.model,

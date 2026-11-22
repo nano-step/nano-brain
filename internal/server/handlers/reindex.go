@@ -46,6 +46,7 @@ type reindexResponse struct {
 	Scanned          int    `json:"scanned"`
 	Skipped          int    `json:"skipped"`
 	Embedded         int    `json:"embedded"`
+	FilesPending     int    `json:"files_pending_ingest"`
 	Deleted          int    `json:"deleted"`
 	DurationMs       int64  `json:"duration_ms"`
 	Message          string `json:"message"`
@@ -53,7 +54,7 @@ type reindexResponse struct {
 
 // TriggerReindex godoc
 // @Summary      Trigger a reindex (incremental or force-wipe) for a workspace
-// @Description  Rescans collections for a workspace, enqueueing changed/new files for embedding; force_wipe clears and re-embeds everything
+// @Description  Requests an asynchronous watcher rescan; files_pending_ingest estimates changed files, while embedded and chunks_enqueued count completed/queued work at response time. force_wipe requeues existing chunks.
 // @Tags         reindex
 // @Accept       json
 // @Produce      json
@@ -117,8 +118,6 @@ func triggerForceWipe(c echo.Context, queries ReindexQuerier, w *watcher.Watcher
 					totalChunks++
 				}
 			}
-		} else {
-			totalChunks += int64(len(ids))
 		}
 		_ = queries.DeleteSymbolDocumentsByCollection(c.Request().Context(), sqlc.DeleteSymbolDocumentsByCollectionParams{
 			WorkspaceHash: workspace,
@@ -132,7 +131,7 @@ func triggerForceWipe(c echo.Context, queries ReindexQuerier, w *watcher.Watcher
 		go w.ReextractSymbolsForWorkspace(context.Background(), workspace)
 	}
 
-	publishReindex(pub, workspace, "completed", int(totalChunks), 0, 0, 0, "")
+	publishReindex(pub, workspace, "queued", int(totalChunks), 0, 0, 0, "")
 
 	reqLog := LoggerFromCtx(c, logger)
 	reqLog.Info().
@@ -152,7 +151,7 @@ func triggerForceWipe(c echo.Context, queries ReindexQuerier, w *watcher.Watcher
 }
 
 func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watcher, pub eventbus.Publisher, logger zerolog.Logger, workspace, root string, targets []sqlc.Collection, start time.Time) error {
-	var scanned, skipped, embedded, deleted int
+	var scanned, skipped, filesPending, deleted int
 	var watcherTriggered bool
 
 	for _, col := range targets {
@@ -210,7 +209,7 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 			entry, exists := indexed[path]
 			if !exists {
 				colHasChanges = true
-				embedded++
+				filesPending++
 			} else if entry.contentHash == diskHash {
 				skipped++
 			} else {
@@ -223,7 +222,7 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 				}
 				changedFiles[path] = true
 				colHasChanges = true
-				embedded++
+				filesPending++
 			}
 		}
 		if colHasChanges {
@@ -291,7 +290,7 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 		}
 	}
 
-	publishReindex(pub, workspace, "completed", embedded, embedded, deleted, skipped, "")
+	publishReindex(pub, workspace, "queued", 0, 0, deleted, skipped, "")
 
 	reqLog := LoggerFromCtx(c, logger)
 	reqLog.Info().
@@ -299,21 +298,20 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 		Str("root", root).
 		Int("scanned", scanned).
 		Int("skipped", skipped).
-		Int("embedded", embedded).
+		Int("files_pending_ingest", filesPending).
 		Int("deleted", deleted).
 		Bool("watcher_triggered", watcherTriggered).
 		Msg("incremental reindex queued")
 
 	return c.JSON(http.StatusAccepted, reindexResponse{
 		Status:           "queued",
-		ChunksEnqueued:   int64(embedded),
 		WatcherTriggered: watcherTriggered,
 		Scanned:          scanned,
 		Skipped:          skipped,
-		Embedded:         embedded,
+		FilesPending:     filesPending,
 		Deleted:          deleted,
 		DurationMs:       time.Since(start).Milliseconds(),
-		Message:          fmt.Sprintf("Incremental reindex queued for workspace %s", workspace),
+		Message:          fmt.Sprintf("Incremental rescan requested for workspace %s; verify persistence via stats", workspace),
 	})
 }
 
@@ -340,7 +338,20 @@ func walkCollectionFiles(col sqlc.Collection) (map[string]string, error) {
 			return nil
 		}
 		info, err := d.Info()
-		if err != nil || info.Size() > maxIncrementalFileSize {
+		if err != nil {
+			return nil
+		}
+		// Opening a FIFO blocks until a writer appears; sockets and devices are
+		// not content either (#675). A symlink is judged by its target, so the
+		// size check applies to the target, not to the link.
+		if !d.Type().IsRegular() {
+			if d.Type()&os.ModeSymlink == 0 {
+				return nil
+			}
+			if target, statErr := os.Stat(path); statErr != nil || !target.Mode().IsRegular() || target.Size() > maxIncrementalFileSize {
+				return nil
+			}
+		} else if info.Size() > maxIncrementalFileSize {
 			return nil
 		}
 		f, err := os.Open(path)
@@ -349,7 +360,11 @@ func walkCollectionFiles(col sqlc.Collection) (map[string]string, error) {
 		}
 		defer f.Close()
 		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
+		// The stat sizes are a hint only: a regular file that reports size 0
+		// (e.g. /proc/self/pagemap on Linux) reads without end, so the copy
+		// itself is bounded (#675).
+		n, err := io.Copy(h, io.LimitReader(f, maxIncrementalFileSize+1))
+		if err != nil || n > maxIncrementalFileSize {
 			return nil
 		}
 		result[path] = hex.EncodeToString(h.Sum(nil))

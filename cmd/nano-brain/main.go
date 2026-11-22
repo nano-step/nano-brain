@@ -14,13 +14,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nano-brain/nano-brain/internal/chunker"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/nano-brain/nano-brain/internal/chunker"
 	"github.com/nano-brain/nano-brain/internal/codesummarize"
-	"github.com/nano-brain/nano-brain/internal/flow"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
 	"github.com/nano-brain/nano-brain/internal/eventbus"
+	"github.com/nano-brain/nano-brain/internal/flow"
 	"github.com/nano-brain/nano-brain/internal/graph"
 	"github.com/nano-brain/nano-brain/internal/harvest"
 	"github.com/nano-brain/nano-brain/internal/health"
@@ -30,7 +31,6 @@ import (
 	"github.com/nano-brain/nano-brain/internal/summarize"
 	"github.com/nano-brain/nano-brain/internal/symbol"
 	"github.com/nano-brain/nano-brain/internal/watcher"
-	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 )
@@ -200,7 +200,7 @@ func initCLILog(configPath string) {
 		return
 	}
 	applyVerbose(&cfg.Logging)
-	
+
 	// Parse log level
 	level := zerolog.InfoLevel
 	switch strings.ToLower(strings.TrimSpace(cfg.Logging.Level)) {
@@ -215,7 +215,7 @@ func initCLILog(configPath string) {
 	case "error":
 		level = zerolog.ErrorLevel
 	}
-	
+
 	// CLI logger writes to stderr to avoid polluting stdout (where JSON responses go)
 	cliLog = zerolog.New(os.Stderr).
 		With().
@@ -262,6 +262,9 @@ func startServer(configPath string) {
 	if err := checkBindSafety(cfg.Server.Host, cfg.Server.Auth.Enabled); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
+	}
+	for _, p := range unauthenticatedBypassPaths(cfg.Server.Host, cfg.Server.Auth.Enabled, cfg.Server.Auth.BypassPaths) {
+		fmt.Fprintf(os.Stderr, "Warning: server.auth.bypass_paths entry %q is reachable without authentication on %s\n", p, cfg.Server.Host)
 	}
 
 	logger, err := health.NewLogger(cfg.Logging)
@@ -495,7 +498,8 @@ func startServer(configPath string) {
 	if cfg.Embedding.Provider != "" {
 		e, embedErr := embed.NewFromConfig(cfg.Embedding)
 		if embedErr != nil {
-			logger.Error().Err(embedErr).Str("provider", cfg.Embedding.Provider).Str("url", cfg.Embedding.URL).Msg("embedding provider init failed")
+			provider, embedURL := embedInitLogFields(cfg.Embedding)
+			logger.Error().Err(embedErr).Str("provider", provider).Str("url", embedURL).Msg("embedding provider init failed")
 		} else {
 			embedder = e
 			if cfg.Server.ServeOnly {
@@ -596,10 +600,10 @@ func startServer(configPath string) {
 			}
 		}
 
-		if cfg.Harvester.ClaudeCode.Enabled && cfg.Harvester.ClaudeCode.SessionDir == "" {
-			if detected := detectClaudeCodeStorageDir(); detected != "" {
-				cfg.Harvester.ClaudeCode.SessionDir = detected
-				logger.Info().Str("path", detected).Msg("auto-detected claude code projects dir")
+		if cfg.Harvester.ClaudeCode.Enabled && cfg.Harvester.ClaudeCode.SessionDir == "" && len(cfg.Harvester.ClaudeCode.SessionDirs) == 0 {
+			if detected := detectClaudeCodeStorageDirs(); len(detected) > 0 {
+				cfg.Harvester.ClaudeCode.SessionDirs = detected
+				logger.Info().Strs("paths", detected).Msg("auto-detected claude code projects dirs")
 			}
 		}
 
@@ -653,7 +657,7 @@ func startServer(configPath string) {
 			}
 			if len(chs) > 0 {
 				logger.Info().
-					Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+					Strs("session_dirs", cfg.Harvester.ClaudeCode.SessionDirsResolved()).
 					Int("workspace_count", len(chs)).
 					Dur("interval", interval).
 					Msg("claude code session harvesters started")
@@ -749,6 +753,12 @@ func startServer(configPath string) {
 	if err := g.Wait(); err != nil {
 		logger.Fatal().Err(err).Msg("server exited with error")
 	}
+}
+
+// embedInitLogFields returns the fields logged when an embedding provider
+// fails to initialise; the URL is redacted because it can carry credentials.
+func embedInitLogFields(ec config.EmbeddingConfig) (provider, url string) {
+	return ec.Provider, config.RedactURLCredentials(ec.URL)
 }
 
 // buildOpenCodeHarvesters constructs OpenCode harvesters in priority order:
@@ -871,4 +881,3 @@ func buildHarvestSummarizer(cfg *config.Config, db *sql.DB, eq *embed.Queue, log
 	}
 	return summarize.NewHarvestSummarizer(pipeline, persister, logger)
 }
-

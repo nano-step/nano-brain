@@ -917,6 +917,9 @@ func TestAuthConfig_UserValidation(t *testing.T) {
 	junkBody := valid[:7] + strings.Repeat("!", 53)
 	costTooHigh := valid[:4] + "99" + valid[6:]
 	costTooLow := valid[:4] + "03" + valid[6:]
+	cost14 := valid[:4] + "14" + valid[6:]
+	cost15 := valid[:4] + "15" + valid[6:]
+	cost31 := valid[:4] + "31" + valid[6:]
 	higherCost, err := bcrypt.GenerateFromPassword([]byte("x"), bcrypt.MinCost+1)
 	if err != nil {
 		t.Fatal(err)
@@ -945,6 +948,16 @@ func TestAuthConfig_UserValidation(t *testing.T) {
 		{name: "one extra character", users: []user{{"admin", valid + "A"}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: valid},
 		{name: "trailing newline", users: []user{{"admin", valid + "\n"}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: valid},
 		{name: "users with different costs", users: []user{{"admin", valid}, {"bob", string(higherCost)}}, wantErr: "server.auth.users[1].password_hash has bcrypt cost 5 but an earlier user has cost 4", secret: valid},
+		{name: "cost at the ceiling", users: []user{{"admin", cost14}}},
+		{name: "cost above the ceiling", users: []user{{"admin", cost15}}, wantErr: "server.auth.users[0].password_hash has bcrypt cost 15; costs above 14 make every login attempt, including unauthenticated ones, very slow", secret: cost15},
+		{name: "highest bcrypt cost", users: []user{{"admin", valid}, {"bob", cost31}}, wantErr: "server.auth.users[1].password_hash has bcrypt cost 31; costs above 14 make every login attempt, including unauthenticated ones, very slow", secret: cost31},
+		{name: "zero-width space in username", users: []user{{"admin\u200b", valid}}, wantErr: "server.auth.users[0].username must not contain control or invisible characters"},
+		{name: "zero-width joiner inside username", users: []user{{"ad\u200dmin", valid}}, wantErr: "server.auth.users[0].username must not contain control or invisible characters"},
+		{name: "BOM in username", users: []user{{"\ufeffadmin", valid}}, wantErr: "server.auth.users[0].username must not contain control or invisible characters"},
+		{name: "NUL in username", users: []user{{"ad\x00min", valid}}, wantErr: "server.auth.users[0].username must not contain control or invisible characters"},
+		{name: "newline inside username", users: []user{{"admin", valid}, {"ad\nmin", other}}, wantErr: "server.auth.users[1].username must not contain control or invisible characters"},
+		{name: "right-to-left override in username", users: []user{{"ad\u202emin", valid}}, wantErr: "server.auth.users[0].username must not contain control or invisible characters"},
+		{name: "non-ASCII letters in username", users: []user{{"zoë-ngọc", valid}}},
 		{name: "valid prefix with a non-base64 body", users: []user{{"admin", junkBody}}, wantErr: "server.auth.users[0].password_hash is not a valid bcrypt hash", secret: junkBody},
 	}
 	for _, tt := range tests {
@@ -1250,5 +1263,62 @@ func TestLoadTrimsHostWhitespace(t *testing.T) {
 	}
 	if cfg.Server.Host != "127.0.0.1" {
 		t.Errorf("Server.Host = %q, want %q", cfg.Server.Host, "127.0.0.1")
+	}
+}
+
+func TestClaudeCodeHarvesterConfig_SessionDirsResolved(t *testing.T) {
+	tmp := t.TempDir()
+	instA := filepath.Join(tmp, "instances", "alpha", "projects")
+	instB := filepath.Join(tmp, "instances", "beta", "projects")
+	plain := filepath.Join(tmp, "plain")
+	for _, d := range []string{instA, instB, plain} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tests := []struct {
+		name string
+		cfg  ClaudeCodeHarvesterConfig
+		want []string
+	}{
+		{
+			name: "legacy session_dir only",
+			cfg:  ClaudeCodeHarvesterConfig{SessionDir: plain},
+			want: []string{plain},
+		},
+		{
+			name: "session_dirs glob expands every instance",
+			cfg:  ClaudeCodeHarvesterConfig{SessionDirs: []string{filepath.Join(tmp, "instances", "*", "projects")}},
+			want: []string{instA, instB},
+		},
+		{
+			name: "session_dir union session_dirs dedupes",
+			cfg:  ClaudeCodeHarvesterConfig{SessionDir: plain, SessionDirs: []string{plain, instA}},
+			want: []string{plain, instA},
+		},
+		{
+			name: "glob matching nothing is dropped",
+			cfg:  ClaudeCodeHarvesterConfig{SessionDirs: []string{filepath.Join(tmp, "nope-*")}},
+			want: nil,
+		},
+		{
+			name: "empty",
+			cfg:  ClaudeCodeHarvesterConfig{},
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.cfg.SessionDirsResolved()
+			if len(got) != len(tt.want) {
+				t.Fatalf("SessionDirsResolved() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("SessionDirsResolved() = %v, want %v", got, tt.want)
+				}
+			}
+		})
 	}
 }

@@ -50,6 +50,8 @@ type WatcherQuerier interface {
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 	PreloadFileStateByWorkspace(ctx context.Context, arg sqlc.PreloadFileStateByWorkspaceParams) ([]sqlc.PreloadFileStateByWorkspaceRow, error)
 	UpdateDocumentFileState(ctx context.Context, arg sqlc.UpdateDocumentFileStateParams) error
+	ListFilesWithStaleSymbolSpans(ctx context.Context, arg sqlc.ListFilesWithStaleSymbolSpansParams) ([]sqlc.ListFilesWithStaleSymbolSpansRow, error)
+	DeleteStaleSymbolSpanDocs(ctx context.Context, arg sqlc.DeleteStaleSymbolSpanDocsParams) (int64, error)
 }
 
 type watchedCollection struct {
@@ -128,6 +130,12 @@ type Watcher struct {
 	// fsnotify is non-recursive, so each subdirectory must be added individually
 	// for edits inside it to fire events (issue #497). Guarded by mu.
 	watchedDirs map[string]bool
+	// startupAdmitted records, per collection dirPath, the files the initial
+	// scan admitted — set before the first processAll and released after
+	// backfillSymbolSpans, so poll ticks never grow it. A surviving file doc
+	// does not prove a file is admitted (the walk may not have reached it),
+	// but this set does (issue #584).
+	startupAdmitted map[string]map[string]bool
 	// hotRegisterCh signals Run() that a workspace was registered at runtime so
 	// the dirty map should be processed without waiting for fsnotify events.
 	// Buffered=1 so WatchWithFilter never blocks. See issue #308.
@@ -326,6 +334,10 @@ func (w *Watcher) TriggerRescanByName(collectionName, workspaceHash string) bool
 				w.collections[col.dirPath] = updated
 			}
 			w.dirty[path] = true
+			select {
+			case w.hotRegisterCh <- struct{}{}:
+			default:
+			}
 			return true
 		}
 	}
@@ -374,7 +386,14 @@ func (w *Watcher) Run(ctx context.Context) error {
 		Int("poll_interval_s", w.pollInterval).
 		Msg("file watcher started")
 
+	w.mu.Lock()
+	w.startupAdmitted = make(map[string]map[string]bool)
+	w.mu.Unlock()
 	w.processAll(ctx)
+	w.backfillSymbolSpans(ctx)
+	w.mu.Lock()
+	w.startupAdmitted = nil
+	w.mu.Unlock()
 
 	for {
 		select {
@@ -597,6 +616,25 @@ func (w *Watcher) warmFileCacheFromDB(ctx context.Context, col watchedCollection
 	w.logger.Debug().Str("collection", col.name).Int("warmed", count).Msg("warmed file cache from DB")
 }
 
+// recordStartupAdmission marks path as admitted by the initial scan so
+// backfillSymbolSpans can distinguish files the scan really processed from
+// files whose docs merely survived an unreachable subtree (issue #584).
+// No-op outside the startup pass — startupAdmitted is nil after the
+// backfill, so poll-tick scans never grow it.
+func (w *Watcher) recordStartupAdmission(col watchedCollection, path string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.startupAdmitted == nil {
+		return
+	}
+	set := w.startupAdmitted[col.dirPath]
+	if set == nil {
+		set = make(map[string]bool)
+		w.startupAdmitted[col.dirPath] = set
+	}
+	set[path] = true
+}
+
 func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 	w.warmFileCacheFromDB(ctx, col)
 	col = col.withRealRoot()
@@ -624,6 +662,7 @@ func (w *Watcher) scanCollection(ctx context.Context, col watchedCollection) {
 		if d.IsDir() {
 			w.watchDir(path)
 		} else {
+			w.recordStartupAdmission(col, path)
 			w.processFile(ctx, col, path)
 		}
 		return nil
@@ -872,6 +911,12 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	if info.IsDir() {
 		return
 	}
+	// A FIFO blocks the read forever; sockets and devices are not content
+	// either (#675). info is the resolved target for a symlink.
+	if !info.Mode().IsRegular() {
+		w.logger.Debug().Str("file", filePath).Msg("skipping non-regular file")
+		return
+	}
 
 	// Re-detect frameworks when manifest files change (go.mod, package.json).
 	// The refreshed list is stored on the collection and consumed per-file by
@@ -1024,7 +1069,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 	w.extractAndInsertEntities(ctx, col.workspaceHash, chunks, chunkIDs)
 
 	if w.symbolRegistry != nil {
-		numSyms := w.extractAndUpsertSymbols(ctx, col, filePath, content)
+		numSyms, _ := w.extractAndUpsertSymbols(ctx, col, filePath, content)
 		if numSyms > 0 && w.summarizeNotify != nil {
 			w.summarizeNotify()
 		}
@@ -1042,16 +1087,19 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 // extractAndUpsertSymbols parses filePath for language symbols and upserts them
 // as summary-eligible chunks. Returns the number of symbols found so callers can
 // avoid waking the code-summarization worker for files with none (e.g. JSON/text).
-func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollection, filePath string, content []byte) int {
+// complete is false when extraction errored or any symbol failed to persist —
+// the caller's symbol docs are then only partially current.
+func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollection, filePath string, content []byte) (int, bool) {
 	syms, err := w.symbolRegistry.Extract(filePath, content)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("symbol extraction failed")
-		return 0
+		return 0, false
 	}
 	if len(syms) == 0 {
-		return 0
+		return 0, true
 	}
 
+	complete := true
 	for _, s := range syms {
 		metaBytes, _ := json.Marshal(map[string]string{
 			"source_type": "symbol",
@@ -1076,6 +1124,7 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 		docRow, err := w.queries.UpsertDocumentBySourcePath(ctx, params)
 		if err != nil {
 			w.logger.Warn().Err(err).Str("symbol", s.Name).Msg("symbol upsert failed")
+			complete = false
 			continue
 		}
 
@@ -1087,6 +1136,7 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 		chunkIDs, err := w.writeChunks(ctx, w.queries, docRow.ID, col.workspaceHash, chunks, chunkMeta)
 		if err != nil {
 			w.logger.Warn().Err(err).Str("symbol", s.Name).Msg("symbol chunk write failed")
+			complete = false
 			continue
 		}
 		if w.embedQueue != nil {
@@ -1101,7 +1151,7 @@ func (w *Watcher) extractAndUpsertSymbols(ctx context.Context, col watchedCollec
 		Int("symbols", len(syms)).
 		Msg("symbols extracted")
 
-	return len(syms)
+	return len(syms), complete
 }
 
 // aliasIndexEntry guards a single collection root's *graph.AliasIndex build
@@ -1155,7 +1205,7 @@ func (w *Watcher) extractAndUpsertEdges(ctx context.Context, col watchedCollecti
 		Exists:   graph.DiskExistsChecker(col.dirPath),
 		ReadFile: func(workspaceRelPath string) ([]byte, error) {
 			p := filepath.Join(col.dirPath, filepath.FromSlash(workspaceRelPath))
-			if skip, _ := w.skipResolved(col, p); skip {
+			if skip, _ := w.skipResolved(col, p); skip || !isRegularFile(p) {
 				return nil, fmt.Errorf("%s is not readable for indexing", workspaceRelPath)
 			}
 			return os.ReadFile(p)
@@ -1321,6 +1371,9 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 					return nil
 				}
 			}
+			if !d.Type().IsRegular() && !isRegularFile(path) {
+				return nil
+			}
 			content, err := os.ReadFile(path)
 			if err != nil {
 				return nil
@@ -1331,6 +1384,144 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 		})
 	}
 	return count
+}
+
+// backfillSymbolSpans repairs symbol documents written before #539 added
+// line/end_line metadata — the content-hash early exit in processFile skips
+// their parent files on every scan, so a restart alone never re-extracts
+// them (issue #584). It runs once at startup, after the initial processAll,
+// and the symbol docs follow the file doc: when the parent file doc is
+// gone the row is deleted without a read; while it exists the stale docs
+// are deleted only after a complete re-extraction. Every other outcome —
+// an ignored, unresolvable, missing, non-regular, oversized, binary or
+// unreadable file, an unsupported extension, or a partial upsert — keeps
+// the docs for a later start, because deleting them is irreversible: the
+// file's unchanged content hash keeps it off every subsequent scan. Once
+// the parent doc is gone, !ParentIndexed cleans the row up on a later
+// start.
+func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
+	if w.symbolRegistry == nil {
+		return
+	}
+
+	w.mu.Lock()
+	cols := make([]watchedCollection, 0, len(w.collections))
+	for _, col := range w.collections {
+		cols = append(cols, col)
+	}
+	w.mu.Unlock()
+
+	for _, col := range cols {
+		col = col.withRealRoot()
+		rows, err := w.queries.ListFilesWithStaleSymbolSpans(ctx, sqlc.ListFilesWithStaleSymbolSpansParams{
+			WorkspaceHash: col.workspaceHash,
+			Collection:    col.name,
+		})
+		if err != nil {
+			w.logger.Warn().Err(err).Str("collection", col.name).Msg("stale symbol span query failed")
+			continue
+		}
+		var repaired, removed int64
+		for _, row := range rows {
+			if ctx.Err() != nil {
+				return
+			}
+			path := row.FilePath
+			keep := func(msg string) {
+				w.logger.Debug().Str("file", path).Msg("stale symbol docs kept: " + msg)
+			}
+			remove := func() { removed += w.deleteStaleSymbolSpanDocs(ctx, col, path) }
+			// The initial scan deleted the file doc of every ignored file,
+			// so a missing parent means the file is not admitted — drop its
+			// stale symbols without reading it.
+			if !row.ParentIndexed {
+				remove()
+				continue
+			}
+			// The file doc exists, so only a complete re-extraction proves
+			// the stale docs are orphans. Everything else keeps them —
+			// starting with files the initial scan never admitted at all:
+			// their doc survived because the walk could not reach them
+			// (unreadable parent, transient cleanup failure), not because
+			// they passed admission.
+			w.mu.Lock()
+			admittedByScan := w.startupAdmitted[col.dirPath][path]
+			w.mu.Unlock()
+			if !admittedByScan {
+				keep("not admitted by initial scan")
+				continue
+			}
+			if col.filter != nil && col.filter.ShouldSkip(path, false) {
+				keep("ignored by collection filter")
+				continue
+			}
+			if skip, _ := w.skipResolved(col, path); skip {
+				keep("path cannot be resolved")
+				continue
+			}
+			info, statErr := os.Stat(path)
+			switch {
+			case statErr != nil:
+				w.logger.Debug().Err(statErr).Str("file", path).Msg("stale symbol docs kept: stat failed")
+				continue
+			case !info.Mode().IsRegular():
+				keep("not a regular file")
+				continue
+			case info.Size() > w.maxFileSize:
+				keep("file exceeds max_file_size")
+				continue
+			}
+			if !w.symbolRegistry.Supports(filepath.Ext(path)) {
+				keep("no extractor for extension")
+				continue
+			}
+			if isBinaryExtension(path) {
+				keep("binary extension")
+				continue
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				w.logger.Debug().Err(err).Str("file", path).Msg("stale symbol docs kept: read failed")
+				continue
+			}
+			if isBinaryContent(content) {
+				keep("binary content")
+				continue
+			}
+			n, complete := w.extractAndUpsertSymbols(ctx, col, path, content)
+			if n > 0 {
+				repaired++
+			}
+			if !complete {
+				w.logger.Warn().Str("file", path).Msg("stale symbol docs kept: re-extraction incomplete")
+				continue
+			}
+			// Re-emitted symbols carry end_line and survive; whatever this
+			// deletes was an orphan for a symbol no longer emitted.
+			remove()
+		}
+		if repaired > 0 || removed > 0 {
+			w.logger.Info().Str("collection", col.name).
+				Int64("repaired", repaired).Int64("removed", removed).
+				Msg("backfilled stale symbol line spans")
+		}
+	}
+}
+
+// deleteStaleSymbolSpanDocs removes the pre-#539 symbol docs still lacking a
+// span for filePath. Symbols just re-emitted carry end_line and survive, so
+// whatever this deletes was an orphan for a symbol no longer emitted.
+func (w *Watcher) deleteStaleSymbolSpanDocs(ctx context.Context, col watchedCollection, filePath string) int64 {
+	n, err := w.queries.DeleteStaleSymbolSpanDocs(ctx, sqlc.DeleteStaleSymbolSpanDocsParams{
+		WorkspaceHash: col.workspaceHash,
+		Collection:    col.name,
+		FilePath:      filePath,
+	})
+	if err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("stale symbol doc delete failed")
+		return 0
+	}
+	return n
 }
 
 // ReextractEdgesForWorkspace re-runs graph edge extraction for every file in
@@ -1394,6 +1585,9 @@ func (w *Watcher) ReextractEdgesForWorkspace(ctx context.Context, workspaceHash 
 				if skip, _ := w.skipResolved(col, path); skip {
 					return nil
 				}
+			}
+			if !d.Type().IsRegular() && !isRegularFile(path) {
+				return nil
 			}
 			// Record every admitted file (in both stored forms — workspace-relative
 			// as written by extractAndUpsertEdges, and absolute) as soon as it passes
@@ -1736,6 +1930,14 @@ func (w *Watcher) resolveRubyCrossFileCalls(ctx context.Context, col watchedColl
 		Msg("ruby cross-file resolution complete")
 }
 
+// isRegularFile reports whether path, with symlinks followed, is a regular
+// file. Reading a FIFO blocks until a writer appears, so every read of a
+// workspace path that is not a plain directory entry checks this first (#675).
+func isRegularFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
 func collectRubyContents(dirPath string) map[string][]byte {
 	contents := make(map[string][]byte)
 	realRoot, err := filepath.EvalSymlinks(dirPath)
@@ -1750,6 +1952,9 @@ func collectRubyContents(dirPath string) map[string][]byte {
 			return nil
 		}
 		if d.Type()&fs.ModeSymlink != 0 && checkResolvedPath(dirPath, realRoot, nil, path) != nil {
+			return nil
+		}
+		if !d.Type().IsRegular() && !isRegularFile(path) {
 			return nil
 		}
 		data, err := os.ReadFile(path)

@@ -48,7 +48,7 @@ func detectGoModDep(dir string, depPath string) bool {
 }
 
 func checkGoModDep(dir string, depPath string) bool {
-	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	data, err := ReadRegularFile(filepath.Join(dir, "go.mod"), MaxAuxFileSize)
 	if err != nil {
 		return false
 	}
@@ -107,7 +107,7 @@ func detectGoModExists(dir string) bool {
 }
 
 func checkGoModExists(dir string) bool {
-	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	data, err := ReadRegularFile(filepath.Join(dir, "go.mod"), MaxAuxFileSize)
 	if err != nil {
 		return false
 	}
@@ -184,7 +184,7 @@ func detectRails(dir string) bool {
 }
 
 func checkGemfileForRails(dir string) bool {
-	data, err := os.ReadFile(filepath.Join(dir, "Gemfile"))
+	data, err := ReadRegularFile(filepath.Join(dir, "Gemfile"), MaxAuxFileSize)
 	if err != nil {
 		return false
 	}
@@ -220,7 +220,7 @@ func checkPackageJSONForNestJSDep(dir string) bool {
 }
 
 func checkPackageJSONForDep(dir string, dep string) bool {
-	data, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	data, err := ReadRegularFile(filepath.Join(dir, "package.json"), MaxAuxFileSize)
 	if err != nil {
 		return false
 	}

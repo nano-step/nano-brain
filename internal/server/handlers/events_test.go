@@ -2,9 +2,11 @@ package handlers_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -185,5 +187,96 @@ func TestEventsHandler_IdleTimeout(t *testing.T) {
 
 	if elapsed > 500*time.Millisecond {
 		t.Fatalf("idle timeout should close within ~200ms, took %v", elapsed)
+	}
+}
+
+// helloRecorder closes wrote on the first write, which the handler makes only
+// after it has counted the connection against its IP.
+type helloRecorder struct {
+	*httptest.ResponseRecorder
+	once  sync.Once
+	wrote chan struct{}
+}
+
+func (r *helloRecorder) Write(p []byte) (int, error) {
+	r.once.Do(func() { close(r.wrote) })
+	return r.ResponseRecorder.Write(p)
+}
+
+// The per-IP cap counts the connection peer. X-Forwarded-For is set by the
+// client, so honouring it would let one peer evade the cap, or fill the
+// bucket of an address it does not hold (#673).
+func TestEventsHandler_PerIPCapIgnoresForwardedFor(t *testing.T) {
+	const maxConn = 8 // sseMaxConnPerIP
+
+	tests := []struct {
+		name      string
+		holdPeer  string
+		holdXFF   func(i int) string
+		probePeer string
+		probeXFF  string
+		want      int
+	}{
+		{
+			name:      "different XFF values from one peer count as one IP",
+			holdPeer:  "10.0.0.1:9999",
+			holdXFF:   func(i int) string { return fmt.Sprintf("198.51.100.%d", i+1) },
+			probePeer: "10.0.0.1:9999",
+			probeXFF:  "203.0.113.9, 198.51.100.200",
+			want:      http.StatusTooManyRequests,
+		},
+		{
+			name:      "spoofed XFF does not occupy another IP's bucket",
+			holdPeer:  "10.0.0.9:9999",
+			holdXFF:   func(int) string { return "10.0.0.2" },
+			probePeer: "10.0.0.2:9999",
+			want:      http.StatusOK,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			bus := eventbus.New(ctx)
+			defer bus.Close()
+
+			e := echo.New()
+			e.GET("/api/v1/events", handlers.EventsHandler(bus, zerolog.Nop()))
+
+			holdCtx, release := context.WithCancel(context.Background())
+			var wg sync.WaitGroup
+			defer wg.Wait()
+			defer release()
+			for i := 0; i < maxConn; i++ {
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/events?workspace=ws", nil).WithContext(holdCtx)
+				req.RemoteAddr = tt.holdPeer
+				req.Header.Set("X-Forwarded-For", tt.holdXFF(i))
+				rec := &helloRecorder{ResponseRecorder: httptest.NewRecorder(), wrote: make(chan struct{})}
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					e.ServeHTTP(rec, req)
+				}()
+				select {
+				case <-rec.wrote:
+				case <-time.After(5 * time.Second):
+					t.Fatalf("holder %d never connected", i)
+				}
+			}
+
+			probeCtx, probeCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer probeCancel()
+			probe := httptest.NewRequest(http.MethodGet, "/api/v1/events?workspace=ws", nil).WithContext(probeCtx)
+			probe.RemoteAddr = tt.probePeer
+			if tt.probeXFF != "" {
+				probe.Header.Set("X-Forwarded-For", tt.probeXFF)
+			}
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, probe)
+
+			if rec.Code != tt.want {
+				t.Errorf("status %d, want %d", rec.Code, tt.want)
+			}
+		})
 	}
 }

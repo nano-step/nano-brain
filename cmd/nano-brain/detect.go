@@ -23,18 +23,42 @@ func detectOpenCodeStorageDir() string {
 	return ""
 }
 
-func detectClaudeCodeStorageDir() string {
-	if v := os.Getenv("CLAUDECODE_STORAGE_DIR"); v != "" {
-		if _, err := os.Stat(v); err == nil {
-			return v
+// detectClaudeCodeStorageDirs returns every existing Claude Code projects
+// directory: the CLAUDECODE_STORAGE_DIR override, the platform candidates,
+// and every profile-manager instance dir matching
+// ~/.ccs/instances/<name>/projects (#643 — Claude Code can write transcripts
+// to more than one projects dir on the same machine). Results are
+// deduplicated in first-seen order.
+func detectClaudeCodeStorageDirs() []string {
+	var dirs []string
+	seen := make(map[string]struct{})
+	add := func(p string) {
+		if p == "" {
+			return
 		}
+		if _, dup := seen[p]; dup {
+			return
+		}
+		if _, err := os.Stat(p); err != nil {
+			return
+		}
+		seen[p] = struct{}{}
+		dirs = append(dirs, p)
+	}
+	if v := os.Getenv("CLAUDECODE_STORAGE_DIR"); v != "" {
+		add(v)
 	}
 	for _, p := range platformClaudeCodePaths() {
-		if _, err := os.Stat(p); err == nil {
-			return p
+		add(p)
+	}
+	if home := os.Getenv("HOME"); home != "" {
+		if matches, err := filepath.Glob(filepath.Join(home, ".ccs", "instances", "*", "projects")); err == nil {
+			for _, m := range matches {
+				add(m)
+			}
 		}
 	}
-	return ""
+	return dirs
 }
 
 func platformClaudeCodePaths() []string {

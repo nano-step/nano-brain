@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -14,6 +15,9 @@ type MultiGetQuerier interface {
 	GetDocumentByID(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error)
 	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error)
 }
+
+// maxMultiGetEntries caps paths and ids together: each entry is one query.
+const maxMultiGetEntries = 200
 
 type multiGetRequest struct {
 	Paths []string `json:"paths"`
@@ -48,6 +52,10 @@ func MultiGet(q MultiGetQuerier, logger zerolog.Logger) echo.HandlerFunc {
 
 		if len(req.Paths) == 0 && len(req.IDs) == 0 {
 			return echo.NewHTTPError(http.StatusBadRequest, "paths or ids is required")
+		}
+
+		if len(req.Paths)+len(req.IDs) > maxMultiGetEntries {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("too many entries: paths and ids together must not exceed %d", maxMultiGetEntries))
 		}
 
 		ctx := c.Request().Context()

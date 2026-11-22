@@ -3,6 +3,7 @@ package summarize
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -262,4 +263,26 @@ func TestChatCompletion_AuthHeader(t *testing.T) {
 			t.Errorf("Authorization header should be absent, got %q", gotAuth)
 		}
 	})
+}
+
+func TestChatCompletion_RedactsSecrets(t *testing.T) {
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices": [{"message": {"content": "ok"}}], "usage": {}}`)
+	}))
+	defer srv.Close()
+
+	secret := "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUv"
+	c := newTestClient(srv.URL, "test-key")
+	if _, _, err := c.ChatCompletion(context.Background(), "system prompt", "use this key: "+secret); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(string(body), secret) {
+		t.Errorf("secret leaked in request body: %s", body)
+	}
+	if !strings.Contains(string(body), "[REDACTED:") {
+		t.Errorf("expected redaction marker in request body: %s", body)
+	}
 }

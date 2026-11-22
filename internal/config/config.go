@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/knadh/koanf/v2"
 	"github.com/knadh/koanf/parsers/yaml"
@@ -131,12 +132,63 @@ type OpenCodeHarvesterConfig struct {
 
 // ClaudeCodeHarvesterConfig holds ClaudeCode harvester configuration.
 type ClaudeCodeHarvesterConfig struct {
-	Enabled        bool     `koanf:"enabled" json:"enabled"`
-	SessionDir     string   `koanf:"session_dir" json:"session_dir"`
+	Enabled    bool   `koanf:"enabled" json:"enabled"`
+	SessionDir string `koanf:"session_dir" json:"session_dir"`
+	// SessionDirs lists Claude Code projects directories to harvest from.
+	// Claude Code can write transcripts under more than one projects dir on
+	// the same machine (e.g. ~/.claude/projects plus one
+	// ~/.ccs/instances/<name>/projects per profile-manager instance), so a
+	// single session_dir silently drops every other source (#643). Entries
+	// support "~" expansion and glob patterns (e.g.
+	// ~/.ccs/instances/star/projects). SessionDir keeps working and is
+	// treated as one more entry.
+	SessionDirs []string `koanf:"session_dirs" json:"session_dirs"`
 	// TicketPatterns is a slice of Go regex strings used by the ticket extractor
 	// to identify ticket IDs in session content and branch names. Zero value
 	// means the extractor uses its built-in defaults ([A-Z]+-\d+ and #\d+).
 	TicketPatterns []string `koanf:"ticket_patterns" json:"ticket_patterns"`
+}
+
+// SessionDirsResolved expands SessionDirs plus the legacy single SessionDir
+// into concrete directories: "~" prefixes resolve to the home directory and
+// glob patterns expand via filepath.Glob. Results are deduplicated in
+// first-seen order; empty entries and globs that match nothing are dropped.
+func (c ClaudeCodeHarvesterConfig) SessionDirsResolved() []string {
+	raw := make([]string, 0, len(c.SessionDirs)+1)
+	if c.SessionDir != "" {
+		raw = append(raw, c.SessionDir)
+	}
+	raw = append(raw, c.SessionDirs...)
+
+	seen := make(map[string]struct{}, len(raw))
+	var out []string
+	add := func(p string) {
+		if p == "" {
+			return
+		}
+		if _, dup := seen[p]; dup {
+			return
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	for _, entry := range raw {
+		if expanded, err := expandTildeForConfig(entry); err == nil {
+			entry = expanded
+		}
+		if strings.ContainsAny(entry, "*?[") {
+			matches, err := filepath.Glob(entry)
+			if err != nil {
+				continue
+			}
+			for _, m := range matches {
+				add(m)
+			}
+			continue
+		}
+		add(entry)
+	}
+	return out
 }
 
 // PiHarvesterConfig holds Pi CLI agent harvester configuration. SessionDir has
@@ -457,6 +509,15 @@ var bcryptHashShape = regexp.MustCompile(`^\$2[abxy]?\$[0-9]{2}\$[./A-Za-z0-9]{5
 // WWW-Authenticate realm parameter without escaping.
 var validRealm = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
 
+// maxBcryptCost is the highest password_hash cost accepted at startup.
+const maxBcryptCost = 14
+
+// isControlOrFormat reports whether r is a control (Cc) or format (Cf)
+// character: NUL, newline, zero-width space, BOM and the like.
+func isControlOrFormat(r rune) bool {
+	return unicode.In(r, unicode.Cc, unicode.Cf)
+}
+
 // splitCommaList parses a comma-separated env value (NANO_BRAIN_AUTH_TOKENS,
 // NANO_BRAIN_SERVER_ALLOWED_HOSTS), dropping surrounding whitespace and empty
 // entries.
@@ -557,6 +618,8 @@ func validate(cfg *Config) error {
 				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not be empty", i))
 			case strings.TrimSpace(u.Username) != u.Username:
 				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not start or end with whitespace", i))
+			case strings.ContainsFunc(u.Username, isControlOrFormat):
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not contain control or invisible characters", i))
 			case strings.Contains(u.Username, ":"):
 				errs = append(errs, fmt.Errorf("server.auth.users[%d].username must not contain ':' (Basic credentials are split on the first colon, so it could never log in)", i))
 			case seenUsers[u.Username]:
@@ -571,6 +634,11 @@ func validate(cfg *Config) error {
 			if err != nil || !bcryptHashShape.MatchString(u.PasswordHash) {
 				errs = append(errs, fmt.Errorf("server.auth.users[%d].password_hash is not a valid bcrypt hash (generate one with: nano-brain auth hash <password>)", i))
 				continue
+			}
+			// The same bcrypt work is done for an unknown username, so anyone
+			// who can reach the port can make the server pay this cost.
+			if cost > maxBcryptCost {
+				errs = append(errs, fmt.Errorf("server.auth.users[%d].password_hash has bcrypt cost %d; costs above %d make every login attempt, including unauthenticated ones, very slow", i, cost, maxBcryptCost))
 			}
 			// An unknown username is compared against the first user's hash.
 			// With one cost for everybody, no response time says whether a
