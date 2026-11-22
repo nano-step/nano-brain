@@ -62,21 +62,21 @@ func GraphImpact(q ImpactQuerier, logger zerolog.Logger) echo.HandlerFunc {
 		}
 
 		ctx := c.Request().Context()
-		impacted, err := collectImpact(ctx, q, workspace, req.Node, req.EdgeType, req.MaxDepth)
-		if err != nil {
-			logger.Error().Err(err).Str("workspace", workspace).Str("node", req.Node).Msg("impact query failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "impact query failed")
-		}
 		found, err := q.ImpactNodeExists(ctx, sqlc.ImpactNodeExistsParams{WorkspaceHash: workspace, Node: req.Node})
 		if err != nil {
 			logger.Error().Err(err).Str("workspace", workspace).Str("node", req.Node).Msg("impact node lookup failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "impact query failed")
+		}
+		impacted, err := collectImpact(ctx, q, workspace, req.Node, req.EdgeType, req.MaxDepth)
+		if err != nil {
+			logger.Error().Err(err).Str("workspace", workspace).Str("node", req.Node).Msg("impact query failed")
 			return echo.NewHTTPError(http.StatusInternalServerError, "impact query failed")
 		}
 
 		return c.JSON(http.StatusOK, impactResponse{
 			Node:      req.Node,
 			Impacted:  impacted,
-			NodeFound: found.Valid && found.Bool || len(impacted) > 0,
+			NodeFound: found.Valid && found.Bool,
 		})
 	}
 }

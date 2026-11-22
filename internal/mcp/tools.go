@@ -2281,6 +2281,10 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 			}
 			maxDepth := argInt(args, "max_depth", 1, 3)
 			pathStyle := argString(args, "paths")
+			found, err := a.queries.ImpactNodeExists(ctx, sqlc.ImpactNodeExistsParams{WorkspaceHash: ws, Node: node})
+			if err != nil {
+				return errResult(fmt.Sprintf("impact node lookup failed: %v", err)), nil
+			}
 
 			frontier := []string{node}
 			if direction == "in" {
@@ -2362,11 +2366,6 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 				}
 			}
 
-			found, err := a.queries.ImpactNodeExists(ctx, sqlc.ImpactNodeExistsParams{WorkspaceHash: ws, Node: node})
-			if err != nil {
-				return errResult(fmt.Sprintf("impact node lookup failed: %v", err)), nil
-			}
-
 			var wsRoot string
 			if pathStyle == "relative" {
 				wsRoot = lookupWorkspaceRoot(ctx, a.queries, ws)
@@ -2379,7 +2378,7 @@ func registerMemoryImpact(server *mcpsdk.Server, a *Adapter) {
 				"node":       stripWorkspacePrefix(wsRoot, node),
 				"impacted":   impacted,
 				"count":      len(impacted),
-				"node_found": (found.Valid && found.Bool) || len(impacted) > 0,
+				"node_found": found.Valid && found.Bool,
 			})
 		},
 	)

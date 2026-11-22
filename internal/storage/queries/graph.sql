@@ -96,6 +96,11 @@ SELECT EXISTS (
            OR (strpos(@node::text, '::') > 0
                AND d.metadata->>'source_type' = 'symbol'
                AND d.title = split_part(@node::text, '::', 2)
+               AND EXISTS (
+                   SELECT 1 FROM documents parent
+                   WHERE parent.workspace_hash = d.workspace_hash
+                     AND parent.source_path = split_part(d.source_path, '?', 1)
+               )
                AND (split_part(d.source_path, '?', 1) = split_part(@node::text, '::', 1)
                     OR split_part(d.source_path, '?', 1) = w.path || '/' || split_part(@node::text, '::', 1))))
 ) AS node_found;

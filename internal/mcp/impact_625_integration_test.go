@@ -21,12 +21,43 @@ func TestMemoryImpact_NodeFoundIndependentOfEdgeFilter(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+		WorkspaceHash: workspace,
+		SourceNode:    "src/caller.go::Caller",
+		TargetNode:    "BareOnly",
+		EdgeType:      "calls",
+		SourceFile:    "src/caller.go",
+		Metadata:      []byte("{}"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+		WorkspaceHash: workspace,
+		ContentHash:   "file-fixture",
+		Title:         "leaf.go",
+		Content:       "func NoEdges() {}",
+		SourcePath:    "/tmp/" + workspace + "/src/leaf.go",
+		Collection:    "code",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := q.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
 		WorkspaceHash: workspace,
 		ContentHash:   "symbol-fixture",
 		Title:         "NoEdges",
 		Content:       "func NoEdges() {}",
 		SourcePath:    "/tmp/" + workspace + "/src/leaf.go?symbol=NoEdges&kind=function",
+		Collection:    "code",
+		Metadata:      pqtype.NullRawMessage{RawMessage: []byte(`{"source_type":"symbol"}`), Valid: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.UpsertDocumentBySourcePath(ctx, sqlc.UpsertDocumentBySourcePathParams{
+		WorkspaceHash: workspace,
+		ContentHash:   "ghost-fixture",
+		Title:         "Ghost",
+		Content:       "func Ghost() {}",
+		SourcePath:    "/tmp/" + workspace + "/src/gone.go?symbol=Ghost&kind=function",
 		Collection:    "code",
 		Metadata:      pqtype.NullRawMessage{RawMessage: []byte(`{"source_type":"symbol"}`), Valid: true},
 	}); err != nil {
@@ -45,12 +76,15 @@ func TestMemoryImpact_NodeFoundIndependentOfEdgeFilter(t *testing.T) {
 	for _, test := range []struct {
 		node, edgeType string
 		found          bool
+		candidates     int
 	}{
-		{"src/leaf.go::Leaf", "", true},
-		{"src/leaf.go::NoEdges", "", true},
-		{"outside", "calls", true},
-		{"foreign.go::OnlyHere", "", false},
-		{"src/missing.go::Missing", "", false},
+		{"src/leaf.go::Leaf", "", true, 0},
+		{"src/leaf.go::NoEdges", "", true, 0},
+		{"src/gone.go::Ghost", "", false, 0},
+		{"outside", "calls", true, 0},
+		{"foreign.go::OnlyHere", "", false, 0},
+		{"src/missing.go::Missing", "", false, 0},
+		{"src/missing.go::BareOnly", "", false, 1},
 	} {
 		t.Run(test.node+"-"+test.edgeType, func(t *testing.T) {
 			got := unmarshalGraphResp(t, callTool("memory_impact", map[string]any{
@@ -59,8 +93,8 @@ func TestMemoryImpact_NodeFoundIndependentOfEdgeFilter(t *testing.T) {
 			if got["node_found"] != test.found {
 				t.Errorf("node_found = %v, want %v; response=%v", got["node_found"], test.found, got)
 			}
-			if impacted, ok := got["impacted"].([]any); !ok || len(impacted) != 0 {
-				t.Errorf("impacted = %v, want empty array", got["impacted"])
+			if impacted, ok := got["impacted"].([]any); !ok || len(impacted) != test.candidates {
+				t.Errorf("impacted = %v, want %d bare-name candidates", got["impacted"], test.candidates)
 			}
 		})
 	}

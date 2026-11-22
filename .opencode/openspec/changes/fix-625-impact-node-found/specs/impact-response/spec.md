@@ -16,9 +16,21 @@ Impact responses SHALL carry a boolean `node_found` determined within the
 selected workspace and independently of the requested edge filter.
 
 #### Scenario: Unknown node
-Given a node missing from the selected workspace's graph and index,
+Given a node missing from the selected workspace's graph and index with no
+bare-name matches,
 when impact is requested,
 then node_found is false and impacted is empty.
+
+#### Scenario: Bare edge matches an unrelated qualified node
+Given an edge targeting a bare symbol name in another file,
+when impact is requested for an absent `missing.go::Symbol` with that suffix,
+then node_found is false even when `impacted` contains candidate callers
+from the existing bare-name fallback.
+
+#### Scenario: Symbol document outlives its source
+Given a symbol document whose parent file document no longer exists,
+when impact is requested for that symbol without a surviving graph edge,
+then node_found is false.
 
 #### Scenario: Known node with filtered-out edges
 Given a node with edges that do not match the requested edge type,
