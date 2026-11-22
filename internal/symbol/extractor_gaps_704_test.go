@@ -709,4 +709,40 @@ export namespace Orders.V2 {
 	if got := findSymbol704(dottedSyms, "foo", symbol.KindFunction); got == nil || got.Line != 7 || got.EndLine != 10 {
 		t.Errorf("dotted_ns.ts: foo got %+v, want 7..10 (all=%+v)", got, dottedSyms)
 	}
+
+	bareNsSrc := `namespace InternalOrders {
+  export function foo(orderId: string) {
+    const normalized = orderId.trim();
+    return normalized;
+  }
+}
+
+const foo = () => 1;
+`
+	bareNsSyms, err := reg.Extract("src/bare_ns.ts", []byte(bareNsSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/bare_ns.ts): %v", err)
+	}
+	if got := findSymbol704(bareNsSyms, "foo", symbol.KindFunction); got == nil || got.Line != 2 || got.EndLine != 5 {
+		t.Errorf("bare_ns.ts: foo got %+v, want 2..5 (all=%+v)", got, bareNsSyms)
+	}
+
+	parenDefClassSrc := `export default (class {
+  handle(req: Req) {
+    const ok = validate(req);
+    return ok;
+  }
+});
+
+class InternalFallback {
+  handle() { return null; }
+}
+`
+	parenDefSyms, err := reg.Extract("src/paren_default_class.ts", []byte(parenDefClassSrc))
+	if err != nil {
+		t.Fatalf("Extract(src/paren_default_class.ts): %v", err)
+	}
+	if got := findSymbol704(parenDefSyms, "handle", symbol.KindMethod); got == nil || got.Line != 2 || got.EndLine != 5 {
+		t.Errorf("paren_default_class.ts: handle got %+v, want 2..5 (all=%+v)", got, parenDefSyms)
+	}
 }

@@ -273,6 +273,10 @@ func moduleScopeInfo(bt *gotreesitter.BoundTree, node *gotreesitter.Node) (atMod
 			if cur != ns || ns == nil {
 				return false, false
 			}
+			// Bare TS `namespace N { ... }` sits inside an `expression_statement` under `program`.
+			if ep := cur.Parent(); ep != nil && bt.NodeType(ep) == "expression_statement" {
+				cur = ep
+			}
 		default:
 			return false, false
 		}
@@ -300,6 +304,8 @@ func classScopeInfo(bt *gotreesitter.BoundTree, classNode *gotreesitter.Node) (a
 		switch bt.NodeType(p) {
 		case "parenthesized_expression", "satisfies_expression", "as_expression", "type_assertion", "non_null_expression":
 			cur = p
+		case "export_statement":
+			return moduleScopeInfo(bt, cur)
 		case "variable_declarator":
 			if decl := p.Parent(); decl != nil {
 				dt := bt.NodeType(decl)
