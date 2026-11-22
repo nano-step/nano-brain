@@ -142,6 +142,7 @@ Source resolution priority at daemon startup (first non-empty wins):
 |-----|------|---------|-------------|
 | `harvester.claudecode.enabled` | bool | `false` | Enable Claude Code session harvesting |
 | `harvester.claudecode.session_dir` | string | `""` | Claude Code JSONL sessions directory |
+| `harvester.claudecode.session_dirs` | list | `[]` | Additional Claude Code projects directories (`~` and globs like `~/.ccs/instances/*/projects` supported); `session_dir` is treated as one more entry |
 
 ### harvester.pi
 

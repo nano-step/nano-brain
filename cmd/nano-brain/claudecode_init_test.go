@@ -218,3 +218,75 @@ func TestInitClaudeCodeHarvesters_MultipleWorkspaces(t *testing.T) {
 		t.Errorf("expected 2 harvesters (alpha + beta), got %d", len(chs))
 	}
 }
+
+func TestInitClaudeCodeHarvesters_MultipleSessionDirs(t *testing.T) {
+	pgDB := setupClaudeInitTestPG(t)
+
+	// Two projects dirs: workspace alpha lives under dirA, beta under dirB —
+	// harvesting only one dir would silently drop the other (#643).
+	dirA := filepath.Join(t.TempDir(), "claude-projects")
+	dirB := filepath.Join(t.TempDir(), "ccs", "rick", "projects")
+	pairs := []struct{ dir, wsPath string }{
+		{dirA, "/fake/workspace/alpha"},
+		{dirB, "/fake/workspace/beta"},
+	}
+	q := sqlc.New(pgDB)
+	for _, p := range pairs {
+		if err := os.MkdirAll(filepath.Join(p.dir, encodeClaudeProjectsDir(p.wsPath)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		h := sha256.Sum256([]byte(p.wsPath))
+		if _, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
+			Hash: hex.EncodeToString(h[:]),
+			Name: filepath.Base(p.wsPath),
+			Path: p.wsPath,
+		}); err != nil {
+			t.Fatalf("seed workspace %s: %v", p.wsPath, err)
+		}
+	}
+
+	cfg := config.ClaudeCodeHarvesterConfig{Enabled: true, SessionDirs: []string{dirA, dirB}}
+	chs, err := initClaudeCodeHarvesters(context.Background(), cfg, pgDB, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if len(chs) != 2 {
+		t.Errorf("expected 2 harvesters across 2 session dirs, got %d", len(chs))
+	}
+}
+
+func TestInitClaudeCodeHarvesters_SessionDirsGlobAndDedup(t *testing.T) {
+	pgDB := setupClaudeInitTestPG(t)
+
+	// glob layout: <tmp>/instances/<name>/projects/<encoded-ws>
+	instancesRoot := t.TempDir()
+	instProjects := filepath.Join(instancesRoot, "instances", "rick", "projects")
+	wsPath := "/fake/workspace/globbed"
+	if err := os.MkdirAll(filepath.Join(instProjects, encodeClaudeProjectsDir(wsPath)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := sha256.Sum256([]byte(wsPath))
+	q := sqlc.New(pgDB)
+	if _, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
+		Hash: hex.EncodeToString(h[:]),
+		Name: "globbed",
+		Path: wsPath,
+	}); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+
+	// Glob picks up the instance dir; listing the same dir via session_dir too
+	// must not create a duplicate harvester.
+	cfg := config.ClaudeCodeHarvesterConfig{
+		Enabled:     true,
+		SessionDir:  instProjects,
+		SessionDirs: []string{filepath.Join(instancesRoot, "instances", "*", "projects")},
+	}
+	chs, err := initClaudeCodeHarvesters(context.Background(), cfg, pgDB, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if len(chs) != 1 {
+		t.Errorf("expected 1 deduplicated harvester, got %d", len(chs))
+	}
+}

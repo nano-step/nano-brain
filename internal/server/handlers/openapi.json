@@ -924,6 +924,12 @@
               },
               "session_dir": {
                 "type": "string"
+              },
+              "session_dirs": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               }
             },
             "type": "object"

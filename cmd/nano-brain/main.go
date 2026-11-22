@@ -596,10 +596,10 @@ func startServer(configPath string) {
 			}
 		}
 
-		if cfg.Harvester.ClaudeCode.Enabled && cfg.Harvester.ClaudeCode.SessionDir == "" {
-			if detected := detectClaudeCodeStorageDir(); detected != "" {
-				cfg.Harvester.ClaudeCode.SessionDir = detected
-				logger.Info().Str("path", detected).Msg("auto-detected claude code projects dir")
+		if cfg.Harvester.ClaudeCode.Enabled && cfg.Harvester.ClaudeCode.SessionDir == "" && len(cfg.Harvester.ClaudeCode.SessionDirs) == 0 {
+			if detected := detectClaudeCodeStorageDirs(); len(detected) > 0 {
+				cfg.Harvester.ClaudeCode.SessionDirs = detected
+				logger.Info().Strs("paths", detected).Msg("auto-detected claude code projects dirs")
 			}
 		}
 
@@ -653,7 +653,7 @@ func startServer(configPath string) {
 			}
 			if len(chs) > 0 {
 				logger.Info().
-					Str("session_dir", cfg.Harvester.ClaudeCode.SessionDir).
+					Strs("session_dirs", cfg.Harvester.ClaudeCode.SessionDirsResolved()).
 					Int("workspace_count", len(chs)).
 					Dur("interval", interval).
 					Msg("claude code session harvesters started")
