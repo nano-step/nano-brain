@@ -11,8 +11,8 @@ import (
 )
 
 type MultiGetQuerier interface {
-	GetDocumentByID(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.Document, error)
-	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
+	GetDocumentByID(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error)
+	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error)
 }
 
 type multiGetRequest struct {
@@ -98,7 +98,7 @@ func MultiGet(q MultiGetQuerier, logger zerolog.Logger) echo.HandlerFunc {
 	}
 }
 
-func docToResponse(doc sqlc.Document) getDocumentResponse {
+func docToResponse(doc sqlc.DocumentView) getDocumentResponse {
 	supersedes := ""
 	if doc.SupersedesID.Valid {
 		supersedes = doc.SupersedesID.UUID.String()

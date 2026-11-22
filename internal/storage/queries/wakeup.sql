@@ -1,10 +1,11 @@
 -- name: RecentDocuments :many
-SELECT id, title, tags, updated_at,
-       LEFT(content, 200) AS snippet
-FROM documents
-WHERE workspace_hash = sqlc.arg(workspace_hash)
-  AND collection = ANY(sqlc.arg(collections)::text[])
-ORDER BY updated_at DESC
+SELECT d.id, d.title, d.tags, d.updated_at,
+       LEFT(cb.content, 200) AS snippet
+FROM documents d
+JOIN content_blobs cb ON cb.id = d.blob_id
+WHERE d.workspace_hash = sqlc.arg(workspace_hash)
+  AND d.collection = ANY(sqlc.arg(collections)::text[])
+ORDER BY d.updated_at DESC
 LIMIT sqlc.arg(max_results);
 
 -- name: WorkspaceDocStats :one

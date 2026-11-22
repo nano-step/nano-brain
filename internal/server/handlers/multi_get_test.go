@@ -18,15 +18,15 @@ import (
 )
 
 type mockMultiGetQuerier struct {
-	getByID         func(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.Document, error)
-	getBySourcePath func(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
+	getByID         func(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error)
+	getBySourcePath func(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error)
 }
 
-func (m *mockMultiGetQuerier) GetDocumentByID(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.Document, error) {
+func (m *mockMultiGetQuerier) GetDocumentByID(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error) {
 	return m.getByID(ctx, arg)
 }
 
-func (m *mockMultiGetQuerier) GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
+func (m *mockMultiGetQuerier) GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error) {
 	return m.getBySourcePath(ctx, arg)
 }
 
@@ -35,16 +35,16 @@ func TestMultiGet_ByPaths(t *testing.T) {
 	docB := uuid.New()
 
 	q := &mockMultiGetQuerier{
-		getBySourcePath: func(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
+		getBySourcePath: func(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error) {
 			switch arg.SourcePath {
 			case "memory://a.md":
 				return sampleDoc(docA, "memory://a.md"), nil
 			case "memory://b.md":
 				return sampleDoc(docB, "memory://b.md"), nil
 			case "memory://missing.md":
-				return sqlc.Document{}, sql.ErrNoRows
+				return sqlc.DocumentView{}, sql.ErrNoRows
 			default:
-				return sqlc.Document{}, sql.ErrNoRows
+				return sqlc.DocumentView{}, sql.ErrNoRows
 			}
 		},
 	}
@@ -93,11 +93,11 @@ func TestMultiGet_ByIDs(t *testing.T) {
 	badID := "not-a-uuid"
 
 	q := &mockMultiGetQuerier{
-		getByID: func(_ context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.Document, error) {
+		getByID: func(_ context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error) {
 			if arg.ID == docA {
 				return sampleDoc(docA, "memory://a.md"), nil
 			}
-			return sqlc.Document{}, sql.ErrNoRows
+			return sqlc.DocumentView{}, sql.ErrNoRows
 		},
 	}
 
@@ -160,8 +160,8 @@ func TestMultiGet_NeitherPathsNorIDs(t *testing.T) {
 
 func TestMultiGet_EmptyPaths(t *testing.T) {
 	q := &mockMultiGetQuerier{
-		getBySourcePath: func(_ context.Context, _ sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
-			return sqlc.Document{}, sql.ErrNoRows
+		getBySourcePath: func(_ context.Context, _ sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error) {
+			return sqlc.DocumentView{}, sql.ErrNoRows
 		},
 	}
 

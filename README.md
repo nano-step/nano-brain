@@ -67,6 +67,31 @@ Bind a default workspace by appending `?workspace=<name-or-hash>` to the URL (e.
 
 For OpenCode, you can bootstrap the current workspace with `npx @nano-step/nano-brain init -- opencode`. It installs a `/nano-brain` slash command that keeps the workspace config local at `.nanobrain/config.yml`.
 
+## Upgrading
+
+Schema migrations run automatically when `nano-brain serve` starts, or explicitly via `nano-brain db:migrate`.
+
+When upgrading an existing pre-`v30` database to the normalized storage schema (~45%–77% smaller disk footprint via deduplicated `content_blobs`, `halfvec(768)` vectors, and interned graph/entity dictionaries):
+
+1. **Prerequisite**: PostgreSQL must have **`pgvector >= 0.7.0`** (`halfvec` support). The bundled `pgvector/pgvector:pg17` Docker image already ships `0.8.2`; on self-hosted/managed Postgres, update the extension first if needed:
+   ```sql
+   ALTER EXTENSION vector UPDATE;
+   ```
+2. **Stop the running daemon** before migrating so old `v29` background workers do not write during the table rewrite:
+   ```bash
+   nano-brain stop
+   ```
+3. **(Recommended for multi-GB DBs) Back up & check temporary disk headroom**: Migration `00030` rebuilds tables atomically inside one transaction and temporarily needs ~30% free disk space (for ~1–3 minutes on multi-GB instances) before freeing the old tables:
+   ```bash
+   pg_dump -Fc "$DATABASE_URL" -f nano-brain-pre-v30.dump
+   ```
+4. **Upgrade binary, run migration, and restart**:
+   ```bash
+   npm install -g @nano-step/nano-brain@latest   # or re-run install.sh
+   nano-brain db:migrate
+   nano-brain serve -d
+   ```
+
 ---
 
 ## The agent workflow

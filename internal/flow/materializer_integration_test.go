@@ -43,8 +43,14 @@ func setupDB(t *testing.T) (*sql.DB, *sqlc.Queries, string) {
 func insertEdge(t *testing.T, db *sql.DB, wsHash, sourceNode, targetNode, edgeType, sourceFile string) {
 	t.Helper()
 	_, err := db.ExecContext(context.Background(),
-		`INSERT INTO graph_edges (workspace_hash, source_node, target_node, edge_type, source_file)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO graph_edges (workspace_id, source_node_id, target_node_id, edge_type, source_file_id)
+		 VALUES (
+		     ensure_workspace_short_id($1),
+		     intern_graph_node($2),
+		     intern_graph_node($3),
+		     $4,
+		     intern_graph_node($5)
+		 )
 		 ON CONFLICT DO NOTHING`,
 		wsHash, sourceNode, targetNode, edgeType, sourceFile)
 	if err != nil {
@@ -55,7 +61,12 @@ func insertEdge(t *testing.T, db *sql.DB, wsHash, sourceNode, targetNode, edgeTy
 func deleteEdge(t *testing.T, db *sql.DB, wsHash, sourceNode, targetNode, edgeType string) {
 	t.Helper()
 	_, err := db.ExecContext(context.Background(),
-		`DELETE FROM graph_edges WHERE workspace_hash=$1 AND source_node=$2 AND target_node=$3 AND edge_type=$4`,
+		`DELETE FROM graph_edges ge
+		 USING graph_nodes sn, graph_nodes tn
+		 WHERE ge.workspace_id = resolve_workspace_short_id($1)
+		   AND ge.source_node_id = sn.id AND sn.node_key = $2
+		   AND ge.target_node_id = tn.id AND tn.node_key = $3
+		   AND ge.edge_type = $4`,
 		wsHash, sourceNode, targetNode, edgeType)
 	if err != nil {
 		t.Fatalf("deleteEdge %s->%s: %v", sourceNode, targetNode, err)

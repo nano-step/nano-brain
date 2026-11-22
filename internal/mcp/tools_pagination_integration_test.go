@@ -74,15 +74,15 @@ func insertDocWithChunk(t *testing.T, ctx context.Context, db *sql.DB, wsHash, t
 	docID := uuid.New()
 	chunkID := uuid.New()
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO documents (id, workspace_hash, content_hash, title, source_path, collection)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		docID, wsHash, contentHash(title+content), title, "/tmp/"+title+".md", "memory")
+		`INSERT INTO documents (id, workspace_hash, content_hash, blob_id, title, source_path, collection)
+		 VALUES ($1, $2, $3, intern_content_blob($7), $4, $5, $6)`,
+		docID, wsHash, contentHash(title+content), title, "/tmp/"+title+".md", "memory", content)
 	if err != nil {
 		t.Fatalf("insert doc %q: %v", title, err)
 	}
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO chunks (id, document_id, workspace_hash, content_hash, content, chunk_index)
-		 VALUES ($1, $2, $3, $4, $5, 0)`,
+		`INSERT INTO chunks (id, document_id, workspace_hash, content_hash, blob_id, chunk_index)
+		 VALUES ($1, $2, $3, $4, intern_content_blob($5), 0)`,
 		chunkID, docID, wsHash, contentHash(content+chunkID.String()), content)
 	if err != nil {
 		t.Fatalf("insert chunk for %q: %v", title, err)

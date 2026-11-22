@@ -28,7 +28,7 @@ func listSummaryDocsForSymbol(t *testing.T, ctx context.Context, db *sql.DB, wor
 	t.Helper()
 
 	rows, err := db.QueryContext(ctx,
-		`SELECT source_path, content FROM documents WHERE workspace_hash = $1 ORDER BY source_path`,
+		`SELECT source_path, content FROM document_views WHERE workspace_hash = $1 ORDER BY source_path`,
 		workspaceHash)
 	if err != nil {
 		t.Fatalf("query documents: %v", err)

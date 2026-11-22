@@ -37,7 +37,7 @@ type SummarizeSummarizer interface {
 
 type SummarizeQuerier interface {
 	ListSessionDocumentsByWorkspace(ctx context.Context, arg sqlc.ListSessionDocumentsByWorkspaceParams) ([]sqlc.ListSessionDocumentsByWorkspaceRow, error)
-	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
+	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error)
 }
 
 // TriggerSummarize godoc

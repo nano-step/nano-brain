@@ -155,7 +155,7 @@ func main() {
 func listWorkspaces(ctx context.Context, pool *pgxpool.Pool) []string {
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT workspace_hash FROM (
-			SELECT workspace_hash FROM graph_edges
+			SELECT workspace_hash FROM graph_edge_views
 			UNION
 			SELECT workspace_hash FROM documents
 		) t WHERE workspace_hash <> '' ORDER BY 1`)
@@ -178,7 +178,7 @@ func listWorkspaces(ctx context.Context, pool *pgxpool.Pool) []string {
 }
 
 func countFor(ctx context.Context, pool *pgxpool.Pool, ws string, dirs, sufs, cont []string) (edges, docs, chunks int64) {
-	_ = pool.QueryRow(ctx, countSQL("graph_edges", "source_file"), ws, dirs, sufs, cont).Scan(&edges)
+	_ = pool.QueryRow(ctx, countSQL("graph_edge_views", "source_file"), ws, dirs, sufs, cont).Scan(&edges)
 	_ = pool.QueryRow(ctx, countSQL("documents", "source_path"), ws, dirs, sufs, cont).Scan(&docs)
 	_ = pool.QueryRow(ctx, `SELECT count(*) FROM chunks WHERE document_id IN (
 		SELECT id FROM documents WHERE workspace_hash=$1 AND `+predicate("source_path")+`)`, ws, dirs, sufs, cont).Scan(&chunks)
@@ -192,7 +192,7 @@ func deleteFor(ctx context.Context, pool *pgxpool.Pool, ws string, dirs, sufs, c
 	}
 	defer tx.Rollback(ctx)
 
-	et, err := tx.Exec(ctx, `DELETE FROM graph_edges WHERE workspace_hash=$1 AND `+predicate("source_file"), ws, dirs, sufs, cont)
+	et, err := tx.Exec(ctx, `DELETE FROM graph_edges ge USING graph_nodes sf WHERE ge.workspace_id = resolve_workspace_short_id($1) AND ge.source_file_id = sf.id AND `+predicate("sf.node_key"), ws, dirs, sufs, cont)
 	if err != nil {
 		fail("delete edges", err)
 	}
@@ -233,7 +233,7 @@ func previewCat(ctx context.Context, pool *pgxpool.Pool, ws, kind string, pats [
 			like = "%" + p + "%"
 		}
 		var e, d int64
-		_ = pool.QueryRow(ctx, `SELECT count(*) FROM graph_edges WHERE workspace_hash=$1 AND source_file ILIKE $2`, ws, like).Scan(&e)
+		_ = pool.QueryRow(ctx, `SELECT count(*) FROM graph_edge_views WHERE workspace_hash=$1 AND source_file ILIKE $2`, ws, like).Scan(&e)
 		_ = pool.QueryRow(ctx, `SELECT count(*) FROM documents WHERE workspace_hash=$1 AND source_path ILIKE $2`, ws, like).Scan(&d)
 		if e > 0 || d > 0 {
 			fmt.Printf("  %-22s %10d %10d\n", kind+":"+p, e, d)

@@ -35,7 +35,7 @@ type mockSummarizeQuerier struct {
 	listDocs         []sqlc.ListSessionDocumentsByWorkspaceRow
 	listErr          error
 	capturedParams   sqlc.ListSessionDocumentsByWorkspaceParams
-	existingByPath   map[string]sqlc.Document
+	existingByPath   map[string]sqlc.DocumentView
 	getByPathErr     error
 }
 
@@ -44,16 +44,16 @@ func (m *mockSummarizeQuerier) ListSessionDocumentsByWorkspace(_ context.Context
 	return m.listDocs, m.listErr
 }
 
-func (m *mockSummarizeQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error) {
+func (m *mockSummarizeQuerier) GetDocumentBySourcePath(_ context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error) {
 	if m.existingByPath != nil {
 		if doc, ok := m.existingByPath[arg.SourcePath]; ok {
 			return doc, nil
 		}
 	}
 	if m.getByPathErr != nil {
-		return sqlc.Document{}, m.getByPathErr
+		return sqlc.DocumentView{}, m.getByPathErr
 	}
-	return sqlc.Document{}, errors.New("not found")
+	return sqlc.DocumentView{}, errors.New("not found")
 }
 
 func makeSumDoc(sourcePath string, tags []string) sqlc.ListSessionDocumentsByWorkspaceRow {
@@ -67,8 +67,8 @@ func makeSumDoc(sourcePath string, tags []string) sqlc.ListSessionDocumentsByWor
 	}
 }
 
-func existingDoc(id uuid.UUID) sqlc.Document {
-	return sqlc.Document{ID: id}
+func existingDoc(id uuid.UUID) sqlc.DocumentView {
+	return sqlc.DocumentView{ID: id}
 }
 
 func newSummarizeCtx(t *testing.T, method, body, workspace string) (echo.Context, *httptest.ResponseRecorder) {
@@ -96,7 +96,7 @@ func TestSummarize_Success(t *testing.T) {
 			makeSumDoc("opencode://sessions/sess-002", []string{"opencode"}),
 			makeSumDoc("opencode://sessions/sess-003", []string{"opencode"}),
 		},
-		existingByPath: map[string]sqlc.Document{
+		existingByPath: map[string]sqlc.DocumentView{
 			"summary://opencode/sess-002": existingDoc(summaryDocID),
 			"summary://opencode/sess-003": existingDoc(summaryDocID),
 		},
@@ -188,7 +188,7 @@ func TestSummarize_ForceFlag(t *testing.T) {
 		listDocs: []sqlc.ListSessionDocumentsByWorkspaceRow{
 			makeSumDoc("opencode://sessions/sess-001", []string{"opencode"}),
 		},
-		existingByPath: map[string]sqlc.Document{
+		existingByPath: map[string]sqlc.DocumentView{
 			"summary://opencode/sess-001": existingDoc(summaryDocID),
 		},
 	}
@@ -247,7 +247,7 @@ func TestSummarize_PiTaggedDocument_CorrectDedupPath(t *testing.T) {
 		listDocs: []sqlc.ListSessionDocumentsByWorkspaceRow{
 			makeSumDoc("pi://sessions/ses-pi-001", []string{"pi"}),
 		},
-		existingByPath: map[string]sqlc.Document{
+		existingByPath: map[string]sqlc.DocumentView{
 			"summary://opencode/ses-pi-001": existingDoc(uuid.New()),
 		},
 	}

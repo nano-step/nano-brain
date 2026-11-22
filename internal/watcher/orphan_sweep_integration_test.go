@@ -35,18 +35,30 @@ func newSweepTestWatcher(t *testing.T) (*Watcher, *sql.DB) {
 // schema via CREATE SCHEMA IF NOT EXISTS).
 func resetWorkspace(t *testing.T, db *sql.DB, ws string) {
 	t.Helper()
-	for _, tbl := range []string{"graph_edges", "function_flowcharts"} {
-		if _, err := db.Exec(`DELETE FROM `+tbl+` WHERE workspace_hash = $1`, ws); err != nil {
-			t.Fatalf("reset %s: %v", tbl, err)
-		}
+	if _, err := db.Exec(
+		`INSERT INTO workspaces (hash, name, path) VALUES ($1, $1, '/tmp/'||$1)
+		 ON CONFLICT (hash) DO NOTHING`, ws); err != nil {
+		t.Fatalf("ensure workspace: %v", err)
+	}
+	if _, err := db.Exec(`DELETE FROM graph_edges WHERE workspace_id = resolve_workspace_short_id($1)`, ws); err != nil {
+		t.Fatalf("reset graph_edges: %v", err)
+	}
+	if _, err := db.Exec(`DELETE FROM function_flowcharts WHERE workspace_hash = $1`, ws); err != nil {
+		t.Fatalf("reset function_flowcharts: %v", err)
 	}
 }
 
 func seedEdge(t *testing.T, db *sql.DB, ws, sourceFile, edgeType string) {
 	t.Helper()
 	_, err := db.Exec(
-		`INSERT INTO graph_edges (workspace_hash, source_node, target_node, edge_type, source_file)
-		 VALUES ($1, $2, $3, $4, $5)`,
+		`INSERT INTO graph_edges (workspace_id, source_node_id, target_node_id, edge_type, source_file_id)
+		 VALUES (
+		     resolve_workspace_short_id($1),
+		     intern_graph_node($2),
+		     intern_graph_node($3),
+		     $4,
+		     intern_graph_node($5)
+		 )`,
 		ws, sourceFile+"::fn", "callee-"+sourceFile+"-"+edgeType, edgeType, sourceFile)
 	if err != nil {
 		t.Fatalf("seed edge %q: %v", sourceFile, err)
@@ -66,7 +78,7 @@ func seedFlowchart(t *testing.T, db *sql.DB, ws, sourceFile string) {
 
 func edgeFiles(t *testing.T, db *sql.DB, ws string) []string {
 	t.Helper()
-	return distinctSourceFiles(t, db, "graph_edges", ws)
+	return distinctSourceFiles(t, db, "graph_edge_views", ws)
 }
 
 func flowchartFiles(t *testing.T, db *sql.DB, ws string) []string {

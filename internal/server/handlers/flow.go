@@ -16,8 +16,8 @@ import (
 
 // FlowQuerier is the storage interface used by GraphFlow.
 type FlowQuerier interface {
-	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
-	ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
+	ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdgeView, error)
+	ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdgeView, error)
 	ListHTTPEndpointsByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.ListHTTPEndpointsByWorkspaceRow, error)
 	GetFunctionFlowchartByHandler(ctx context.Context, arg sqlc.GetFunctionFlowchartByHandlerParams) (sqlc.FunctionFlowchart, error)
 }
@@ -297,10 +297,10 @@ func flowSymbolMatches(symbol, entry string) bool {
 	return symbol == entry || (!strings.Contains(entry, "#") && strings.HasPrefix(symbol, entry+"#"))
 }
 
-// convertEdges maps sqlc.GraphEdge rows to graph.Edge values.
+// convertEdges maps sqlc.GraphEdgeView rows to graph.Edge values.
 // Metadata JSON is decoded but only used when it carries extra fields;
 // the SourceFile and Language fields stored in the DB row are used directly.
-func convertEdges(rows []sqlc.GraphEdge) []graph.Edge {
+func convertEdges(rows []sqlc.GraphEdgeView) []graph.Edge {
 	out := make([]graph.Edge, 0, len(rows))
 	for _, r := range rows {
 		e := graph.Edge{

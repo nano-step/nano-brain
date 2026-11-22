@@ -16,16 +16,16 @@ import (
 )
 
 type mockNeighborhoodQuerier struct {
-	outEdges []sqlc.GraphEdge
+	outEdges []sqlc.GraphEdgeView
 }
 
-func (m *mockNeighborhoodQuerier) GetOutgoingEdges(_ context.Context, _ sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdge, error) {
+func (m *mockNeighborhoodQuerier) GetOutgoingEdges(_ context.Context, _ sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdgeView, error) {
 	return m.outEdges, nil
 }
-func (m *mockNeighborhoodQuerier) GetIncomingEdges(_ context.Context, _ sqlc.GetIncomingEdgesParams) ([]sqlc.GraphEdge, error) {
+func (m *mockNeighborhoodQuerier) GetIncomingEdges(_ context.Context, _ sqlc.GetIncomingEdgesParams) ([]sqlc.GraphEdgeView, error) {
 	return nil, nil
 }
-func (m *mockNeighborhoodQuerier) GetEdgesByNodes(_ context.Context, _ sqlc.GetEdgesByNodesParams) ([]sqlc.GraphEdge, error) {
+func (m *mockNeighborhoodQuerier) GetEdgesByNodes(_ context.Context, _ sqlc.GetEdgesByNodesParams) ([]sqlc.GraphEdgeView, error) {
 	return nil, nil
 }
 func (m *mockNeighborhoodQuerier) ListDocumentsByIDs(_ context.Context, _ sqlc.ListDocumentsByIDsParams) ([]sqlc.ListDocumentsByIDsRow, error) {
@@ -131,7 +131,7 @@ func TestGraphNeighborhood_UnknownFocusEmpty(t *testing.T) {
 }
 
 func TestGraphNeighborhood_DropsUnresolvedDerivedEdge(t *testing.T) {
-	q := &mockNeighborhoodQuerier{outEdges: []sqlc.GraphEdge{
+	q := &mockNeighborhoodQuerier{outEdges: []sqlc.GraphEdgeView{
 		{SourceNode: "repo-a/consumer.ts::caller", TargetNode: "<unresolved>", EdgeType: "calls"},
 		{SourceNode: "repo-a/consumer.ts::caller", TargetNode: "repo-a/lib/api.ts::run", EdgeType: "calls"},
 	}}
@@ -176,20 +176,20 @@ func TestGraphNeighborhood_DropsUnresolvedDerivedEdge(t *testing.T) {
 }
 
 type docModeNeighborhoodQuerier struct {
-	outEdges    []sqlc.GraphEdge
-	inEdges     []sqlc.GraphEdge
+	outEdges    []sqlc.GraphEdgeView
+	inEdges     []sqlc.GraphEdgeView
 	docRows     []sqlc.ListDocumentsByIDsRow
 	capturedOut []sqlc.GetOutgoingEdgesParams
 }
 
-func (m *docModeNeighborhoodQuerier) GetOutgoingEdges(_ context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdge, error) {
+func (m *docModeNeighborhoodQuerier) GetOutgoingEdges(_ context.Context, arg sqlc.GetOutgoingEdgesParams) ([]sqlc.GraphEdgeView, error) {
 	m.capturedOut = append(m.capturedOut, arg)
 	return m.outEdges, nil
 }
-func (m *docModeNeighborhoodQuerier) GetIncomingEdges(_ context.Context, _ sqlc.GetIncomingEdgesParams) ([]sqlc.GraphEdge, error) {
+func (m *docModeNeighborhoodQuerier) GetIncomingEdges(_ context.Context, _ sqlc.GetIncomingEdgesParams) ([]sqlc.GraphEdgeView, error) {
 	return m.inEdges, nil
 }
-func (m *docModeNeighborhoodQuerier) GetEdgesByNodes(_ context.Context, _ sqlc.GetEdgesByNodesParams) ([]sqlc.GraphEdge, error) {
+func (m *docModeNeighborhoodQuerier) GetEdgesByNodes(_ context.Context, _ sqlc.GetEdgesByNodesParams) ([]sqlc.GraphEdgeView, error) {
 	return nil, nil
 }
 func (m *docModeNeighborhoodQuerier) ListDocumentsByIDs(_ context.Context, _ sqlc.ListDocumentsByIDsParams) ([]sqlc.ListDocumentsByIDsRow, error) {
@@ -202,7 +202,7 @@ func TestGraphNeighborhood_DocModeEnrichment(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	q := &docModeNeighborhoodQuerier{
-		outEdges: []sqlc.GraphEdge{
+		outEdges: []sqlc.GraphEdgeView{
 			{SourceNode: focusID.String(), TargetNode: neighborID.String(), EdgeType: "references", WorkspaceHash: "w1"},
 		},
 		docRows: []sqlc.ListDocumentsByIDsRow{
@@ -267,7 +267,7 @@ func TestGraphNeighborhood_DocModeEdgeFilter(t *testing.T) {
 	neighborID := uuid.New()
 
 	q := &docModeNeighborhoodQuerier{
-		outEdges: []sqlc.GraphEdge{
+		outEdges: []sqlc.GraphEdgeView{
 			{SourceNode: focusID.String(), TargetNode: neighborID.String(), EdgeType: "references", WorkspaceHash: "w1"},
 		},
 	}

@@ -45,7 +45,7 @@ type WatcherQuerier interface {
 	DeleteChunksByIDs(ctx context.Context, ids []uuid.UUID) error
 	DeleteDocumentByIDAndWorkspace(ctx context.Context, arg sqlc.DeleteDocumentByIDAndWorkspaceParams) (int64, error)
 	UpsertChunk(ctx context.Context, arg sqlc.UpsertChunkParams) (uuid.UUID, error)
-	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
+	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error)
 	InsertChunkEntity(ctx context.Context, arg sqlc.InsertChunkEntityParams) error
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 	PreloadFileStateByWorkspace(ctx context.Context, arg sqlc.PreloadFileStateByWorkspaceParams) ([]sqlc.PreloadFileStateByWorkspaceRow, error)
@@ -777,7 +777,11 @@ func (w *Watcher) cleanupPathPrefix(ctx context.Context, col watchedCollection, 
 	// prefix. source_file is stored workspace-relative or absolute, so match both.
 	relPrefix := collRelFile(col.dirPath, filepath.Clean(dirPath)) + "/"
 	if _, err := w.db.ExecContext(ctx,
-		`DELETE FROM graph_edges WHERE workspace_hash = $1 AND (source_file LIKE $2 OR source_file LIKE $3)`,
+		`DELETE FROM graph_edges ge
+		 USING graph_nodes sf
+		 WHERE ge.workspace_id = resolve_workspace_short_id($1)
+		   AND ge.source_file_id = sf.id
+		   AND (sf.node_key LIKE $2 OR sf.node_key LIKE $3)`,
 		col.workspaceHash, prefix+"%", relPrefix+"%"); err != nil {
 		w.logger.Warn().Err(err).Str("prefix", prefix).Msg("cleanupPathPrefix: delete graph edges failed")
 	}
@@ -813,7 +817,11 @@ func (w *Watcher) deleteGraphRowsForFile(ctx context.Context, col watchedCollect
 		forms = append(forms, filePath)
 	}
 	if _, err := w.db.ExecContext(ctx,
-		`DELETE FROM graph_edges WHERE workspace_hash = $1 AND source_file = ANY($2::text[])`,
+		`DELETE FROM graph_edges ge
+		 USING graph_nodes sf
+		 WHERE ge.workspace_id = resolve_workspace_short_id($1)
+		   AND ge.source_file_id = sf.id
+		   AND sf.node_key = ANY($2::text[])`,
 		col.workspaceHash, forms); err != nil {
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("deleteGraphRowsForFile: delete graph edges failed")
 	}
@@ -1438,7 +1446,11 @@ func (w *Watcher) sweepOrphanGraphRows(ctx context.Context, workspaceHash string
 	}
 
 	edgeRes, err := w.db.ExecContext(ctx,
-		`DELETE FROM graph_edges WHERE workspace_hash = $1 AND source_file <> ALL($2::text[])`,
+		`DELETE FROM graph_edges ge
+		 USING graph_nodes sf
+		 WHERE ge.workspace_id = resolve_workspace_short_id($1)
+		   AND ge.source_file_id = sf.id
+		   AND sf.node_key <> ALL($2::text[])`,
 		workspaceHash, keep)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("workspace", workspaceHash).Msg("sweep orphan graph_edges failed")
@@ -1660,7 +1672,7 @@ func (w *Watcher) resolveRubyCrossFileCalls(ctx context.Context, col watchedColl
 	defer tx.Rollback() //nolint:errcheck
 
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM graph_edges WHERE workspace_hash = $1 AND edge_type IN ('calls', 'reconcile')`,
+		`DELETE FROM graph_edges WHERE workspace_id = resolve_workspace_short_id($1) AND edge_type IN ('calls', 'reconcile')`,
 		col.workspaceHash); err != nil {
 		w.logger.Warn().Err(err).Str("workspace", col.workspaceHash).Msg("ruby resolver: delete old edges failed")
 		return
@@ -1759,7 +1771,7 @@ func hasRailsFramework(fws []string) bool {
 	return false
 }
 
-func sqlcGraphEdgeToGraphEdge(ge sqlc.GraphEdge) graph.Edge {
+func sqlcGraphEdgeToGraphEdge(ge sqlc.GraphEdgeView) graph.Edge {
 	e := graph.Edge{
 		SourceNode: ge.SourceNode,
 		TargetNode: ge.TargetNode,

@@ -50,9 +50,9 @@ func SeedDocumentWithTimestamps(
 	}
 
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO documents (id, workspace_hash, content_hash, title, source_path, collection, tags, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7::text[], $8, $9)`,
-		docID, wsHash, hash, title, "/tmp/"+title+".md", "memory", tagArray, createdAt, updatedAt)
+		`INSERT INTO documents (id, workspace_hash, content_hash, blob_id, title, source_path, collection, tags, created_at, updated_at)
+		 VALUES ($1, $2, $3, intern_content_blob($10), $4, $5, $6, $7::text[], $8, $9)`,
+		docID, wsHash, hash, title, "/tmp/"+title+".md", "memory", tagArray, createdAt, updatedAt, content)
 	if err != nil {
 		t.Fatalf("insert doc %q: %v", title, err)
 	}
@@ -62,8 +62,8 @@ func SeedDocumentWithTimestamps(
 
 	// Insert chunk and populate search_vector for BM25 indexing
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO chunks (id, document_id, workspace_hash, content_hash, content, chunk_index, search_vector)
-		 VALUES ($1, $2, $3, $4, $5, 0, to_tsvector('english', $5))`,
+		`INSERT INTO chunks (id, document_id, workspace_hash, content_hash, blob_id, chunk_index, search_vector)
+		 VALUES ($1, $2, $3, $4, intern_content_blob($5), 0, to_tsvector('english', $5))`,
 		chunkID, docID, wsHash, chunkHash, content)
 	if err != nil {
 		t.Fatalf("insert chunk for %q: %v", title, err)

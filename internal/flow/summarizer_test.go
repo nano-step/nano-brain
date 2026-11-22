@@ -28,12 +28,12 @@ func (m *mockSummarizer) Summarize(_ context.Context, entry string, chain []stri
 }
 
 type recordingQuerier struct {
-	edges       []sqlc.GraphEdge
+	edges       []sqlc.GraphEdgeView
 	upsertedDoc *sqlc.UpsertDocumentBySourcePathParams
 	insertErr   error
 }
 
-func (m *recordingQuerier) ListAllEdgesByWorkspace(_ context.Context, _ string) ([]sqlc.GraphEdge, error) {
+func (m *recordingQuerier) ListAllEdgesByWorkspace(_ context.Context, _ string) ([]sqlc.GraphEdgeView, error) {
 	return m.edges, nil
 }
 
@@ -61,7 +61,7 @@ func (m *recordingQuerier) UpsertChunk(_ context.Context, _ sqlc.UpsertChunkPara
 func TestSummarizerCalledWithCorrectArgs(t *testing.T) {
 	ms := &mockSummarizer{summary: "test summary"}
 	q := &recordingQuerier{
-		edges: []sqlc.GraphEdge{
+		edges: []sqlc.GraphEdgeView{
 			{SourceNode: "POST /api/topup", TargetNode: "TopupHandler", EdgeType: string(graph.EdgeHTTP)},
 			{SourceNode: "handlers/x.go::TopupHandler", TargetNode: "PaymentService", EdgeType: string(graph.EdgeCalls), SourceFile: "handlers/x.go"},
 			{SourceNode: "handlers/x.go::TopupHandler", TargetNode: "POST http://external.api/charge", EdgeType: string(graph.EdgeIntegration), SourceFile: "handlers/x.go"},
@@ -94,7 +94,7 @@ func TestSummarizerCalledWithCorrectArgs(t *testing.T) {
 func TestFallbackToTextOnSummarizerError(t *testing.T) {
 	ms := &mockSummarizer{summary: "", err: context.DeadlineExceeded}
 	q := &recordingQuerier{
-		edges: []sqlc.GraphEdge{
+		edges: []sqlc.GraphEdgeView{
 			{SourceNode: "GET /api/health", TargetNode: "HealthHandler", EdgeType: string(graph.EdgeHTTP)},
 		},
 	}
@@ -123,7 +123,7 @@ func TestFallbackToTextOnSummarizerError(t *testing.T) {
 func TestDocumentContentMatchesSummary(t *testing.T) {
 	ms := &mockSummarizer{summary: "LLM-generated summary"}
 	q := &recordingQuerier{
-		edges: []sqlc.GraphEdge{
+		edges: []sqlc.GraphEdgeView{
 			{SourceNode: "POST /api/topup", TargetNode: "TopupHandler", EdgeType: string(graph.EdgeHTTP)},
 		},
 	}
@@ -147,7 +147,7 @@ func TestDocumentContentMatchesSummary(t *testing.T) {
 
 func TestTextSummaryWhenNoSummarizer(t *testing.T) {
 	q := &recordingQuerier{
-		edges: []sqlc.GraphEdge{
+		edges: []sqlc.GraphEdgeView{
 			{SourceNode: "POST /api/topup", TargetNode: "TopupHandler", EdgeType: string(graph.EdgeHTTP)},
 		},
 	}

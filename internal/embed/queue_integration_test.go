@@ -46,8 +46,8 @@ func TestQueue_ScanByStatus_SkipsInflightChunks(t *testing.T) {
 	chunkIDs := make([]uuid.UUID, 5)
 	for i := range chunkIDs {
 		chunkIDs[i] = uuid.New()
-		_, err := db.ExecContext(ctx, `INSERT INTO chunks (id, document_id, workspace_hash, chunk_index, content, content_hash, embed_status)
-			VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
+		_, err := db.ExecContext(ctx, `INSERT INTO chunks (id, document_id, workspace_hash, chunk_index, blob_id, content_hash, embed_status)
+			VALUES ($1, $2, $3, $4, intern_content_blob($5), $6, 'pending')`,
 			chunkIDs[i], docID, wsHash, i, "test content", uuid.New().String()[:8])
 		if err != nil {
 			t.Fatalf("insert chunk %d: %v", i, err)

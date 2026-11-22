@@ -7,6 +7,11 @@ All notable changes to nano-brain are documented here.
 ## [Unreleased]
 
 ### Changed
+- **Normalized PostgreSQL storage schema, cutting database disk usage by ~45%–77%** (#663). Document and chunk text payloads are now deduplicated by SHA-256 in `content_blobs`; embeddings are deduplicated per `(blob_id, provider, model)` in `embedding_vectors` using `halfvec(768)` (inline heap storage with zero TOAST amplification and ~50% smaller HNSW index, plus cross-worktree vector cache reuse in the embed queue); `graph_edges` and `chunk_entities` intern repeated file/symbol paths and entity names into `graph_nodes` and `entity_dictionary` with compact 4-byte workspace IDs.
+
+  **Upgrade notes for existing databases (migration `00030`):**
+  - Requires **`pgvector >= 0.7.0`** (`halfvec` type). The default `pgvector/pgvector:pg17` image includes `0.8.2`; on custom/managed PostgreSQL, run `ALTER EXTENSION vector UPDATE;` before upgrading if on `< 0.7.0`.
+  - Stop the running `nano-brain` daemon (`nano-brain stop`) before upgrading, back up large databases (`pg_dump -Fc`), ensure ~30% temporary free disk headroom for the atomic table rewrite, then run `nano-brain db:migrate` (or start the new `nano-brain serve`, which migrates automatically).
 - **MCP SDK upgraded to `go-sdk` v1.7.0**, adding support for MCP protocol revision `2026-07-28` (#630). nano-brain previously implemented `2025-06-18`, which modern clients refuse to talk to. All five revisions (`2024-11-05` → `2026-07-28`) are now supported with backward negotiation, so existing clients keep working.
 
   Three behavior changes come from the SDK and are worth knowing about:

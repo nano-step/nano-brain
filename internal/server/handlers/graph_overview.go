@@ -19,7 +19,7 @@ const (
 type OverviewQuerier interface {
 	ListTopGraphNodesByDegree(ctx context.Context, arg sqlc.ListTopGraphNodesByDegreeParams) ([]sqlc.ListTopGraphNodesByDegreeRow, error)
 	CountDistinctGraphNodes(ctx context.Context, arg sqlc.CountDistinctGraphNodesParams) (int64, error)
-	ListEdgesTouchingNodes(ctx context.Context, arg sqlc.ListEdgesTouchingNodesParams) ([]sqlc.GraphEdge, error)
+	ListEdgesTouchingNodes(ctx context.Context, arg sqlc.ListEdgesTouchingNodesParams) ([]sqlc.GraphEdgeView, error)
 	ListDocumentsByIDs(ctx context.Context, arg sqlc.ListDocumentsByIDsParams) ([]sqlc.ListDocumentsByIDsRow, error)
 }
 
@@ -109,7 +109,7 @@ func GraphOverview(q OverviewQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			nodeIDs = append(nodeIDs, r.Node)
 		}
 
-		var edgeRows []sqlc.GraphEdge
+		var edgeRows []sqlc.GraphEdgeView
 		if len(nodeIDs) > 0 {
 			edgeRows, err = q.ListEdgesTouchingNodes(ctx, sqlc.ListEdgesTouchingNodesParams{
 				WorkspaceHash: workspace,

@@ -9,10 +9,10 @@ import (
 )
 
 type mockStitchQuerier struct {
-	entries map[string][]sqlc.GraphEdge
+	entries map[string][]sqlc.GraphEdgeView
 }
 
-func (m *mockStitchQuerier) ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error) {
+func (m *mockStitchQuerier) ListConsumerEntryNodesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdgeView, error) {
 	return m.entries[workspaceHash], nil
 }
 
@@ -40,7 +40,7 @@ func TestStitchMatchesStringLiteralTopics(t *testing.T) {
 	}
 
 	mock := &mockStitchQuerier{
-		entries: map[string][]sqlc.GraphEdge{
+		entries: map[string][]sqlc.GraphEdgeView{
 			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
 				{SourceNode: "CONSUME trade.created", TargetNode: "HandleTradeCreated", EdgeType: "integration"},
 			},
@@ -81,7 +81,7 @@ func TestStitchSkipsVarPlaceholders(t *testing.T) {
 	}
 
 	mock := &mockStitchQuerier{
-		entries: map[string][]sqlc.GraphEdge{
+		entries: map[string][]sqlc.GraphEdgeView{
 			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
 				{SourceNode: "CONSUME trade.created", TargetNode: "HandleTradeCreated", EdgeType: "integration"},
 			},
@@ -113,7 +113,7 @@ func TestStitchEmptyOnNoMatch(t *testing.T) {
 	}
 
 	mock := &mockStitchQuerier{
-		entries: map[string][]sqlc.GraphEdge{
+		entries: map[string][]sqlc.GraphEdgeView{
 			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
 				{SourceNode: "CONSUME order.placed", TargetNode: "HandleOrderPlaced", EdgeType: "integration"},
 			},
@@ -130,7 +130,7 @@ func TestStitchEmptyOnNoMatch(t *testing.T) {
 }
 
 func TestStitchEmptyEdgesOrWorkspaces(t *testing.T) {
-	mock := &mockStitchQuerier{entries: map[string][]sqlc.GraphEdge{}}
+	mock := &mockStitchQuerier{entries: map[string][]sqlc.GraphEdgeView{}}
 
 	if r := Stitch(context.Background(), nil, []string{"ws1"}, mock); r != nil {
 		t.Error("expected nil for nil publishEdges")
@@ -154,7 +154,7 @@ func TestStitchCrossServiceWorkspaceHashes(t *testing.T) {
 	}
 
 	mock := &mockStitchQuerier{
-		entries: map[string][]sqlc.GraphEdge{
+		entries: map[string][]sqlc.GraphEdgeView{
 			ws: {
 				{SourceNode: "CONSUME order.shipped", TargetNode: "HandleShipping", EdgeType: "integration"},
 			},

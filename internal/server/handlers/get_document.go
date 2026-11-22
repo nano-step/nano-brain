@@ -14,8 +14,8 @@ import (
 )
 
 type GetDocumentQuerier interface {
-	GetDocumentByID(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.Document, error)
-	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.Document, error)
+	GetDocumentByID(ctx context.Context, arg sqlc.GetDocumentByIDParams) (sqlc.DocumentView, error)
+	GetDocumentBySourcePath(ctx context.Context, arg sqlc.GetDocumentBySourcePathParams) (sqlc.DocumentView, error)
 }
 
 type getDocumentRequest struct {
@@ -65,7 +65,7 @@ func GetDocument(q GetDocumentQuerier, logger zerolog.Logger) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusBadRequest, "path or id is required")
 		}
 
-		var doc sqlc.Document
+		var doc sqlc.DocumentView
 		var err error
 
 		switch {

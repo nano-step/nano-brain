@@ -1,6 +1,6 @@
 -- name: ListCallEdges :many
 SELECT source_node, target_node
-FROM graph_edges
+FROM graph_edge_views
 WHERE workspace_hash = $1
   AND edge_type = 'calls'
   AND source_node <> '<unresolved>'
@@ -21,7 +21,7 @@ WHERE workspace_hash = $1;
 DELETE FROM pagerank_scores WHERE workspace_hash = $1;
 
 -- name: CountCallEdges :one
-SELECT count(*)::bigint FROM graph_edges
+SELECT count(*)::bigint FROM graph_edge_views
 WHERE workspace_hash = $1
   AND edge_type = 'calls'
   AND source_node <> '<unresolved>'

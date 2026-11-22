@@ -18,11 +18,11 @@ import (
 )
 
 type mockFCQuerier struct {
-	ListAllEdgesByWorkspaceFn         func(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error)
+	ListAllEdgesByWorkspaceFn         func(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdgeView, error)
 	GetFunctionFlowchartByHandlerFn   func(ctx context.Context, arg sqlc.GetFunctionFlowchartByHandlerParams) (sqlc.FunctionFlowchart, error)
 }
 
-func (m *mockFCQuerier) ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdge, error) {
+func (m *mockFCQuerier) ListAllEdgesByWorkspace(ctx context.Context, workspaceHash string) ([]sqlc.GraphEdgeView, error) {
 	return m.ListAllEdgesByWorkspaceFn(ctx, workspaceHash)
 }
 
@@ -69,8 +69,8 @@ func TestGraphFlowchart_Disabled(t *testing.T) {
 
 func TestGraphFlowchart_EntryNotFound(t *testing.T) {
 	q := &mockFCQuerier{
-		ListAllEdgesByWorkspaceFn: func(_ context.Context, _ string) ([]sqlc.GraphEdge, error) {
-			return []sqlc.GraphEdge{}, nil
+		ListAllEdgesByWorkspaceFn: func(_ context.Context, _ string) ([]sqlc.GraphEdgeView, error) {
+			return []sqlc.GraphEdgeView{}, nil
 		},
 		GetFunctionFlowchartByHandlerFn: func(_ context.Context, _ sqlc.GetFunctionFlowchartByHandlerParams) (sqlc.FunctionFlowchart, error) {
 			return sqlc.FunctionFlowchart{}, sql.ErrNoRows
@@ -88,8 +88,8 @@ func TestGraphFlowchart_EntryNotFound(t *testing.T) {
 
 func TestGraphFlowchart_ReturnsCFG(t *testing.T) {
 	q := &mockFCQuerier{
-		ListAllEdgesByWorkspaceFn: func(_ context.Context, _ string) ([]sqlc.GraphEdge, error) {
-			return []sqlc.GraphEdge{
+		ListAllEdgesByWorkspaceFn: func(_ context.Context, _ string) ([]sqlc.GraphEdgeView, error) {
+			return []sqlc.GraphEdgeView{
 				{SourceNode: "POST /api/game", TargetNode: "handleGame", EdgeType: "http", SourceFile: "routes.ts", Metadata: json.RawMessage(`{"method":"POST","path":"/api/game"}`)},
 			}, nil
 		},
@@ -122,8 +122,8 @@ func TestGraphFlowchart_ReturnsCFG(t *testing.T) {
 
 func TestGraphFlowchart_HandlerNotFound(t *testing.T) {
 	q := &mockFCQuerier{
-		ListAllEdgesByWorkspaceFn: func(_ context.Context, _ string) ([]sqlc.GraphEdge, error) {
-			return []sqlc.GraphEdge{
+		ListAllEdgesByWorkspaceFn: func(_ context.Context, _ string) ([]sqlc.GraphEdgeView, error) {
+			return []sqlc.GraphEdgeView{
 				{SourceNode: "POST /api/game", TargetNode: "handleGame", EdgeType: "http"},
 			}, nil
 		},
@@ -150,7 +150,7 @@ func TestGraphFlowchart_EmptyEntry(t *testing.T) {
 
 func TestGraphFlowchart_DBError(t *testing.T) {
 	q := &mockFCQuerier{
-		ListAllEdgesByWorkspaceFn: func(_ context.Context, _ string) ([]sqlc.GraphEdge, error) {
+		ListAllEdgesByWorkspaceFn: func(_ context.Context, _ string) ([]sqlc.GraphEdgeView, error) {
 			return nil, errors.New("db error")
 		},
 	}
