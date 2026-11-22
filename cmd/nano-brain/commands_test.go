@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -744,5 +746,191 @@ func TestParseInitArgs(t *testing.T) {
 				t.Errorf("parseInitArgs(%v) = %+v, want %+v", tt.args, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestStubCmdHelpSubprocessHelper(t *testing.T) {
+	if os.Getenv("GO_WANT_STUB_HELP_HELPER") != "1" {
+		return
+	}
+	var args []string
+	if raw := os.Getenv("NB_TEST_STUB_ARGS"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &args); err != nil {
+			os.Stderr.WriteString("bad NB_TEST_STUB_ARGS: " + err.Error() + "\n")
+			os.Exit(99)
+		}
+	}
+	switch os.Getenv("NB_TEST_STUB_CMD") {
+	case "query":
+		runQueryCmd(args)
+	case "search":
+		runSearchCmd(args)
+	case "vsearch":
+		runVSearchCmd(args)
+	default:
+		os.Stderr.WriteString("unknown NB_TEST_STUB_CMD\n")
+		os.Exit(98)
+	}
+	os.Exit(0)
+}
+
+func execStubCmdInSubprocess(t *testing.T, subcmd string, args []string) (stdout, stderr string, exitCode int) {
+	t.Helper()
+	var serverHits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHits.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	u := strings.TrimPrefix(ts.URL, "http://")
+	hostPort := strings.SplitN(u, ":", 2)
+
+	encodedArgs, err := json.Marshal(args)
+	if err != nil {
+		t.Fatalf("marshal args: %v", err)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestStubCmdHelpSubprocessHelper$")
+	cmd.Env = append(os.Environ(),
+		"GO_WANT_STUB_HELP_HELPER=1",
+		"NB_TEST_STUB_CMD="+subcmd,
+		"NB_TEST_STUB_ARGS="+string(encodedArgs),
+		"NANO_BRAIN_HOST="+hostPort[0],
+		"NANO_BRAIN_PORT="+hostPort[1],
+		"NANO_BRAIN_NO_AUTO_START=1",
+	)
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+
+	runErr := cmd.Run()
+	if hits := serverHits.Load(); hits > 0 {
+		t.Errorf("%s %v unexpectedly sent %d HTTP request(s) to server", subcmd, args, hits)
+	}
+	if runErr != nil {
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
+			return outBuf.String(), errBuf.String(), exitErr.ExitCode()
+		}
+		t.Fatalf("subprocess run failed: %v", runErr)
+	}
+	return outBuf.String(), errBuf.String(), 0
+}
+
+func assertAllStubFlagsDocumented(t *testing.T, subcmd, text string) {
+	t.Helper()
+	requiredTokens := []string{
+		"Usage: nano-brain " + subcmd,
+		"--workspace",
+		"--scope",
+		"--tags",
+		"--created-after",
+		"--created-before",
+		"--updated-after",
+		"--updated-before",
+		"--json",
+	}
+	for _, tok := range requiredTokens {
+		if !strings.Contains(text, tok) {
+			t.Errorf("%s help/usage missing %q in:\n%s", subcmd, tok, text)
+		}
+	}
+}
+
+// Regression test for #236: query, search, and vsearch must support --help/-h
+// and document --tags alongside all other supported stub flags.
+func TestStubCmd_HelpFlag(t *testing.T) {
+	cases := []struct {
+		subcmd string
+		args   []string
+	}{
+		{"query", []string{"--help"}},
+		{"query", []string{"-h"}},
+		{"query", []string{"-h", "--scope=all"}},
+		{"search", []string{"--help"}},
+		{"search", []string{"-h"}},
+		{"vsearch", []string{"--help"}},
+		{"vsearch", []string{"-h"}},
+	}
+	for _, tc := range cases {
+		name := tc.subcmd + "_" + strings.Join(tc.args, "_")
+		t.Run(name, func(t *testing.T) {
+			stdout, stderr, code := execStubCmdInSubprocess(t, tc.subcmd, tc.args)
+			if code != 0 {
+				t.Errorf("exit code = %d, want 0 (stderr=%q)", code, stderr)
+			}
+			if stderr != "" {
+				t.Errorf("expected empty stderr on help, got %q", stderr)
+			}
+			assertAllStubFlagsDocumented(t, tc.subcmd, stdout)
+		})
+	}
+}
+
+// Regression test for #236: empty-arg / missing-arg usage output for query,
+// search, and vsearch must also document --tags and all other supported flags.
+func TestStubCmd_EmptyArgsUsage(t *testing.T) {
+	for _, subcmd := range []string{"query", "search", "vsearch"} {
+		t.Run(subcmd, func(t *testing.T) {
+			stdout, stderr, code := execStubCmdInSubprocess(t, subcmd, nil)
+			if code != 1 {
+				t.Errorf("exit code = %d, want 1", code)
+			}
+			if stdout != "" {
+				t.Errorf("expected empty stdout on usage error, got %q", stdout)
+			}
+			assertAllStubFlagsDocumented(t, subcmd, stderr)
+		})
+	}
+}
+
+// Regression test for #236: top-level `nano-brain help` (printUsage) lists
+// flags inline for query, search, and vsearch and must include --tags on each.
+func TestPrintUsage_SearchCommandsDocumentTags(t *testing.T) {
+	var buf bytes.Buffer
+	printUsage(&buf)
+	lines := strings.Split(buf.String(), "\n")
+
+	for _, subcmd := range []string{"query", "search", "vsearch"} {
+		found := false
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, subcmd+" ") {
+				found = true
+				for _, flagName := range []string{"--workspace", "--scope", "--tags"} {
+					if !strings.Contains(trimmed, flagName) {
+						t.Errorf("printUsage() %s line missing %q: %q", subcmd, flagName, trimmed)
+					}
+				}
+			}
+		}
+		if !found {
+			t.Errorf("printUsage() missing command summary line for %q", subcmd)
+		}
+	}
+}
+
+func TestParseStubFlags_HelpAndDashQuery(t *testing.T) {
+	for _, flagArg := range []string{"--help", "-h"} {
+		f, errMsg := parseStubFlags([]string{flagArg})
+		if errMsg != "" {
+			t.Fatalf("parseStubFlags(%q) unexpected error: %q", flagArg, errMsg)
+		}
+		if !f.help {
+			t.Errorf("parseStubFlags(%q) help = false, want true", flagArg)
+		}
+	}
+
+	// Single-dash search terms other than -h must remain valid query strings.
+	f, errMsg := parseStubFlags([]string{"-race", "--workspace", "ws1"})
+	if errMsg != "" {
+		t.Fatalf("parseStubFlags(-race) unexpected error: %q", errMsg)
+	}
+	if f.help {
+		t.Error("parseStubFlags(-race) help = true, want false")
+	}
+	if f.query != "-race" {
+		t.Errorf("parseStubFlags(-race) query = %q, want %q", f.query, "-race")
 	}
 }
