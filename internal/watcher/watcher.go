@@ -50,7 +50,8 @@ type WatcherQuerier interface {
 	ListChunksByDocumentID(ctx context.Context, arg sqlc.ListChunksByDocumentIDParams) ([]sqlc.ListChunksByDocumentIDRow, error)
 	PreloadFileStateByWorkspace(ctx context.Context, arg sqlc.PreloadFileStateByWorkspaceParams) ([]sqlc.PreloadFileStateByWorkspaceRow, error)
 	UpdateDocumentFileState(ctx context.Context, arg sqlc.UpdateDocumentFileStateParams) error
-	ListFilesWithStaleSymbolSpans(ctx context.Context, arg sqlc.ListFilesWithStaleSymbolSpansParams) ([]string, error)
+	ListFilesWithStaleSymbolSpans(ctx context.Context, arg sqlc.ListFilesWithStaleSymbolSpansParams) ([]sqlc.ListFilesWithStaleSymbolSpansRow, error)
+	DeleteStaleSymbolSpanDocs(ctx context.Context, arg sqlc.DeleteStaleSymbolSpanDocsParams) (int64, error)
 }
 
 type watchedCollection struct {
@@ -1339,12 +1340,15 @@ func (w *Watcher) ReextractSymbolsForWorkspace(ctx context.Context, workspaceHas
 	return count
 }
 
-// backfillSymbolSpans re-extracts symbols from files whose symbol documents
-// lack line/end_line metadata — written before #539 added the span. Those
-// files hit the content-hash early exit in processFile on every scan, so a
-// restart alone never repairs them; one DB query returns just their parents
-// instead of re-extracting every file (issue #584). Runs once at startup,
-// after the initial processAll.
+// backfillSymbolSpans repairs symbol documents written before #539 added
+// line/end_line metadata — the content-hash early exit in processFile skips
+// their parent files on every scan, so a restart alone never re-extracts
+// them (issue #584). It runs once at startup, after the initial processAll,
+// and converges in a single pass: files that can be re-read are re-extracted
+// through the normal symbol path, and any doc still lacking a span
+// afterwards — a renamed or removed symbol, a file that now parses to zero
+// symbols, or a file the scan no longer indexes — is deleted so the next
+// start has nothing left to do.
 func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
 	if w.symbolRegistry == nil {
 		return
@@ -1359,7 +1363,7 @@ func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
 
 	for _, col := range cols {
 		col = col.withRealRoot()
-		paths, err := w.queries.ListFilesWithStaleSymbolSpans(ctx, sqlc.ListFilesWithStaleSymbolSpansParams{
+		rows, err := w.queries.ListFilesWithStaleSymbolSpans(ctx, sqlc.ListFilesWithStaleSymbolSpansParams{
 			WorkspaceHash: col.workspaceHash,
 			Collection:    col.name,
 		})
@@ -1367,32 +1371,63 @@ func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
 			w.logger.Warn().Err(err).Str("collection", col.name).Msg("stale symbol span query failed")
 			continue
 		}
-		var count int
-		for _, path := range paths {
+		var repaired, removed int64
+		for _, row := range rows {
 			if ctx.Err() != nil {
 				return
 			}
-			if col.filter != nil && col.filter.ShouldSkip(path, false) {
-				continue
+			path := row.FilePath
+			// The initial scan deleted the file doc of every ignored file,
+			// so a missing parent means the file is not admitted — drop its
+			// stale symbols without reading it. A deleted file's doc can
+			// still be present; the Stat check below catches that case.
+			admitted := row.ParentIndexed
+			if admitted && col.filter != nil && col.filter.ShouldSkip(path, false) {
+				admitted = false
 			}
-			if skip, _ := w.skipResolved(col, path); skip {
-				continue
+			if admitted {
+				if skip, _ := w.skipResolved(col, path); skip {
+					admitted = false
+				}
 			}
-			info, err := os.Stat(path)
-			if err != nil || !info.Mode().IsRegular() || info.Size() > w.maxFileSize {
-				continue
+			if admitted {
+				info, err := os.Stat(path)
+				admitted = err == nil && info.Mode().IsRegular() && info.Size() <= w.maxFileSize
 			}
-			content, err := os.ReadFile(path)
-			if err != nil {
-				continue
+			var content []byte
+			if admitted {
+				var readErr error
+				if content, readErr = os.ReadFile(path); readErr != nil {
+					admitted = false
+				}
 			}
-			w.extractAndUpsertSymbols(ctx, col, path, content)
-			count++
+			if admitted && w.extractAndUpsertSymbols(ctx, col, path, content) > 0 {
+				repaired++
+			}
+			removed += w.deleteStaleSymbolSpanDocs(ctx, col, path)
 		}
-		if count > 0 {
-			w.logger.Info().Str("collection", col.name).Int("files", count).Msg("backfilled stale symbol line spans")
+		if repaired > 0 || removed > 0 {
+			w.logger.Info().Str("collection", col.name).
+				Int64("repaired", repaired).Int64("removed", removed).
+				Msg("backfilled stale symbol line spans")
 		}
 	}
+}
+
+// deleteStaleSymbolSpanDocs removes the pre-#539 symbol docs still lacking a
+// span for filePath. Symbols just re-emitted carry end_line and survive, so
+// whatever this deletes was an orphan for a symbol no longer emitted.
+func (w *Watcher) deleteStaleSymbolSpanDocs(ctx context.Context, col watchedCollection, filePath string) int64 {
+	n, err := w.queries.DeleteStaleSymbolSpanDocs(ctx, sqlc.DeleteStaleSymbolSpanDocsParams{
+		WorkspaceHash: col.workspaceHash,
+		Collection:    col.name,
+		FilePath:      filePath,
+	})
+	if err != nil {
+		w.logger.Warn().Err(err).Str("file", filePath).Msg("stale symbol doc delete failed")
+		return 0
+	}
+	return n
 }
 
 // ReextractEdgesForWorkspace re-runs graph edge extraction for every file in

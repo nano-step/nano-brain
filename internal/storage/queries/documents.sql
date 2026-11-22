@@ -94,11 +94,28 @@ ORDER BY CASE metadata->>'kind'
 
 -- name: ListFilesWithStaleSymbolSpans :many
 -- Parent files of symbol docs written before line/end_line metadata existed
--- (#539); unchanged files are never re-extracted, so they need a one-off backfill.
-SELECT DISTINCT split_part(source_path, '?symbol=', 1)::text AS file_path
-FROM documents
-WHERE workspace_hash = $1
-  AND collection = $2
+-- (#539); unchanged files are never re-extracted, so they need a one-off
+-- backfill. parent_indexed reports whether the initial scan still indexes
+-- the parent file — deleted or ignored files lose their file doc, which is
+-- the admission signal for dropping stale symbols without a read.
+SELECT DISTINCT split_part(s.source_path, '?symbol=', 1)::text AS file_path,
+       EXISTS (SELECT 1 FROM documents p
+               WHERE p.workspace_hash = s.workspace_hash
+                 AND p.source_path = split_part(s.source_path, '?symbol=', 1))::bool AS parent_indexed
+FROM documents s
+WHERE s.workspace_hash = $1
+  AND s.collection = $2
+  AND s.metadata->>'source_type' = 'symbol'
+  AND COALESCE(NULLIF(s.metadata->>'end_line', ''), '0') = '0';
+
+-- name: DeleteStaleSymbolSpanDocs :execrows
+-- Removes pre-#539 symbol docs for one file after a backfill pass. Only
+-- docs still lacking end_line match, so freshly re-emitted symbols survive
+-- and whatever is deleted was an orphan.
+DELETE FROM documents
+WHERE workspace_hash = @workspace_hash
+  AND collection = @collection
+  AND starts_with(source_path, @file_path::text || '?symbol=')
   AND metadata->>'source_type' = 'symbol'
   AND COALESCE(NULLIF(metadata->>'end_line', ''), '0') = '0';
 

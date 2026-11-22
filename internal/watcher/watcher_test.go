@@ -96,8 +96,12 @@ func (m *mockQuerier) UpdateDocumentFileState(_ context.Context, _ sqlc.UpdateDo
 	return nil
 }
 
-func (m *mockQuerier) ListFilesWithStaleSymbolSpans(_ context.Context, _ sqlc.ListFilesWithStaleSymbolSpansParams) ([]string, error) {
+func (m *mockQuerier) ListFilesWithStaleSymbolSpans(_ context.Context, _ sqlc.ListFilesWithStaleSymbolSpansParams) ([]sqlc.ListFilesWithStaleSymbolSpansRow, error) {
 	return nil, nil
+}
+
+func (m *mockQuerier) DeleteStaleSymbolSpanDocs(_ context.Context, _ sqlc.DeleteStaleSymbolSpanDocsParams) (int64, error) {
+	return 0, nil
 }
 
 func testConfig(debounceMs, pollSec int) config.Config {

@@ -8,5 +8,9 @@
       the re-extract admission gates (filter, skipResolved, regular file,
       max size).
 - [x] CHANGELOG entry; workaround note for older binaries.
+- [x] Review rework: `parent_indexed` on the stale-span query so ignored or
+      deleted files are never read; `DeleteStaleSymbolSpanDocs` after every
+      pass so orphans converge; red tests for ignored/deleted/zero-symbol
+      files and the third-start no-op.
 - [x] Quick + full integration validation.
 - [ ] Independent review and PR.

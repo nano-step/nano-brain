@@ -177,13 +177,13 @@ func (e *mcp584Env) index(t *testing.T, relFile, sym string) {
 	runCtx, cancel := context.WithCancel(e.ctx)
 	done := make(chan error, 1)
 	go func() { done <- w.Run(runCtx) }()
-	t.Cleanup(func() {
-		cancel()
-		if err := <-done; err != nil {
-			t.Errorf("watcher: %v", err)
-		}
-	})
 	e.waitSpan(t, filepath.Join(e.root, relFile)+"?symbol="+sym+"&kind=function")
+	// Stop the watcher before returning so a second index() call never runs
+	// two watchers over the same workspace concurrently.
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("watcher: %v", err)
+	}
 }
 
 func (e *mcp584Env) symbolMeta(t *testing.T, sourcePath string) map[string]string {

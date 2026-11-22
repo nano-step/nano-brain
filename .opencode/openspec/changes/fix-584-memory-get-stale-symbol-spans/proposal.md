@@ -12,9 +12,13 @@ the same file, so `file::foo` returns the wrong body.
 
 ## What
 
-- Backfill stale symbol spans once at watcher start: a new query lists the
-  parent files of symbol docs without `end_line`; the watcher re-runs symbol
-  extraction for just those files after the initial scan.
+- Backfill stale symbol spans at watcher start: a new query lists the
+  parent files of symbol docs without `end_line` and whether each file is
+  still indexed; the watcher re-runs symbol extraction for just the
+  admitted files after the initial scan.
+- Converge in one pass: stale docs whose symbols are no longer emitted —
+  or whose files are no longer indexed (deleted, newly ignored) — are
+  deleted instead of re-attempted on every start.
 - Order `ResolveSymbolByName` deterministically — functions first, then
   types, consts/vars, and methods last — so same-name lookups are stable.
 - Workaround for already-indexed workspaces on older binaries:
