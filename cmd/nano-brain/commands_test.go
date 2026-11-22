@@ -3,15 +3,20 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nano-brain/nano-brain/internal/health/doctor"
 )
 
 func TestGetBaseURL_Defaults(t *testing.T) {
@@ -745,4 +750,145 @@ func TestParseInitArgs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCLIHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_CLI_HELPER_PROCESS") != "1" {
+		return
+	}
+	for i, a := range os.Args {
+		if a == "--" {
+			os.Args = append([]string{"nano-brain"}, os.Args[i+1:]...)
+			main()
+			os.Exit(0)
+		}
+	}
+	os.Exit(2)
+}
+
+func invokeCLI(t *testing.T, env map[string]string, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
+	cmdArgs := append([]string{"-test.run=^TestCLIHelperProcess$", "--"}, args...)
+	cmd := exec.Command(os.Args[0], cmdArgs...)
+	baseEnv := make([]string, 0, len(os.Environ())+len(env)+4)
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		if _, overridden := env[k]; overridden {
+			continue
+		}
+		baseEnv = append(baseEnv, kv)
+	}
+	baseEnv = append(baseEnv, "GO_WANT_CLI_HELPER_PROCESS=1")
+	for k, v := range env {
+		baseEnv = append(baseEnv, k+"="+v)
+	}
+	cmd.Env = baseEnv
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err := cmd.Run()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return outBuf.String(), errBuf.String(), exitErr.ExitCode()
+		}
+		t.Fatalf("invokeCLI(%v) failed: %v", args, err)
+	}
+	return outBuf.String(), errBuf.String(), 0
+}
+
+func TestCLI_ConfigFlagWhitespaceAndThreading(t *testing.T) {
+	t.Run("init --yes trims --config whitespace and writes trimmed path", func(t *testing.T) {
+		h := &orchestratorHooks{}
+		withOrchestratorHooks(t, h)
+
+		dir := t.TempDir()
+		t.Chdir(dir)
+		cfgPath := filepath.Join(dir, "custom-init.yml")
+		t.Setenv("NANO_BRAIN_CONFIG", "")
+
+		var doctorArg string
+		runDoctorChecksFn = func(p string) []doctor.Check {
+			h.doctorCalls++
+			doctorArg = p
+			return []doctor.Check{{Name: "PostgreSQL", Status: "ok", Detail: "127.0.0.1:5432"}}
+		}
+
+		_, _ = captureOutput(t, func() {
+			runNonInteractiveInit("  " + cfgPath + "  ")
+		})
+
+		if _, err := os.Stat(cfgPath); err != nil {
+			t.Fatalf("expected config written at trimmed path %q: %v", cfgPath, err)
+		}
+		if doctorArg != cfgPath {
+			t.Errorf("doctor received configPath = %q, want trimmed %q", doctorArg, cfgPath)
+		}
+	})
+
+	t.Run("status threads --config with surrounding whitespace to HTTP client", func(t *testing.T) {
+		envSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"from-env"}`))
+		}))
+		defer envSrv.Close()
+
+		flagSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"from-flag"}`))
+		}))
+		defer flagSrv.Close()
+
+		envHostPort := strings.Split(strings.TrimPrefix(envSrv.URL, "http://"), ":")
+		flagHostPort := strings.Split(strings.TrimPrefix(flagSrv.URL, "http://"), ":")
+
+		dir := t.TempDir()
+		envCfg := filepath.Join(dir, "env.yml")
+		flagCfg := filepath.Join(dir, "flag.yml")
+		if err := os.WriteFile(envCfg, []byte(fmt.Sprintf("server:\n  host: %s\n  port: %s\n", envHostPort[0], envHostPort[1])), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(flagCfg, []byte(fmt.Sprintf("server:\n  host: %s\n  port: %s\n", flagHostPort[0], flagHostPort[1])), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		stdout, stderr, code := invokeCLI(t, map[string]string{
+			"HOME":                     dir,
+			"NANO_BRAIN_CONFIG":        envCfg,
+			"NANO_BRAIN_HOST":          "",
+			"NANO_BRAIN_PORT":          "",
+			"NANO_BRAIN_NO_AUTO_START": "1",
+		}, "--config", "  "+flagCfg+"  ", "status", "--json")
+
+		if code != 0 {
+			t.Fatalf("exit code = %d, stderr = %q", code, stderr)
+		}
+		if !strings.Contains(stdout, `"from-flag"`) {
+			t.Errorf("status did not use --config (trimmed): stdout = %q, stderr = %q", stdout, stderr)
+		}
+	})
+
+	t.Run("logs threads --config with surrounding whitespace", func(t *testing.T) {
+		dir := t.TempDir()
+		logPath := filepath.Join(dir, "custom.log")
+		if err := os.WriteFile(logPath, []byte("hello-from-custom-log-233\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfgPath := filepath.Join(dir, "logs-cfg.yml")
+		if err := os.WriteFile(cfgPath, []byte(fmt.Sprintf("logging:\n  file: %q\n", logPath)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		stdout, stderr, code := invokeCLI(t, map[string]string{
+			"HOME":              dir,
+			"NANO_BRAIN_CONFIG": "",
+		}, "--config", "  "+cfgPath+"  ", "logs", "-n", "5")
+
+		if code != 0 {
+			t.Fatalf("logs exit code = %d, stderr = %q", code, stderr)
+		}
+		if !strings.Contains(stdout, "hello-from-custom-log-233") {
+			t.Errorf("logs stdout = %q, want custom log line", stdout)
+		}
+	})
 }

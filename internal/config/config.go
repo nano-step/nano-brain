@@ -379,6 +379,7 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	// If config path is provided, load from file
+	configPath = strings.TrimSpace(configPath)
 	if configPath != "" {
 		// Expand tilde if present
 		if strings.HasPrefix(configPath, "~") {
@@ -754,19 +755,25 @@ func DefaultConfigPath() string {
 // ResolveConfigPathStrict when the caller needs a warning on missing files.
 func ResolveConfigPath(flagValue string) string {
 	if v := strings.TrimSpace(flagValue); v != "" {
+		if expanded, err := expandTildeForConfig(v); err == nil {
+			return expanded
+		}
 		return v
 	}
 	if v := strings.TrimSpace(os.Getenv("NANO_BRAIN_CONFIG")); v != "" {
+		if expanded, err := expandTildeForConfig(v); err == nil {
+			return expanded
+		}
 		return v
 	}
 	return DefaultConfigPath()
 }
 
-// ResolveConfigPathStrict behaves like ResolveConfigPath but ALSO emits a
-// warning to stderr (and returns the warning) when --config flag or
-// NANO_BRAIN_CONFIG env was set explicitly but the resolved file does not
-// exist. The path is still returned so the caller can fall through to
-// defaults — this is a warning, not a fatal error.
+// ResolveConfigPathStrict behaves like ResolveConfigPath but ALSO returns a
+// warning message when --config flag or NANO_BRAIN_CONFIG env was set
+// explicitly and the resolved file does not exist. The path is still returned
+// so the caller can fall through to defaults — this is a warning, not a fatal
+// error (unless a caller such as doctor chooses to fail on it).
 //
 // Returns (path, warning). warning is "" when no problem detected.
 func ResolveConfigPathStrict(flagValue string) (string, string) {
@@ -782,6 +789,9 @@ func ResolveConfigPathStrict(flagValue string) (string, string) {
 		path, source = envTrimmed, "NANO_BRAIN_CONFIG env"
 	default:
 		return DefaultConfigPath(), ""
+	}
+	if expanded, err := expandTildeForConfig(path); err == nil {
+		path = expanded
 	}
 
 	if _, err := os.Stat(path); err != nil {

@@ -15,7 +15,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
-func runDBMigrateCmd(args []string) {
+func runDBMigrateCmd(args []string, configPath string) {
 	cliLog.Info().Str("cmd", "db:migrate").Msg("cli command started")
 	var fromV1 string
 	var workspace string
@@ -46,7 +46,7 @@ func runDBMigrateCmd(args []string) {
 	}
 
 	if fromV1 == "" {
-		runGooseMigrateCmd(jsonFlag)
+		runGooseMigrateCmd(configPath, jsonFlag)
 		cliLog.Info().Str("cmd", "db:migrate").Msg("cli command completed")
 		return
 	}
@@ -55,7 +55,8 @@ func runDBMigrateCmd(args []string) {
 		workspace = "default"
 	}
 
-	cfg, err := config.Load(config.ResolveConfigPath(""))
+	resolvedPath, _ := resolveCLIConfigPath(configPath)
+	cfg, err := config.Load(resolvedPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)

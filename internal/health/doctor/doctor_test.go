@@ -183,3 +183,13 @@ func TestCheckEmbeddingProvider_VoyageConfigured(t *testing.T) {
 		t.Errorf("status = %q, want ok", c.Status)
 	}
 }
+
+func TestCheckConfig_FileDoesNotExistHint(t *testing.T) {
+	c := doctor.CheckConfig("/tmp/missing-explicit.yml", os.ErrNotExist)
+	if c.Status != "fail" {
+		t.Errorf("status = %q, want fail", c.Status)
+	}
+	if c.Hint == "" || c.Detail != "/tmp/missing-explicit.yml" {
+		t.Errorf("unexpected check: %+v", c)
+	}
+}

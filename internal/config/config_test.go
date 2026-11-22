@@ -718,6 +718,28 @@ func TestResolveConfigPath_TrimsWhitespace(t *testing.T) {
 	if got != "/from/env.yml" {
 		t.Errorf("expected trimmed env value, got %q", got)
 	}
+	if gotFlag := ResolveConfigPath("  /from/flag.yml  "); gotFlag != "/from/flag.yml" {
+		t.Errorf("expected trimmed flag value, got %q", gotFlag)
+	}
+	if gotBlankFlag := ResolveConfigPath("   "); gotBlankFlag != "/from/env.yml" {
+		t.Errorf("expected whitespace-only flag to fall through to env, got %q", gotBlankFlag)
+	}
+}
+
+func TestResolveConfigPathStrict_TrimsWhitespaceAndExpandsTilde(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cfgPath := filepath.Join(home, "custom.yml")
+	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 3199\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, warn := ResolveConfigPathStrict("  ~/custom.yml  ")
+	if warn != "" {
+		t.Errorf("unexpected warning for existing tilde path: %q", warn)
+	}
+	if got != cfgPath {
+		t.Errorf("ResolveConfigPathStrict() = %q, want %q", got, cfgPath)
+	}
 }
 
 func TestResolveConfigPathStrict_WarnsOnMissingFile(t *testing.T) {

@@ -41,7 +41,7 @@ func resolveHostPort() (string, int) {
 	envHost := os.Getenv("NANO_BRAIN_HOST")
 	envPort := os.Getenv("NANO_BRAIN_PORT")
 	
-	cfg, _ := config.Load(config.ResolveConfigPath(""))
+	cfg, _ := config.Load(resolveClientConfigPath())
 	
 	// Host resolution with correct precedence:
 	// 1. ENV var (highest)
@@ -180,7 +180,7 @@ func recoverFromConnectionRefused(host string, port int) bool {
 		return false
 	}
 
-	runServeDaemonFn(config.ResolveConfigPath(""))
+	runServeDaemonFn(config.ResolveConfigPath(cliConfigPath))
 
 	if err := waitForServerHealthy(serverHealthTimeout); err != nil {
 		fmt.Fprintln(os.Stderr, "Server started but did not become healthy in 10s. Check logs: ~/.nano-brain/logs/nano-brain.log")

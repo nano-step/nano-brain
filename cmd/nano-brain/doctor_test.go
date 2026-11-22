@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -101,4 +103,127 @@ func TestCheckConfigSuccess(t *testing.T) {
 	if r.Status != "ok" {
 		t.Errorf("expected ok for valid config, got %q", r.Status)
 	}
+}
+
+func TestDoctor_MissingExplicitConfigFailsAndWarns(t *testing.T) {
+	findConfigCheck := func(t *testing.T, stdout string) doctor.Check {
+		t.Helper()
+		var parsed struct {
+			Checks    []doctor.Check `json:"checks"`
+			AllPassed bool           `json:"all_passed"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+			t.Fatalf("json.Unmarshal(%q): %v", stdout, err)
+		}
+		for _, c := range parsed.Checks {
+			if c.Name == "Config" {
+				return c
+			}
+		}
+		t.Fatalf("Config check not found in %+v", parsed.Checks)
+		return doctor.Check{}
+	}
+
+	t.Run("NANO_BRAIN_CONFIG missing reports Config FAIL and emits WARNING on stderr", func(t *testing.T) {
+		dir := t.TempDir()
+		missing := filepath.Join(dir, "does-not-exist.yml")
+
+		stdout, stderr, code := invokeCLI(t, map[string]string{
+			"HOME":                          dir,
+			"NANO_BRAIN_CONFIG":             missing,
+			"DATABASE_URL":                  "",
+			"NANO_BRAIN_EMBEDDING_PROVIDER": "",
+		}, "doctor", "--json")
+
+		if code == 0 {
+			t.Errorf("exit code = 0, want non-zero when explicit config is missing")
+		}
+		if !strings.Contains(stderr, "WARNING:") || !strings.Contains(stderr, "NANO_BRAIN_CONFIG") || !strings.Contains(stderr, missing) {
+			t.Errorf("stderr = %q, want WARNING mentioning NANO_BRAIN_CONFIG and %q", stderr, missing)
+		}
+		cfgCheck := findConfigCheck(t, stdout)
+		if cfgCheck.Status != "fail" {
+			t.Errorf("Config check status = %q, want \"fail\" (got %+v)", cfgCheck.Status, cfgCheck)
+		}
+		if !strings.Contains(cfgCheck.Hint, "file does not exist") && !strings.Contains(cfgCheck.Detail, "file does not exist") {
+			t.Errorf("Config check missing 'file does not exist' message: %+v", cfgCheck)
+		}
+	})
+
+	t.Run("explicit --config missing reports Config FAIL and emits WARNING on stderr", func(t *testing.T) {
+		dir := t.TempDir()
+		missing := filepath.Join(dir, "flag-does-not-exist.yml")
+
+		stdout, stderr, code := invokeCLI(t, map[string]string{
+			"HOME":                          dir,
+			"NANO_BRAIN_CONFIG":             "",
+			"DATABASE_URL":                  "",
+			"NANO_BRAIN_EMBEDDING_PROVIDER": "",
+		}, "--config", missing, "doctor")
+
+		if code == 0 {
+			t.Errorf("exit code = 0, want non-zero when --config file is missing")
+		}
+		if !strings.Contains(stderr, "WARNING:") || !strings.Contains(stderr, "--config flag") || !strings.Contains(stderr, missing) {
+			t.Errorf("stderr = %q, want WARNING mentioning --config flag and %q", stderr, missing)
+		}
+		if !strings.Contains(stdout, "FAIL") || !strings.Contains(stdout, "file does not exist") {
+			t.Errorf("stdout = %q, want Config FAIL with 'file does not exist'", stdout)
+		}
+	})
+
+	t.Run("unset env and missing default path still reports Config OK with empty stderr", func(t *testing.T) {
+		dir := t.TempDir()
+
+		stdout, stderr, _ := invokeCLI(t, map[string]string{
+			"HOME":                          dir,
+			"NANO_BRAIN_CONFIG":             "",
+			"DATABASE_URL":                  "",
+			"NANO_BRAIN_EMBEDDING_PROVIDER": "",
+		}, "doctor", "--json")
+
+		if stderr != "" {
+			t.Errorf("stderr = %q, want empty when neither --config nor NANO_BRAIN_CONFIG is set", stderr)
+		}
+		cfgCheck := findConfigCheck(t, stdout)
+		if cfgCheck.Status != "ok" {
+			t.Errorf("Config check status = %q, want \"ok\" for zero-config default (got %+v)", cfgCheck.Status, cfgCheck)
+		}
+	})
+}
+
+func TestDoctor_TrimsConfigFlagWhitespace(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "valid-config.yml")
+	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 3199\nembedding:\n  provider: \"\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, _ := invokeCLI(t, map[string]string{
+		"HOME":              dir,
+		"NANO_BRAIN_CONFIG": "",
+		"DATABASE_URL":      "",
+	}, "--config", "  "+cfgPath+"  ", "doctor", "--json")
+
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty for valid padded --config path", stderr)
+	}
+	var parsed struct {
+		Checks []doctor.Check `json:"checks"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", stdout, err)
+	}
+	for _, c := range parsed.Checks {
+		if c.Name == "Config" {
+			if c.Status != "ok" {
+				t.Errorf("Config status = %q, want \"ok\" (check=%+v)", c.Status, c)
+			}
+			if c.Detail != cfgPath {
+				t.Errorf("Config detail = %q, want trimmed %q", c.Detail, cfgPath)
+			}
+			return
+		}
+	}
+	t.Fatal("Config check not found")
 }

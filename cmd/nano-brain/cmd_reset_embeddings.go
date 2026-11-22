@@ -13,7 +13,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 )
 
-func runResetEmbeddingsCmd(args []string) {
+func runResetEmbeddingsCmd(args []string, configPath string) {
 	cliLog.Info().Str("cmd", "reset-embeddings").Msg("cli command started")
 
 	var workspaceHash, workspacePath string
@@ -62,7 +62,8 @@ func runResetEmbeddingsCmd(args []string) {
 		workspaceHash = h
 	}
 
-	cfg, err := config.Load(config.ResolveConfigPath(""))
+	resolvedPath, _ := resolveCLIConfigPath(configPath)
+	cfg, err := config.Load(resolvedPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)

@@ -95,9 +95,11 @@ func runServeDaemon(configPath string) {
 		logStart = info.Size()
 	}
 
+	_, _ = resolveCLIConfigPath(configPath)
+
 	childArgs := []string{exe, "--daemon-child"}
-	if configPath != "" {
-		childArgs = append(childArgs, "--config", configPath)
+	if trimmed := strings.TrimSpace(configPath); trimmed != "" {
+		childArgs = append(childArgs, "--config", trimmed)
 	}
 	if unsafeNoAuth {
 		childArgs = append(childArgs, "--unsafe-no-auth")

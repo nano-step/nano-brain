@@ -54,7 +54,7 @@ Commands:
 	fmt.Fprint(os.Stderr, help)
 }
 
-func runBenchCmd(args []string) {
+func runBenchCmd(args []string, configPath string) {
 	cliLog.Info().Str("cmd", "bench").Msg("cli command started")
 	if len(args) == 0 || (len(args) > 0 && (args[0] == "--help" || args[0] == "-h")) {
 		printBenchHelp()
@@ -62,13 +62,13 @@ func runBenchCmd(args []string) {
 	}
 	switch args[0] {
 	case "generate":
-		runBenchGenerate(args[1:])
+		runBenchGenerate(args[1:], configPath)
 	case "run":
-		runBenchRun(args[1:])
+		runBenchRun(args[1:], configPath)
 	case "compare":
 		runBenchCompare(args[1:])
 	case "stress":
-		runBenchStress(args[1:])
+		runBenchStress(args[1:], configPath)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown bench subcommand: %s\n\n", args[0])
 		printBenchHelp()
@@ -89,7 +89,7 @@ func splitEqualsArgs(args []string) []string {
 	return out
 }
 
-func runBenchGenerate(args []string) {
+func runBenchGenerate(args []string, configPath string) {
 	args = splitEqualsArgs(args)
 	var workspace, output string
 	var scale int
@@ -136,7 +136,8 @@ func runBenchGenerate(args []string) {
 		os.Exit(1)
 	}
 
-	cfg, err := config.Load(config.ResolveConfigPath(""))
+	resolvedPath, _ := resolveCLIConfigPath(configPath)
+	cfg, err := config.Load(resolvedPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)
@@ -192,7 +193,7 @@ func runBenchGenerate(args []string) {
 	fmt.Println(string(data))
 }
 
-func runBenchRun(args []string) {
+func runBenchRun(args []string, configPath string) {
 	args = splitEqualsArgs(args)
 	var dataset, save string
 	var jsonFlag bool
@@ -237,7 +238,8 @@ func runBenchRun(args []string) {
 		os.Exit(1)
 	}
 
-	cfg, err := config.Load(config.ResolveConfigPath(""))
+	resolvedPath, _ := resolveCLIConfigPath(configPath)
+	cfg, err := config.Load(resolvedPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)
@@ -403,7 +405,7 @@ func runBenchCompare(args []string) {
 	}
 }
 
-func runBenchStress(args []string) {
+func runBenchStress(args []string, configPath string) {
 	args = splitEqualsArgs(args)
 	var workspace string
 	var concurrency, docsPerWriter int
@@ -458,7 +460,8 @@ func runBenchStress(args []string) {
 		docsPerWriter = 10
 	}
 
-	cfg, err := config.Load(config.ResolveConfigPath(""))
+	resolvedPath, _ := resolveCLIConfigPath(configPath)
+	cfg, err := config.Load(resolvedPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)

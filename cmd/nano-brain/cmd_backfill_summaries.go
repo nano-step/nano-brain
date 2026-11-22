@@ -18,7 +18,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/summarize"
 )
 
-func runBackfillSummariesCmd(args []string) {
+func runBackfillSummariesCmd(args []string, configPath string) {
 	var outputDir, workspace, sinceStr string
 	var dryRun bool
 
@@ -44,7 +44,7 @@ func runBackfillSummariesCmd(args []string) {
 
 	warnIfBackfillServerRunning()
 
-	configPath := config.ResolveConfigPath("")
+	configPath, _ = resolveCLIConfigPath(configPath)
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)

@@ -14,7 +14,7 @@ import (
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 )
 
-func runCleanupOrphanWorkspacesCmd(args []string) {
+func runCleanupOrphanWorkspacesCmd(args []string, configPath string) {
 	cliLog.Info().Str("cmd", "cleanup-orphan-workspaces").Msg("cli command started")
 
 	var dryRun bool
@@ -34,7 +34,7 @@ func runCleanupOrphanWorkspacesCmd(args []string) {
 
 	warnIfServerRunning()
 
-	configPath := config.ResolveConfigPath("")
+	configPath, _ = resolveCLIConfigPath(configPath)
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)

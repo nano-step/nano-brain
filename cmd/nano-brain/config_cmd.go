@@ -7,11 +7,47 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"gopkg.in/yaml.v3"
 )
+
+var (
+	clientConfigWarnMu   sync.Mutex
+	lastClientConfigWarn string
+)
+
+// resolveCLIConfigPath resolves the config file path via ResolveConfigPathStrict
+// and prints any missing-explicit-config warning to stderr.
+func resolveCLIConfigPath(flagValue string) (string, string) {
+	path, warn := config.ResolveConfigPathStrict(flagValue)
+	if warn != "" {
+		fmt.Fprintln(os.Stderr, warn)
+		clientConfigWarnMu.Lock()
+		lastClientConfigWarn = warn
+		clientConfigWarnMu.Unlock()
+	}
+	return path, warn
+}
+
+// resolveClientConfigPath resolves the config path for HTTP client commands,
+// emitting a missing-explicit-config warning to stderr at most once per unique
+// warning string so repeated HTTP probes do not duplicate stderr output.
+func resolveClientConfigPath() string {
+	path, warn := config.ResolveConfigPathStrict(cliConfigPath)
+	if warn != "" {
+		clientConfigWarnMu.Lock()
+		shouldPrint := warn != lastClientConfigWarn
+		lastClientConfigWarn = warn
+		clientConfigWarnMu.Unlock()
+		if shouldPrint {
+			fmt.Fprintln(os.Stderr, warn)
+		}
+	}
+	return path
+}
 
 func runConfigCmd(args []string, configPath string) {
 	cliLog.Debug().Str("cmd", "config").Msg("cli command started")
@@ -39,9 +75,7 @@ func runConfigCmd(args []string, configPath string) {
 }
 
 func runConfigShow(configPath string, jsonFlag bool) {
-	if configPath == "" {
-		configPath = config.ResolveConfigPath("")
-	}
+	configPath, _ = resolveCLIConfigPath(configPath)
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)

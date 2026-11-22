@@ -4,6 +4,7 @@ package doctor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -53,6 +54,9 @@ func RunAll(configPath string, cfg *config.Config, cfgErr error, binaryPath stri
 
 func CheckConfig(path string, err error) Check {
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Check{Name: "Config", Status: "fail", Detail: path, Hint: "file does not exist — check --config or NANO_BRAIN_CONFIG"}
+		}
 		return Check{Name: "Config", Status: "fail", Detail: path, Hint: "Run nano-brain to generate default config"}
 	}
 	return Check{Name: "Config", Status: "ok", Detail: path}

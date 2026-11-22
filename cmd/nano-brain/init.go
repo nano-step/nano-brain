@@ -126,9 +126,7 @@ func writeConfigFile(configPath, data string) {
 // the Phase 13 wizard are gone; the commented template replaces the need to
 // prompt for them (D-09).
 func runInteractiveInit(configPath string) {
-	if configPath == "" {
-		configPath = config.ResolveConfigPath("")
-	}
+	configPath = config.ResolveConfigPath(configPath)
 
 	// D-04 (Phase 13): interactive init requires a TTY. Non-interactive
 	// callers (CI, scripts, piped stdin) get pointed at the flag-driven path
@@ -235,9 +233,7 @@ func runInteractiveInit(configPath string) {
 // doctor; it does not chain into serve/register/MCP, since those steps are
 // interactive gates by design (D-08 only collapses config building).
 func runNonInteractiveInit(configPath string) {
-	if configPath == "" {
-		configPath = config.ResolveConfigPath("")
-	}
+	configPath = config.ResolveConfigPath(configPath)
 
 	// A scanner over an empty, already-closed reader: any prompt read inside
 	// stepDatabaseFn/stepEmbeddingFn immediately hits EOF, so those steps

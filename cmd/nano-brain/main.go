@@ -45,10 +45,13 @@ var cliLog = zerolog.Nop()
 // verbose holds the -v/--verbose count: 0=info, 1=debug, 2+=trace.
 var verbose int
 
+// cliConfigPath holds the global --config flag value parsed in main() so
+// shared HTTP client helpers (client.go) honor --config alongside subcommands.
+var cliConfigPath string
+
 func main() {
-	var configPath string
 	var daemonChild bool
-	flag.StringVar(&configPath, "config", "", "path to config file (default: ~/.nano-brain/config.yml)")
+	flag.StringVar(&cliConfigPath, "config", "", "path to config file (default: ~/.nano-brain/config.yml)")
 	flag.BoolVar(&daemonChild, "daemon-child", false, "")
 	flag.BoolVar(&unsafeNoAuth, "unsafe-no-auth", false, "allow binding to non-loopback without auth")
 	flag.BoolVar(&serveOnlyFlag, "serve-only", false, "disable background workers (embed queue, watcher, harvester) — issue #282")
@@ -63,6 +66,7 @@ func main() {
 	flag.Usage = func() { printUsage(os.Stderr) }
 	flag.Parse()
 
+	configPath := cliConfigPath
 	initCLILog(configPath)
 
 	// Hidden --daemon-child flag: run server directly (called by serve -d)
@@ -111,13 +115,13 @@ func main() {
 			runReindexCmd(args[1:])
 			return
 		case "bench":
-			runBenchCmd(args[1:])
+			runBenchCmd(args[1:], configPath)
 			return
 		case "db:migrate":
-			runDBMigrateCmd(args[1:])
+			runDBMigrateCmd(args[1:], configPath)
 			return
 		case "logs":
-			runLogsCmd(args[1:])
+			runLogsCmd(args[1:], configPath)
 			return
 		case "docker":
 			runDockerCmd(args[1:])
@@ -141,16 +145,16 @@ func main() {
 			runDetectChangesCmd(args[1:])
 			return
 		case "reset-embeddings":
-			runResetEmbeddingsCmd(args[1:])
+			runResetEmbeddingsCmd(args[1:], configPath)
 			return
 		case "backfill-summaries":
-			runBackfillSummariesCmd(args[1:])
+			runBackfillSummariesCmd(args[1:], configPath)
 			return
 		case "cleanup-stale-raw":
-			runCleanupStaleRawCmd(args[1:])
+			runCleanupStaleRawCmd(args[1:], configPath)
 			return
 		case "cleanup-orphan-workspaces":
-			runCleanupOrphanWorkspacesCmd(args[1:])
+			runCleanupOrphanWorkspacesCmd(args[1:], configPath)
 			return
 		case "wake-up":
 			runWakeUpCmd(args[1:])
@@ -242,11 +246,7 @@ func startServer(configPath string) {
 		os.Exit(1)
 	}
 
-	var configWarning string
-	configPath, configWarning = config.ResolveConfigPathStrict(configPath)
-	if configWarning != "" {
-		fmt.Fprintln(os.Stderr, configWarning)
-	}
+	configPath, _ = resolveCLIConfigPath(configPath)
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
