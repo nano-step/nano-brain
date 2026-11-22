@@ -111,8 +111,11 @@ func RetryCodeSummarize(
 			})
 		}
 
-		// Run the summarizer to reprocess
-		_, _, errs, err := summarizer.RunOnce(ctx, workspace)
+		hashes := make([]string, 0, len(failuresToRetry))
+		for _, f := range failuresToRetry {
+			hashes = append(hashes, f.ContentHash)
+		}
+		_, _, _, err = summarizer.RetryContentHashes(ctx, workspace, hashes)
 		if err != nil {
 			if errors.Is(err, codesummarize.ErrBudgetExhausted) {
 				return c.JSON(http.StatusOK, RetryResponse{
@@ -127,16 +130,21 @@ func RetryCodeSummarize(
 			return echo.NewHTTPError(http.StatusInternalServerError, "code summarization retry failed")
 		}
 
+		remaining, err := queries.GetUnresolvedFailures(ctx, workspace)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to verify retry results")
+		}
+		stillFailed := make(map[uuid.UUID]bool, len(remaining))
+		for _, f := range remaining {
+			stillFailed[f.ID] = true
+		}
 		succeeded := 0
-		failed := errs
 		for id := range failuresToRetry {
-			if err := queries.ResolveFailure(ctx, id); err != nil {
-				reqLog.Warn().Err(err).Str("failure_id", id.String()).Msg("failed to resolve failure")
-				failed++
-			} else {
+			if !stillFailed[id] {
 				succeeded++
 			}
 		}
+		failed := len(failuresToRetry) - succeeded
 
 		reqLog.Info().
 			Int("retried", len(failuresToRetry)).
@@ -209,8 +217,11 @@ func RetryAllCodeSummarize(
 			})
 		}
 
-		// Run the summarizer to reprocess
-		_, _, errs, err := summarizer.RunOnce(ctx, workspace)
+		hashes := make([]string, 0, len(failures))
+		for _, f := range failures {
+			hashes = append(hashes, f.ContentHash)
+		}
+		_, _, _, err = summarizer.RetryContentHashes(ctx, workspace, hashes)
 		if err != nil {
 			if errors.Is(err, codesummarize.ErrBudgetExhausted) {
 				return c.JSON(http.StatusOK, RetryResponse{
@@ -225,16 +236,21 @@ func RetryAllCodeSummarize(
 			return echo.NewHTTPError(http.StatusInternalServerError, "code summarization retry-all failed")
 		}
 
+		remaining, err := queries.GetUnresolvedFailures(ctx, workspace)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to verify retry results")
+		}
+		stillFailed := make(map[uuid.UUID]bool, len(remaining))
+		for _, f := range remaining {
+			stillFailed[f.ID] = true
+		}
 		succeeded := 0
-		failed := errs
 		for _, f := range failures {
-			if err := queries.ResolveFailure(ctx, f.ID); err != nil {
-				reqLog.Warn().Err(err).Str("failure_id", f.ID.String()).Msg("failed to resolve failure")
-				failed++
-			} else {
+			if !stillFailed[f.ID] {
 				succeeded++
 			}
 		}
+		failed := len(failures) - succeeded
 
 		reqLog.Info().
 			Int("retried", len(failures)).

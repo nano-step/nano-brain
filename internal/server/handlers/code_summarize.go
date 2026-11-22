@@ -24,6 +24,7 @@ type CodeSummarizeResponse struct {
 
 type CodeSummarizer interface {
 	RunOnce(ctx context.Context, workspaceHash string) (processed, skipped, errors int, err error)
+	RetryContentHashes(ctx context.Context, workspaceHash string, hashes []string) (processed, skipped, errors int, err error)
 }
 
 // TriggerCodeSummarize godoc
