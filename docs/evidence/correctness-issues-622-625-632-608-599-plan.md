@@ -83,3 +83,25 @@ Each fix: OpenSpec proposal/design/spec/tasks before code, regression test,
 `go build ./...`, `go test -race -short ./...`, focused and full integration
 against `nanobrain_test`, independent review when available, and PR/CI.
 Never claim a fix without observed before/after behavior.
+
+## Summarization review follow-up (#599/#608)
+
+Independent reviews sent PR #693 back for retry-all truncation at the
+cycle limit, starvation of graph-stale work, same-hash symbols sharing
+failure state, incorrect success counts after partial budget exhaustion,
+and a persisted empty graph-context marker that could hide a later edge.
+
+Measured red/green regressions cover more retries than one cycle, fresh
+and stale queues competing, two files with the same symbol hash retaining
+independent failure rows, source-scoped summary existence, and a calls edge
+appearing after an edge-free interval. Migration 00031 changes only the
+partial unique index on unresolved failures, from workspace plus hash to
+workspace, hash, file and symbol name. Explicit retries select failure IDs;
+successful summaries resolve the same identity. The stale selector now
+checks for relevant calls edges instead of storing a permanent empty hash.
+The legacy hash-keyed migration down is intentionally allowed to fail when
+distinct same-hash failures exist rather than deleting either record.
+
+The provider-429 worker backoff gap predates this change and remains open
+for separate investigation. Validation and final independent review of
+the migration-bearing revision are required before merging #693.
