@@ -25,6 +25,7 @@ reviewer reports and the isolated test-DB measurements.
 
 ## Resolution Status
 
-Two independent code reviewers returned MERGE before the final
-measurement/phase metadata updates; re-review the complete final diff
-before merging.
+Two independent code reviewers returned MERGE on the final code diff;
+a focused third reviewer approved the later HTTP smoke addition. Build,
+race/integration, OpenSpec, privacy and in-progress harness gates pass.
+Phase 20 is marked completed after verification; PR CI is pending.

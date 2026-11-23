@@ -1,6 +1,6 @@
 # Review #730: MCP trace symbol lookup
 
-Reviewer: two independent read-only code reviewers (separate from implementer)
+Reviewer: independent trace reviewer and independent process reviewer
 Review Verdict: PASS
 
 ## Independent findings
