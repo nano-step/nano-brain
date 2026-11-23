@@ -2084,6 +2084,7 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 			wsRoot := lookupWorkspaceRoot(ctx, a.queries, ws)
 
 			seen := map[string]bool{node: true}
+			resolvedSymbols := make(map[string][]sqlc.ResolveSymbolByNameRow)
 			type traceItem struct {
 				Node      string `json:"node"`
 				Name      string `json:"name"`
@@ -2153,12 +2154,17 @@ func registerMemoryTrace(server *mcpsdk.Server, a *Adapter) {
 						continue
 					}
 
-					matches, rErr := a.queries.ResolveSymbolByName(ctx, sqlc.ResolveSymbolByNameParams{
-						WorkspaceHash: ws,
-						Column2:       e.TargetNode,
-					})
-					if rErr != nil {
-						return errResult(fmt.Sprintf("trace query failed: %v", rErr)), nil
+					matches, cached := resolvedSymbols[e.TargetNode]
+					if !cached {
+						var rErr error
+						matches, rErr = a.queries.ResolveSymbolByName(ctx, sqlc.ResolveSymbolByNameParams{
+							WorkspaceHash: ws,
+							Column2:       e.TargetNode,
+						})
+						if rErr != nil {
+							return errResult(fmt.Sprintf("trace query failed: %v", rErr)), nil
+						}
+						resolvedSymbols[e.TargetNode] = matches
 					}
 					if len(matches) == 0 {
 						// Builtin or third-party symbol — not defined anywhere in
