@@ -5,8 +5,10 @@ package mcp_test
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -26,7 +28,7 @@ import (
 // Unlike setupGraphMCP, graph edges here follow the real watcher convention
 // (workspace-relative source/target nodes, e.g. filepath.Rel + ToSlash) —
 // see internal/watcher/watcher.go relPath/relFile.
-func setupFindingsMCP(t *testing.T) (context.Context, *sqlc.Queries, string, func(string, map[string]any) *mcpsdk.CallToolResult) {
+func setupFindingsMCP(t *testing.T, resolverCalls ...*atomic.Int32) (context.Context, *sqlc.Queries, string, func(string, map[string]any) *mcpsdk.CallToolResult) {
 	t.Helper()
 	pool := testutil.SetupTestDB(t)
 	ctx := context.Background()
@@ -34,6 +36,10 @@ func setupFindingsMCP(t *testing.T) (context.Context, *sqlc.Queries, string, fun
 	t.Cleanup(func() { db.Close() })
 
 	q := sqlc.New(db)
+	handlerQueries := q
+	if len(resolverCalls) > 0 {
+		handlerQueries = sqlc.New(&countingSymbolDB{DB: db, calls: resolverCalls[0]})
+	}
 	wsHash := fmt.Sprintf("%x", sha256.Sum256([]byte("test_ws_"+uuid.New().String())))
 	wsPath := "/tmp/test-ws-" + uuid.New().String()[:8]
 	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
@@ -43,7 +49,7 @@ func setupFindingsMCP(t *testing.T) (context.Context, *sqlc.Queries, string, fun
 	}
 
 	server := internalmcp.NewMCPServer("test")
-	adapter := internalmcp.NewAdapter(q, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
+	adapter := internalmcp.NewAdapter(handlerQueries, db, nil, nil, nil, config.EmbeddingConfig{}, config.SearchConfig{}, config.FlowConfig{}, nil, zerolog.Nop())
 	internalmcp.RegisterTools(server, adapter)
 
 	ct, st := mcpsdk.NewInMemoryTransports()
@@ -66,6 +72,87 @@ func setupFindingsMCP(t *testing.T) (context.Context, *sqlc.Queries, string, fun
 		return result
 	}
 	return ctx, q, wsHash, callTool
+}
+
+type countingSymbolDB struct {
+	*sql.DB
+	calls *atomic.Int32
+}
+
+func (db *countingSymbolDB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if strings.Contains(query, "-- name: ResolveSymbolByName ") {
+		db.calls.Add(1)
+	}
+	return db.DB.QueryContext(ctx, query, args...)
+}
+
+func TestMemoryTrace_ResolvesEachBareNameOncePerRequest(t *testing.T) {
+	var calls atomic.Int32
+	ctx, q, wsHash, callTool := setupFindingsMCP(t, &calls)
+	upsertSymbolDoc(t, ctx, q, wsHash, "left/target.go", "shared", "function", "func shared() {}", "1", "1")
+	upsertSymbolDoc(t, ctx, q, wsHash, "right/target.go", "shared", "function", "func shared() {}", "1", "1")
+
+	for _, edge := range []struct{ source, target, file string }{
+		{"entry.go::Main", "left/caller.go::Left", "entry.go"},
+		{"entry.go::Main", "right/caller.go::Right", "entry.go"},
+		{"left/caller.go::Left", "shared", "left/caller.go"},
+		{"left/caller.go::Left", "absent", "left/caller.go"},
+		{"right/caller.go::Right", "shared", "right/caller.go"},
+		{"right/caller.go::Right", "absent", "right/caller.go"},
+	} {
+		if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+			WorkspaceHash: wsHash, SourceNode: edge.source, TargetNode: edge.target,
+			SourceFile: edge.file, EdgeType: "calls", Metadata: []byte("{}"),
+		}); err != nil {
+			t.Fatalf("upsert edge: %v", err)
+		}
+	}
+	args := map[string]any{
+		"workspace": wsHash, "node": "entry.go::Main", "max_depth": float64(2),
+		"paths": "relative", "include_external": true,
+	}
+	for request := 1; request <= 2; request++ {
+		resp := unmarshalGraphResp(t, callTool("memory_trace", args))
+		chain, _ := resp["chain"].([]any)
+		if len(chain) != 5 {
+			t.Fatalf("request %d: chain = %+v, want two callers, two nearest matches, one external", request, chain)
+		}
+		for i, want := range []string{
+			"left/caller.go::Left", "right/caller.go::Right",
+			"absent", "left/target.go::shared", "right/target.go::shared",
+		} {
+			if got := chain[i].(map[string]any)["node"]; got != want {
+				t.Errorf("request %d: chain[%d].node = %v, want %s", request, i, got, want)
+			}
+		}
+		if got := calls.Load(); got != int32(2*request) {
+			t.Errorf("request %d: resolver calls = %d, want %d (one present and one missing per request)", request, got, 2*request)
+		}
+	}
+	otherWS := fmt.Sprintf("%x", sha256.Sum256([]byte("other_"+uuid.New().String())))
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: otherWS, Name: "other", Path: "/tmp/other-fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	upsertSymbolDoc(t, ctx, q, otherWS, "other/target.go", "absent", "function", "func absent() {}", "1", "1")
+	if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
+		WorkspaceHash: otherWS, SourceNode: "entry.go::Main", TargetNode: "absent",
+		SourceFile: "entry.go", EdgeType: "calls", Metadata: []byte("{}"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	other := unmarshalGraphResp(t, callTool("memory_trace", map[string]any{
+		"workspace": otherWS, "node": "entry.go::Main", "max_depth": float64(1),
+		"paths": "relative",
+	}))
+	otherChain, _ := other["chain"].([]any)
+	if len(otherChain) != 1 || otherChain[0].(map[string]any)["node"] != "other/target.go::absent" {
+		t.Fatalf("other workspace resolved stale missing target: %+v", otherChain)
+	}
+	if got := calls.Load(); got != 5 {
+		t.Errorf("resolver calls after other workspace = %d, want 5", got)
+	}
 }
 
 // --- Finding 2: memory_get chunk-id resolution -----------------------------
