@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/nano-brain/nano-brain/internal/bench"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/embed"
@@ -21,7 +22,6 @@ import (
 	"github.com/nano-brain/nano-brain/internal/search/reranking"
 	"github.com/nano-brain/nano-brain/internal/storage"
 	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog"
 )
 
@@ -50,6 +50,21 @@ Commands:
              --docs-per-writer=M  Documents per writer (default: 10)
              --workspace=HASH     Workspace hash (required)
              --json               Machine-readable JSON output
+
+  eval       Read-only multi-workspace capability, token-efficiency & observe replay suite
+             --url=URL            Target nano-brain URL (default: http://localhost:3100)
+             --transport=MODE     Transport for capability suites: mcp|rest (default: mcp)
+             --suite=LIST         Comma-separated: all,go,ts,vue,rails,replay (default: all)
+             --profiles=FILE      Suite profile mapping JSON (default: .omc/bench-eval.local.json)
+             --workspace=ID       Override workspace hash/name for a single suite
+             --var=KEY=VAL        Template variable substitution (repeatable)
+             --replay-logs=GLOB   Observe JSONL logs glob/path
+             --replay-limit=N     Max read-only calls to replay (default: 200, 0=unlimited)
+             --strict-immutable   Fail if evaluated workspace counts change (default: true)
+             --save=FILE          Write JSON report to file
+             --markdown=FILE      Write Markdown scorecard to file
+             --compare=FILE       Compare against baseline JSON report (exit 1 on regression)
+             --json               Print JSON report to stdout instead of Markdown
 `
 	fmt.Fprint(os.Stderr, help)
 }
@@ -69,6 +84,8 @@ func runBenchCmd(args []string, configPath string) {
 		runBenchCompare(args[1:])
 	case "stress":
 		runBenchStress(args[1:], configPath)
+	case "eval":
+		runBenchEval(args[1:], configPath)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown bench subcommand: %s\n\n", args[0])
 		printBenchHelp()

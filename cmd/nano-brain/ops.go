@@ -583,7 +583,7 @@ Commands:
   mcp-url            Print the resolved MCP server URL
   docker             Manage Docker Compose (start/stop/status)
   db:migrate         Run database migrations
-  bench              Benchmarking suite (generate/run/compare/stress)
+  bench              Benchmarking suite (generate/run/compare/stress/eval)
   context            Show symbol definition + call sites     [--workspace <hash>]
   code-impact        Show blast radius of a symbol change    [--workspace <hash>] [--depth N]
   detect-changes     List changed symbols since last commit  [--workspace <hash>] [--staged|--all]
