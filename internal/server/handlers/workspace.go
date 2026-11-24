@@ -107,7 +107,7 @@ func initWorkspace(ctx context.Context, q WorkspaceQuerier, hash, name, absPath 
 
 // InitWorkspace godoc
 // @Summary      Register a workspace
-// @Description  Registers a root path as a workspace and creates its default collections (memory, sessions, code). When db is non-nil, all three DB operations are wrapped in a single transaction.
+// @Description  Registers a root path as a workspace and creates its default collections (memory, sessions, code; memory/sessions are logical and not filesystem-watched). When db is non-nil, all three DB operations are wrapped in a single transaction.
 // @Tags         workspaces
 // @Accept       json
 // @Produce      json
@@ -163,22 +163,12 @@ func InitWorkspace(q WorkspaceQuerier, db *sql.DB, fw *watcher.Watcher, watcherC
 		}
 
 		if fw != nil {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				logger.Warn().Err(err).Msg("failed to get home directory for watcher paths")
-				home = "~"
-			}
-			type colSpec struct{ name, path, glob string }
-			cols := []colSpec{
-				{"memory", filepath.Join(home, ".nano-brain", "memory"), "**/*"},
-				{"sessions", filepath.Join(home, ".nano-brain", "sessions"), "**/*"},
-				{"code", absPath, "**/*"},
-			}
+			// Only the "code" collection is filesystem-backed. "memory"/"sessions"
+			// are logical DB-backed collections and must never be watched, walked,
+			// or fsnotify-scanned (issue #714).
 			cfgExclude, cfgExtensions := watcherCfg.ResolveFilterForPath(absPath)
-			for _, col := range cols {
-				if err := fw.WatchWithFilter(col.name, col.path, hash, col.glob, cfgExclude, cfgExtensions); err != nil {
-					logger.Warn().Err(err).Str("collection", col.name).Msg("failed to attach watcher after init")
-				}
+			if err := fw.WatchWithFilter("code", absPath, hash, "**/*", cfgExclude, cfgExtensions); err != nil {
+				logger.Warn().Err(err).Str("collection", "code").Msg("failed to attach watcher after init")
 			}
 		}
 

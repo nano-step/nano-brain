@@ -24,6 +24,12 @@ type removeWorkspaceTxBeginner interface {
 	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }
 
+// WorkspaceUnwatcher detaches a deleted workspace from the file watcher.
+// *watcher.Watcher satisfies it; kept as an interface for testability.
+type WorkspaceUnwatcher interface {
+	UnwatchWorkspace(workspaceHash string) error
+}
+
 type removeWorkspaceResponse struct {
 	Workspace        string `json:"workspace"`
 	DeletedDocs      int64  `json:"deleted_docs"`
@@ -41,7 +47,7 @@ type removeWorkspaceResponse struct {
 // @Failure      404 {object} map[string]string
 // @Failure      500 {object} map[string]string
 // @Router       /api/v1/workspaces/{hash} [delete]
-func RemoveWorkspace(q RemoveWorkspaceQuerier, db removeWorkspaceTxBeginner, logger zerolog.Logger) echo.HandlerFunc {
+func RemoveWorkspace(q RemoveWorkspaceQuerier, db removeWorkspaceTxBeginner, fw WorkspaceUnwatcher, logger zerolog.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		hash := c.Param("hash")
 		if hash == "" {
@@ -64,21 +70,21 @@ func RemoveWorkspace(q RemoveWorkspaceQuerier, db removeWorkspaceTxBeginner, log
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count documents")
 		}
 
-	if db == nil {
-		if err := q.DeleteDocumentsByWorkspace(ctx, hash); err != nil {
-			logger.Error().Err(err).Str("workspace", hash).Msg("delete documents failed")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
-		}
-		if err := q.DeleteCodeSummarizationUsageByWorkspace(ctx, hash); err != nil {
-			logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization usage")
-		}
-		if err := q.DeleteCodeSummarizationFailuresByWorkspace(ctx, hash); err != nil {
-			logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization failures")
-		}
-		if err := q.DeleteWorkspace(ctx, hash); err != nil {
-			logger.Error().Err(err).Str("workspace", hash).Msg("delete workspace failed (docs already deleted)")
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
-		}
+		if db == nil {
+			if err := q.DeleteDocumentsByWorkspace(ctx, hash); err != nil {
+				logger.Error().Err(err).Str("workspace", hash).Msg("delete documents failed")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
+			}
+			if err := q.DeleteCodeSummarizationUsageByWorkspace(ctx, hash); err != nil {
+				logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization usage")
+			}
+			if err := q.DeleteCodeSummarizationFailuresByWorkspace(ctx, hash); err != nil {
+				logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization failures")
+			}
+			if err := q.DeleteWorkspace(ctx, hash); err != nil {
+				logger.Error().Err(err).Str("workspace", hash).Msg("delete workspace failed (docs already deleted)")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete workspace")
+			}
 		} else {
 			tx, err := db.BeginTx(ctx, nil)
 			if err != nil {
@@ -91,11 +97,19 @@ func RemoveWorkspace(q RemoveWorkspaceQuerier, db removeWorkspaceTxBeginner, log
 				logger.Error().Err(err).Str("workspace", hash).Msg("delete documents failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete documents")
 			}
+			// Inside a tx a failed statement aborts it — a warn-and-continue
+			// here would guarantee DeleteWorkspace fails with "current
+			// transaction is aborted". Roll back and surface the real error
+			// instead (issue #714).
 			if err := txq.DeleteCodeSummarizationUsageByWorkspace(ctx, hash); err != nil {
-				logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization usage")
+				_ = tx.Rollback()
+				logger.Error().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization usage")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to cleanup code summarization usage")
 			}
 			if err := txq.DeleteCodeSummarizationFailuresByWorkspace(ctx, hash); err != nil {
-				logger.Warn().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization failures")
+				_ = tx.Rollback()
+				logger.Error().Err(err).Str("workspace", hash).Msg("failed to cleanup code summarization failures")
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to cleanup code summarization failures")
 			}
 			if err := txq.DeleteWorkspace(ctx, hash); err != nil {
 				_ = tx.Rollback()
@@ -105,6 +119,14 @@ func RemoveWorkspace(q RemoveWorkspaceQuerier, db removeWorkspaceTxBeginner, log
 			if err := tx.Commit(); err != nil {
 				logger.Error().Err(err).Str("workspace", hash).Msg("commit transaction failed")
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to commit transaction")
+			}
+		}
+
+		// The workspace row is gone — detach its watcher state so a deleted
+		// workspace can never be resurrected by a stale scan (issue #714).
+		if fw != nil {
+			if err := fw.UnwatchWorkspace(hash); err != nil {
+				logger.Warn().Err(err).Str("workspace", hash).Msg("failed to detach watcher after workspace removal")
 			}
 		}
 

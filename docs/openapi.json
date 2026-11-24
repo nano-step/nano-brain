@@ -3199,7 +3199,7 @@
     },
     "/api/v1/init": {
       "post": {
-        "description": "Registers a root path as a workspace and creates its default collections (memory, sessions, code). When db is non-nil, all three DB operations are wrapped in a single transaction.",
+        "description": "Registers a root path as a workspace and creates its default collections (memory, sessions, code; memory/sessions are logical and not filesystem-watched). When db is non-nil, all three DB operations are wrapped in a single transaction.",
         "requestBody": {
           "content": {
             "application/json": {

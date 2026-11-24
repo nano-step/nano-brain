@@ -13,6 +13,13 @@ import (
 func TestGraphImpact_NodeFoundIndependentOfEdgeFilter(t *testing.T) {
 	q := newQueries(t)
 	workspace := "ws_" + uuid.NewString()
+	// Graph upserts require a registered workspace since migration 00033
+	// (issue #714) — ensure_workspace_short_id raises instead of auto-creating.
+	if _, err := q.UpsertWorkspace(context.Background(), sqlc.UpsertWorkspaceParams{
+		Hash: workspace, Name: workspace, Path: "/tmp/" + workspace,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := q.UpsertGraphEdge(context.Background(), sqlc.UpsertGraphEdgeParams{
 		WorkspaceHash: workspace,
 		SourceNode:    "src/leaf.go::Leaf",

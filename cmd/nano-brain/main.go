@@ -533,6 +533,11 @@ func startServer(configPath string) {
 			}
 			cfgExclude, cfgExtensions := cfg.Watcher.ResolveFilter(ws.Path)
 			for _, col := range collections {
+				// Logical collections ("memory"/"sessions") are DB-backed, not
+				// filesystem roots — never watch them (issue #714).
+				if watcher.IsLogicalCollection(col.Name) {
+					continue
+				}
 				if _, statErr := os.Stat(col.Path); os.IsNotExist(statErr) {
 					logger.Debug().Str("collection", col.Name).Str("path", col.Path).Msg("skipping watch — path does not exist")
 					continue

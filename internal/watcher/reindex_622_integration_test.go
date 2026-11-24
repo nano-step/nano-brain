@@ -74,14 +74,15 @@ func TestTriggerRescanWakesIdleWatcher(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	sentinel := filepath.Join(root, "unregistered-sentinel")
+	sentinelKey := collectionKey{workspaceHash: workspace, dirPath: sentinel}
 	w.mu.Lock()
-	w.dirty[sentinel] = true
+	w.dirty[sentinelKey] = true
 	w.mu.Unlock()
 	w.hotRegisterCh <- struct{}{}
 	deadline = time.Now().Add(5 * time.Second)
 	for {
 		w.mu.Lock()
-		_, pending := w.dirty[sentinel]
+		_, pending := w.dirty[sentinelKey]
 		w.mu.Unlock()
 		if !pending {
 			break

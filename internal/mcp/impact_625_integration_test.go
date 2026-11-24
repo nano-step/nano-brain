@@ -63,6 +63,13 @@ func TestMemoryImpact_NodeFoundIndependentOfEdgeFilter(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// The foreign-workspace edge needs its own registered workspace row now
+	// that ensure_workspace_short_id no longer auto-creates one (issue #714).
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: "other-" + workspace, Name: "other-" + workspace, Path: "/tmp/other-" + workspace,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
 		WorkspaceHash: "other-" + workspace,
 		SourceNode:    "foreign.go::OnlyHere",

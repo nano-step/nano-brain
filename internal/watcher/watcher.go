@@ -118,24 +118,30 @@ type Watcher struct {
 	// per file from this cache instead and passed in as an ImportContext.
 	aliasIndexes sync.Map
 
-	fsw         *fsnotify.Watcher
-	mu          sync.Mutex
-	collections map[string]watchedCollection
-	dirty       map[string]bool
+	fsw *fsnotify.Watcher
+	mu  sync.Mutex
+	// collections/dirty/warmed/startupAdmitted are keyed by collectionKey
+	// (workspaceHash + dirPath): two workspaces may watch the same absolute
+	// path, so path alone cannot identify a collection (issue #714).
+	collections map[collectionKey]watchedCollection
+	dirty       map[collectionKey]bool
 	// contextualReextract records workspaces whose JS/TS export surface changed.
 	// It is drained with the debounce batch, so a removed or unparsable event
 	// still re-extracts every source file in the owning workspace.
 	contextualReextract map[string]bool
 	// watchedDirs tracks every directory currently registered with fsnotify.
 	// fsnotify is non-recursive, so each subdirectory must be added individually
-	// for edits inside it to fire events (issue #497). Guarded by mu.
+	// for edits inside it to fire events (issue #497). Physical watches are
+	// shared across collections/workspaces on the same path, so this stays
+	// path-keyed; Unwatch* prunes entries no remaining collection needs.
+	// Guarded by mu.
 	watchedDirs map[string]bool
-	// startupAdmitted records, per collection dirPath, the files the initial
+	// startupAdmitted records, per collection key, the files the initial
 	// scan admitted — set before the first processAll and released after
 	// backfillSymbolSpans, so poll ticks never grow it. A surviving file doc
 	// does not prove a file is admitted (the walk may not have reached it),
 	// but this set does (issue #584).
-	startupAdmitted map[string]map[string]bool
+	startupAdmitted map[collectionKey]map[string]bool
 	// hotRegisterCh signals Run() that a workspace was registered at runtime so
 	// the dirty map should be processed without waiting for fsnotify events.
 	// Buffered=1 so WatchWithFilter never blocks. See issue #308.
@@ -148,11 +154,15 @@ type Watcher struct {
 	summarizeNotify func()
 	flowNotify      func(string)
 
-	fileCache    map[string]fileState
+	// fileCache is keyed file path → workspaceHash → state, so two workspaces
+	// watching the same path keep independent fingerprints while a
+	// path-level delete (file removed/renamed) still clears every workspace
+	// at once (issue #714).
+	fileCache    map[string]map[string]fileState
 	fileCacheMu  sync.RWMutex
 	hasNewEvents atomic.Bool
 
-	warmed map[string]bool
+	warmed map[collectionKey]bool
 
 	// symlinkWarned holds the paths already reported at Warn as symlinks leaving
 	// their workspace root, so repeat scans log them at Debug (issue #655).
@@ -185,13 +195,13 @@ func New(db *sql.DB, queries WatcherQuerier, logger zerolog.Logger, cfg config.C
 		pollInterval:        cfg.Watcher.ReindexInterval,
 		maxFileSize:         cfg.Storage.MaxFileSize,
 		chunkOverlap:        cfg.Watcher.ChunkOverlap,
-		collections:         make(map[string]watchedCollection),
-		dirty:               make(map[string]bool),
+		collections:         make(map[collectionKey]watchedCollection),
+		dirty:               make(map[collectionKey]bool),
 		contextualReextract: make(map[string]bool),
 		watchedDirs:         make(map[string]bool),
 		hotRegisterCh:       make(chan struct{}, 1),
-		fileCache:           make(map[string]fileState),
-		warmed:              make(map[string]bool),
+		fileCache:           make(map[string]map[string]fileState),
+		warmed:              make(map[collectionKey]bool),
 	}
 }
 
@@ -265,7 +275,8 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 		}
 	}
 
-	w.collections[absPath] = watchedCollection{
+	key := collectionKey{workspaceHash: workspaceHash, dirPath: absPath}
+	w.collections[key] = watchedCollection{
 		name:               collectionName,
 		dirPath:            absPath,
 		workspaceHash:      workspaceHash,
@@ -281,15 +292,20 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 			w.logger.Info().Str("dir", absPath).Str("collection", collectionName).Msg("collection path not found, skipping watch")
 			return nil
 		}
-		if err := w.fsw.Add(absPath); err != nil {
-			return fmt.Errorf("watch dir %s: %w", absPath, err)
+		// fsnotify watches are physical and shared: if another collection (or
+		// workspace) already watches this inode, skip fsw.Add but still mark
+		// this collection dirty so it gets its own scan (issue #714).
+		if !w.watchedDirs[absPath] {
+			if err := w.fsw.Add(absPath); err != nil {
+				return fmt.Errorf("watch dir %s: %w", absPath, err)
+			}
+			w.watchedDirs[absPath] = true
 		}
-		w.watchedDirs[absPath] = true
 		// Mark dirty + nudge Run() so processDirty runs an immediate scan.
 		// Without this, fsnotify only fires on FUTURE changes — existing files in a
 		// freshly-registered workspace never get queued for embedding until server
 		// restart (issue #308).
-		w.dirty[absPath] = true
+		w.dirty[key] = true
 		select {
 		case w.hotRegisterCh <- struct{}{}:
 		default:
@@ -299,7 +315,14 @@ func (w *Watcher) WatchWithFilter(collectionName, dirPath, workspaceHash, globPa
 	return nil
 }
 
-func (w *Watcher) Unwatch(dirPath string) error {
+// UnwatchCollection detaches a single (workspace, path) collection from the
+// watcher: its state maps are cleared, this workspace's fileCache entries under
+// the collection root are dropped, and fsnotify watches no remaining
+// collection needs are pruned (issue #714).
+func (w *Watcher) UnwatchCollection(workspaceHash, dirPath string) error {
+	if w == nil {
+		return nil
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -308,12 +331,104 @@ func (w *Watcher) Unwatch(dirPath string) error {
 		return fmt.Errorf("resolve path %s: %w", dirPath, err)
 	}
 
-	delete(w.collections, absPath)
-	delete(w.dirty, absPath)
+	key := collectionKey{workspaceHash: workspaceHash, dirPath: absPath}
+	delete(w.collections, key)
+	delete(w.dirty, key)
+	delete(w.warmed, key)
+	delete(w.startupAdmitted, key)
 
-	// Remove the root watch plus every recursive subdirectory watch under it.
-	w.unwatchTreeLocked(absPath)
+	w.fileCacheMu.Lock()
+	for cachedPath, byWorkspace := range w.fileCache {
+		if cachedPath == absPath || strings.HasPrefix(cachedPath, absPath+string(os.PathSeparator)) {
+			delete(byWorkspace, workspaceHash)
+			if len(byWorkspace) == 0 {
+				delete(w.fileCache, cachedPath)
+			}
+		}
+	}
+	w.fileCacheMu.Unlock()
+
+	// contextualReextract/rateLimiters are workspace-scoped: only drop them
+	// when this was the workspace's last watched collection (#714 review).
+	workspaceGone := true
+	for key := range w.collections {
+		if key.workspaceHash == workspaceHash {
+			workspaceGone = false
+			break
+		}
+	}
+	if workspaceGone {
+		delete(w.contextualReextract, workspaceHash)
+		delete(w.rateLimiters, workspaceHash)
+	}
+
+	w.pruneWatchedDirsLocked()
 	return nil
+}
+
+// UnwatchWorkspace detaches every collection belonging to workspaceHash and
+// drops all of that workspace's watcher state, including every fileCache
+// entry, then prunes fsnotify watches no remaining collection needs
+// (issue #714).
+func (w *Watcher) UnwatchWorkspace(workspaceHash string) error {
+	if w == nil {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	for key := range w.collections {
+		if key.workspaceHash == workspaceHash {
+			delete(w.collections, key)
+			delete(w.dirty, key)
+			delete(w.warmed, key)
+			delete(w.startupAdmitted, key)
+		}
+	}
+
+	w.fileCacheMu.Lock()
+	for cachedPath, byWorkspace := range w.fileCache {
+		delete(byWorkspace, workspaceHash)
+		if len(byWorkspace) == 0 {
+			delete(w.fileCache, cachedPath)
+		}
+	}
+	w.fileCacheMu.Unlock()
+
+	delete(w.contextualReextract, workspaceHash)
+	delete(w.rateLimiters, workspaceHash)
+
+	w.pruneWatchedDirsLocked()
+	return nil
+}
+
+// pruneWatchedDirsLocked removes fsnotify watches (and watchedDirs entries)
+// that no remaining collection still needs. A watched dir is kept when it
+// equals a collection root, sits under one, or is an ancestor of one — the
+// last case covers nested collections where a parent dir watch still serves
+// a surviving child root. Caller must hold w.mu.
+func (w *Watcher) pruneWatchedDirsLocked() {
+	if len(w.watchedDirs) == 0 {
+		return
+	}
+	sep := string(os.PathSeparator)
+	for dir := range w.watchedDirs {
+		needed := false
+		for _, col := range w.collections {
+			root := col.dirPath
+			if dir == root || strings.HasPrefix(dir, root+sep) || strings.HasPrefix(root, dir+sep) {
+				needed = true
+				break
+			}
+		}
+		if needed {
+			continue
+		}
+		if w.fsw != nil {
+			_ = w.fsw.Remove(dir)
+		}
+		delete(w.watchedDirs, dir)
+	}
 }
 
 // TriggerRescanByName marks the directory of a named collection dirty so the
@@ -322,18 +437,18 @@ func (w *Watcher) Unwatch(dirPath string) error {
 func (w *Watcher) TriggerRescanByName(collectionName, workspaceHash string) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	for path, col := range w.collections {
+	for key, col := range w.collections {
 		if col.name == collectionName && col.workspaceHash == workspaceHash {
 			if w.frameworkDetector != nil {
 				fws := w.frameworkDetector.Detect(col.dirPath)
 				if len(fws) > 0 {
 					w.logger.Debug().Strs("frameworks", fws).Str("dir", col.dirPath).Msg("framework re-detection during reindex")
 				}
-				updated := w.collections[col.dirPath]
+				updated := w.collections[key]
 				updated.detectedFrameworks = fws
-				w.collections[col.dirPath] = updated
+				w.collections[key] = updated
 			}
-			w.dirty[path] = true
+			w.dirty[key] = true
 			select {
 			case w.hotRegisterCh <- struct{}{}:
 			default:
@@ -361,9 +476,15 @@ func (w *Watcher) Run(ctx context.Context) error {
 	// fsw is brand new here; drop any stale watch bookkeeping from a prior run.
 	// Subdirectory watches are re-added by the initial scanCollection walk.
 	w.watchedDirs = make(map[string]bool)
-	for absPath, col := range w.collections {
+	for _, col := range w.collections {
+		absPath := col.dirPath
 		if _, err := os.Stat(absPath); err != nil {
 			w.logger.Info().Str("dir", absPath).Str("collection", col.name).Msg("collection path not found, skipping watch")
+			continue
+		}
+		// Multiple collections/workspaces may share one physical path; the
+		// fsnotify watch is added once and shared (issue #714).
+		if w.watchedDirs[absPath] {
 			continue
 		}
 		if err := fsw.Add(absPath); err != nil {
@@ -387,7 +508,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 		Msg("file watcher started")
 
 	w.mu.Lock()
-	w.startupAdmitted = make(map[string]map[string]bool)
+	w.startupAdmitted = make(map[collectionKey]map[string]bool)
 	w.mu.Unlock()
 	w.processAll(ctx)
 	w.backfillSymbolSpans(ctx)
@@ -446,14 +567,15 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 
 	w.hasNewEvents.Store(true)
 
-	// Mark the owning collection (by path prefix) dirty, not just the exact
+	// Mark the owning collection(s) (by path prefix) dirty, not just the exact
 	// parent dir. With recursive watches an event can come from any depth, so
 	// matching only collections[parentDir] would miss every subdirectory edit
-	// (issue #497). The dirty collection is re-walked on the next debounce tick.
+	// (issue #497). Every workspace sharing the path gets its own dirty key so
+	// each is re-walked on the next debounce tick (issue #714).
 	w.mu.Lock()
-	for root, col := range w.collections {
-		if event.Name == root || strings.HasPrefix(event.Name, col.dirPath+string(os.PathSeparator)) {
-			w.dirty[root] = true
+	for key, col := range w.collections {
+		if event.Name == col.dirPath || strings.HasPrefix(event.Name, col.dirPath+string(os.PathSeparator)) {
+			w.dirty[key] = true
 			if isContextualSourcePath(event.Name) {
 				w.contextualReextract[col.workspaceHash] = true
 			}
@@ -482,23 +604,28 @@ func (w *Watcher) handleFSEvent(event fsnotify.Event, debounce *time.Timer) {
 
 func (w *Watcher) processDirty(ctx context.Context) {
 	w.mu.Lock()
-	dirs := make([]string, 0, len(w.dirty))
-	for d := range w.dirty {
-		dirs = append(dirs, d)
+	keys := make([]collectionKey, 0, len(w.dirty))
+	for k := range w.dirty {
+		keys = append(keys, k)
 	}
-	w.dirty = make(map[string]bool)
+	w.dirty = make(map[collectionKey]bool)
 	workspaces := make([]string, 0, len(w.contextualReextract))
 	for workspace := range w.contextualReextract {
 		workspaces = append(workspaces, workspace)
 	}
 	w.contextualReextract = make(map[string]bool)
 	w.mu.Unlock()
-	sort.Strings(dirs)
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].dirPath != keys[j].dirPath {
+			return keys[i].dirPath < keys[j].dirPath
+		}
+		return keys[i].workspaceHash < keys[j].workspaceHash
+	})
 	sort.Strings(workspaces)
 
-	for _, d := range dirs {
+	for _, k := range keys {
 		w.mu.Lock()
-		col, ok := w.collections[d]
+		col, ok := w.collections[k]
 		w.mu.Unlock()
 		if !ok {
 			continue
@@ -572,18 +699,33 @@ func (w *Watcher) unwatchTreeLocked(path string) {
 	}
 }
 
+// setFileCacheEntry records the mtime+size+hash fingerprint for filePath under
+// workspaceHash, preserving other workspaces' entries for the same path
+// (issue #714). Takes fileCacheMu itself.
+func (w *Watcher) setFileCacheEntry(filePath, workspaceHash string, st fileState) {
+	w.fileCacheMu.Lock()
+	byWorkspace := w.fileCache[filePath]
+	if byWorkspace == nil {
+		byWorkspace = make(map[string]fileState)
+		w.fileCache[filePath] = byWorkspace
+	}
+	byWorkspace[workspaceHash] = st
+	w.fileCacheMu.Unlock()
+}
+
 // warmFileCacheFromDB pre-populates the in-memory fileCache for the given
 // collection by loading mtime+size fingerprints from the DB. Called once per
 // collection (idempotent via w.warmed) at the top of scanCollection, so an
 // unchanged file on process restart is skipped by the Stage-1 fast-path
 // without any read/hash/extraction (Fix B, plan 03).
 func (w *Watcher) warmFileCacheFromDB(ctx context.Context, col watchedCollection) {
+	key := col.key()
 	w.mu.Lock()
-	if w.warmed[col.dirPath] {
+	if w.warmed[key] {
 		w.mu.Unlock()
 		return
 	}
-	w.warmed[col.dirPath] = true
+	w.warmed[key] = true
 	w.mu.Unlock()
 
 	rows, err := w.queries.PreloadFileStateByWorkspace(ctx, sqlc.PreloadFileStateByWorkspaceParams{
@@ -601,10 +743,15 @@ func (w *Watcher) warmFileCacheFromDB(ctx context.Context, col watchedCollection
 		if !row.ModTime.Valid || !row.FileSize.Valid {
 			continue
 		}
-		if _, exists := w.fileCache[row.SourcePath]; exists {
+		byWorkspace := w.fileCache[row.SourcePath]
+		if _, exists := byWorkspace[col.workspaceHash]; exists {
 			continue
 		}
-		w.fileCache[row.SourcePath] = fileState{
+		if byWorkspace == nil {
+			byWorkspace = make(map[string]fileState)
+			w.fileCache[row.SourcePath] = byWorkspace
+		}
+		byWorkspace[col.workspaceHash] = fileState{
 			ModTime: row.ModTime.Time,
 			Size:    row.FileSize.Int64,
 			Hash:    row.ContentHash,
@@ -627,10 +774,10 @@ func (w *Watcher) recordStartupAdmission(col watchedCollection, path string) {
 	if w.startupAdmitted == nil {
 		return
 	}
-	set := w.startupAdmitted[col.dirPath]
+	set := w.startupAdmitted[col.key()]
 	if set == nil {
 		set = make(map[string]bool)
-		w.startupAdmitted[col.dirPath] = set
+		w.startupAdmitted[col.key()] = set
 	}
 	set[path] = true
 }
@@ -727,8 +874,15 @@ func (w *Watcher) cleanupIgnoredDocument(ctx context.Context, col watchedCollect
 		w.logger.Warn().Err(err).Str("file", filePath).Msg("cleanupIgnoredDocument: delete document failed")
 	}
 
+	// Only this workspace's fingerprint is dropped — another workspace
+	// watching the same path keeps its own cache entry (issue #714).
 	w.fileCacheMu.Lock()
-	delete(w.fileCache, filePath)
+	if byWorkspace := w.fileCache[filePath]; byWorkspace != nil {
+		delete(byWorkspace, col.workspaceHash)
+		if len(byWorkspace) == 0 {
+			delete(w.fileCache, filePath)
+		}
+	}
 	w.fileCacheMu.Unlock()
 
 	w.logger.Debug().Str("file", filePath).Str("doc_id", doc.ID.String()).Msg("cleaned up document matching ignore pattern")
@@ -762,11 +916,12 @@ func (w *Watcher) cleanupDeletedDocument(filePath string) {
 			WorkspaceHash: col.workspaceHash,
 		})
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return
+			// Every workspace sharing this path gets its own document lookup;
+			// one workspace missing the doc must not skip the others (#714).
+			if !errors.Is(err, sql.ErrNoRows) {
+				w.logger.Warn().Err(err).Str("file", filePath).Msg("cleanupDeletedDocument: get document failed")
 			}
-			w.logger.Warn().Err(err).Str("file", filePath).Msg("cleanupDeletedDocument: get document failed")
-			return
+			continue
 		}
 
 		if err := w.queries.DeleteChunksByDocumentID(ctx, sqlc.DeleteChunksByDocumentIDParams{
@@ -784,7 +939,6 @@ func (w *Watcher) cleanupDeletedDocument(filePath string) {
 		}
 
 		w.logger.Info().Str("file", filePath).Str("doc_id", doc.ID.String()).Msg("cleaned up deleted document")
-		return
 	}
 }
 
@@ -830,10 +984,16 @@ func (w *Watcher) cleanupPathPrefix(ctx context.Context, col watchedCollection, 
 		w.logger.Warn().Err(err).Str("prefix", prefix).Msg("cleanupPathPrefix: delete flowcharts failed")
 	}
 
+	// Drop only this workspace's fingerprints under the prefix — a second
+	// workspace watching the same paths keeps its own entries (#714).
 	w.fileCacheMu.Lock()
 	for cachedPath := range w.fileCache {
 		if strings.HasPrefix(cachedPath, prefix) {
-			delete(w.fileCache, cachedPath)
+			byWorkspace := w.fileCache[cachedPath]
+			delete(byWorkspace, col.workspaceHash)
+			if len(byWorkspace) == 0 {
+				delete(w.fileCache, cachedPath)
+			}
 		}
 	}
 	w.fileCacheMu.Unlock()
@@ -926,16 +1086,20 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 			fws := w.frameworkDetector.Detect(col.dirPath)
 			w.logger.Debug().Strs("frameworks", fws).Str("file", filePath).Msg("framework re-detection triggered by manifest change")
 			w.mu.Lock()
-			updated := w.collections[col.dirPath]
-			updated.detectedFrameworks = fws
-			w.collections[col.dirPath] = updated
+			key := col.key()
+			// The collection may have been unwatched mid-scan; never write a
+			// tombstone entry (zero dirPath) back into the map (#714 review).
+			if updated, ok := w.collections[key]; ok {
+				updated.detectedFrameworks = fws
+				w.collections[key] = updated
+			}
 			w.mu.Unlock()
 		}
 	}
 
 	// Fast-path: skip if mtime+size unchanged (biggest perf win from issue #375)
 	w.fileCacheMu.RLock()
-	cached, exists := w.fileCache[filePath]
+	cached, exists := w.fileCache[filePath][col.workspaceHash]
 	w.fileCacheMu.RUnlock()
 
 	if exists && cached.Size == info.Size() && sameMtime(cached.ModTime, info.ModTime()) {
@@ -1004,9 +1168,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 				w.logger.Warn().Err(upErr).Str("file", filePath).Msg("backfill file fingerprint failed")
 			}
 		}
-		w.fileCacheMu.Lock()
-		w.fileCache[filePath] = fileState{ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash}
-		w.fileCacheMu.Unlock()
+		w.setFileCacheEntry(filePath, col.workspaceHash, fileState{ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash})
 		return
 	}
 
@@ -1050,9 +1212,7 @@ func (w *Watcher) processFile(ctx context.Context, col watchedCollection, filePa
 
 	w.publishFileEvent(col.workspaceHash, filePath, "modified")
 
-	w.fileCacheMu.Lock()
-	w.fileCache[filePath] = fileState{ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash}
-	w.fileCacheMu.Unlock()
+	w.setFileCacheEntry(filePath, col.workspaceHash, fileState{ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash})
 
 	w.logger.Info().
 		Str("file", filePath).
@@ -1445,7 +1605,7 @@ func (w *Watcher) backfillSymbolSpans(ctx context.Context) {
 			// (unreadable parent, transient cleanup failure), not because
 			// they passed admission.
 			w.mu.Lock()
-			admittedByScan := w.startupAdmitted[col.dirPath][path]
+			admittedByScan := w.startupAdmitted[col.key()][path]
 			w.mu.Unlock()
 			if !admittedByScan {
 				keep("not admitted by initial scan")

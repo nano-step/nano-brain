@@ -109,7 +109,7 @@ func TestWarmFileCache(t *testing.T) {
 
 	// Assert the file cache was warmed (watcher B's cache has the entry).
 	wB.fileCacheMu.RLock()
-	_, cached := wB.fileCache[filePath]
+	_, cached := wB.fileCache[filePath][wsHash]
 	wB.fileCacheMu.RUnlock()
 	if !cached {
 		t.Error("expected watcher B fileCache to contain the file after warmFileCacheFromDB")
