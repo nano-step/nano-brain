@@ -102,6 +102,9 @@ func AddCollection(q CollectionQuerier, fw *watcher.Watcher, watcherCfg config.W
 		if !validCollectionName.MatchString(req.Name) {
 			return echo.NewHTTPError(http.StatusBadRequest, "name must be 1-128 characters: letters, digits, underscores, hyphens only")
 		}
+		if watcher.IsLogicalCollection(req.Name) {
+			return echo.NewHTTPError(http.StatusBadRequest, "name is reserved for a logical collection")
+		}
 		if req.Path == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "path is required")
 		}
@@ -229,6 +232,9 @@ func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, watcherCf
 		if name == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "collection name is required")
 		}
+		if watcher.IsLogicalCollection(name) {
+			return echo.NewHTTPError(http.StatusBadRequest, "logical collections cannot be renamed")
+		}
 
 		var req RenameCollectionRequest
 		if err := c.Bind(&req); err != nil {
@@ -243,31 +249,34 @@ func RenameCollectionHandler(q CollectionQuerier, fw *watcher.Watcher, watcherCf
 		if req.NewName == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "new_name is required")
 		}
-	if !validCollectionName.MatchString(req.NewName) {
-		return echo.NewHTTPError(http.StatusBadRequest, "new_name must be 1-128 characters: letters, digits, underscores, hyphens only")
-	}
-
-	if err := q.UpdateDocumentsCollection(c.Request().Context(), sqlc.UpdateDocumentsCollectionParams{
-		Collection:    name,
-		Collection_2:  req.NewName,
-		WorkspaceHash: workspace,
-	}); err != nil {
-		logger.Error().Err(err).Str("old", name).Str("new", req.NewName).Msg("update documents collection failed")
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update documents for rename")
-	}
-
-	col, err := q.RenameCollection(c.Request().Context(), sqlc.RenameCollectionParams{
-		Name:          name,
-		Name_2:        req.NewName,
-		WorkspaceHash: workspace,
-	})
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusNotFound, "collection not found")
+		if !validCollectionName.MatchString(req.NewName) {
+			return echo.NewHTTPError(http.StatusBadRequest, "new_name must be 1-128 characters: letters, digits, underscores, hyphens only")
 		}
-		logger.Error().Err(err).Str("old", name).Str("new", req.NewName).Msg("rename collection failed")
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to rename collection")
-	}
+		if watcher.IsLogicalCollection(req.NewName) {
+			return echo.NewHTTPError(http.StatusBadRequest, "new_name is reserved for a logical collection")
+		}
+
+		if err := q.UpdateDocumentsCollection(c.Request().Context(), sqlc.UpdateDocumentsCollectionParams{
+			Collection:    name,
+			Collection_2:  req.NewName,
+			WorkspaceHash: workspace,
+		}); err != nil {
+			logger.Error().Err(err).Str("old", name).Str("new", req.NewName).Msg("update documents collection failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to update documents for rename")
+		}
+
+		col, err := q.RenameCollection(c.Request().Context(), sqlc.RenameCollectionParams{
+			Name:          name,
+			Name_2:        req.NewName,
+			WorkspaceHash: workspace,
+		})
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return echo.NewHTTPError(http.StatusNotFound, "collection not found")
+			}
+			logger.Error().Err(err).Str("old", name).Str("new", req.NewName).Msg("rename collection failed")
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to rename collection")
+		}
 
 		if fw != nil {
 			cfgExclude, cfgExtensions := watcherCfg.ResolveFilterForPath(col.Path)
@@ -333,8 +342,11 @@ func RemoveCollection(q CollectionQuerier, fw *watcher.Watcher, logger zerolog.L
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to remove collection")
 		}
 
-		if fw != nil {
-			if err := fw.Unwatch(col.Path); err != nil {
+		// Logical collections (memory/sessions) are never watched; skipping the
+		// unwatch also avoids detaching an unrelated collection that happens to
+		// share the same dirPath under this workspace (#714 review).
+		if fw != nil && !watcher.IsLogicalCollection(name) {
+			if err := fw.UnwatchCollection(col.WorkspaceHash, col.Path); err != nil {
 				logger.Warn().Err(err).Str("path", col.Path).Msg("failed to detach watcher")
 			}
 		}

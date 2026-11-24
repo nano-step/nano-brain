@@ -19,14 +19,14 @@ import (
 )
 
 type mockCollectionQuerier struct {
-	upsertFn            func(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error)
-	listFn              func(ctx context.Context, ws string) ([]sqlc.Collection, error)
-	listWithDocCountFn  func(ctx context.Context, ws string) ([]sqlc.ListCollectionsWithDocCountRow, error)
-	getFn               func(ctx context.Context, arg sqlc.GetCollectionByNameParams) (sqlc.Collection, error)
-	renameFn            func(ctx context.Context, arg sqlc.RenameCollectionParams) (sqlc.Collection, error)
-	deleteFn            func(ctx context.Context, arg sqlc.DeleteCollectionParams) error
-	countDocsFn         func(ctx context.Context, arg sqlc.CountDocumentsByCollectionParams) (int64, error)
-	updateDocsFn        func(ctx context.Context, arg sqlc.UpdateDocumentsCollectionParams) error
+	upsertFn           func(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error)
+	listFn             func(ctx context.Context, ws string) ([]sqlc.Collection, error)
+	listWithDocCountFn func(ctx context.Context, ws string) ([]sqlc.ListCollectionsWithDocCountRow, error)
+	getFn              func(ctx context.Context, arg sqlc.GetCollectionByNameParams) (sqlc.Collection, error)
+	renameFn           func(ctx context.Context, arg sqlc.RenameCollectionParams) (sqlc.Collection, error)
+	deleteFn           func(ctx context.Context, arg sqlc.DeleteCollectionParams) error
+	countDocsFn        func(ctx context.Context, arg sqlc.CountDocumentsByCollectionParams) (int64, error)
+	updateDocsFn       func(ctx context.Context, arg sqlc.UpdateDocumentsCollectionParams) error
 }
 
 func (m *mockCollectionQuerier) UpsertCollection(ctx context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error) {
@@ -111,6 +111,32 @@ func TestAddCollection_Success(t *testing.T) {
 	}
 	if resp.Name != "codebase" {
 		t.Errorf("expected name=codebase, got %s", resp.Name)
+	}
+}
+
+// TestAddCollection_LogicalNameReserved verifies "memory"/"sessions" cannot be
+// registered as user collections — they are DB-backed logical collections
+// (#714).
+func TestAddCollection_LogicalNameReserved(t *testing.T) {
+	for _, name := range []string{"memory", "sessions"} {
+		q := &mockCollectionQuerier{
+			upsertFn: func(_ context.Context, arg sqlc.UpsertCollectionParams) (sqlc.Collection, error) {
+				t.Fatalf("UpsertCollection must not be called for reserved name %q", arg.Name)
+				return sqlc.Collection{}, nil
+			},
+		}
+		e := echo.New()
+		body := `{"workspace":"ws-test","name":"` + name + `","path":"/tmp"}`
+		c, _ := newCollectionContext(e, http.MethodPost, "/api/v1/collections", body, "ws-test")
+
+		h := handlers.AddCollection(q, nil, config.WatcherConfig{}, zerolog.Nop())
+		err := h(c)
+		if err == nil {
+			t.Fatalf("expected error adding reserved collection %q", name)
+		}
+		if he, ok := err.(*echo.HTTPError); !ok || he.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 for reserved name %q, got %v", name, err)
+		}
 	}
 }
 
@@ -222,6 +248,47 @@ func TestRenameCollection_Success(t *testing.T) {
 	}
 	if resp.Name != "renamed" {
 		t.Errorf("expected name=renamed, got %s", resp.Name)
+	}
+}
+
+// TestRenameCollection_LogicalNamesReserved verifies logical collection names
+// are rejected both as the rename source and as new_name (#714).
+func TestRenameCollection_LogicalNamesReserved(t *testing.T) {
+	// Renaming FROM a logical name is rejected before any DB call.
+	q := &mockCollectionQuerier{
+		renameFn: func(_ context.Context, _ sqlc.RenameCollectionParams) (sqlc.Collection, error) {
+			t.Fatal("RenameCollection must not be called for a logical source name")
+			return sqlc.Collection{}, nil
+		},
+	}
+	e := echo.New()
+	c, _ := newCollectionContext(e, http.MethodPut, "/api/v1/collections/memory", `{"workspace":"ws-test","new_name":"renamed"}`, "ws-test")
+	c.SetParamNames("name")
+	c.SetParamValues("memory")
+
+	h := handlers.RenameCollectionHandler(q, nil, config.WatcherConfig{}, zerolog.Nop())
+	if err := h(c); err == nil {
+		t.Fatal("expected error renaming a logical collection")
+	} else if he, ok := err.(*echo.HTTPError); !ok || he.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+
+	// Renaming TO a logical name is rejected before any DB call.
+	q2 := &mockCollectionQuerier{
+		renameFn: func(_ context.Context, _ sqlc.RenameCollectionParams) (sqlc.Collection, error) {
+			t.Fatal("RenameCollection must not be called for a logical new_name")
+			return sqlc.Collection{}, nil
+		},
+	}
+	c2, _ := newCollectionContext(e, http.MethodPut, "/api/v1/collections/old-name", `{"workspace":"ws-test","new_name":"sessions"}`, "ws-test")
+	c2.SetParamNames("name")
+	c2.SetParamValues("old-name")
+
+	h2 := handlers.RenameCollectionHandler(q2, nil, config.WatcherConfig{}, zerolog.Nop())
+	if err := h2(c2); err == nil {
+		t.Fatal("expected error renaming to a logical collection name")
+	} else if he, ok := err.(*echo.HTTPError); !ok || he.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
 	}
 }
 

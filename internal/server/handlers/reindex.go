@@ -105,6 +105,11 @@ func triggerForceWipe(c echo.Context, queries ReindexQuerier, w *watcher.Watcher
 	var totalChunks int64
 	var watcherTriggered bool
 	for _, col := range targets {
+		// Logical collections (memory/sessions) have no filesystem scan; skip
+		// them for symmetry with triggerIncremental (#714 review).
+		if watcher.IsLogicalCollection(col.Name) {
+			continue
+		}
 		ids, err := queries.ResetAndReturnChunkIDsByCollection(c.Request().Context(), sqlc.ResetAndReturnChunkIDsByCollectionParams{
 			WorkspaceHash: workspace,
 			Collection:    col.Name,
@@ -155,6 +160,11 @@ func triggerIncremental(c echo.Context, queries ReindexQuerier, w *watcher.Watch
 	var watcherTriggered bool
 
 	for _, col := range targets {
+		// Logical collections ("memory"/"sessions") are DB-backed, not
+		// filesystem roots — never walk or fsnotify-scan them (#714).
+		if watcher.IsLogicalCollection(col.Name) {
+			continue
+		}
 		diskFiles, err := walkCollectionFiles(col)
 		if err != nil {
 			reqLog := LoggerFromCtx(c, logger)

@@ -441,7 +441,9 @@ func TestScanCollection_PurgesDocumentsForEscapingSymlinks(t *testing.T) {
 			w := New(nil, q, testLogger(), testConfig(2000, 300))
 			// A stale fingerprint, as warmFileCacheFromDB would load for a
 			// previously indexed path; it must not survive a purge.
-			w.fileCache[file] = fileState{Size: -1, Hash: "stale-hash"}
+			w.fileCache[file] = map[string]fileState{
+				"ws": {Size: -1, Hash: "stale-hash"},
+			}
 			col := watchedCollection{name: "c", dirPath: root, workspaceHash: "ws", globPattern: "*"}
 
 			if tc.viaProcessFile {
@@ -463,7 +465,7 @@ func TestScanCollection_PurgesDocumentsForEscapingSymlinks(t *testing.T) {
 			if len(q.docsDeleted) > wantDeletes {
 				t.Errorf("unexpected document deletes: %v", q.docsDeleted)
 			}
-			_, cached := w.fileCache[file]
+			_, cached := w.fileCache[file]["ws"]
 			if tc.wantPurged {
 				if cached {
 					t.Error("file cache entry must be dropped with the purged document")

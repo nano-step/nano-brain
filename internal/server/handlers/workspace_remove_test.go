@@ -17,10 +17,10 @@ import (
 )
 
 type mockRemoveQuerier struct {
-	getWorkspaceFn           func(ctx context.Context, hash string) (sqlc.Workspace, error)
-	countDocumentsFn         func(ctx context.Context, workspaceHash string) (int64, error)
-	deleteDocumentsFn        func(ctx context.Context, workspaceHash string) error
-	deleteWorkspaceFn        func(ctx context.Context, hash string) error
+	getWorkspaceFn    func(ctx context.Context, hash string) (sqlc.Workspace, error)
+	countDocumentsFn  func(ctx context.Context, workspaceHash string) (int64, error)
+	deleteDocumentsFn func(ctx context.Context, workspaceHash string) error
+	deleteWorkspaceFn func(ctx context.Context, hash string) error
 }
 
 func (m *mockRemoveQuerier) GetWorkspaceByHash(ctx context.Context, hash string) (sqlc.Workspace, error) {
@@ -74,7 +74,7 @@ func TestWorkspaceRemove_Success(t *testing.T) {
 	c.SetParamNames("hash")
 	c.SetParamValues("abc123")
 
-	h := handlers.RemoveWorkspace(q, nil, zerolog.Nop())
+	h := handlers.RemoveWorkspace(q, nil, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -99,6 +99,39 @@ func TestWorkspaceRemove_Success(t *testing.T) {
 	}
 }
 
+type mockWorkspaceUnwatcher struct {
+	calls []string
+	err   error
+}
+
+func (m *mockWorkspaceUnwatcher) UnwatchWorkspace(hash string) error {
+	m.calls = append(m.calls, hash)
+	return m.err
+}
+
+func TestWorkspaceRemove_CallsUnwatchWorkspace(t *testing.T) {
+	q := newDefaultRemoveQuerier()
+	uw := &mockWorkspaceUnwatcher{}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/workspaces/ws-unwatch", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("hash")
+	c.SetParamValues("ws-unwatch")
+
+	h := handlers.RemoveWorkspace(q, nil, uw, zerolog.Nop())
+	if err := h(c); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if len(uw.calls) != 1 || uw.calls[0] != "ws-unwatch" {
+		t.Fatalf("expected UnwatchWorkspace called once with ws-unwatch, got %v", uw.calls)
+	}
+}
+
 func TestWorkspaceRemove_NotFound(t *testing.T) {
 	q := newDefaultRemoveQuerier()
 	q.getWorkspaceFn = func(_ context.Context, _ string) (sqlc.Workspace, error) {
@@ -112,7 +145,7 @@ func TestWorkspaceRemove_NotFound(t *testing.T) {
 	c.SetParamNames("hash")
 	c.SetParamValues("nonexistent")
 
-	h := handlers.RemoveWorkspace(q, nil, zerolog.Nop())
+	h := handlers.RemoveWorkspace(q, nil, nil, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for missing workspace")
@@ -150,7 +183,7 @@ func TestWorkspaceRemove_CascadeStats(t *testing.T) {
 	c.SetParamNames("hash")
 	c.SetParamValues("ws1")
 
-	h := handlers.RemoveWorkspace(q, nil, zerolog.Nop())
+	h := handlers.RemoveWorkspace(q, nil, nil, zerolog.Nop())
 	if err := h(c); err != nil {
 		t.Fatalf("handler returned error: %v", err)
 	}
@@ -179,7 +212,7 @@ func TestWorkspaceRemove_MissingHash(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	h := handlers.RemoveWorkspace(q, nil, zerolog.Nop())
+	h := handlers.RemoveWorkspace(q, nil, nil, zerolog.Nop())
 	err := h(c)
 	if err == nil {
 		t.Fatal("expected error for missing hash")

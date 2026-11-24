@@ -64,6 +64,13 @@ func TestGraphImpact_BareCallsTarget_DirectCallerReturned(t *testing.T) {
 	q := newQueries(t)
 	ctx := context.Background()
 	wsHash := "ws_" + uuid.New().String()
+	// Graph upserts require a registered workspace since migration 00033
+	// (issue #714) — ensure_workspace_short_id raises instead of auto-creating.
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: wsHash, Name: wsHash, Path: "/tmp/" + wsHash,
+	}); err != nil {
+		t.Fatalf("upsert workspace: %v", err)
+	}
 
 	if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
 		WorkspaceHash: wsHash,
@@ -103,6 +110,13 @@ func TestGraphImpact_BareCallsTarget_TransitiveCallersAtDepth(t *testing.T) {
 	q := newQueries(t)
 	ctx := context.Background()
 	wsHash := "ws_" + uuid.New().String()
+	// Graph upserts require a registered workspace since migration 00033
+	// (issue #714) — ensure_workspace_short_id raises instead of auto-creating.
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: wsHash, Name: wsHash, Path: "/tmp/" + wsHash,
+	}); err != nil {
+		t.Fatalf("upsert workspace: %v", err)
+	}
 
 	// A calls B, B calls C — both calls-edge targets stored bare.
 	edges := []struct{ source, target string }{
@@ -160,6 +174,13 @@ func TestGraphImpact_NoRegression_QualifiedImportsTarget(t *testing.T) {
 	q := newQueries(t)
 	ctx := context.Background()
 	wsHash := "ws_" + uuid.New().String()
+	// Graph upserts require a registered workspace since migration 00033
+	// (issue #714) — ensure_workspace_short_id raises instead of auto-creating.
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: wsHash, Name: wsHash, Path: "/tmp/" + wsHash,
+	}); err != nil {
+		t.Fatalf("upsert workspace: %v", err)
+	}
 
 	if err := q.UpsertGraphEdge(ctx, sqlc.UpsertGraphEdgeParams{
 		WorkspaceHash: wsHash,

@@ -439,22 +439,47 @@ func TestWatchUnwatch(t *testing.T) {
 
 	w.mu.Lock()
 	absDir, _ := filepath.Abs(dir)
-	if _, ok := w.collections[absDir]; !ok {
+	key := collectionKey{workspaceHash: "ws1", dirPath: absDir}
+	if _, ok := w.collections[key]; !ok {
 		w.mu.Unlock()
 		t.Fatal("expected collection to be registered")
 	}
 	w.mu.Unlock()
 
-	if err := w.Unwatch(dir); err != nil {
+	if err := w.UnwatchCollection("ws1", dir); err != nil {
 		t.Fatal(err)
 	}
 
 	w.mu.Lock()
-	if _, ok := w.collections[absDir]; ok {
+	if _, ok := w.collections[key]; ok {
 		w.mu.Unlock()
-		t.Fatal("expected collection to be removed after Unwatch")
+		t.Fatal("expected collection to be removed after UnwatchCollection")
 	}
 	w.mu.Unlock()
+}
+
+// TestTwoWorkspacesSamePathStaySeparate is the issue #714 counterexample: two
+// workspaces registering a collection on the SAME absolute path must keep
+// independent watcher state. Written version-agnostically (only len() on the
+// collections map — no collectionKey) so it compiles and FAILS on the pre-fix
+// path-keyed code and PASSES after the (workspace, path) re-key.
+func TestTwoWorkspacesSamePathStaySeparate(t *testing.T) {
+	dir := t.TempDir()
+	w := newTestWatcher(newMockQuerier(), 2000, 300)
+
+	if err := w.WatchWithFilter("code", dir, "ws-a", "**/*", nil, nil); err != nil {
+		t.Fatalf("watch ws-a: %v", err)
+	}
+	if err := w.WatchWithFilter("code", dir, "ws-b", "**/*", nil, nil); err != nil {
+		t.Fatalf("watch ws-b: %v", err)
+	}
+
+	w.mu.Lock()
+	got := len(w.collections)
+	w.mu.Unlock()
+	if got != 2 {
+		t.Fatalf("expected 2 watched collections (one per workspace on the same path), got %d — watcher state is colliding across workspaces", got)
+	}
 }
 
 func TestTriggerRescanByName(t *testing.T) {
@@ -474,7 +499,7 @@ func TestTriggerRescanByName(t *testing.T) {
 	}
 
 	w.mu.Lock()
-	if !w.dirty[absDir] {
+	if !w.dirty[collectionKey{workspaceHash: "ws42", dirPath: absDir}] {
 		w.mu.Unlock()
 		t.Fatal("expected directory to be marked dirty")
 	}
@@ -659,10 +684,8 @@ func TestProcessFile_SkipsUnchangedMtime(t *testing.T) {
 	contentHash := hex.EncodeToString(sum[:])
 
 	w.fileCacheMu.Lock()
-	w.fileCache[fp] = fileState{
-		ModTime: info.ModTime(),
-		Size:    info.Size(),
-		Hash:    contentHash,
+	w.fileCache[fp] = map[string]fileState{
+		"ws123": {ModTime: info.ModTime(), Size: info.Size(), Hash: contentHash},
 	}
 	w.fileCacheMu.Unlock()
 
@@ -700,7 +723,7 @@ func TestHandleFSEvent_SkipsGitEvents(t *testing.T) {
 	w.handleFSEvent(gitEvent, debounce)
 
 	w.mu.Lock()
-	isDirty := w.dirty[dir]
+	isDirty := w.dirty[collectionKey{workspaceHash: "ws123", dirPath: dir}]
 	w.mu.Unlock()
 
 	if isDirty {
@@ -1062,7 +1085,7 @@ func TestProcessFile_ContentHashSkipsEdgeExtraction(t *testing.T) {
 
 	// Cache entry must be repopulated so the next scan hits the mtime fast-path.
 	w.fileCacheMu.RLock()
-	entry, ok := w.fileCache[fp]
+	entry, ok := w.fileCache[fp]["ws-edge-skip"]
 	w.fileCacheMu.RUnlock()
 	if !ok {
 		t.Fatal("expected fileCache entry to be repopulated after content-hash dedup hit")
@@ -1193,7 +1216,9 @@ func TestBackfillKeepsStaleDocsWhenSymbolUpsertFails(t *testing.T) {
 	}
 	// backfillSymbolSpans only re-extracts files the initial scan admitted;
 	// this test invokes it directly, so mark the file admitted by hand.
-	w.startupAdmitted = map[string]map[string]bool{dir: {path: true}}
+	w.startupAdmitted = map[collectionKey]map[string]bool{
+		{workspaceHash: "workspace", dirPath: dir}: {path: true},
+	}
 
 	w.backfillSymbolSpans(context.Background())
 
