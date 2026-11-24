@@ -86,7 +86,7 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: go build -ldflags="-s -w -X main.Version=${VERSION}" -o nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/nano-brain
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
           path: nano-brain-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
