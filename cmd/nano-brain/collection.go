@@ -8,14 +8,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+
+	"github.com/nano-brain/nano-brain/internal/clientauth"
 )
 
 func collectionUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: nano-brain collection <add|remove|list|rename> [flags]")
 	os.Exit(1)
 }
-
-
 
 func runCollectionCmd(args []string) {
 	if len(args) == 0 {
@@ -88,7 +88,14 @@ func runCollectionAdd(args []string) {
 		os.Exit(1)
 	}
 
-	resp, err := http.Post(getBaseURL()+"/api/v1/collections", "application/json", bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPost, getBaseURL()+"/api/v1/collections", bytes.NewReader(data))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	setClientAuthorization(req)
+	resp, err := clientauth.Do(http.DefaultClient, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		cliLog.Error().Err(err).Str("cmd", "collection.add").Msg("request failed")
@@ -127,8 +134,13 @@ func runCollectionRemove(args []string) {
 	}
 
 	reqURL := fmt.Sprintf("%s/api/v1/collections/%s?workspace=%s", getBaseURL(), url.PathEscape(name), url.QueryEscape(workspace))
-	req, _ := http.NewRequest(http.MethodDelete, reqURL, nil)
-	resp, err := http.DefaultClient.Do(req)
+	req, err := http.NewRequest(http.MethodDelete, reqURL, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	setClientAuthorization(req)
+	resp, err := clientauth.Do(http.DefaultClient, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		cliLog.Error().Err(err).Str("cmd", "collection.remove").Msg("request failed")
@@ -165,7 +177,13 @@ func runCollectionList(args []string) {
 	}
 
 	reqURL := fmt.Sprintf("%s/api/v1/collections?workspace=%s", getBaseURL(), url.QueryEscape(workspace))
-	resp, err := http.Get(reqURL)
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	setClientAuthorization(req)
+	resp, err := clientauth.Do(http.DefaultClient, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		cliLog.Error().Err(err).Str("cmd", "collection.list").Msg("request failed")
@@ -221,9 +239,14 @@ func runCollectionRename(args []string) {
 	}
 
 	reqURL := fmt.Sprintf("%s/api/v1/collections/%s", getBaseURL(), url.PathEscape(oldName))
-	req, _ := http.NewRequest(http.MethodPut, reqURL, bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPut, reqURL, bytes.NewReader(data))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	setClientAuthorization(req)
+	resp, err := clientauth.Do(http.DefaultClient, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		cliLog.Error().Err(err).Str("cmd", "collection.rename").Msg("request failed")

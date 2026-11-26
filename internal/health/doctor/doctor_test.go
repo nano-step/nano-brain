@@ -85,12 +85,39 @@ func TestCheckVersionSkew_Mismatch(t *testing.T) {
 }
 
 func TestCheckServerRunning_Unreachable(t *testing.T) {
-	c, status := doctor.CheckServerRunning("http://127.0.0.1:19999")
+	c, status := doctor.CheckServerRunning("http://127.0.0.1:19999", "")
 	if c.Status != "fail" {
 		t.Errorf("status = %q, want fail", c.Status)
 	}
 	if status != nil {
 		t.Errorf("expected nil status on failure")
+	}
+}
+
+func TestOnlineChecksBearerToken(t *testing.T) {
+	const token = "doctor-test-token"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/status":
+			_, _ = w.Write([]byte(`{"version":"test"}`))
+		case "/mcp":
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	check, status := doctor.CheckServerRunning(srv.URL, token)
+	if check.Status != "ok" || status == nil {
+		t.Fatalf("status probe failed: %+v", check)
+	}
+	if check := doctor.CheckMCPReachable(srv.URL+"/mcp", token); check.Status != "ok" {
+		t.Fatalf("MCP probe failed: %+v", check)
 	}
 }
 
@@ -100,7 +127,7 @@ func TestCheckMCPReachable_404(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := doctor.CheckMCPReachable(srv.URL + "/mcp")
+	c := doctor.CheckMCPReachable(srv.URL+"/mcp", "")
 	if c.Status != "fail" {
 		t.Errorf("status = %q, want fail", c.Status)
 	}
@@ -121,7 +148,7 @@ func TestCheckMCPReachable_OK_SSE(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := doctor.CheckMCPReachable(srv.URL + "/mcp")
+	c := doctor.CheckMCPReachable(srv.URL+"/mcp", "")
 	if c.Status != "ok" {
 		t.Errorf("status = %q, want ok (hint: %s)", c.Status, c.Hint)
 	}
@@ -135,7 +162,7 @@ func TestCheckMCPReachable_OK_JSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := doctor.CheckMCPReachable(srv.URL + "/mcp")
+	c := doctor.CheckMCPReachable(srv.URL+"/mcp", "")
 	if c.Status != "ok" {
 		t.Errorf("status = %q, want ok (hint: %s)", c.Status, c.Hint)
 	}
@@ -148,7 +175,7 @@ func TestCheckMCPReachable_200_Malformed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := doctor.CheckMCPReachable(srv.URL + "/mcp")
+	c := doctor.CheckMCPReachable(srv.URL+"/mcp", "")
 	if c.Status != "fail" {
 		t.Errorf("status = %q, want fail", c.Status)
 	}
