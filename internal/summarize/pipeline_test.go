@@ -120,6 +120,33 @@ func TestPipeline_Summarize_PiSourceUsesStripClaude(t *testing.T) {
 	}
 }
 
+// TestPipeline_Summarize_CodexSourceUsesStripClaude mirrors the Pi test:
+// Codex rollouts render with the same "Tool:"/"Result:" conventions, so
+// SourceCodex must route through StripClaude, not StripOpenCode's default.
+func TestPipeline_Summarize_CodexSourceUsesStripClaude(t *testing.T) {
+	longOutput := strings.Repeat("output line with various content data\n", 8)
+	content := "## assistant (2026-05-26T10:00:00Z)\n\nResult: " + longOutput + "\n## human (2026-05-26T10:01:00Z)\n\nok\n"
+
+	llm := &fakeLLM{}
+	p := newTestPipeline(llm, nil, 1)
+	meta := baseMeta()
+	meta.Source = SourceCodex
+
+	if _, err := p.Summarize(context.Background(), content, meta); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if llm.callCount() == 0 {
+		t.Fatal("expected at least one LLM call")
+	}
+	got := llm.calls[0].user
+	if strings.Contains(got, "output line with various") {
+		t.Errorf("SourceCodex content should be stripped via StripClaude (long Result body compacted), got:\n%s", got)
+	}
+	if !strings.Contains(got, "Result: [") {
+		t.Errorf("expected StripClaude's 'Result: [N lines]' placeholder for SourceCodex, got:\n%s", got)
+	}
+}
+
 func TestPipeline_SingleShotShortcut(t *testing.T) {
 	llm := &fakeLLM{handler: func(idx int, system, user string) (string, TokenUsage, error) {
 		return "## Goal\nFix auth bug.", TokenUsage{PromptTokens: 10, CompletionTokens: 5}, nil

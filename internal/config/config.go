@@ -116,6 +116,7 @@ type HarvesterConfig struct {
 	OpenCode   OpenCodeHarvesterConfig   `koanf:"opencode" json:"opencode"`
 	ClaudeCode ClaudeCodeHarvesterConfig `koanf:"claudecode" json:"claudecode"`
 	Pi         PiHarvesterConfig         `koanf:"pi" json:"pi"`
+	Codex      CodexHarvesterConfig      `koanf:"codex" json:"codex"`
 	Git        GitHarvesterConfig        `koanf:"git" json:"git"`
 }
 
@@ -202,6 +203,15 @@ func (c ClaudeCodeHarvesterConfig) SessionDirsResolved() []string {
 type PiHarvesterConfig struct {
 	Enabled    bool   `koanf:"enabled" json:"enabled"`
 	SessionDir string `koanf:"session_dir" json:"session_dir"`
+}
+
+// CodexHarvesterConfig holds Codex CLI session harvester configuration.
+// CodexHome has no default in code and no tilde-expansion — matching
+// PiHarvesterConfig.SessionDir's behavior. Resolution order at init time:
+// this value, then $CODEX_HOME, then ~/.codex.
+type CodexHarvesterConfig struct {
+	Enabled   bool   `koanf:"enabled" json:"enabled"`
+	CodexHome string `koanf:"codex_home" json:"codex_home"`
 }
 
 // GitHarvesterConfig holds Git history harvesting configuration.

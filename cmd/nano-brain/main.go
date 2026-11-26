@@ -689,6 +689,16 @@ func startServer(configPath string) {
 			}
 		}
 
+		if cxh := initCodexHarvesters(ctx, cfg.Harvester.Codex, db, logger); len(cxh) > 0 {
+			for _, ch := range cxh {
+				if hr == nil {
+					hr = harvest.NewRunner(ch, eq, interval, logger)
+				} else {
+					hr.AddHarvester(ch)
+				}
+			}
+		}
+
 		if hr != nil {
 			hr.WithPublisher(bus)
 			if harvestSummarizer != nil {

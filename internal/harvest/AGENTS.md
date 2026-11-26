@@ -1,6 +1,6 @@
 # harvest package
 
-Session harvesting — ingests OpenCode, Claude Code, and Pi AI sessions into nano-brain storage.
+Session harvesting — ingests OpenCode, Claude Code, Pi, and Codex CLI sessions into nano-brain storage.
 
 ## Files
 
@@ -12,6 +12,7 @@ Session harvesting — ingests OpenCode, Claude Code, and Pi AI sessions into na
 | `opencode.go` | Legacy OpenCode JSON session format reader |
 | `claudecode.go` | `ClaudeCodeHarvester` — scans a directory for Claude Code JSONL files, renders each session to markdown, upserts into PG |
 | `pi.go` | `PiHarvester` — scans a directory for Pi CLI agent JSONL session files, renders each session to markdown (all three message roles — `user`/`assistant`/`toolResult` — and all four content-block types — `text`/`toolCall`/`thinking`/`image`), upserts into PG. Modeled directly on `ClaudeCodeHarvester`; opt-in via `harvester.pi.enabled` (disabled by default) |
+| `codex.go` | `CodexHarvester` — scans `$CODEX_HOME/sessions/` (recursive, date-partitioned) and `archived_sessions/` for Codex CLI rollout JSONL files, attributes each session to a registered workspace via `session_meta.payload.cwd` (exact → longest-ancestor → hash check), renders `response_item` records to Claude-style markdown (`## user`/`## assistant` + `Tool:`/`Result:` pairs via `call_id`), upserts into PG. Opt-in via `harvester.codex.enabled` (disabled by default); `.jsonl.zst` rollouts are skipped |
 | `sanitize.go` | `sanitizeText` (strip NUL, replace invalid UTF-8) and the helpers every writer applies at the persistence boundary: `sanitizeDocParams`, `sanitizeMetadata`, `sanitizeSummaryMeta`. Session ids are sanitized once, before the dedup lookup, so lookup and write share one source path |
 | `automemory.go` | `AutoMemoryExtractor` — regex-scans harvested session content for `DECISION:` / `LESSON:` markers and heading patterns; writes extracted items as discrete memory documents |
 

@@ -259,6 +259,8 @@ func buildSourcePath(meta SessionMetadata) string {
 		return "summary://opencode/" + meta.SessionID
 	case SourcePi:
 		return "summary://pi/" + meta.SessionID
+	case SourceCodex:
+		return "summary://codex/" + meta.SessionID
 	default:
 		return "summary://" + string(meta.Source) + "/" + meta.SessionID
 	}
