@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/nano-brain/nano-brain/internal/clientauth"
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/health/doctor"
 )
@@ -38,7 +39,8 @@ func runDoctorCmd(args []string, configPath string) {
 
 	if onlineFlag {
 		baseURL := getBaseURL()
-		serverCheck, status := doctor.CheckServerRunning(baseURL)
+		token := clientToken()
+		serverCheck, status := doctor.CheckServerRunning(baseURL, token)
 		results = append(results, serverCheck)
 		if status == nil {
 			results = append(results, doctor.Check{Name: "Queue health", Status: "skip", Detail: "server unreachable"})
@@ -47,8 +49,15 @@ func runDoctorCmd(args []string, configPath string) {
 		} else {
 			results = append(results, doctor.CheckQueueHealth(*status))
 			results = append(results, doctor.CheckVersionSkew(Version, status.Version))
-			mcpURL := resolveMCPURL("/.dockerenv")
-			results = append(results, doctor.CheckMCPReachable(mcpURL))
+			mcpURL := baseURL + "/mcp"
+			if override := strings.TrimSpace(os.Getenv("NANO_BRAIN_MCP_URL")); override != "" {
+				mcpURL = override
+			}
+			mcpToken := token
+			if !clientauth.SameOrigin(baseURL, mcpURL) {
+				mcpToken = ""
+			}
+			results = append(results, doctor.CheckMCPReachable(mcpURL, mcpToken))
 		}
 	}
 

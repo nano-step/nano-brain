@@ -67,6 +67,8 @@ NANO_BRAIN_LOGGING_LEVEL=debug    # logging.level
 | `NANO_BRAIN_AUTH_ENABLED` | `server.auth.enabled` | Enable auth |
 | `NANO_BRAIN_AUTH_REALM` | `server.auth.realm` | Auth realm |
 | `NANO_BRAIN_AUTH_TOKENS` | `server.auth.tokens` | Auth tokens (comma-separated) |
+| `NANO_BRAIN_TOKEN` | — | CLI bearer token; overrides the first configured `server.auth.tokens` entry |
+| `NANO_BRAIN_ALLOW_INSECURE_REMOTE_TOKEN` | — | Set to `1` to permit CLI credentials over remote HTTP; unsafe without a trusted network |
 
 ---
 

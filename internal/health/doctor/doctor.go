@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/nano-brain/nano-brain/internal/clientauth"
 	"github.com/nano-brain/nano-brain/internal/config"
 )
 
@@ -211,7 +212,7 @@ func CheckBinaryExists(binaryPath string) Check {
 
 // CheckServerRunning fetches GET baseURL+"/api/status" with 3s timeout.
 // On success returns (check, &parsedStatus). On failure returns (failCheck, nil).
-func CheckServerRunning(baseURL string) (Check, *StatusResponse) {
+func CheckServerRunning(baseURL string, token string) (Check, *StatusResponse) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -219,8 +220,11 @@ func CheckServerRunning(baseURL string) (Check, *StatusResponse) {
 	if err != nil {
 		return Check{Name: "Server running", Status: "fail", Detail: baseURL, Hint: fmt.Sprintf("Request error: %v", err)}, nil
 	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := clientauth.Do(http.DefaultClient, req)
 	if err != nil {
 		return Check{Name: "Server running", Status: "fail", Detail: baseURL, Hint: "Cannot reach server. Start with: nano-brain serve"}, nil
 	}
@@ -278,7 +282,7 @@ func CheckVersionSkew(cliVersion, serverVersion string) Check {
 // answers GET with 405 because it is the SSE-resume verb and stateless mode
 // has no sessions to resume — which made doctor always report a healthy
 // server as unreachable (#633).
-func CheckMCPReachable(mcpURL string) Check {
+func CheckMCPReachable(mcpURL string, token string) Check {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -289,8 +293,11 @@ func CheckMCPReachable(mcpURL string) Check {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := clientauth.Do(http.DefaultClient, req)
 	if err != nil {
 		return Check{Name: "MCP reachable", Status: "fail", Detail: mcpURL, Hint: "Cannot reach MCP endpoint"}
 	}

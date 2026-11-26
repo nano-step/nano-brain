@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/nano-brain/nano-brain/internal/clientauth"
 )
 
 const healthPollInterval = 200 * time.Millisecond
@@ -92,7 +94,8 @@ func waitForServerHealthy(timeout time.Duration) error {
 	for {
 		req, err := http.NewRequest(http.MethodGet, url, nil)
 		if err == nil {
-			resp, doErr := httpClient.Do(req)
+			setClientAuthorization(req)
+			resp, doErr := clientauth.Do(httpClient, req)
 			if doErr == nil {
 				status := resp.StatusCode
 				_ = resp.Body.Close()
