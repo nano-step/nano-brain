@@ -172,6 +172,7 @@ func TestExtractBackfillSource(t *testing.T) {
 		{[]string{"summary", "opencode"}, "opencode"},
 		{[]string{"summary", "claude"}, "claude"},
 		{[]string{"summary", "pi"}, "pi"},
+		{[]string{"summary", "codex"}, "codex"},
 		{[]string{"summary", "unrelated-tag"}, "opencode"},
 	}
 	for _, c := range cases {

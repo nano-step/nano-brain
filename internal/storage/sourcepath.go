@@ -19,6 +19,8 @@ func SourceFromPath(sourcePath string) string {
 		return "claude"
 	case strings.HasPrefix(sourcePath, "summary://pi/"):
 		return "pi"
+	case strings.HasPrefix(sourcePath, "summary://codex/"):
+		return "codex"
 	default:
 		return "unknown"
 	}

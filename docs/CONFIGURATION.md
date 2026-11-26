@@ -170,6 +170,15 @@ Source resolution priority at daemon startup (first non-empty wins):
 | `harvester.pi.enabled` | bool | `false` | Enable Pi CLI agent session harvesting |
 | `harvester.pi.session_dir` | string | `""` | Pi JSONL sessions directory (e.g. `$HOME/.pi/agent/sessions`) — set as an absolute path; nano-brain does not expand `~` for this key |
 
+### harvester.codex
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `harvester.codex.enabled` | bool | `false` | Enable Codex CLI session harvesting |
+| `harvester.codex.codex_home` | string | `""` | Codex home directory containing `sessions/` and `archived_sessions/`. Resolution order: this value → `$CODEX_HOME` → `~/.codex`. Set as an absolute path; nano-brain does not expand `~` for this key. Point it at a CCS codex-instance dir (`~/.ccs/codex-instances/<profile>`) to harvest those sessions too |
+
+Codex sessions are attributed to workspaces by `session_meta.payload.cwd`: exact match, then longest-ancestor match (Codex run in a workspace subdirectory), then workspace-hash check. Sessions in unregistered directories are skipped. `.jsonl.zst` compressed rollouts are not yet supported.
+
 ### harvester.git
 
 | Key | Type | Default | Description |
@@ -513,6 +522,9 @@ harvester:
   pi:
     enabled: false
     session_dir: ""
+  codex:
+    enabled: false
+    codex_home: ""
   git:
     enabled: false
 

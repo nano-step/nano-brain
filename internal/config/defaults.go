@@ -47,6 +47,10 @@ func getDefaults() *Config {
 				Enabled:    false,
 				SessionDir: "",
 			},
+			Codex: CodexHarvesterConfig{
+				Enabled:   false,
+				CodexHome: "",
+			},
 			Git: GitHarvesterConfig{
 				Enabled: false,
 			},

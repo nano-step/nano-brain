@@ -10,6 +10,7 @@ func TestSourceFromPath(t *testing.T) {
 		{"summary://claude/ses1", "claude"},
 		{"summary://opencode/ses1", "opencode"},
 		{"summary://pi/ses1", "pi"},
+		{"summary://codex/ses1", "codex"},
 		{"opencode://ses1", "opencode"},
 		{"claude://ses1", "claude"},
 		{"summary://unknown-source/ses1", "unknown"},

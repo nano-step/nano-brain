@@ -60,6 +60,7 @@ All notable changes to nano-brain are documented here.
 ### Added
 - **`server.allowed_hosts`** — `Host`-header allowlist guarding against DNS rebinding (#630, extended to every route by #652; see the entry under Fixed for when it applies and what needs action). Defaults to `localhost`, `127.0.0.1`, `::1`, and `host.docker.internal`; a configured list replaces the defaults. `NANO_BRAIN_SERVER_ALLOWED_HOSTS` takes a comma-separated list. Like `server.host` and `server.port`, changing it requires a restart.
 - **Pi CLI agent session harvesting** (opt-in, disabled by default). A new `PiHarvester` ingests session transcripts from the Pi CLI coding agent (`~/.pi/agent/sessions/<encoded-cwd>/*.jsonl`), following the existing `Harvester` extension point alongside Claude Code and OpenCode. Enable with `harvester.pi.enabled: true` and `harvester.pi.session_dir` set to your Pi sessions directory.
+- **Codex CLI session harvesting** (opt-in, disabled by default). A new `CodexHarvester` ingests rollout transcripts from Codex CLI (`$CODEX_HOME/sessions/**/rollout-*.jsonl` and `archived_sessions/`), attributing each session to a registered workspace via `session_meta.payload.cwd` (exact, longest-ancestor, then workspace-hash match). Enable with `harvester.codex.enabled: true`; `harvester.codex.codex_home` overrides the home resolution (`$CODEX_HOME` → `~/.codex`) and can point at a CCS codex-instance directory. `.jsonl.zst` compressed rollouts are not yet supported.
 
 ## [2026.6.22] — 2026-06-22
 

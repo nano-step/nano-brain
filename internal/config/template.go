@@ -108,6 +108,9 @@ harvester:
   pi:
     enabled: false
     session_dir: ""
+  codex:
+    enabled: false
+    codex_home: ""  # default: $CODEX_HOME or ~/.codex
   git:
     enabled: false
 
