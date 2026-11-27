@@ -1,8 +1,10 @@
 # Codex Review — PR #749 / Issue #745
 
 Reviewer: OpenAI Codex CLI (`codex review --base origin/master`), non-interactive read-only review pass.
-Runtime evidence: codex-cli 0.172.0; session `01a21df7-bee1-7d93-ba7a-bf81df1b9c25`; raw session output captured locally at `/tmp/codex-review-745.raw` during the run.
-Review Verdict: FAIL before fix; PASS expected after the valid P2 finding is fixed and re-reviewed.
+Runtime evidence: codex-cli 0.172.0; initial session `01a21df7-bee1-7d93-ba7a-bf81df1b9c25`; re-review session `01a21dfd-7895-79b3-9a05-fc149c745cac`; raw session output captured locally at `/tmp/codex-review-745.raw` and `/tmp/codex-review-745-rerun.raw` during the runs.
+Review Verdict: PASS
+
+Re-review output after the fix: "The review did not identify a discrete, actionable defect introduced by the patch." The initial P2 finding below was valid and fixed before re-review.
 
 ## Findings and triage
 
