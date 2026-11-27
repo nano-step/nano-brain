@@ -803,10 +803,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 			// on an empty AND result with a multi-word query, retry with an OR
 			// tsquery. (No tag-OR SQL variant exists yet, so this covers the
 			// untagged case — the reported repro.)
-			// Skipped when a time filter is set: the OR SQL variants have no
-			// time-range params, so relaxing there could surface rows outside the
-			// requested window — return 0 (as before) instead.
-			if len(allRows) == 0 && len(tags) == 0 && timeRange == nil {
+			if len(allRows) == 0 && len(tags) == 0 {
 				// Only relax when >=2 non-stopword terms survive: a single term
 				// (e.g. "the deposit" -> "deposit") yields the same query the AND
 				// leg already ran with 0 rows, so the "|" is what makes it useful.
@@ -814,6 +811,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 					if ws == "all" {
 						rows, orErr := a.queries.BM25SearchAllOR(ctx, sqlc.BM25SearchAllORParams{
 							Query: orQuery, ChunkType: chunkTypeNull, MaxResults: fetchLimit,
+							CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 						})
 						if orErr != nil {
 							return errResult(fmt.Sprintf("bm25 OR search failed: %v", orErr)), nil
@@ -830,6 +828,7 @@ func registerMemorySearch(server *mcpsdk.Server, a *Adapter) {
 					} else {
 						rows, orErr := a.queries.BM25SearchOR(ctx, sqlc.BM25SearchORParams{
 							Query: orQuery, WorkspaceHash: ws, ChunkType: chunkTypeNull, MaxResults: fetchLimit,
+							CreatedAfter: ca, CreatedBefore: cb, UpdatedAfter: ua, UpdatedBefore: ub,
 						})
 						if orErr != nil {
 							return errResult(fmt.Sprintf("bm25 OR search failed: %v", orErr)), nil

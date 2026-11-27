@@ -531,16 +531,21 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 	}
 
 	orFallback := false
-	if len(bm25Results) == 0 && bm25Err == nil && len(strings.Fields(query)) > 2 {
+	if len(bm25Results) == 0 && bm25Err == nil && len(tags) == 0 && len(strings.Fields(query)) > 2 {
 		orQuery := buildORQuery(query)
 		if orQuery != "" {
 			s.logger.Debug().Str("original", query).Str("or_query", orQuery).Msg("bm25 returned 0 results, retrying with OR")
 			orFallback = true
+			ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 			if workspace == "all" {
 				orRows, err := s.queries.BM25SearchAllOR(ctx, sqlc.BM25SearchAllORParams{
-					Query:      orQuery,
-					ChunkType:  chunkTypeNullStr,
-					MaxResults: fetchLimit,
+					Query:         orQuery,
+					ChunkType:     chunkTypeNullStr,
+					MaxResults:    fetchLimit,
+					CreatedAfter:  ca,
+					CreatedBefore: cb,
+					UpdatedAfter:  ua,
+					UpdatedBefore: ub,
 				})
 				if err == nil {
 					bm25Results = make([]Result, 0, len(orRows))
@@ -561,6 +566,10 @@ func (s *SearchService) HybridSearch(ctx context.Context, query string, workspac
 					WorkspaceHash: workspace,
 					ChunkType:     chunkTypeNullStr,
 					MaxResults:    fetchLimit,
+					CreatedAfter:  ca,
+					CreatedBefore: cb,
+					UpdatedAfter:  ua,
+					UpdatedBefore: ub,
 				})
 				if err == nil {
 					bm25Results = make([]Result, 0, len(orRows))
@@ -1000,16 +1009,21 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 	}
 
 	orFallback := false
-	if len(bm25Results) == 0 && bm25Err == nil && len(strings.Fields(query)) > 2 {
+	if len(bm25Results) == 0 && bm25Err == nil && len(tags) == 0 && len(strings.Fields(query)) > 2 {
 		orQuery := buildORQuery(query)
 		if orQuery != "" {
 			s.logger.Debug().Str("original", query).Str("or_query", orQuery).Msg("bm25 returned 0 results, retrying with OR")
 			orFallback = true
+			ca, cb, ua, ub := timeRange.ToSqlNullTimes()
 			if workspace == "all" {
 				orRows, err := s.queries.BM25SearchAllOR(ctx, sqlc.BM25SearchAllORParams{
-					Query:      orQuery,
-					ChunkType:  chunkTypeNullStr,
-					MaxResults: fetchLimit,
+					Query:         orQuery,
+					ChunkType:     chunkTypeNullStr,
+					MaxResults:    fetchLimit,
+					CreatedAfter:  ca,
+					CreatedBefore: cb,
+					UpdatedAfter:  ua,
+					UpdatedBefore: ub,
 				})
 				if err == nil {
 					bm25Results = make([]Result, 0, len(orRows))
@@ -1030,6 +1044,10 @@ func (s *SearchService) hybridSearchInner(ctx context.Context, query string, wor
 					WorkspaceHash: workspace,
 					ChunkType:     chunkTypeNullStr,
 					MaxResults:    fetchLimit,
+					CreatedAfter:  ca,
+					CreatedBefore: cb,
+					UpdatedAfter:  ua,
+					UpdatedBefore: ub,
 				})
 				if err == nil {
 					bm25Results = make([]Result, 0, len(orRows))

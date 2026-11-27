@@ -23,6 +23,8 @@ type mockQuerier struct {
 	vectorAllWithTagsCalled bool
 	capturedTags            []string
 	capturedQuery           string
+	orCalled                bool
+	orParams                sqlc.BM25SearchORParams
 }
 
 func (m *mockQuerier) BM25Search(ctx context.Context, arg sqlc.BM25SearchParams) ([]sqlc.BM25SearchRow, error) {
@@ -49,6 +51,10 @@ func (m *mockQuerier) BM25SearchAllWithTags(ctx context.Context, arg sqlc.BM25Se
 }
 
 func (m *mockQuerier) BM25SearchOR(ctx context.Context, arg sqlc.BM25SearchORParams) ([]sqlc.BM25SearchORRow, error) {
+	m.mu.Lock()
+	m.orCalled = true
+	m.orParams = arg
+	m.mu.Unlock()
 	return []sqlc.BM25SearchORRow{}, nil
 }
 
@@ -336,6 +342,40 @@ func TestHybridSearch_NoHypothetical_HyDEStillRuns(t *testing.T) {
 	if got := emb.LastText(); got != "generated hypothetical" {
 		t.Errorf("expected embedder to embed the HyDE-generated text, got %q", got)
 	}
+}
+
+func TestHybridSearch_ORFallback_RespectsTimeRangeAndTags(t *testing.T) {
+	cfg := config.SearchConfig{RrfK: 60, RecencyWeight: 0.3, RecencyHalfLifeDays: 180, Limit: 20}
+	after := time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
+	before := after.Add(24 * time.Hour)
+	tr := &TimeRangeFilter{CreatedAfter: &after, CreatedBefore: &before}
+	query := "work done tickets investigation"
+
+	t.Run("time range passed to OR leg", func(t *testing.T) {
+		q := &mockQuerier{}
+		service := NewSearchService(q, &mockEmbedder{}, cfg, zerolog.Nop())
+		if _, err := service.HybridSearch(context.Background(), query, "ws1", 10, nil, tr, "", ""); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !q.orCalled {
+			t.Fatal("expected OR fallback to run when AND leg is empty")
+		}
+		p := q.orParams
+		if !p.CreatedAfter.Valid || !p.CreatedAfter.Time.Equal(after) || !p.CreatedBefore.Valid || !p.CreatedBefore.Time.Equal(before) {
+			t.Errorf("OR leg dropped time range: %+v", p)
+		}
+	})
+
+	t.Run("OR fallback skipped when tags set", func(t *testing.T) {
+		q := &mockQuerier{}
+		service := NewSearchService(q, &mockEmbedder{}, cfg, zerolog.Nop())
+		if _, err := service.HybridSearch(context.Background(), query, "ws1", 10, []string{"decision"}, tr, "", ""); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if q.orCalled {
+			t.Error("OR fallback has no tag filter and must not run when tags are set")
+		}
+	})
 }
 
 func TestHybridSearch_WithTags_DispatchesToWithTagsQueries(t *testing.T) {
