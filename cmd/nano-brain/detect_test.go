@@ -466,6 +466,16 @@ func TestApplyClaudeCodeStorageAutoDetection_GatesAndPopulates(t *testing.T) {
 		if len(got) == 0 || cfg.Harvester.ClaudeCode.SessionDirs[0] != want[0] {
 			t.Fatalf("auto detection got %v config %v, want first pattern %q", got, cfg.Harvester.ClaudeCode.SessionDirs, want[0])
 		}
+		futureCCS := filepath.Join(home, ".ccs", "instances", "*", "projects")
+		found := false
+		for _, pattern := range got {
+			if pattern == futureCCS {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("auto detection got %v, want future default CCS pattern %q", got, futureCCS)
+		}
 	})
 
 	tests := []struct {

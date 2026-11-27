@@ -66,6 +66,7 @@ The encoder implementation was checked against the locally installed Claude Code
 Two independent read-only reviews were completed after implementation. Their blocking/actionable findings were addressed as follows:
 
 - startup auto-detection gating is now extracted into `applyClaudeCodeStorageAutoDetection` and directly tested;
+- Codex PR review triage is recorded in `docs/evidence/review-745-codex.md`; its valid P2 first-install-after-startup finding was fixed by retaining stable future Claude/CCS runtime patterns;
 - long-path truncation/hash encoding is implemented and tested;
 - symlink-canonical workspace spellings are probed during discovery and covered by an integration fixture;
 - file-backed config and effective harvester config are separated so auto-detected patterns do not create false reload diffs;
@@ -75,7 +76,6 @@ Residual non-blocking deferrals:
 
 - cwd-mismatched collision files can still be reconsidered on later harvest cycles because no persistent negative cache was added; this wastes some work but does not affect correctness;
 - `/api/status` still exposes the pre-existing `session_dirs` resolved-shape semantics rather than a separate raw-pattern field;
-- historical pre-current Claude leaf encodings and case-insensitive APFS spelling variants are not probed;
-- installing the first Claude/CCS storage root after daemon startup still requires restart because no harvester was configured at startup.
+- historical pre-current Claude leaf encodings and case-insensitive APFS spelling variants are not probed.
 
-These deferrals do not contradict the approved scenarios: they affect operational efficiency, observability polish, or legacy/case variants outside the issue's current-layout CCS flow.
+These deferrals do not contradict the approved scenarios: they affect operational efficiency, observability polish, or legacy/case variants outside the issue's current-layout CCS flow. First-use-after-startup for standard Claude and default CCS locations is supported; only custom per-invocation CCS `--config-dir` layouts still require explicit configuration.

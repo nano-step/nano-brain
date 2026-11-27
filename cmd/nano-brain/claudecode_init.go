@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/harvest"
@@ -33,11 +34,37 @@ func applyClaudeCodeStorageAutoDetection(cfg *config.Config) []string {
 		cfg.Harvester.ClaudeCode.SessionDir != "" || len(cfg.Harvester.ClaudeCode.SessionDirs) != 0 {
 		return nil
 	}
-	detected := detectClaudeCodeStoragePatterns()
+	detected := withFutureClaudeCodeStoragePatterns(detectClaudeCodeStoragePatterns())
 	if len(detected) != 0 {
 		cfg.Harvester.ClaudeCode.SessionDirs = detected
 	}
 	return detected
+}
+
+func withFutureClaudeCodeStoragePatterns(detected []string) []string {
+	seen := make(map[string]struct{}, len(detected)+2)
+	out := make([]string, 0, len(detected)+2)
+	add := func(pattern string) {
+		if pattern == "" {
+			return
+		}
+		pattern = filepath.Clean(pattern)
+		if _, dup := seen[pattern]; dup {
+			return
+		}
+		seen[pattern] = struct{}{}
+		out = append(out, pattern)
+	}
+	for _, pattern := range detected {
+		add(pattern)
+	}
+	for _, pattern := range platformClaudeCodePaths() {
+		add(pattern)
+	}
+	if home := userHomeDir(); home != "" {
+		add(filepath.Join(home, ".ccs", "instances", "*", "projects"))
+	}
+	return out
 }
 
 // initClaudeCodeHarvesters registers dynamic Claude projects-root discovery.
