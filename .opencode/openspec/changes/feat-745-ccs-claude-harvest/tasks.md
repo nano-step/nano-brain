@@ -10,4 +10,4 @@
 - [x] Run focused tests, `go test -race -short ./...`, build/lint validation, and relevant isolated `nanobrain_test` integration tests.
 - [x] Run fixture-based smoke evidence without touching the dev DB or port 3100; write evidence under `docs/evidence/`.
 - [x] Self-review the diff, obtain independent review distinct from implementation, fix blockers, and document any deferrals.
-- [ ] Commit with repo attribution rules, push the existing feature branch, open/refresh the PR, and verify CI.
+- [x] Commit with repo attribution rules, push the existing feature branch, open/refresh the PR, and verify CI.
