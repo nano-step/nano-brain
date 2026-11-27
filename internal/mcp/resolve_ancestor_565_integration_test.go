@@ -43,3 +43,19 @@ func TestMemoryWorkspacesResolve_CoveredByAncestor(t *testing.T) {
 		t.Errorf("unrelated path must omit covered_by, got: %+v", miss["covered_by"])
 	}
 }
+
+// Issue #750: some MCP clients send {cwd} instead of {path}.
+func TestMemoryWorkspacesResolve_CwdAlias(t *testing.T) {
+	ctx, q, wsHash, callTool := setupFindingsMCP(t)
+
+	ws, err := q.GetWorkspaceByHash(ctx, wsHash)
+	if err != nil {
+		t.Fatalf("get workspace: %v", err)
+	}
+
+	byPath := unmarshalGraphResp(t, callTool("memory_workspaces_resolve", map[string]any{"path": ws.Path}))
+	byCwd := unmarshalGraphResp(t, callTool("memory_workspaces_resolve", map[string]any{"cwd": ws.Path}))
+	if byCwd["workspace_hash"] == nil || byCwd["workspace_hash"] != byPath["workspace_hash"] {
+		t.Fatalf("cwd alias: got %+v, want same as path %+v", byCwd, byPath)
+	}
+}

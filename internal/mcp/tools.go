@@ -2464,7 +2464,7 @@ func registerMemoryWorkspacesResolve(server *mcpsdk.Server, a *Adapter) {
 	server.AddTool(
 		&mcpsdk.Tool{
 			Name:        "memory_workspaces_resolve",
-			Description: "Resolve a filesystem path to a deterministic workspace hash and report whether it is registered. Read-only — does not register the workspace; use POST /api/v1/init for that.",
+			Description: "Resolve a filesystem path to a deterministic workspace hash and report whether it is registered. Read-only — does not register the workspace; use POST /api/v1/init for that. `cwd` is accepted as an alias for `path`.",
 			InputSchema: toolSchema(map[string]map[string]any{
 				"path": {"type": "string", "description": "Absolute filesystem path to the project root"},
 			}, []string{"path"}),
@@ -2475,6 +2475,9 @@ func registerMemoryWorkspacesResolve(server *mcpsdk.Server, a *Adapter) {
 				return errResult("invalid arguments"), nil
 			}
 			path, _ := args["path"].(string)
+			if path == "" {
+				path, _ = args["cwd"].(string)
+			}
 			if path == "" {
 				return errResult("path is required"), nil
 			}
