@@ -4,6 +4,7 @@ package handlers_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -549,5 +550,65 @@ func TestTimeFilter_REST_CursorInvalidationOnTagsChange(t *testing.T) {
 	}
 	if !errors.Is(cursorErr, search.ErrCursorQueryMismatch) {
 		t.Errorf("expected ErrCursorQueryMismatch, got: %v", cursorErr)
+	}
+}
+
+// TestTimeFilter_BM25SearchOR_RespectsTimeRange guards #747: the OR fallback
+// queries must apply the same time window as the AND queries.
+func TestTimeFilter_BM25SearchOR_RespectsTimeRange(t *testing.T) {
+	pool := testutil.SetupTestDB(t)
+	db := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() { db.Close() })
+
+	ctx := context.Background()
+	q := sqlc.New(db)
+
+	wsHash := "test_ws_" + uuid.New().String()[:8]
+	if _, err := q.UpsertWorkspace(ctx, sqlc.UpsertWorkspaceParams{
+		Hash: wsHash, Name: "test", Path: "/tmp/" + wsHash,
+	}); err != nil {
+		t.Fatalf("upsert workspace: %v", err)
+	}
+
+	now := time.Now().UTC()
+	inWindow := now.AddDate(0, 0, -1)
+	outWindow := now.AddDate(0, 0, -60)
+	testutil.SeedDocumentWithTimestamps(t, ctx, db, wsHash, "doc-in", "review notes", nil, inWindow, inWindow)
+	testutil.SeedDocumentWithTimestamps(t, ctx, db, wsHash, "doc-out", "review notes", nil, outWindow, outWindow)
+
+	after := sql.NullTime{Time: now.AddDate(0, 0, -2), Valid: true}
+	before := sql.NullTime{Time: now, Valid: true}
+	orQuery := search.BuildORQuery("review investigation commit")
+
+	rows, err := q.BM25SearchOR(ctx, sqlc.BM25SearchORParams{
+		Query: orQuery, WorkspaceHash: wsHash, MaxResults: 100,
+		CreatedAfter: after, CreatedBefore: before, UpdatedAfter: after, UpdatedBefore: before,
+	})
+	if err != nil {
+		t.Fatalf("BM25SearchOR: %v", err)
+	}
+	if len(rows) != 1 || rows[0].SourcePath != "/tmp/doc-in.md" {
+		t.Fatalf("BM25SearchOR: expected only doc-in, got %d rows", len(rows))
+	}
+
+	allRows, err := q.BM25SearchAllOR(ctx, sqlc.BM25SearchAllORParams{
+		Query: orQuery, MaxResults: 100,
+		CreatedAfter: after, CreatedBefore: before, UpdatedAfter: after, UpdatedBefore: before,
+	})
+	if err != nil {
+		t.Fatalf("BM25SearchAllOR: %v", err)
+	}
+	for _, r := range allRows {
+		if r.SourcePath == "/tmp/doc-out.md" {
+			t.Fatal("BM25SearchAllOR returned out-of-window doc-out")
+		}
+	}
+
+	unfiltered, err := q.BM25SearchOR(ctx, sqlc.BM25SearchORParams{Query: orQuery, WorkspaceHash: wsHash, MaxResults: 100})
+	if err != nil {
+		t.Fatalf("BM25SearchOR unfiltered: %v", err)
+	}
+	if len(unfiltered) != 2 {
+		t.Fatalf("BM25SearchOR without filter: expected 2 rows, got %d", len(unfiltered))
 	}
 }

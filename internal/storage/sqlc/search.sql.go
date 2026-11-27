@@ -206,14 +206,22 @@ JOIN content_blobs cb ON cb.id = c.blob_id
 JOIN documents d ON c.document_id = d.id
 WHERE c.search_vector @@ to_tsquery(get_tsvector_config(), $1::text)
   AND ($2::text IS NULL OR c.chunk_type = $2)
+  AND ($3::timestamptz IS NULL OR d.updated_at >= $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at <= $4)
+  AND ($5::timestamptz IS NULL OR d.created_at >= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at <= $6)
 ORDER BY score DESC, c.id ASC
-LIMIT $3
+LIMIT $7
 `
 
 type BM25SearchAllORParams struct {
-	Query      string
-	ChunkType  sql.NullString
-	MaxResults int32
+	Query         string
+	ChunkType     sql.NullString
+	UpdatedAfter  sql.NullTime
+	UpdatedBefore sql.NullTime
+	CreatedAfter  sql.NullTime
+	CreatedBefore sql.NullTime
+	MaxResults    int32
 }
 
 type BM25SearchAllORRow struct {
@@ -233,7 +241,15 @@ type BM25SearchAllORRow struct {
 }
 
 func (q *Queries) BM25SearchAllOR(ctx context.Context, arg BM25SearchAllORParams) ([]BM25SearchAllORRow, error) {
-	rows, err := q.db.QueryContext(ctx, bM25SearchAllOR, arg.Query, arg.ChunkType, arg.MaxResults)
+	rows, err := q.db.QueryContext(ctx, bM25SearchAllOR,
+		arg.Query,
+		arg.ChunkType,
+		arg.UpdatedAfter,
+		arg.UpdatedBefore,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
+		arg.MaxResults,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -372,14 +388,22 @@ JOIN documents d ON c.document_id = d.id
 WHERE c.search_vector @@ to_tsquery(get_tsvector_config(), $1::text)
   AND c.workspace_hash = $2
   AND ($3::text IS NULL OR c.chunk_type = $3)
+  AND ($4::timestamptz IS NULL OR d.updated_at >= $4)
+  AND ($5::timestamptz IS NULL OR d.updated_at <= $5)
+  AND ($6::timestamptz IS NULL OR d.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR d.created_at <= $7)
 ORDER BY score DESC, c.id ASC
-LIMIT $4
+LIMIT $8
 `
 
 type BM25SearchORParams struct {
 	Query         string
 	WorkspaceHash string
 	ChunkType     sql.NullString
+	UpdatedAfter  sql.NullTime
+	UpdatedBefore sql.NullTime
+	CreatedAfter  sql.NullTime
+	CreatedBefore sql.NullTime
 	MaxResults    int32
 }
 
@@ -404,6 +428,10 @@ func (q *Queries) BM25SearchOR(ctx context.Context, arg BM25SearchORParams) ([]B
 		arg.Query,
 		arg.WorkspaceHash,
 		arg.ChunkType,
+		arg.UpdatedAfter,
+		arg.UpdatedBefore,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
 		arg.MaxResults,
 	)
 	if err != nil {

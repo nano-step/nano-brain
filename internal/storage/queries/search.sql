@@ -81,6 +81,10 @@ JOIN documents d ON c.document_id = d.id
 WHERE c.search_vector @@ to_tsquery(get_tsvector_config(), sqlc.arg(query)::text)
   AND c.workspace_hash = sqlc.arg(workspace_hash)
   AND (sqlc.narg('chunk_type')::text IS NULL OR c.chunk_type = sqlc.narg('chunk_type'))
+  AND (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
+  AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR d.created_at <= sqlc.narg('created_before'))
 ORDER BY score DESC, c.id ASC
 LIMIT sqlc.arg(max_results);
 
@@ -94,5 +98,9 @@ JOIN content_blobs cb ON cb.id = c.blob_id
 JOIN documents d ON c.document_id = d.id
 WHERE c.search_vector @@ to_tsquery(get_tsvector_config(), sqlc.arg(query)::text)
   AND (sqlc.narg('chunk_type')::text IS NULL OR c.chunk_type = sqlc.narg('chunk_type'))
+  AND (sqlc.narg('updated_after')::timestamptz IS NULL OR d.updated_at >= sqlc.narg('updated_after'))
+  AND (sqlc.narg('updated_before')::timestamptz IS NULL OR d.updated_at <= sqlc.narg('updated_before'))
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR d.created_at >= sqlc.narg('created_after'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR d.created_at <= sqlc.narg('created_before'))
 ORDER BY score DESC, c.id ASC
 LIMIT sqlc.arg(max_results);
