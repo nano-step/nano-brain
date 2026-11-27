@@ -38,21 +38,21 @@ Goal: agents know the project context, decision history, and can anticipate what
 | Feature | Description | Status |
 |---|---|---|
 | OpenCode SQLite harvester | Parse `opencode.db`, extract sessions/messages | ✅ |
-| Claude Code JSONL harvester | Parse `ses_*.jsonl` transcripts | ✅ |
+| Claude Code JSONL harvester | Parse `*.jsonl` transcripts | ✅ |
 | Workspace filtering | Only harvest sessions matching registered workspace paths | ✅ |
 | LLM summarization pipeline | Map-reduce chunking, token-bucket rate limiter | ✅ |
 | Incremental harvest | Track last-harvested timestamp, dedup by session ID | ✅ |
-| Summary persistence | `.md` files + vector DB (`session-summary` collection) | ✅ |
+| Summary persistence | `.md` files + vector DB (`sessions` collection) | ✅ |
 | Embed queue workspace isolation | Queue scan scoped to registered workspaces only | ✅ |
 
 ### Architecture
 
 ```
-opencode.db / ses_*.jsonl
+opencode.db / *.jsonl
   → filter by workspace path
   → extract messages
   → map-reduce LLM summary (token-bucket rate limited)
-  → chunk → embed → index (session-summary collection)
+  → chunk → embed → index (sessions collection)
   → .md summary file to output_dir
 ```
 
@@ -64,7 +64,10 @@ harvester:
     session_dir: ~/.local/share/opencode/storage
   claudecode:
     enabled: false
-    session_dir: ~/.claude/transcripts/
+    session_dir: ""
+    # session_dirs:
+    #   - ~/.claude/projects
+    #   - ~/.ccs/instances/*/projects
 
 summarization:
   enabled: true

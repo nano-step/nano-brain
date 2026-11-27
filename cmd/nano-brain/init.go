@@ -95,9 +95,14 @@ func buildRenderedConfig(scanner *bufio.Scanner) (yaml string, notes string, ok 
 	var notesBuf bytes.Buffer
 	embBlock := stepEmbeddingFn(scanner, &notesBuf, defaultProbeEmbURL, defaultProbeModel)
 
+	claudeDetected := len(detectClaudeCodeStoragePatterns()) > 0
+	if claudeDetected {
+		notesBuf.WriteString("  Claude Code session harvesting enabled (auto-detected Claude/CCS storage).\n")
+	}
 	yaml = config.RenderConfig(config.RenderOpts{
-		DatabaseURL:    dbURL,
-		EmbeddingBlock: embBlock,
+		DatabaseURL:       dbURL,
+		EmbeddingBlock:    embBlock,
+		ClaudeCodeEnabled: claudeDetected,
 	})
 	return yaml, notesBuf.String(), true
 }

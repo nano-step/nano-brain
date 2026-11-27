@@ -520,7 +520,13 @@ func startServer(configPath string) {
 	}
 	fw.WithPublisher(bus)
 
-	srv := server.New(cfg, configPath, pool, db, queries, fw, eq, embedder, bus, logger, Version, migrationVersion, graphRegistry)
+	fileBackedCfg := *cfg
+	if detected := applyClaudeCodeStorageAutoDetection(cfg); len(detected) > 0 {
+		logger.Info().Strs("patterns", detected).Msg("auto-detected claude code projects dir patterns")
+	}
+
+	srv := server.New(&fileBackedCfg, configPath, pool, db, queries, fw, eq, embedder, bus, logger, Version, migrationVersion, graphRegistry)
+	srv.SetHarvesterConfig(cfg.Harvester)
 
 	if cfg.Server.ServeOnly {
 		logger.Info().Msg("serve_only mode — skipping collection watcher registration")
@@ -606,13 +612,6 @@ func startServer(configPath string) {
 			}
 		}
 
-		if cfg.Harvester.ClaudeCode.Enabled && cfg.Harvester.ClaudeCode.SessionDir == "" && len(cfg.Harvester.ClaudeCode.SessionDirs) == 0 {
-			if detected := detectClaudeCodeStorageDirs(); len(detected) > 0 {
-				cfg.Harvester.ClaudeCode.SessionDirs = detected
-				logger.Info().Strs("paths", detected).Msg("auto-detected claude code projects dirs")
-			}
-		}
-
 		var harvestSummarizer *summarize.HarvestSummarizer
 		if cfg.Summarization.Enabled {
 			harvestSummarizer = buildHarvestSummarizer(cfg, db, eq, logger)
@@ -663,8 +662,8 @@ func startServer(configPath string) {
 			}
 			if len(chs) > 0 {
 				logger.Info().
-					Strs("session_dirs", cfg.Harvester.ClaudeCode.SessionDirsResolved()).
-					Int("workspace_count", len(chs)).
+					Strs("session_dir_patterns", configuredClaudeCodeSessionDirs(cfg.Harvester.ClaudeCode)).
+					Int("harvester_count", len(chs)).
 					Dur("interval", interval).
 					Msg("claude code session harvesters started")
 			}

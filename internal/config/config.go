@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -141,7 +142,7 @@ type ClaudeCodeHarvesterConfig struct {
 	// ~/.ccs/instances/<name>/projects per profile-manager instance), so a
 	// single session_dir silently drops every other source (#643). Entries
 	// support "~" expansion and glob patterns (e.g.
-	// ~/.ccs/instances/star/projects). SessionDir keeps working and is
+	// ~/.ccs/instances/*/projects). SessionDir keeps working and is
 	// treated as one more entry.
 	SessionDirs []string `koanf:"session_dirs" json:"session_dirs"`
 	// TicketPatterns is a slice of Go regex strings used by the ticket extractor
@@ -182,6 +183,7 @@ func (c ClaudeCodeHarvesterConfig) SessionDirsResolved() []string {
 			if err != nil {
 				continue
 			}
+			sort.Strings(matches)
 			for _, m := range matches {
 				add(m)
 			}
