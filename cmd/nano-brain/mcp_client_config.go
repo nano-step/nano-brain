@@ -258,6 +258,17 @@ func promptMCPClientConfig(scanner *bufio.Scanner, projectRoot, workspaceName st
 	})
 
 	promptAndWriteCodex(scanner, baseURL, workspaceName, projectRoot)
+
+	// Windsurf/Devin mcp_config.json is global (one file for every project),
+	// so like global Codex it gets the bare URL with no ?workspace= binding.
+	for _, configPath := range detectWindsurfConfigPaths() {
+		promptAndWrite(scanner, "Windsurf/Devin ("+configPath+")", baseURL, func() (string, string) {
+			return peekExistingJSONURL(configPath, "mcpServers"), ""
+		}, func() (bool, string, string, error) {
+			changed, oldURL, err := mergeJSONMCPEntry(configPath, "mcpServers", map[string]any{"serverUrl": baseURL})
+			return changed, oldURL, configPath, err
+		})
+	}
 }
 
 // promptAndWriteCodex handles Codex CLI specially: unlike Claude Code and
@@ -336,7 +347,7 @@ type writeFunc func() (changed bool, oldURL string, configPath string, err error
 type peekFunc func() (oldURL, caveat string)
 
 // peekExistingJSONURL reads configPath (without modifying it) and returns
-// the "url" field of any existing raw[sectionKey]["nano-brain"] entry, or
+// the "url" (or Windsurf's "serverUrl") field of any existing raw[sectionKey]["nano-brain"] entry, or
 // "" if the file/section/entry doesn't exist. Used to drive the D-06
 // overwrite confirmation BEFORE any write happens.
 func peekExistingJSONURL(configPath, sectionKey string) string {
@@ -357,6 +368,9 @@ func peekExistingJSONURL(configPath, sectionKey string) string {
 		return ""
 	}
 	u, _ := nb["url"].(string)
+	if u == "" {
+		u, _ = nb["serverUrl"].(string) // Windsurf/Devin key
+	}
 	return u
 }
 
