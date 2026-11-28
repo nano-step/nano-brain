@@ -64,6 +64,11 @@ The Claude harvester SHALL re-expand configured projects-parent patterns and re-
 - **WHEN** the standard Claude projects dir or default `~/.ccs` instance root is first created later
 - **THEN** the next harvest cycle SHALL consider the retained standard pattern without a daemon restart.
 
+#### Scenario: Explicit storage dir created after startup
+- **GIVEN** `CLAUDECODE_STORAGE_DIR` explicitly names a projects parent directory when harvesting is enabled at startup
+- **WHEN** that directory is first created later
+- **THEN** the next harvest cycle SHALL consider the retained explicit path without a daemon restart.
+
 #### Scenario: Config edit still requires restart
 - **WHEN** the YAML values of `session_dir` or `session_dirs` are changed while the daemon is running
 - **THEN** the running daemon SHALL continue using the startup-loaded patterns until restart.

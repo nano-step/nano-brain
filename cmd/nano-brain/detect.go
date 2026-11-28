@@ -47,9 +47,7 @@ func detectClaudeCodeStoragePatterns() []string {
 	}
 
 	if v := os.Getenv("CLAUDECODE_STORAGE_DIR"); v != "" {
-		if info, err := os.Stat(v); err == nil && info.IsDir() {
-			add(v)
-		}
+		add(v)
 	}
 	for _, p := range platformClaudeCodePaths() {
 		// Include a platform projects dir even before the first session if its

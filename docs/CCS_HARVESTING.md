@@ -39,7 +39,7 @@ A non-empty `session_dir` or `session_dirs` is a complete explicit replacement l
 4. Init prints the privacy-sensitive notice that Claude/CCS session harvesting was detected and enabled.
 5. After the server starts, startup auto-detection resolves the current platform/CCS patterns and starts one dynamic discovery harvester.
 6. Once the user registers workspaces, sessions whose transcript `cwd` matches a registered workspace can be ingested. Sessions for unregistered workspaces are not imported.
-7. Once harvesting is enabled, new sessions, new CCS profiles, first-use creation of a standard Claude/CCS storage location, and newly registered workspaces are reconsidered on later harvest cycles without restarting the daemon. If init found no Claude/CCS storage and therefore rendered `enabled: false`, installing CCS later does not flip that config flag by itself. YAML edits themselves still require restart.
+7. Once harvesting is enabled, new sessions, new CCS profiles, first-use creation of a standard Claude/CCS storage location or an explicitly named `CLAUDECODE_STORAGE_DIR`, and newly registered workspaces are reconsidered on later harvest cycles without restarting the daemon. If init found no Claude/CCS storage and therefore rendered `enabled: false`, installing CCS later does not flip that config flag by itself. YAML edits themselves still require restart.
 
 ### Day-to-day use
 

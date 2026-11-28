@@ -30,6 +30,7 @@ Focused detection/init/render/encoding tests:
 ```text
 --- PASS: TestDetectClaudeCodeStoragePatterns_DefaultCCSRoot
 --- PASS: TestDetectClaudeCodeStoragePatterns_CCSDirAndCCSHome
+--- PASS: TestDetectClaudeCodeStoragePatterns_StorageDirNeedNotExist
 --- PASS: TestDetectClaudeCodeStoragePatterns_ExplicitEnvRootNeedNotExist
 --- PASS: TestDetectClaudeCodeStoragePatterns_RelativeCCSDirIgnored
 --- PASS: TestDetectClaudeCodeStoragePatterns_PlatformParentExists

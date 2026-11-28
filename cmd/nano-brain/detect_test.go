@@ -377,6 +377,18 @@ func TestDetectClaudeCodeStoragePatterns_CCSDirAndCCSHome(t *testing.T) {
 	}
 }
 
+func TestDetectClaudeCodeStoragePatterns_StorageDirNeedNotExist(t *testing.T) {
+	clearClaudeCodeEnv(t)
+	t.Setenv("HOME", t.TempDir())
+	missing := filepath.Join(t.TempDir(), "missing-claude-projects")
+	t.Setenv("CLAUDECODE_STORAGE_DIR", missing)
+
+	got := detectClaudeCodeStoragePatterns()
+	if len(got) == 0 || got[0] != missing {
+		t.Fatalf("detectClaudeCodeStoragePatterns() = %v, want first %q", got, missing)
+	}
+}
+
 func TestDetectClaudeCodeStoragePatterns_ExplicitEnvRootNeedNotExist(t *testing.T) {
 	clearClaudeCodeEnv(t)
 	t.Setenv("HOME", t.TempDir())
