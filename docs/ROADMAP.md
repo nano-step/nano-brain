@@ -115,7 +115,7 @@ summarization:
 
 | Method | Description | Status |
 |---|---|---|
-| Bearer token auth | Single shared token for all users | ✅ |
+| Bearer token auth | Static tokens from config, all sharing one identity | ✅ |
 | Basic auth | Username/password per user | ✅ |
 | TLS termination | HTTPS support (native or reverse proxy) | ❌ |
 | Rate limiting | Per-user, per-IP request limits | ❌ |
@@ -273,7 +273,7 @@ Phase 10 — Deployment & Security (Planned)
   │   ├── ❌ Cloud provider guides (AWS, GCP, Azure)
   │   └── ❌ CI/CD integration (GitHub Actions, GitLab CI)
   ├── Authentication & authorization (→ ROADMAP-ENTERPRISE.md)
-  │   ├── ✅ Bearer token auth (single shared token)
+  │   ├── ✅ Bearer token auth (static config tokens, no per-token identity)
   │   ├── ✅ Basic auth (username/password per user)
   │   ├── ❌ Role-based access control (Admin / Developer / Reader)
   │   ├── ❌ Per-token role assignment (each `nbt_` token carries a role)
@@ -305,9 +305,7 @@ Phase 10 — Deployment & Security (Planned)
 4. **Ruby limitations**: No `before_action`/`after_action`, no ActiveRecord dynamic methods, no metaprogramming — worth implementing?
 5. **Benchmark accuracy**: How to improve P@5 from 0.749 to 0.9+ — better embedding models, HyDE, or reranking?
 6. **Deployment target**: Self-hosted VPS vs cloud-managed (RDS, Cloud SQL) — which to prioritize?
-7. **Auth granularity**: Is workspace-scoped access enough, or do we need collection-level permissions?
-8. **TLS**: Should nano-brain handle TLS termination, or rely on reverse proxy (nginx, Caddy)?
-9. **Frontend scope**: For Next/Nuxt, should we prioritize route extraction first, or end-to-end page→component→API flow tracing?
+7. **Frontend scope**: For Next/Nuxt, should we prioritize route extraction first, or end-to-end page→component→API flow tracing?
 
 ### Resolved Questions
 
@@ -317,4 +315,6 @@ Phase 10 — Deployment & Security (Planned)
 - ~~Claude projects/memory~~ → Not harvesting `~/.claude/projects/` — only transcripts
 - ~~costs.jsonl~~ → Not indexed — analytics-only, not searchable
 - ~~Tree-sitter vs regex~~ → go-tree-sitter for Python, Ruby; regex for Go, JS/TS
+- ~~Auth granularity~~ → workspace level to start ([ROADMAP-ENTERPRISE.md](ROADMAP-ENTERPRISE.md))
+- ~~TLS~~ → terminate at the ingress or a reverse proxy ([ROADMAP-ENTERPRISE.md](ROADMAP-ENTERPRISE.md))
 - ~~Agent memory benchmark~~ → nano-brain P@5=0.749 vs LlamaIndex 0.55 vs Qdrant 0.27

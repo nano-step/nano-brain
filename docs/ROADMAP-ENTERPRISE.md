@@ -15,12 +15,12 @@
 | Authentication | Basic auth (bcrypt users in config) and static bearer tokens in config. Off by default. | `internal/server/middleware/auth.go`, `internal/config/template.go` |
 | Identity on a request | The username, or the literal `"token"` for every bearer token. Set as `auth.principal` but never passed to handlers or MCP tools. | `auth.go` `validateBearer` |
 | Authorization | None. Routes are already split into `api` / `data` / `write` groups, but one gate covers all of them. | `internal/server/routes.go` |
-| Route grouping bugs | `POST /graph/neighborhood` and `GET /code/summarize/status` are reads that sit in the `write` group. | `routes.go:80,117` |
-| Workspace identity | SHA-256 of an absolute path. The same repo cloned on two laptops gives two workspaces. | `memory_workspaces_resolve` |
+| Route grouping bugs | `GET /code/summarize/status`, `GET /code/summarize/failures` and `POST /graph/neighborhood` are reads that sit in the `write` group. | `routes.go:75,76,112` |
+| Workspace identity | SHA-256 of an absolute path. The same repo cloned on two laptops gives two workspaces. (`workspace_ids` from migration 00030 is only a short storage id for that hash, not a logical identity.) | `memory_workspaces_resolve`, `migrations/00030_storage_normalization.sql` |
 | Ingestion | The watcher and the harvester read the server's own disk. | `internal/watcher`, `internal/harvest` |
-| Audit | None. `telemetry_logs` records only 3 REST search handlers; the 19 MCP tools record nothing. | migration 00001, observe `docs/DESIGN.md` |
+| Audit | None. `telemetry_logs` records the 3 REST search handlers and every MCP `tools/call` (an `mcp_tool` row with sanitized, truncated args, `is_error` and `result_count`; #678). Rows carry no principal, so this is telemetry, not an audit log. | `migrations/00001_initial_schema.sql`, `internal/mcp/telemetry.go` |
 | Users, orgs, tokens in the DB | No tables. | `migrations/*.sql` |
-| Known holes | #735: any 64-hex `workspace` value skips the DB check. #723: `reload-config` ignores `server.auth`. #673 and #674: open follow-ups on the HTTP surface and on auth. | GitHub issues |
+| Known holes | #735: any 64-hex `workspace` value skips the DB check. #723: `reload-config` ignores `server.auth`. #673 and #674: open follow-ups on the HTTP surface and on auth. `server.auth.bypass_paths` lets listed paths skip auth (part of #673). | GitHub issues, `internal/config/config.go` |
 | MCP OAuth discovery | Clients already probe `/.well-known/oauth-*` and get 404. Before observe PR #7 stopped logging these probes, they made up about 49% of its records. | observe logs |
 
 ## Blockers to decide before building auth
@@ -30,10 +30,11 @@
 
 ## Phases
 ### E0 — Hardening prerequisites (no new features)
+- Review `server.auth.bypass_paths` (#673).
 - Close #735: a `workspace` must exist in the DB, and from E2 on it must also be granted to the caller. Close #723 (reloading auth config), #673 and #674.
 - Body size limit and server timeouts on every route.
 - `/healthz` (liveness), `/readyz` (checks Postgres and the embedder), Prometheus `/metrics`.
-- Move all routes under `/api/v1`. `/api/status`, `/api/version`, `/api/harvest` and `/api/reload-config` are outside it today. Keep the old paths as aliases for one release.
+- Move all REST routes under `/api/v1`. `/api/status`, `/api/version`, `/api/harvest` and `/api/reload-config` are outside it today. `/health`, `/api/openapi.json`, `/mcp`, `/sse` and `/ui` stay where they are. Keep the old paths as aliases for one release.
 - **Done when:** these security issues are closed and Kubernetes probes work.
 
 ### E1 — Identity and tokens
@@ -55,10 +56,11 @@
 ### E3 — SSO via OAuth 2.1 (MCP authorization spec)
 - nano-brain is an OAuth **resource server**, not an authorization server. Sign-in goes to the company IdP (Okta, Entra ID, Google Workspace, Keycloak, Auth0) over OIDC.
 - Follow the MCP authorization spec:
-  - serve `GET /.well-known/oauth-protected-resource` (RFC 9728), naming the IdP;
-  - on 401, return `WWW-Authenticate: Bearer resource_metadata="…"`;
+  - serve `GET /.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp` (the RFC 9728 form with the resource path appended, for the `/mcp` resource), listing the IdP in `authorization_servers`;
+  - on 401, return `WWW-Authenticate: Bearer resource_metadata="…"`, plus the existing Basic challenge while config users are enabled;
   - validate each JWT against the IdP's JWKS: `iss`, `exp`, scopes, and an `aud` equal to this server's resource URI (RFC 8707). Never pass tokens through to anything else.
 - Map `sub` or email to a `users` row, creating it on first login when the email domain is on an allow-list.
+- Client registration: use the IdP's support for Client ID Metadata Documents or dynamic client registration (RFC 7591) where it has them; otherwise document a pre-registered client ID for each MCP client. Part of Q6.
 - MCP clients that support OAuth sign in through the browser. Headless agents and CI keep using personal access tokens.
 - The web UI, if it stays, signs in with the authorization-code flow plus PKCE and keeps a server-side session cookie (HttpOnly, SameSite=Lax).
 - **Done when:** an agent connects to a remote nano-brain with only its URL plus a browser login.
@@ -87,12 +89,13 @@ Roles map to permissions as follows: `viewer` = read; `member` = read + write; a
 
 | Permission | MCP tools | REST routes |
 |---|---|---|
-| `memory:read` | query, search, vsearch, get, wake_up, tags, ticket, graph, impact, trace, symbols, flow, flowchart, workspaces_list, workspaces_resolve, status | `data` group reads: `/query`, `/search`, `/vsearch`, `/get`, `/multi-get`, `/graph/*`, `/symbols`, `/links/*`, `/wake-up`, `/events` |
-| `memory:write` | write, update, delete | `/write`, `DELETE /documents/:id` |
-| `workspace:maintain` | — | `/reindex`, `/reindex-cfg`, `/update`, `/embed`, `/summarize`, `/code/summarize*`, `/flow/materialize`, `/graph/pagerank/compute`, collections POST/PUT/DELETE, `/harvest` |
-| `admin` | — | `/init`, `DELETE /workspaces/:hash`, `/reset-workspace`, `/config`, `/reload-config`, `/doctor`, and the users, tokens, grants and audit APIs |
+| `memory:read` | query, search, vsearch, get, wake_up, tags, ticket, graph, impact, trace, symbols, flow, flowchart, workspaces_list, workspaces_resolve, status | reads: `/query`, `/search`, `/vsearch`, `/get`, `/multi-get`, `/graph/*` except `/graph/pagerank/compute`, `/symbols`, `/links/*`, `/wake-up`, `/events`, `/workspaces`, `/workspaces/resolve`, `/tags`, `/documents`, `GET /collections`, `/stats`, `/sessions/by-ticket`, `GET /code/summarize/status`, `GET /code/summarize/failures` |
+| `memory:write` | write, delete | `/write`, `DELETE /documents/:id` |
+| `workspace:maintain` | update (re-embeds and reindexes, like REST `/update`) | `/reindex`, `/reindex-cfg`, `/update`, `/embed`, `/summarize`, `POST /code/summarize`, `/code/summarize/retry`, `/code/summarize/retry-all`, `/flow/materialize`, `/graph/pagerank/compute`, collections POST/PUT/DELETE |
+| `admin` | — | `/init`, `DELETE /workspaces/:hash`, `/reset-workspace`, `/config`, `/reload-config`, `/doctor`, `/harvest` (server-wide, every workspace), and the users, tokens, grants and audit APIs |
+| public / any valid token | — | No auth: `/health`, `/healthz`, `/ui` (static page), `/readyz`, `/.well-known/oauth-protected-resource*`. Any valid token: `/api/status`, `/api/version`, `/api/openapi.json`, `/metrics`. `/mcp` and `/sse` are checked per tool. |
 
-All 19 MCP tools are in the table. No MCP tool needs `workspace:maintain` or `admin`, so agents with a normal token never see admin operations.
+All 19 MCP tools are in the table. Only `memory_update` needs `workspace:maintain`; no MCP tool needs `admin`, so agents with a normal token never see admin operations.
 
 ## New API endpoints
 **Yes, new endpoints are needed.** None of them are for search or graph; those get permission checks instead.
@@ -105,7 +108,7 @@ All 19 MCP tools are in the table. No MCP tool needs `workspace:maintain` or `ad
 | E1 | `GET/POST /api/v1/tokens`, `DELETE /api/v1/tokens/:id` | Personal access tokens, self-service. The secret is shown once, at creation. |
 | E1 | `GET/POST /api/v1/users`, `PATCH/DELETE /api/v1/users/:id` | Admin: invite, change role, disable |
 | E2 | `GET/PUT/DELETE /api/v1/workspaces/:hash/members` | Workspace grants for users and groups |
-| E3 | `GET /.well-known/oauth-protected-resource` | MCP OAuth discovery (RFC 9728). Clients already probe this path today. |
+| E3 | `GET /.well-known/oauth-protected-resource` (+ `/mcp` suffix) | MCP OAuth discovery (RFC 9728). Clients already probe this path today. |
 | E3 | `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout` | Web UI sign-in only. Agents never use these. |
 | E4 | `GET /api/v1/audit`, `GET /api/v1/audit/export` | Query the audit log; NDJSON export for a SIEM |
 | E4 | `POST /api/v1/workspaces/:hash/export` | Export one workspace's data |
@@ -120,19 +123,19 @@ All 19 MCP tools are in the table. No MCP tool needs `workspace:maintain` or `ad
 
 | Phase | Work | Depends on |
 |---|---|---|
-| O1 | Open issues: #3 (redact credentials in args and responses, never log the `Authorization` header, retention, private file permissions) and #5 (installer) | — |
+| O1 | #3 (redact credentials in args and responses, never log `Authorization` or `Cookie`, retention, private file permissions), #5 (installer) and the rest of #4 (proxy memory and time limits) | — |
 | O2 | Log who made each call: the token's public id from `nbt_<id>_…`, or the `sub` of a JWT, marked as *claimed* because the proxy does not validate it. Tests that OAuth discovery and `WWW-Authenticate` pass through unchanged. Keep dropping only 404 probes. | E1, E3 |
 | O3 | Deployable: a stdout sink for Kubernetes log collectors, sampling, metadata only by default with payload capture opt-in per workspace, and a sidecar option in the Helm chart | E6 |
 | O4 | Quality reports: `stats` grouped by caller and by workspace, plus a report of empty-result queries, failing arguments and slow tools to feed nano-brain issues | O2 |
 
-Overlap: #728 moves User-Agent attribution and a usage report into nano-brain itself. Once E0 metrics and E4 audit ship, observe's metadata-only mode duplicates them; what stays unique to observe is capturing payloads. (Q4)
+Overlap: #728 moves User-Agent attribution and a usage report into nano-brain itself. Once E0 metrics and E4 audit ship, observe's metadata-only mode duplicates them; what stays unique to observe is capturing full responses and untruncated args. (Q4)
 
 ## Out of scope
 - **Running our own OAuth authorization server, or hosting dynamic client registration.** The company IdP does this better, and doing it ourselves is a large security surface.
 - **Native SAML.** Customers who only have SAML put an IdP broker (Keycloak) in front.
 - **Row-level multi-tenancy in v1.** See blocker 3.
-- **Access control per collection or per document.** The workspace is the unit of access. (Q7 in ROADMAP.md is answered: workspace level is enough to start.)
-- **Native TLS.** TLS ends at the ingress or a reverse proxy (Q8 in ROADMAP.md is answered).
+- **Access control per collection or per document.** The workspace is the unit of access. (The "Auth granularity" question in ROADMAP.md is answered: workspace level is enough to start.)
+- **Native TLS.** TLS ends at the ingress or a reverse proxy (The "TLS" question in ROADMAP.md is answered.).
 
 ## Open questions (owner decision)
 - **Q1 Tenancy:** one tenant per self-hosted deployment first (recommended), or multi-tenant SaaS from the start?
