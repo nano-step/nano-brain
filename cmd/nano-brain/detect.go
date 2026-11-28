@@ -161,6 +161,41 @@ func detectCodexProjectConfigPath(projectRoot string) string {
 	return filepath.Join(projectRoot, ".codex", "config.toml")
 }
 
+// detectWindsurfConfigPaths returns the global mcp_config.json of every
+// installed Windsurf-family client: Windsurf stable, Windsurf Next, and
+// Devin Desktop (Cortex-managed, XDG/AppData-aware). A client counts as
+// installed when its config directory exists; none installed returns nil.
+func detectWindsurfConfigPaths() []string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = os.Getenv("USERPROFILE")
+	}
+	devin := filepath.Join(home, ".config", "devin")
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		devin = filepath.Join(xdg, "devin")
+	}
+	if runtime.GOOS == "windows" {
+		devin = ""
+		if appdata := os.Getenv("APPDATA"); appdata != "" {
+			devin = filepath.Join(appdata, "devin")
+		}
+	}
+	var paths []string
+	for _, dir := range []string{
+		filepath.Join(home, ".codeium", "windsurf"),
+		filepath.Join(home, ".codeium", "windsurf-next"),
+		devin,
+	} {
+		if dir == "" {
+			continue
+		}
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			paths = append(paths, filepath.Join(dir, "mcp_config.json"))
+		}
+	}
+	return paths
+}
+
 func detectOpenCodeDBPath() string {
 	if v := os.Getenv("OPENCODE_DB_PATH"); v != "" {
 		if _, err := os.Stat(v); err == nil {

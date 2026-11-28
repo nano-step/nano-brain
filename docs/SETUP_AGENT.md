@@ -40,7 +40,7 @@ Run with no arguments, in an interactive terminal. This single command:
 4. Writes the config file and runs `doctor` to verify the stack.
 5. Starts the server.
 6. Offers to register the current directory as a workspace.
-7. Configures the MCP client(s) the user selects (Claude Code, OpenCode, Codex CLI). Claude Code and OpenCode are written **project-local** (`.mcp.json` / `opencode.json` in the project root), each bound to this project's `?workspace=`. Codex CLI asks a scope: **global** (`~/.codex/config.toml`, shared by every project) writes a bare URL with **no** `?workspace=` — so registering another project can't override this one's binding, and the agent passes a workspace per call; **project** (`<project>/.codex/config.toml`) writes a workspace-bound URL but requires trusting the directory in Codex.
+7. Configures the MCP client(s) the user selects (Claude Code, OpenCode, Codex CLI, Windsurf / Devin Desktop). Claude Code and OpenCode are written **project-local** (`.mcp.json` / `opencode.json` in the project root), each bound to this project's `?workspace=`. Codex CLI asks a scope: **global** (`~/.codex/config.toml`, shared by every project) writes a bare URL with **no** `?workspace=` — so registering another project can't override this one's binding, and the agent passes a workspace per call; **project** (`<project>/.codex/config.toml`) writes a workspace-bound URL but requires trusting the directory in Codex. Windsurf / Devin Desktop is offered once per installed client (`~/.codeium/windsurf`, `~/.codeium/windsurf-next`, `~/.config/devin`); its `mcp_config.json` is global, so it gets the bare URL with **no** `?workspace=`, same as global Codex.
 8. Prints a summary — server URL, workspace name/hash — ending with: **restart your AI client** to pick up the new MCP configuration.
 
 The happy path is a handful of prompts (at most six consequential questions: overwrite/keep, database, embeddings, start server, register, per-MCP-client) — not the ~20-question flow of older versions. For per-step manual control instead of the wizard, see the appendix below.
@@ -281,6 +281,19 @@ If you need the manual config shape instead, add to OpenCode config:
   }
 }
 ```
+
+#### Windsurf / Devin Desktop
+`nano-brain init` writes this for you. Manual shape, in `~/.codeium/windsurf/mcp_config.json` (`windsurf-next` for Next; `~/.config/devin/mcp_config.json` for Devin Desktop, `%AppData%\devin\` on Windows):
+```json
+{
+  "mcpServers": {
+    "nano-brain": {
+      "serverUrl": "http://localhost:3100/mcp"
+    }
+  }
+}
+```
+Press refresh in Cascade's MCP menu after editing. Session harvest is **not** supported: Cascade transcripts (`~/.codeium/windsurf/cascade/*.pb`) are AES-GCM-sealed protobuf with a key embedded in the vendor binary, so a reader would break on every release. Use `memory_write` at the end of a session for cross-session recall.
 
 #### Other MCP clients
 Use `url: http://localhost:3100/mcp` with transport type `http` (MCP 2025-03-26 streamable HTTP) for Claude Code and generic streamable-HTTP clients. Note: OpenCode's own config schema names this transport `"type": "remote"` (not `"http"`).

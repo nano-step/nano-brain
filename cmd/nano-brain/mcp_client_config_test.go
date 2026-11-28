@@ -167,26 +167,35 @@ func TestMergeJSONMCPEntry_Idempotent(t *testing.T) {
 // WR-01 regression: writing into a pre-existing, loosely-permissioned
 // config file must tighten it to 0600, not leave it at its prior mode —
 // os.WriteFile's mode argument is ignored when the target already exists.
-func TestMergeJSONMCPEntry_TightensPermissionsOnExistingFile(t *testing.T) {
+func TestMergeJSONMCPEntry_ExistingFileMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix file permission bits don't apply on windows")
 	}
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, ".mcp.json")
-	if err := os.WriteFile(configPath, []byte(`{}`), 0644); err != nil {
-		t.Fatalf("seed loosely-permissioned file: %v", err)
-	}
-
-	if _, _, err := mergeJSONMCPEntry(configPath, "mcpServers", map[string]any{"type": "http", "url": "x"}); err != nil {
-		t.Fatalf("mergeJSONMCPEntry: %v", err)
-	}
-
-	info, err := os.Stat(configPath)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if info.Mode().Perm() != 0600 {
-		t.Errorf("file mode = %o, want 0600 (pre-existing file permissions must be tightened)", info.Mode().Perm())
+	for _, tc := range []struct {
+		url  string
+		want os.FileMode
+	}{
+		{"http://localhost:3100/mcp", 0644},
+		{"http://localhost:3100/mcp?workspace=w", 0644},
+		{"http://vps:3100/mcp?token=secret", 0600},
+		{"http://vps:3100/mcp?%74oken=secret", 0600},
+		{"http://vps:3100/mcp?key=secret", 0600},
+		{"http://user:pass@vps:3100/mcp", 0600},
+	} {
+		configPath := filepath.Join(t.TempDir(), ".mcp.json")
+		if err := os.WriteFile(configPath, []byte(`{}`), 0644); err != nil {
+			t.Fatalf("seed file: %v", err)
+		}
+		if _, _, err := mergeJSONMCPEntry(configPath, "mcpServers", map[string]any{"type": "http", "url": tc.url}); err != nil {
+			t.Fatalf("merge: %v", err)
+		}
+		info, err := os.Stat(configPath)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		if info.Mode().Perm() != tc.want {
+			t.Errorf("url %s: mode = %o, want %o (keep existing mode unless the entry may hold a credential)", tc.url, info.Mode().Perm(), tc.want)
+		}
 	}
 }
 
@@ -410,26 +419,32 @@ func TestMergeCodexTOMLEntry_Idempotent(t *testing.T) {
 
 // WR-01 regression: same permission-tightening requirement as the JSON
 // merge, for the TOML merge path.
-func TestMergeCodexTOMLEntry_TightensPermissionsOnExistingFile(t *testing.T) {
+func TestMergeCodexTOMLEntry_ExistingFileMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix file permission bits don't apply on windows")
 	}
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(configPath, []byte(""), 0644); err != nil {
-		t.Fatalf("seed loosely-permissioned file: %v", err)
-	}
-
-	if _, _, err := mergeCodexTOMLEntry(configPath, map[string]any{"url": "x"}); err != nil {
-		t.Fatalf("mergeCodexTOMLEntry: %v", err)
-	}
-
-	info, err := os.Stat(configPath)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if info.Mode().Perm() != 0600 {
-		t.Errorf("file mode = %o, want 0600 (pre-existing file permissions must be tightened)", info.Mode().Perm())
+	for _, tc := range []struct {
+		url  string
+		want os.FileMode
+	}{
+		{"http://localhost:3100/mcp", 0644},
+		{"http://vps:3100/mcp?token=secret", 0600},
+		{"http://user:pass@vps:3100/mcp", 0600},
+	} {
+		configPath := filepath.Join(t.TempDir(), "config.toml")
+		if err := os.WriteFile(configPath, []byte(""), 0644); err != nil {
+			t.Fatalf("seed file: %v", err)
+		}
+		if _, _, err := mergeCodexTOMLEntry(configPath, map[string]any{"url": tc.url}); err != nil {
+			t.Fatalf("merge: %v", err)
+		}
+		info, err := os.Stat(configPath)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		if info.Mode().Perm() != tc.want {
+			t.Errorf("url %s: mode = %o, want %o (keep existing mode unless the entry may hold a credential)", tc.url, info.Mode().Perm(), tc.want)
+		}
 	}
 }
 
@@ -585,6 +600,7 @@ func TestShouldPromptMCPConfig(t *testing.T) {
 }
 
 func TestPromptMCPClientConfig_DeclineAllWritesNothing(t *testing.T) {
+	isolateHome(t)
 	dir := t.TempDir()
 	t.Setenv("OPENCODE_CONFIG", "")
 	codexHome := t.TempDir()
@@ -605,6 +621,7 @@ func TestPromptMCPClientConfig_DeclineAllWritesNothing(t *testing.T) {
 }
 
 func TestPromptMCPClientConfig_SelectiveYesWritesOnlyThatClient(t *testing.T) {
+	isolateHome(t)
 	dir := t.TempDir()
 	t.Setenv("OPENCODE_CONFIG", "")
 	codexHome := t.TempDir()
@@ -626,6 +643,7 @@ func TestPromptMCPClientConfig_SelectiveYesWritesOnlyThatClient(t *testing.T) {
 }
 
 func TestPromptMCPClientConfig_OverwriteConfirm_Declined(t *testing.T) {
+	isolateHome(t)
 	dir := t.TempDir()
 	// Pre-seed .mcp.json with a nano-brain entry bound to a different workspace.
 	if _, _, _, err := writeClaudeCodeMCPConfig(dir, "http://localhost:3100/mcp", "old-workspace"); err != nil {
@@ -650,6 +668,7 @@ func TestPromptMCPClientConfig_OverwriteConfirm_Declined(t *testing.T) {
 }
 
 func TestPromptMCPClientConfig_OverwriteConfirm_Accepted(t *testing.T) {
+	isolateHome(t)
 	dir := t.TempDir()
 	if _, _, _, err := writeClaudeCodeMCPConfig(dir, "http://localhost:3100/mcp", "old-workspace"); err != nil {
 		t.Fatalf("seed config: %v", err)
@@ -677,6 +696,7 @@ func TestPromptMCPClientConfig_OverwriteConfirm_Accepted(t *testing.T) {
 // treated as an implicit "yes" — neither for the initial per-client prompt
 // nor for the D-06 overwrite confirmation.
 func TestPromptMCPClientConfig_StdinEOFDoesNotWriteAnything(t *testing.T) {
+	isolateHome(t)
 	dir := t.TempDir()
 	t.Setenv("OPENCODE_CONFIG", "")
 	codexHome := t.TempDir()
@@ -702,6 +722,7 @@ func TestPromptMCPClientConfig_StdinEOFDoesNotWriteAnything(t *testing.T) {
 // dropped session mid-sequence) must not cascade into an implicit "yes"
 // for the remaining clients.
 func TestPromptMCPClientConfig_StdinEOFAfterFirstAnswerStopsAtDecline(t *testing.T) {
+	isolateHome(t)
 	dir := t.TempDir()
 	t.Setenv("OPENCODE_CONFIG", "")
 	codexHome := t.TempDir()
@@ -726,6 +747,7 @@ func TestPromptMCPClientConfig_StdinEOFAfterFirstAnswerStopsAtDecline(t *testing
 // CR-01 regression: EOF at the D-06 overwrite-confirmation prompt must
 // decline the overwrite, not accept it.
 func TestPromptMCPClientConfig_StdinEOFAtOverwriteConfirmDeclines(t *testing.T) {
+	isolateHome(t)
 	dir := t.TempDir()
 	if _, _, _, err := writeClaudeCodeMCPConfig(dir, "http://localhost:3100/mcp", "old-workspace"); err != nil {
 		t.Fatalf("seed config: %v", err)
@@ -745,5 +767,100 @@ func TestPromptMCPClientConfig_StdinEOFAtOverwriteConfirmDeclines(t *testing.T) 
 	}
 	if string(before) != string(after) {
 		t.Errorf("file changed after stdin EOF at overwrite confirm (should decline, not accept):\nbefore: %s\nafter:  %s", before, after)
+	}
+}
+
+func TestDetectWindsurfConfigPaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	t.Setenv("APPDATA", filepath.Join(home, ".config")) // Windows: same devin path as XDG default
+	if got := detectWindsurfConfigPaths(); len(got) != 0 {
+		t.Errorf("no install: got %v, want none", got)
+	}
+
+	for _, d := range []string{".codeium/windsurf-next", ".config/devin"} {
+		if err := os.MkdirAll(filepath.Join(home, d), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{
+		filepath.Join(home, ".codeium", "windsurf-next", "mcp_config.json"),
+		filepath.Join(home, ".config", "devin", "mcp_config.json"),
+	}
+	if got := detectWindsurfConfigPaths(); strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("installed: got %v, want %v", got, want)
+	}
+}
+
+func TestPromptMCPClientConfig_WindsurfWritesGlobalServerURL(t *testing.T) {
+	isolateHome(t)
+	dir := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("OPENCODE_CONFIG", "")
+	t.Setenv("CODEX_HOME", t.TempDir())
+	cfg := filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, []byte(`{"mcpServers":{"other":{"command":"x"}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// n for Claude Code, OpenCode, Codex; y for Windsurf.
+	promptMCPClientConfig(bufio.NewScanner(strings.NewReader("n\nn\nn\ny\n")), dir, "my-workspace")
+
+	data, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatalf("read windsurf config: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	servers := raw["mcpServers"].(map[string]any)
+	if _, ok := servers["other"]; !ok {
+		t.Errorf("unrelated server entry dropped: %s", data)
+	}
+	nb := servers["nano-brain"].(map[string]any)
+	if want := resolveMCPURL("/.dockerenv"); nb["serverUrl"] != want {
+		t.Errorf("serverUrl = %v, want bare %s (global config carries no ?workspace=)", nb["serverUrl"], want)
+	}
+
+	// Existing different serverUrl + declined overwrite leaves the file untouched.
+	seeded := `{"mcpServers":{"nano-brain":{"serverUrl":"http://old:1/mcp"}}}`
+	if err := os.WriteFile(cfg, []byte(seeded), 0600); err != nil {
+		t.Fatal(err)
+	}
+	promptMCPClientConfig(bufio.NewScanner(strings.NewReader("n\nn\nn\ny\nn\n")), dir, "my-workspace")
+	if after, _ := os.ReadFile(cfg); string(after) != seeded {
+		t.Errorf("file changed after declining overwrite: %s", after)
+	}
+}
+
+// isolateHome points every home-derived config path at a temp dir so a
+// wizard test can never write the developer's real client configs.
+func isolateHome(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("APPDATA", filepath.Join(home, ".config"))
+}
+
+func TestMergeJSONMCPEntry_NullRoot(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "mcp_config.json")
+	if err := os.WriteFile(configPath, []byte("null"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := mergeJSONMCPEntry(configPath, "mcpServers", map[string]any{"serverUrl": "x"}); err != nil {
+		t.Fatalf("mergeJSONMCPEntry on null root: %v", err)
+	}
+	if got := peekExistingJSONURL(configPath, "mcpServers"); got != "x" {
+		t.Errorf("serverUrl = %q, want x", got)
 	}
 }
