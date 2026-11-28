@@ -57,6 +57,10 @@ git diff --check                                                 PASS
 
 `golangci-lint` is not installed on this machine, so the repository Makefile lint lane could not be run locally; `go vet` was run instead.
 
+## Real CCS transcript E2E
+
+A server-level E2E check against privacy-safe copies of real CCS transcripts is documented in `docs/CCS_HARVESTING.md`. It exercised zero-config auto-detection, API workspace registration, manual `POST /api/harvest`, dynamic addition of transcripts after startup, PostgreSQL persistence, and BM25 visibility. The run initially exposed a typed-nil embed-enqueuer panic in BM25-only mode; `internal/harvest/runner.go` now normalizes typed-nil enqueuers and the rerun completed with 7/7 unique sampled sessions persisted, zero harvest errors, and search visibility.
+
 ## Format verification
 
 The encoder implementation was checked against the locally installed Claude Code 2.1.332 bundle. The bundle contains the current project-dir rule: replace every non-alphanumeric character with `-`, cap at 200 UTF-16 units, and append `-` plus a base-36 Java-style string hash for longer paths. Hard-coded vectors cover spaces/dots/underscores, Windows separators, non-BMP UTF-16 behavior, the 200-unit boundary, and an over-200 hash suffix.
