@@ -167,26 +167,32 @@ func TestMergeJSONMCPEntry_Idempotent(t *testing.T) {
 // WR-01 regression: writing into a pre-existing, loosely-permissioned
 // config file must tighten it to 0600, not leave it at its prior mode —
 // os.WriteFile's mode argument is ignored when the target already exists.
-func TestMergeJSONMCPEntry_TightensPermissionsOnExistingFile(t *testing.T) {
+func TestMergeJSONMCPEntry_ExistingFileMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix file permission bits don't apply on windows")
 	}
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, ".mcp.json")
-	if err := os.WriteFile(configPath, []byte(`{}`), 0644); err != nil {
-		t.Fatalf("seed loosely-permissioned file: %v", err)
-	}
-
-	if _, _, err := mergeJSONMCPEntry(configPath, "mcpServers", map[string]any{"type": "http", "url": "x"}); err != nil {
-		t.Fatalf("mergeJSONMCPEntry: %v", err)
-	}
-
-	info, err := os.Stat(configPath)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if info.Mode().Perm() != 0600 {
-		t.Errorf("file mode = %o, want 0600 (pre-existing file permissions must be tightened)", info.Mode().Perm())
+	for _, tc := range []struct {
+		url  string
+		want os.FileMode
+	}{
+		{"http://localhost:3100/mcp", 0644},
+		{"http://vps:3100/mcp?token=secret", 0600},
+		{"http://vps:3100/mcp?%74oken=secret", 0600},
+	} {
+		configPath := filepath.Join(t.TempDir(), ".mcp.json")
+		if err := os.WriteFile(configPath, []byte(`{}`), 0644); err != nil {
+			t.Fatalf("seed file: %v", err)
+		}
+		if _, _, err := mergeJSONMCPEntry(configPath, "mcpServers", map[string]any{"type": "http", "url": tc.url}); err != nil {
+			t.Fatalf("merge: %v", err)
+		}
+		info, err := os.Stat(configPath)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		if info.Mode().Perm() != tc.want {
+			t.Errorf("url %s: mode = %o, want %o (keep existing mode unless the entry holds a token)", tc.url, info.Mode().Perm(), tc.want)
+		}
 	}
 }
 
@@ -410,26 +416,31 @@ func TestMergeCodexTOMLEntry_Idempotent(t *testing.T) {
 
 // WR-01 regression: same permission-tightening requirement as the JSON
 // merge, for the TOML merge path.
-func TestMergeCodexTOMLEntry_TightensPermissionsOnExistingFile(t *testing.T) {
+func TestMergeCodexTOMLEntry_ExistingFileMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix file permission bits don't apply on windows")
 	}
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(configPath, []byte(""), 0644); err != nil {
-		t.Fatalf("seed loosely-permissioned file: %v", err)
-	}
-
-	if _, _, err := mergeCodexTOMLEntry(configPath, map[string]any{"url": "x"}); err != nil {
-		t.Fatalf("mergeCodexTOMLEntry: %v", err)
-	}
-
-	info, err := os.Stat(configPath)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if info.Mode().Perm() != 0600 {
-		t.Errorf("file mode = %o, want 0600 (pre-existing file permissions must be tightened)", info.Mode().Perm())
+	for _, tc := range []struct {
+		url  string
+		want os.FileMode
+	}{
+		{"http://localhost:3100/mcp", 0644},
+		{"http://vps:3100/mcp?token=secret", 0600},
+	} {
+		configPath := filepath.Join(t.TempDir(), "config.toml")
+		if err := os.WriteFile(configPath, []byte(""), 0644); err != nil {
+			t.Fatalf("seed file: %v", err)
+		}
+		if _, _, err := mergeCodexTOMLEntry(configPath, map[string]any{"url": tc.url}); err != nil {
+			t.Fatalf("merge: %v", err)
+		}
+		info, err := os.Stat(configPath)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		if info.Mode().Perm() != tc.want {
+			t.Errorf("url %s: mode = %o, want %o (keep existing mode unless the entry holds a token)", tc.url, info.Mode().Perm(), tc.want)
+		}
 	}
 }
 
@@ -835,4 +846,17 @@ func isolateHome(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("APPDATA", filepath.Join(home, ".config"))
+}
+
+func TestMergeJSONMCPEntry_NullRoot(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "mcp_config.json")
+	if err := os.WriteFile(configPath, []byte("null"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := mergeJSONMCPEntry(configPath, "mcpServers", map[string]any{"serverUrl": "x"}); err != nil {
+		t.Fatalf("mergeJSONMCPEntry on null root: %v", err)
+	}
+	if got := peekExistingJSONURL(configPath, "mcpServers"); got != "x" {
+		t.Errorf("serverUrl = %q, want x", got)
+	}
 }

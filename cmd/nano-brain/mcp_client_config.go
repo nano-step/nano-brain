@@ -35,8 +35,8 @@ func buildWorkspaceURL(base, name string) string {
 // generic map[string]any (never a typed struct — see RESEARCH
 // Anti-Patterns: typed structs silently drop unknown user keys), sets only
 // raw[sectionKey]["nano-brain"] = entry preserving every other key/section
-// untouched, and writes the result back with 0600 permissions after
-// ensuring the parent directory exists with 0700 (T-10-05).
+// untouched, and writes the result back via writeMCPConfigFile (mode rules
+// there).
 //
 // Returns changed=true when the serialized nano-brain entry differs from
 // what was already present (or was absent), and oldURL set to the prior
@@ -55,6 +55,9 @@ func mergeJSONMCPEntry(configPath, sectionKey string, entry map[string]any) (cha
 		return false, "", fmt.Errorf("read existing config %s: %w", configPath, readErr)
 	}
 
+	if raw == nil { // file content was JSON null
+		raw = map[string]any{}
+	}
 	section, ok := raw[sectionKey].(map[string]any)
 	if !ok {
 		section = map[string]any{}
@@ -77,20 +80,41 @@ func mergeJSONMCPEntry(configPath, sectionKey string, entry map[string]any) (cha
 		return false, "", fmt.Errorf("marshal config: %w", marshalErr)
 	}
 
-	if mkdirErr := os.MkdirAll(filepath.Dir(configPath), 0700); mkdirErr != nil {
-		return false, "", fmt.Errorf("create config dir: %w", mkdirErr)
+	if err := writeMCPConfigFile(configPath, out, entry); err != nil {
+		return false, "", err
 	}
-	if writeErr := os.WriteFile(configPath, out, 0600); writeErr != nil {
-		return false, "", fmt.Errorf("write config %s: %w", configPath, writeErr)
-	}
-	// os.WriteFile's mode is only applied when creating a new file, so a
-	// pre-existing file written with looser permissions (e.g. 0644) must be
-	// explicitly tightened here to actually get 0600 (T-10-05).
-	if chmodErr := os.Chmod(configPath, 0600); chmodErr != nil {
-		return false, "", fmt.Errorf("chmod config %s: %w", configPath, chmodErr)
-	}
-
 	return changed, oldURL, nil
+}
+
+// writeMCPConfigFile writes data to configPath, creating the parent dir 0700.
+// A new file is created 0600. An existing file keeps its mode (a committed
+// .mcp.json in a shared repo must not flip to 0600 in git, #725) unless the
+// entry carries a token, in which case it is tightened to 0600 (T-10-05).
+func writeMCPConfigFile(configPath string, data []byte, entry map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+	// Tighten before writing so the token is never readable under the old mode.
+	if entryHasToken(entry) {
+		if err := os.Chmod(configPath, 0600); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("chmod config %s: %w", configPath, err)
+		}
+	}
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
+		return fmt.Errorf("write config %s: %w", configPath, err)
+	}
+	return nil
+}
+
+// entryHasToken reports whether any entry value mentions a token (e.g. a
+// NANO_BRAIN_MCP_URL with ?token=...), i.e. the file now holds a secret.
+func entryHasToken(entry map[string]any) bool {
+	b, _ := json.Marshal(entry)
+	s := string(b)
+	if u, err := url.QueryUnescape(s); err == nil {
+		s = u
+	}
+	return strings.Contains(strings.ToLower(s), "token")
 }
 
 // mapsEqual reports whether two map[string]any values are deeply equal by
@@ -140,9 +164,8 @@ func writeOpenCodeMCPConfig(projectRoot, baseMCPURL, workspaceName string) (chan
 // mergeCodexTOMLEntry reads configPath (if it exists), decodes it into a
 // generic map[string]any via BurntSushi/toml, sets only
 // raw["mcp_servers"]["nano-brain"] = entry preserving every other table and
-// top-level key untouched, and writes the result back with 0600
-// permissions after ensuring the parent directory exists with 0700
-// (T-10-05). Same (changed, oldURL, err) contract as mergeJSONMCPEntry.
+// top-level key untouched, and writes the result back via writeMCPConfigFile.
+// Same (changed, oldURL, err) contract as mergeJSONMCPEntry.
 //
 // KNOWN LIMITATION (RESEARCH Pitfall 4 / A3, threat T-10-07, accepted):
 // BurntSushi/toml's Encode does not preserve comments or original
@@ -186,18 +209,9 @@ func mergeCodexTOMLEntry(configPath string, entry map[string]any) (changed bool,
 		return false, "", fmt.Errorf("marshal config: %w", encodeErr)
 	}
 
-	if mkdirErr := os.MkdirAll(filepath.Dir(configPath), 0700); mkdirErr != nil {
-		return false, "", fmt.Errorf("create config dir: %w", mkdirErr)
+	if err := writeMCPConfigFile(configPath, buf.Bytes(), entry); err != nil {
+		return false, "", err
 	}
-	if writeErr := os.WriteFile(configPath, buf.Bytes(), 0600); writeErr != nil {
-		return false, "", fmt.Errorf("write config %s: %w", configPath, writeErr)
-	}
-	// See mergeJSONMCPEntry's identical comment: WriteFile's mode is ignored
-	// for pre-existing files, so tighten permissions explicitly (T-10-05).
-	if chmodErr := os.Chmod(configPath, 0600); chmodErr != nil {
-		return false, "", fmt.Errorf("chmod config %s: %w", configPath, chmodErr)
-	}
-
 	return changed, oldURL, nil
 }
 
