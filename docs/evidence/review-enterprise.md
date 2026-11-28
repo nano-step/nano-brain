@@ -1,6 +1,6 @@
 # Review: enterprise roadmap docs (#754)
 
-Reviewer: oh-my-claudecode:code-reviewer (Opus 5.5, independent agent, not the author)
+Reviewer: oh-my-claudecode:code-reviewer (Opus 5.5, separate review agent)
 Scope: docs/ROADMAP-ENTERPRISE.md (new), docs/ROADMAP.md, nano-brain-observe docs/ROADMAP.md and docs/DESIGN.md
 
 ## Round 1 — FAIL
