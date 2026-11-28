@@ -446,3 +446,67 @@ func TestBuildRenderedConfig_DatabaseAbort(t *testing.T) {
 		t.Error("stepEmbeddingFn must not be called when the database step aborts")
 	}
 }
+
+func TestBuildRenderedConfig_EnablesClaudeHarvestWhenCCSDetected(t *testing.T) {
+	clearClaudeCodeEnv(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".ccs", "instances", "work", "projects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origStepDatabase := stepDatabaseFn
+	origStepEmbedding := stepEmbeddingFn
+	t.Cleanup(func() {
+		stepDatabaseFn = origStepDatabase
+		stepEmbeddingFn = origStepEmbedding
+	})
+	stepDatabaseFn = func(scanner *bufio.Scanner, defaultURL string) (string, bool) {
+		return defaultURL, true
+	}
+	stepEmbeddingFn = func(scanner *bufio.Scanner, notes io.Writer, defaultURL, defaultModel string) string {
+		return "embedding:\n  provider: \"\"\n"
+	}
+
+	yaml, notes, ok := buildRenderedConfig(bufio.NewScanner(strings.NewReader("")))
+	if !ok {
+		t.Fatal("buildRenderedConfig() ok = false, want true")
+	}
+	claudeSection := yaml[strings.Index(yaml, "  claudecode:"):]
+	if !strings.Contains(claudeSection, "enabled: true") {
+		t.Errorf("rendered config should enable claudecode when CCS storage is detectable:\n%s", yaml)
+	}
+	if !strings.Contains(notes, "Claude Code session harvesting enabled") {
+		t.Errorf("notes = %q, want visible Claude harvesting notice", notes)
+	}
+}
+
+func TestBuildRenderedConfig_NoClaudeStorageLeavesHarvestDisabled(t *testing.T) {
+	clearClaudeCodeEnv(t)
+	t.Setenv("HOME", t.TempDir())
+
+	origStepDatabase := stepDatabaseFn
+	origStepEmbedding := stepEmbeddingFn
+	t.Cleanup(func() {
+		stepDatabaseFn = origStepDatabase
+		stepEmbeddingFn = origStepEmbedding
+	})
+	stepDatabaseFn = func(scanner *bufio.Scanner, defaultURL string) (string, bool) {
+		return defaultURL, true
+	}
+	stepEmbeddingFn = func(scanner *bufio.Scanner, notes io.Writer, defaultURL, defaultModel string) string {
+		return "embedding:\n  provider: \"\"\n"
+	}
+
+	yaml, notes, ok := buildRenderedConfig(bufio.NewScanner(strings.NewReader("")))
+	if !ok {
+		t.Fatal("buildRenderedConfig() ok = false, want true")
+	}
+	claudeSection := yaml[strings.Index(yaml, "  claudecode:"):]
+	if !strings.Contains(claudeSection, "enabled: false") {
+		t.Errorf("rendered config should keep claudecode disabled without detectable storage:\n%s", yaml)
+	}
+	if strings.Contains(notes, "Claude Code session harvesting enabled") {
+		t.Errorf("notes = %q, want no Claude harvesting notice", notes)
+	}
+}

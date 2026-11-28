@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -36,10 +37,21 @@ type Runner struct {
 func NewRunner(harvester Harvester, enqueuer ChunkEnqueuer, interval time.Duration, logger zerolog.Logger) *Runner {
 	return &Runner{
 		harvesters: []Harvester{harvester},
-		enqueuer:   enqueuer,
+		enqueuer:   normalizeChunkEnqueuer(enqueuer),
 		interval:   interval,
 		logger:     logger.With().Str("component", "harvest-runner").Logger(),
 	}
+}
+
+func normalizeChunkEnqueuer(enqueuer ChunkEnqueuer) ChunkEnqueuer {
+	if enqueuer == nil {
+		return nil
+	}
+	v := reflect.ValueOf(enqueuer)
+	if v.Kind() == reflect.Ptr && v.IsNil() {
+		return nil
+	}
+	return enqueuer
 }
 
 // AddHarvester appends an additional harvester to the runner.
@@ -123,9 +135,9 @@ func (r *Runner) publishHarvest(state string, sessionsSeen, sessionsSummarized i
 		return
 	}
 	m := map[string]any{
-		"state":                state,
-		"sessions_seen":        sessionsSeen,
-		"sessions_summarized":  sessionsSummarized,
+		"state":               state,
+		"sessions_seen":       sessionsSeen,
+		"sessions_summarized": sessionsSummarized,
 	}
 	if errMsg != "" {
 		m["error"] = errMsg

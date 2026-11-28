@@ -1,13 +1,15 @@
 package config
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
-// RenderOpts carries the two probed substitution points the D-01..D-10
+// RenderOpts carries the probed/detected substitution points the D-01..D-10
 // minimal-init flow fills in before writing the config template: the
-// database URL (from stepDatabase's Postgres probe/provision) and the
-// embedding YAML block (from the simplified embedding probe). Every other
-// section is written at its getDefaults() value, commented, with advanced
-// features disabled — see fullConfigTemplate.
+// database URL, embedding YAML block, and Claude harvester enablement. Every
+// other section is written at its getDefaults() value, commented, with
+// advanced features disabled — see fullConfigTemplate.
 type RenderOpts struct {
 	// DatabaseURL is substituted verbatim into the database.url field.
 	DatabaseURL string
@@ -16,6 +18,9 @@ type RenderOpts struct {
 	// by stepEmbedding: either a populated ollama/voyage block or the
 	// BM25-only `embedding:\n  provider: ""\n` sentinel.
 	EmbeddingBlock string
+	// ClaudeCodeEnabled controls the rendered harvester.claudecode.enabled
+	// value. Directory fields stay empty when auto-detection is desired.
+	ClaudeCodeEnabled bool
 }
 
 // RenderConfig substitutes opts.DatabaseURL and opts.EmbeddingBlock into
@@ -35,6 +40,7 @@ func RenderConfig(opts RenderOpts) string {
 	safeURL = strings.ReplaceAll(safeURL, `"`, `\"`)
 	out = strings.ReplaceAll(out, "{{.DatabaseURL}}", safeURL)
 	out = strings.ReplaceAll(out, "{{.EmbeddingBlock}}", strings.TrimRight(opts.EmbeddingBlock, "\n"))
+	out = strings.ReplaceAll(out, "{{.ClaudeCodeEnabled}}", strconv.FormatBool(opts.ClaudeCodeEnabled))
 	return out
 }
 
@@ -95,15 +101,24 @@ database:
   voyage_api_key: ""
 
 harvester:
-  # Auto-detected at init time (D-02.3) — never prompted. Leave blank to
-  # disable a source.
+  # Auto-detected at init time (D-02.3) — never prompted. Blank OpenCode
+  # fields disable that source; blank Claude fields mean auto-detect when
+  # claudecode.enabled is true.
   opencode:
     session_dir: ""
     db_path: ""
     db_root: ""
   claudecode:
-    enabled: false
+    # Enabled automatically by init when Claude/CCS storage is detected.
+    # When both directory fields are empty, startup auto-detects platform
+    # Claude paths and CCS instance roots. Explicit entries below are a
+    # complete replacement source list and disable that auto-detection.
+    enabled: {{.ClaudeCodeEnabled}}
     session_dir: ""
+    # session_dirs:
+    #   - ~/.claude/projects
+    #   - ~/.ccs/instances/*/projects
+    #   - /path/to/custom-ccs/instances/*/projects  # manual CCS --config-dir root
     # ticket_patterns: []  # custom regexes for ticket-ID extraction
   pi:
     enabled: false

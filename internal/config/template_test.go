@@ -142,3 +142,35 @@ func TestRenderConfig_NoSecretsWritten(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderConfig_ClaudeCodeEnabledConditional(t *testing.T) {
+	rendered := RenderConfig(RenderOpts{
+		DatabaseURL:       "postgres://nanobrain:nanobrain@localhost:5432/nanobrain_dev",
+		EmbeddingBlock:    "embedding:\n  provider: \"\"\n",
+		ClaudeCodeEnabled: true,
+	})
+
+	claudeSection := rendered[strings.Index(rendered, "  claudecode:"):]
+	if !strings.Contains(claudeSection, "enabled: true") {
+		t.Fatalf("rendered config does not enable claudecode conditionally:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "# session_dirs:") || !strings.Contains(rendered, "~/.ccs/instances/*/projects") {
+		t.Fatalf("rendered config missing commented session_dirs CCS example:\n%s", rendered)
+	}
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configPath, []byte(rendered), 0600); err != nil {
+		t.Fatalf("write rendered template: %v", err)
+	}
+	loaded, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load(rendered claude-enabled template) error = %v", err)
+	}
+	if !loaded.Harvester.ClaudeCode.Enabled {
+		t.Error("loaded.Harvester.ClaudeCode.Enabled = false, want true")
+	}
+	if loaded.Harvester.ClaudeCode.SessionDir != "" || len(loaded.Harvester.ClaudeCode.SessionDirs) != 0 {
+		t.Errorf("rendered config must leave Claude dirs empty for auto-detection, got dir=%q dirs=%v", loaded.Harvester.ClaudeCode.SessionDir, loaded.Harvester.ClaudeCode.SessionDirs)
+	}
+}

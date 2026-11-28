@@ -3,119 +3,97 @@ package main
 import (
 	"context"
 	"database/sql"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/nano-brain/nano-brain/internal/config"
 	"github.com/nano-brain/nano-brain/internal/harvest"
-	"github.com/nano-brain/nano-brain/internal/storage/sqlc"
 	"github.com/rs/zerolog"
 )
 
-// encodeClaudeProjectsDir encodes a workspace root path to the directory name
-// used by Claude Code under ~/.claude/projects/. Claude Code encodes the cwd
-// by replacing every '/' with '-' (including the leading slash), producing a
-// flat directory name like "-Users-alice-workspaces-myproject".
-//
-// This is a best-effort match: it mirrors how Claude Code names its project
-// directories (replacing '/' with '-'). The encoding is NOT injective —
-// workspace paths that contain '-' can collide (e.g. "/a/b-c" and "/a-b/c"
-// both encode to "-a-b-c"), causing a silent miss: the workspace simply won't
-// get a harvester and its sessions won't be harvested. No error or crash
-// occurs. This is acceptable because the lookup direction is always
-// workspace→dir and a miss is benign.
+// encodeClaudeProjectsDir is kept as the cmd-local test seam for Claude's
+// projects leaf encoding. The implementation lives in harvest so production
+// discovery and validation share one definition.
 func encodeClaudeProjectsDir(workspacePath string) string {
-	return strings.ReplaceAll(workspacePath, "/", "-")
+	return harvest.EncodeClaudeProjectsDir(workspacePath)
 }
 
-// initClaudeCodeHarvesters scans every resolved session dir (cfg.SessionDirs
-// plus the legacy cfg.SessionDir, after "~" and glob expansion — see
-// ClaudeCodeHarvesterConfig.SessionDirsResolved) for session directories that
-// correspond to registered nano-brain workspaces.
+func configuredClaudeCodeSessionDirs(cfg config.ClaudeCodeHarvesterConfig) []string {
+	var out []string
+	if cfg.SessionDir != "" {
+		out = append(out, cfg.SessionDir)
+	}
+	return append(out, cfg.SessionDirs...)
+}
+
+// applyClaudeCodeStorageAutoDetection populates stable auto-detected projects
+// parent patterns only for the zero-config startup path. Any explicit
+// session_dir/session_dirs entry is a complete replacement list and disables
+// auto-detection, as does serve_only or a disabled harvester.
+func applyClaudeCodeStorageAutoDetection(cfg *config.Config) []string {
+	if cfg == nil || cfg.Server.ServeOnly || !cfg.Harvester.ClaudeCode.Enabled ||
+		cfg.Harvester.ClaudeCode.SessionDir != "" || len(cfg.Harvester.ClaudeCode.SessionDirs) != 0 {
+		return nil
+	}
+	detected := withFutureClaudeCodeStoragePatterns(detectClaudeCodeStoragePatterns())
+	if len(detected) != 0 {
+		cfg.Harvester.ClaudeCode.SessionDirs = detected
+	}
+	return detected
+}
+
+func withFutureClaudeCodeStoragePatterns(detected []string) []string {
+	seen := make(map[string]struct{}, len(detected)+2)
+	out := make([]string, 0, len(detected)+2)
+	add := func(pattern string) {
+		if pattern == "" {
+			return
+		}
+		pattern = filepath.Clean(pattern)
+		if _, dup := seen[pattern]; dup {
+			return
+		}
+		seen[pattern] = struct{}{}
+		out = append(out, pattern)
+	}
+	for _, pattern := range detected {
+		add(pattern)
+	}
+	for _, pattern := range platformClaudeCodePaths() {
+		add(pattern)
+	}
+	if home := userHomeDir(); home != "" {
+		add(filepath.Join(home, ".ccs", "instances", "*", "projects"))
+	}
+	return out
+}
+
+// initClaudeCodeHarvesters registers dynamic Claude projects-root discovery.
+// The returned harvester re-expands configured globs and re-reads registered
+// workspaces on every harvest cycle, so first sessions, new CCS profiles, and
+// workspaces registered after daemon startup do not require a daemon restart.
+// The resolver itself closes over startup-loaded config; YAML edits remain
+// restart-required.
 //
-// For each registered workspace, it encodes the workspace root path into the
-// Claude directory name format and checks whether that directory exists under
-// each session dir. When a match is found, one ClaudeCodeHarvester is created
-// for that (dir, workspace) pair, so transcripts under multiple projects dirs
-// (e.g. ~/.claude/projects and ~/.ccs/instances/<name>/projects) are all
-// harvested (#643).
-//
-// Returns an empty slice (not an error) when:
-//   - cfg.Enabled = false
-//   - no session dirs are configured/resolved
-//   - every resolved dir is missing on disk
-//   - no registered workspaces have a matching Claude session directory
-//
-// Only returns a non-nil error for unexpected failures (currently none).
-//
-// This replaces the old single-harvester design that incorrectly hashed the
-// Claude session directory path instead of the workspace root path, causing a
-// workspace hash mismatch that silently disabled the harvester (issue #238).
+// A harvester is registered whenever enabled raw directory configuration is
+// present, even if it currently matches nothing. Missing future glob matches
+// are therefore discoverable later. Returns an empty slice when disabled or
+// when neither session_dir nor session_dirs is configured.
 func initClaudeCodeHarvesters(
-	ctx context.Context,
+	_ context.Context,
 	cfg config.ClaudeCodeHarvesterConfig,
 	db *sql.DB,
 	logger zerolog.Logger,
-) ([]*harvest.ClaudeCodeHarvester, error) {
+) ([]harvest.Harvester, error) {
 	if !cfg.Enabled {
 		return nil, nil
 	}
-
-	baseDirs := cfg.SessionDirsResolved()
-	if len(baseDirs) == 0 {
+	if cfg.SessionDir == "" && len(cfg.SessionDirs) == 0 {
 		logger.Warn().Msg("claude code harvester enabled but no session_dir/session_dirs configured, skipping")
 		return nil, nil
 	}
-	existingDirs := baseDirs[:0]
-	for _, baseDir := range baseDirs {
-		if _, err := os.Stat(baseDir); err != nil {
-			logger.Warn().
-				Str("session_dir", baseDir).
-				Msg("claude code harvester session dir does not exist, skipping")
-			continue
-		}
-		existingDirs = append(existingDirs, baseDir)
-	}
-	if len(existingDirs) == 0 {
-		return nil, nil
-	}
 
-	q := sqlc.New(db)
-	workspaces, err := q.ListWorkspaces(ctx)
-	if err != nil {
-		logger.Warn().Err(err).Msg("claude code harvester: failed to list workspaces, skipping")
-		return nil, nil
-	}
-
-	var harvesters []*harvest.ClaudeCodeHarvester
-	seenSessionDirs := make(map[string]struct{})
-	for _, baseDir := range existingDirs {
-		for _, ws := range workspaces {
-			encoded := encodeClaudeProjectsDir(ws.Path)
-			sessionDir := filepath.Join(baseDir, encoded)
-			if _, statErr := os.Stat(sessionDir); os.IsNotExist(statErr) {
-				continue
-			}
-			if _, dup := seenSessionDirs[sessionDir]; dup {
-				continue
-			}
-			seenSessionDirs[sessionDir] = struct{}{}
-			h := harvest.NewClaudeCodeHarvester(db, logger, sessionDir, ws.Hash)
-			harvesters = append(harvesters, h)
-			logger.Info().
-				Str("session_dir", sessionDir).
-				Str("workspace", ws.Path).
-				Str("workspace_hash", ws.Hash).
-				Msg("claude code session harvester registered for workspace")
-		}
-	}
-
-	if len(harvesters) == 0 {
-		logger.Info().
-			Strs("session_dirs", existingDirs).
-			Msg("claude code harvester: no registered workspaces have a matching Claude session directory")
-	}
-
-	return harvesters, nil
+	resolver := cfg.SessionDirsResolved
+	return []harvest.Harvester{
+		harvest.NewClaudeCodeDiscoveryHarvester(db, logger, resolver),
+	}, nil
 }

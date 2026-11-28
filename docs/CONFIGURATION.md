@@ -160,8 +160,29 @@ Source resolution priority at daemon startup (first non-empty wins):
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `harvester.claudecode.enabled` | bool | `false` | Enable Claude Code session harvesting |
-| `harvester.claudecode.session_dir` | string | `""` | Claude Code JSONL sessions directory |
+| `harvester.claudecode.session_dir` | string | `""` | Claude Code projects parent directory |
 | `harvester.claudecode.session_dirs` | list | `[]` | Additional Claude Code projects directories (`~` and globs like `~/.ccs/instances/*/projects` supported); `session_dir` is treated as one more entry |
+
+Claude entries are **projects parent directories**, not leaf session directories. See [CCS_HARVESTING.md](CCS_HARVESTING.md) for the user-facing CCS setup/UX flow and real-transcript E2E evidence. When `enabled: true` and both `session_dir` and `session_dirs` are empty, nano-brain auto-detects platform Claude locations plus CCS instance roots at startup. CCS detection checks `CCS_DIR`, `$CCS_HOME/.ccs`, and `~/.ccs` as a union of possible historical roots and uses each root's `instances/*/projects` glob. At runtime the standard platform Claude patterns, default `~/.ccs` instance glob, and explicit `CLAUDECODE_STORAGE_DIR` are retained even before their directories exist, so a first install after daemon startup can still be discovered. A per-invocation CCS `--config-dir` cannot be inferred; add its projects glob explicitly. Relative `CCS_DIR`/`CCS_HOME` values are not guessed against the daemon cwd — use absolute paths or explicit `session_dirs`.
+
+A non-empty `session_dir` or `session_dirs` is a complete explicit source list and disables auto-detection. For a custom CCS root, include every standard location you still want:
+
+```yaml
+harvester:
+  claudecode:
+    enabled: true
+    session_dir: ""
+    session_dirs:
+      - ~/.claude/projects
+      - ~/.ccs/instances/*/projects
+      - /path/to/custom-ccs/instances/*/projects
+```
+
+Configured patterns are re-expanded on every harvest cycle, so new CCS profiles, first sessions, and newly registered workspaces do not require a daemon restart. Editing the YAML values themselves still requires restart. Scanning multiple CCS profiles merges those profiles' sessions into the same workspace memory; use a restrictive explicit list if that is not desired.
+
+Existing config files are never rewritten implicitly. To opt in to auto-detected Claude/CCS harvesting, set `enabled: true` and leave both directory fields empty, then restart nano-brain. If harvesting was already enabled with empty directory fields before CCS support, upgrading widens discovery from the platform Claude directory to the documented union of Claude/CCS roots; pin an explicit `session_dirs` list if you need a narrower privacy boundary. Harvested session documents already written before disabling or narrowing the config are not deleted automatically.
+
+Claude's encoded project directory names are lossy. nano-brain therefore uses them only for discovery and, for modern transcripts containing `cwd`, skips a transcript when that `cwd` does not match the registered workspace being harvested. Older transcripts without `cwd` keep the legacy encoded-directory attribution.
 
 ### harvester.pi
 
@@ -510,6 +531,9 @@ harvester:
   claudecode:
     enabled: false
     session_dir: ""
+    # session_dirs:
+    #   - ~/.claude/projects
+    #   - ~/.ccs/instances/*/projects
   pi:
     enabled: false
     session_dir: ""

@@ -11,9 +11,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/google/uuid"
 	"github.com/nano-brain/nano-brain/internal/chunk"
@@ -33,11 +36,13 @@ const (
 
 // ClaudeCodeHarvester ingests Claude Code JSONL session files into the document store.
 type ClaudeCodeHarvester struct {
-	db            *sql.DB
-	logger        zerolog.Logger
-	sessionDir    string
-	workspace     string
-	summarizer    SessionSummarizer
+	db                   *sql.DB
+	logger               zerolog.Logger
+	sessionDir           string
+	workspace            string
+	workspacePath        string
+	failClosedWithoutCwd bool
+	summarizer           SessionSummarizer
 }
 
 // WorkspaceHash returns the workspace hash this harvester was created for.
@@ -58,6 +63,59 @@ func NewClaudeCodeHarvester(db *sql.DB, logger zerolog.Logger, sessionDir, works
 		sessionDir: sessionDir,
 		workspace:  workspace,
 	}
+}
+
+// NewClaudeCodeHarvesterWithWorkspacePath creates a harvester bound to a
+// registered workspace root. The path is used as a fail-closed guard for
+// modern transcripts that carry cwd, mitigating non-injective encoded leaf
+// collisions when multiple projects roots are scanned. failClosedWithoutCwd
+// is set when multiple registered workspaces encode to the same leaf; in that
+// case a cwd-less transcript is ambiguous and is skipped rather than exposed
+// to every colliding workspace.
+func NewClaudeCodeHarvesterWithWorkspacePath(db *sql.DB, logger zerolog.Logger, sessionDir, workspace, workspacePath string, failClosedWithoutCwd bool) *ClaudeCodeHarvester {
+	h := NewClaudeCodeHarvester(db, logger, sessionDir, workspace)
+	h.workspacePath = workspacePath
+	h.failClosedWithoutCwd = failClosedWithoutCwd
+	return h
+}
+
+// EncodeClaudeProjectsDir converts a workspace path into Claude Code's
+// projects leaf name. Claude Code replaces every non-alphanumeric UTF-16
+// code unit with a dash; this encoding is not injective (path separators,
+// punctuation, and literal dashes collapse), so callers binding a workspace
+// must validate transcript cwd when it is available.
+func EncodeClaudeProjectsDir(workspacePath string) string {
+	units := utf16.Encode([]rune(workspacePath))
+	var b strings.Builder
+	b.Grow(len(units) + 12)
+	for _, u := range units {
+		if u == '-' || (u >= '0' && u <= '9') || (u >= 'A' && u <= 'Z') || (u >= 'a' && u <= 'z') {
+			b.WriteByte(byte(u))
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	encoded := b.String()
+	if len(units) <= 200 {
+		return encoded
+	}
+	return encoded[:200] + "-" + claudePathHashBase36(units)
+}
+
+// claudePathHashBase36 mirrors Claude Code's Java-style string hash over
+// UTF-16 code units, rendered unsigned-base36 after Math.abs.
+func claudePathHashBase36(units []uint16) string {
+	var h int32
+	for _, u := range units {
+		h = (h << 5) - h + int32(u)
+	}
+	var magnitude uint64
+	if h < 0 {
+		magnitude = uint64(-int64(h))
+	} else {
+		magnitude = uint64(h)
+	}
+	return strconv.FormatUint(magnitude, 36)
 }
 
 // HarvestAll scans the session directory and ingests all JSONL sessions.
@@ -169,6 +227,25 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 		return harvestSkipped, nil
 	}
 
+	if h.workspacePath != "" {
+		cwd := firstClaudeCodeCwd(msgs)
+		if cwd != "" && !sameFilesystemPath(cwd, h.workspacePath) {
+			h.logger.Warn().
+				Str("session", sessionID).
+				Str("cwd", cwd).
+				Str("workspace_path", h.workspacePath).
+				Msg("skipping session whose cwd does not match bound workspace")
+			return harvestSkipped, nil
+		}
+		if cwd == "" && h.failClosedWithoutCwd {
+			h.logger.Warn().
+				Str("session", sessionID).
+				Str("workspace_path", h.workspacePath).
+				Msg("skipping cwd-less session in ambiguous encoded workspace leaf")
+			return harvestSkipped, nil
+		}
+	}
+
 	md := renderClaudeCodeMarkdown(sessionID, msgs)
 
 	sum := sha256.Sum256([]byte(md))
@@ -211,6 +288,35 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 		return harvestSkipped, fmt.Errorf("raw fallback failed: %w", fbErr)
 	}
 	return harvestFallback, nil
+}
+
+func firstClaudeCodeCwd(msgs []claudeCodeMessage) string {
+	for _, msg := range msgs {
+		if msg.Cwd != "" {
+			return msg.Cwd
+		}
+	}
+	return ""
+}
+
+func sameFilesystemPath(a, b string) bool {
+	ca := canonicalFilesystemPath(a)
+	cb := canonicalFilesystemPath(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(ca, cb)
+	}
+	return ca == cb
+}
+
+func canonicalFilesystemPath(p string) string {
+	p = filepath.Clean(p)
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		p = resolved
+	}
+	return filepath.Clean(p)
 }
 
 func (h *ClaudeCodeHarvester) writeRawFallback(
@@ -479,4 +585,3 @@ func renderClaudeCodeMarkdown(sessionID string, msgs []claudeCodeMessage) string
 
 	return sanitizeText(b.String())
 }
-

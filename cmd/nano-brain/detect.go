@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // detectOpenCodeStorageDir returns the first existing OpenCode storage
@@ -23,46 +24,125 @@ func detectOpenCodeStorageDir() string {
 	return ""
 }
 
-// detectClaudeCodeStorageDirs returns every existing Claude Code projects
-// directory: the CLAUDECODE_STORAGE_DIR override, the platform candidates,
-// and every profile-manager instance dir matching
-// ~/.ccs/instances/<name>/projects (#643 — Claude Code can write transcripts
-// to more than one projects dir on the same machine). Results are
-// deduplicated in first-seen order.
-func detectClaudeCodeStorageDirs() []string {
-	var dirs []string
+// detectClaudeCodeStoragePatterns returns stable Claude Code projects-parent
+// patterns worth harvesting from: the CLAUDECODE_STORAGE_DIR override,
+// platform candidates whose Claude config home/projects dir exists, and CCS
+// instance globs for every known CCS root. CCS root candidates are scanned as
+// a union in precedence order because harvesting is retrospective — users may
+// have historical sessions under more than one root. Results are deduplicated
+// in first-seen order.
+func detectClaudeCodeStoragePatterns() []string {
+	var patterns []string
 	seen := make(map[string]struct{})
 	add := func(p string) {
 		if p == "" {
 			return
 		}
+		p = filepath.Clean(p)
 		if _, dup := seen[p]; dup {
 			return
 		}
-		if _, err := os.Stat(p); err != nil {
-			return
-		}
 		seen[p] = struct{}{}
-		dirs = append(dirs, p)
+		patterns = append(patterns, p)
 	}
+
 	if v := os.Getenv("CLAUDECODE_STORAGE_DIR"); v != "" {
 		add(v)
 	}
 	for _, p := range platformClaudeCodePaths() {
-		add(p)
-	}
-	if home := os.Getenv("HOME"); home != "" {
-		if matches, err := filepath.Glob(filepath.Join(home, ".ccs", "instances", "*", "projects")); err == nil {
-			for _, m := range matches {
-				add(m)
-			}
+		// Include a platform projects dir even before the first session if its
+		// Claude config parent already exists; dynamic discovery can pick up the
+		// projects dir when Claude creates it later.
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			add(p)
+			continue
+		}
+		if info, err := os.Stat(filepath.Dir(p)); err == nil && info.IsDir() {
+			add(p)
 		}
 	}
-	return dirs
+	for _, candidate := range ccsRootCandidates() {
+		if !candidate.explicit {
+			if info, err := os.Stat(candidate.root); err != nil || !info.IsDir() {
+				continue
+			}
+		}
+		add(filepath.Join(candidate.root, "instances", "*", "projects"))
+	}
+	return patterns
+}
+
+type ccsRootCandidate struct {
+	root     string
+	explicit bool
+}
+
+// ccsRootCandidates returns known CCS config roots in precedence order:
+// CCS_DIR, then CCS_HOME/.ccs, then the default home .ccs. Relative env paths
+// are ignored rather than guessed against the daemon process cwd; operators can
+// use absolute paths or explicit session_dirs for those cases.
+func ccsRootCandidates() []ccsRootCandidate {
+	var out []ccsRootCandidate
+	seen := make(map[string]struct{})
+	add := func(root string, explicit bool) {
+		normalized, ok := normalizeCCSRoot(root)
+		if !ok {
+			return
+		}
+		if _, dup := seen[normalized]; dup {
+			return
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, ccsRootCandidate{root: normalized, explicit: explicit})
+	}
+
+	if v := os.Getenv("CCS_DIR"); v != "" {
+		add(v, true)
+	}
+	if v := os.Getenv("CCS_HOME"); v != "" {
+		if root, ok := normalizeCCSRoot(v); ok {
+			add(filepath.Join(root, ".ccs"), true)
+		}
+	}
+	if home := userHomeDir(); home != "" {
+		add(filepath.Join(home, ".ccs"), false)
+	}
+	return out
+}
+
+func normalizeCCSRoot(root string) (string, bool) {
+	if root == "" {
+		return "", false
+	}
+	if root == "~" || strings.HasPrefix(root, "~/") || strings.HasPrefix(root, `~\`) {
+		home := userHomeDir()
+		if home == "" {
+			return "", false
+		}
+		if root == "~" {
+			root = home
+		} else {
+			root = filepath.Join(home, root[2:])
+		}
+	}
+	if !filepath.IsAbs(root) {
+		return "", false
+	}
+	return filepath.Clean(root), true
+}
+
+func userHomeDir() string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home
+	}
+	if home := os.Getenv("HOME"); home != "" {
+		return home
+	}
+	return os.Getenv("USERPROFILE")
 }
 
 func platformClaudeCodePaths() []string {
-	home := os.Getenv("HOME")
+	home := userHomeDir()
 	if home == "" {
 		return nil
 	}

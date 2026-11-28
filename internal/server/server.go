@@ -283,6 +283,15 @@ func (s *Server) LinkDeps() (*links.Resolver, *links.Extractor) {
 	return s.concreteLinkRes, s.concreteLinkExt
 }
 
+// SetHarvesterConfig records the effective startup harvester configuration.
+// It is separate from the file-backed full config so runtime auto-detection
+// does not make an unchanged YAML reload look like a restart-required edit.
+func (s *Server) SetHarvesterConfig(cfg config.HarvesterConfig) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+	s.harvesterCfg = cfg
+}
+
 func (s *Server) getHealthCfg() (config.HarvesterConfig, config.IntervalsConfig) {
 	s.configMu.RLock()
 	defer s.configMu.RUnlock()

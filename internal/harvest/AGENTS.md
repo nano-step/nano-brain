@@ -10,7 +10,8 @@ Session harvesting — ingests OpenCode, Claude Code, and Pi AI sessions into na
 | `harvest.go` | Shared types: `Harvester` interface, `ChunkEnqueuer`, `SessionSummarizer`, `SummaryMeta` |
 | `opencode_sqlite.go` | `OpenCodeSQLiteHarvester` — opens OpenCode's SQLite DB read-only, renders sessions to markdown, upserts into PG; filters by registered workspace paths before ingesting. Also exports `ScanOpenCodeDBRoot` (multi-DB discovery helper). |
 | `opencode.go` | Legacy OpenCode JSON session format reader |
-| `claudecode.go` | `ClaudeCodeHarvester` — scans a directory for Claude Code JSONL files, renders each session to markdown, upserts into PG |
+| `claudecode.go` | `ClaudeCodeHarvester` — scans a leaf directory for Claude Code JSONL files, renders each session to markdown, upserts into PG; production instances validate transcript `cwd` against the bound workspace when present and fail closed on cwd-less transcripts in multi-workspace encoded-leaf collisions |
+| `claudecode_discovery.go` | `ClaudeCodeDiscoveryHarvester` — re-expands configured projects-root globs and re-reads registered workspaces on every harvest cycle, then delegates matching leaf dirs to `ClaudeCodeHarvester` |
 | `pi.go` | `PiHarvester` — scans a directory for Pi CLI agent JSONL session files, renders each session to markdown (all three message roles — `user`/`assistant`/`toolResult` — and all four content-block types — `text`/`toolCall`/`thinking`/`image`), upserts into PG. Modeled directly on `ClaudeCodeHarvester`; opt-in via `harvester.pi.enabled` (disabled by default) |
 | `sanitize.go` | `sanitizeText` (strip NUL, replace invalid UTF-8) and the helpers every writer applies at the persistence boundary: `sanitizeDocParams`, `sanitizeMetadata`, `sanitizeSummaryMeta`. Session ids are sanitized once, before the dedup lookup, so lookup and write share one source path |
 | `automemory.go` | `AutoMemoryExtractor` — regex-scans harvested session content for `DECISION:` / `LESSON:` markers and heading patterns; writes extracted items as discrete memory documents |
@@ -49,7 +50,7 @@ OpenCode harvesters are selected at startup in priority order:
 
 Auto-detected at `~/.ai-sandbox/opencode-dbs` on linux/darwin when not set.
 
-Discovery is startup-only; new per-project DBs require daemon restart (live rescan deferred — see `docs/HARNESS_BACKLOG.md`).
+OpenCode db_root discovery is startup-only; new per-project DBs require daemon restart (live rescan deferred — see `docs/HARNESS_BACKLOG.md`). Claude Code projects-root discovery is dynamic per harvest cycle, although YAML config edits still require restart.
 
 ## SQLite Access
 
