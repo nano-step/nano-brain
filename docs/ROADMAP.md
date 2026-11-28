@@ -1,6 +1,6 @@
 # nano-brain Roadmap
 
-> Last updated: 2026-06-23
+> Last updated: 2026-11-28
 
 ---
 
@@ -107,6 +107,8 @@ summarization:
 
 **What:** Shared knowledge base for the whole team — one server, multiple users, role-controlled access.
 
+> **Superseded (2026-11-28):** the detailed plan for auth, OAuth/SSO, permissions and audit is [ROADMAP-ENTERPRISE.md](ROADMAP-ENTERPRISE.md). The tables below are kept for history.
+
 **Use case:** Deploy one nano-brain server for the entire team. Every developer's AI agent connects to the same PostgreSQL instance — decisions, architecture notes, and code intelligence are instantly shared. New team members get full project context from day one without any per-machine setup.
 
 ### Authentication
@@ -151,40 +153,9 @@ summarization:
 | Kubernetes / Helm | Cloud-native deployment | ❌ |
 | Cloud managed | AWS RDS, GCP Cloud SQL, Azure DB | ❌ |
 
-### Config sketch (proposed)
+### Config sketch
 
-```yaml
-server:
-  auth:
-    enabled: true
-    users:
-      - username: alice
-        password_hash: "$2a$10$..."
-        role: admin
-      - username: bob
-        password_hash: "$2a$10$..."
-        role: developer
-        workspaces: ["abc123..."]  # scoped to specific workspaces
-      - username: reviewer
-        password_hash: "$2a$10$..."
-        role: reader
-    tokens:
-      - token: "nbt_admin_..."
-        role: admin
-      - token: "nbt_dev_..."
-        role: developer
-        workspaces: ["abc123..."]
-      - token: "nbt_readonly_..."
-        role: reader
-  rate_limit:
-    enabled: true
-    requests_per_minute: 60
-    burst: 10
-  cors:
-    enabled: true
-    allowed_origins:
-      - "https://app.example.com"
-```
+Removed. Roles and tokens move from the config file into the database; see [ROADMAP-ENTERPRISE.md](ROADMAP-ENTERPRISE.md) (E1 and E2).
 
 ---
 
@@ -271,7 +242,7 @@ Phase 6 — Enhanced Code Intelligence (in progress)
   │   └── API handler + server action + middleware graph support
   └── ⚠️ Cross-language support — Python, Ruby via tree-sitter; TypeScript, Rust pending
 
-Phase 7 — Team & Multi-user (Planned)
+Phase 7 — Team & Multi-user (Planned → ROADMAP-ENTERPRISE.md E1–E5)
   ├── Role-based access control (Admin / Developer / Reader)
   ├── Per-token and per-user role assignment in config
   ├── Read-only enforcement at middleware layer
@@ -301,7 +272,7 @@ Phase 10 — Deployment & Security (Planned)
   │   ├── ❌ Kubernetes / Helm chart
   │   ├── ❌ Cloud provider guides (AWS, GCP, Azure)
   │   └── ❌ CI/CD integration (GitHub Actions, GitLab CI)
-  ├── Authentication & authorization
+  ├── Authentication & authorization (→ ROADMAP-ENTERPRISE.md)
   │   ├── ✅ Bearer token auth (single shared token)
   │   ├── ✅ Basic auth (username/password per user)
   │   ├── ❌ Role-based access control (Admin / Developer / Reader)
