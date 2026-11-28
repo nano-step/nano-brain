@@ -89,13 +89,13 @@ func mergeJSONMCPEntry(configPath, sectionKey string, entry map[string]any) (cha
 // writeMCPConfigFile writes data to configPath, creating the parent dir 0700.
 // A new file is created 0600. An existing file keeps its mode (a committed
 // .mcp.json in a shared repo must not flip to 0600 in git, #725) unless the
-// entry carries a token, in which case it is tightened to 0600 (T-10-05).
+// entry may carry a credential, in which case it is tightened to 0600 (T-10-05).
 func writeMCPConfigFile(configPath string, data []byte, entry map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 	// Tighten before writing so the token is never readable under the old mode.
-	if entryHasToken(entry) {
+	if entryHasSecret(entry) {
 		if err := os.Chmod(configPath, 0600); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("chmod config %s: %w", configPath, err)
 		}
@@ -106,15 +106,26 @@ func writeMCPConfigFile(configPath string, data []byte, entry map[string]any) er
 	return nil
 }
 
-// entryHasToken reports whether any entry value mentions a token (e.g. a
-// NANO_BRAIN_MCP_URL with ?token=...), i.e. the file now holds a secret.
-func entryHasToken(entry map[string]any) bool {
-	b, _ := json.Marshal(entry)
-	s := string(b)
-	if u, err := url.QueryUnescape(s); err == nil {
-		s = u
+// entryHasSecret fails closed: any string value that is not a plain URL
+// (unparseable, has userinfo, or a query key other than workspace) may hold
+// a credential, e.g. a NANO_BRAIN_MCP_URL carrying ?token=... .
+func entryHasSecret(entry map[string]any) bool {
+	for _, v := range entry {
+		s, ok := v.(string)
+		if !ok {
+			continue
+		}
+		u, err := url.Parse(s)
+		if err != nil || u.User != nil {
+			return true
+		}
+		for k := range u.Query() {
+			if k != "workspace" {
+				return true
+			}
+		}
 	}
-	return strings.Contains(strings.ToLower(s), "token")
+	return false
 }
 
 // mapsEqual reports whether two map[string]any values are deeply equal by

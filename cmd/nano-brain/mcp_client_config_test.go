@@ -176,8 +176,11 @@ func TestMergeJSONMCPEntry_ExistingFileMode(t *testing.T) {
 		want os.FileMode
 	}{
 		{"http://localhost:3100/mcp", 0644},
+		{"http://localhost:3100/mcp?workspace=w", 0644},
 		{"http://vps:3100/mcp?token=secret", 0600},
 		{"http://vps:3100/mcp?%74oken=secret", 0600},
+		{"http://vps:3100/mcp?key=secret", 0600},
+		{"http://user:pass@vps:3100/mcp", 0600},
 	} {
 		configPath := filepath.Join(t.TempDir(), ".mcp.json")
 		if err := os.WriteFile(configPath, []byte(`{}`), 0644); err != nil {
@@ -191,7 +194,7 @@ func TestMergeJSONMCPEntry_ExistingFileMode(t *testing.T) {
 			t.Fatalf("stat: %v", err)
 		}
 		if info.Mode().Perm() != tc.want {
-			t.Errorf("url %s: mode = %o, want %o (keep existing mode unless the entry holds a token)", tc.url, info.Mode().Perm(), tc.want)
+			t.Errorf("url %s: mode = %o, want %o (keep existing mode unless the entry may hold a credential)", tc.url, info.Mode().Perm(), tc.want)
 		}
 	}
 }
@@ -426,6 +429,7 @@ func TestMergeCodexTOMLEntry_ExistingFileMode(t *testing.T) {
 	}{
 		{"http://localhost:3100/mcp", 0644},
 		{"http://vps:3100/mcp?token=secret", 0600},
+		{"http://user:pass@vps:3100/mcp", 0600},
 	} {
 		configPath := filepath.Join(t.TempDir(), "config.toml")
 		if err := os.WriteFile(configPath, []byte(""), 0644); err != nil {
@@ -439,7 +443,7 @@ func TestMergeCodexTOMLEntry_ExistingFileMode(t *testing.T) {
 			t.Fatalf("stat: %v", err)
 		}
 		if info.Mode().Perm() != tc.want {
-			t.Errorf("url %s: mode = %o, want %o (keep existing mode unless the entry holds a token)", tc.url, info.Mode().Perm(), tc.want)
+			t.Errorf("url %s: mode = %o, want %o (keep existing mode unless the entry may hold a credential)", tc.url, info.Mode().Perm(), tc.want)
 		}
 	}
 }
