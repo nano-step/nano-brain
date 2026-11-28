@@ -75,7 +75,7 @@ The Claude harvester SHALL re-expand configured projects-parent patterns and re-
 
 ### Requirement: Transcript cwd guards workspace attribution
 
-When a transcript contains an explicit `cwd`, the Claude harvester SHALL compare it with the registered workspace path before persistence and SHALL skip mismatches. Transcripts without `cwd` SHALL preserve legacy behavior.
+When a transcript contains an explicit `cwd`, the Claude harvester SHALL compare it with the registered workspace path before persistence and SHALL skip mismatches. Transcripts without `cwd` SHALL preserve legacy behavior only when their encoded leaf maps to one registered workspace. When multiple distinct registered workspaces encode to the same leaf, cwd-less transcripts are ambiguous and SHALL be skipped rather than copied into every candidate workspace.
 
 #### Scenario: Matching cwd
 - **WHEN** a discovered transcript's `cwd` matches the registered workspace path after path normalization
@@ -85,9 +85,13 @@ When a transcript contains an explicit `cwd`, the Claude harvester SHALL compare
 - **WHEN** an encoded leaf collision causes a transcript whose `cwd` belongs to a different path to be scanned for a workspace
 - **THEN** it SHALL NOT be ingested into that workspace.
 
-#### Scenario: Missing cwd
-- **WHEN** an older transcript has no `cwd`
+#### Scenario: Missing cwd in an unambiguous leaf
+- **WHEN** an older transcript has no `cwd` and its encoded leaf maps to one registered workspace
 - **THEN** the harvester SHALL retain the pre-existing encoded-path behavior rather than dropping the transcript solely for missing metadata.
+
+#### Scenario: Missing cwd in an encoded-path collision
+- **WHEN** multiple distinct registered workspaces encode to the same leaf and a transcript has no `cwd`
+- **THEN** the harvester SHALL skip that transcript for all colliding workspaces because safe attribution is impossible.
 
 ### Requirement: Init enables harvesting without persisting stale profile paths
 

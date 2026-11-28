@@ -23,7 +23,7 @@ PASS
 ok      github.com/nano-brain/nano-brain/cmd/nano-brain      3.637s
 ```
 
-`TestClaudeDiscovery_FirstSessionAfterStartup` also executes a BM25 query for the fixture token and asserts at least one row, proving the harvested session is query-visible.
+`TestClaudeDiscovery_FirstSessionAfterStartup` also executes a BM25 query for the fixture token and asserts at least one row, proving the harvested session is query-visible. `TestClaudeDiscoveryCollisionAttribution` additionally uses the real PostgreSQL schema to prove that a cwd-less transcript in a two-workspace encoded-leaf collision is fail-closed in both workspaces, while a cwd-bearing transcript still reaches only the matching workspace.
 
 Focused detection/init/render/encoding tests:
 
@@ -41,6 +41,8 @@ Focused detection/init/render/encoding tests:
 --- PASS: TestRenderConfig_ClaudeCodeEnabledConditional
 --- PASS: TestExistingClaudeBaseDirsDedupesSymlinkAliases
 --- PASS: TestSameFilesystemPath_NormalizesLexicalAndSymlinkPaths
+--- PASS: TestDiscoverClaudeLeafBindingsGroupsEncodedCollisions
+--- PASS: TestDiscoverClaudeLeafBindingsKeepsDistinctLeavesSeparate
 --- PASS: TestEncodeClaudeProjectsDirMatchesClaudeCharacterRules
 ```
 
@@ -79,7 +81,7 @@ Two independent read-only reviews were completed after implementation. Their blo
 
 Residual non-blocking deferrals:
 
-- cwd-mismatched collision files can still be reconsidered on later harvest cycles because no persistent negative cache was added; this wastes some work but does not affect correctness;
+- cwd-mismatched collision files and ambiguous cwd-less collision files can still be reconsidered on later harvest cycles because no persistent negative cache was added; this wastes some work but does not affect correctness;
 - `/api/status` still exposes the pre-existing `session_dirs` resolved-shape semantics rather than a separate raw-pattern field;
 - historical pre-current Claude leaf encodings and case-insensitive APFS spelling variants are not probed.
 

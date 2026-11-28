@@ -36,12 +36,13 @@ const (
 
 // ClaudeCodeHarvester ingests Claude Code JSONL session files into the document store.
 type ClaudeCodeHarvester struct {
-	db            *sql.DB
-	logger        zerolog.Logger
-	sessionDir    string
-	workspace     string
-	workspacePath string
-	summarizer    SessionSummarizer
+	db                   *sql.DB
+	logger               zerolog.Logger
+	sessionDir           string
+	workspace            string
+	workspacePath        string
+	failClosedWithoutCwd bool
+	summarizer           SessionSummarizer
 }
 
 // WorkspaceHash returns the workspace hash this harvester was created for.
@@ -67,10 +68,14 @@ func NewClaudeCodeHarvester(db *sql.DB, logger zerolog.Logger, sessionDir, works
 // NewClaudeCodeHarvesterWithWorkspacePath creates a harvester bound to a
 // registered workspace root. The path is used as a fail-closed guard for
 // modern transcripts that carry cwd, mitigating non-injective encoded leaf
-// collisions when multiple projects roots are scanned.
-func NewClaudeCodeHarvesterWithWorkspacePath(db *sql.DB, logger zerolog.Logger, sessionDir, workspace, workspacePath string) *ClaudeCodeHarvester {
+// collisions when multiple projects roots are scanned. failClosedWithoutCwd
+// is set when multiple registered workspaces encode to the same leaf; in that
+// case a cwd-less transcript is ambiguous and is skipped rather than exposed
+// to every colliding workspace.
+func NewClaudeCodeHarvesterWithWorkspacePath(db *sql.DB, logger zerolog.Logger, sessionDir, workspace, workspacePath string, failClosedWithoutCwd bool) *ClaudeCodeHarvester {
 	h := NewClaudeCodeHarvester(db, logger, sessionDir, workspace)
 	h.workspacePath = workspacePath
+	h.failClosedWithoutCwd = failClosedWithoutCwd
 	return h
 }
 
@@ -223,12 +228,20 @@ func (h *ClaudeCodeHarvester) harvestSession(ctx context.Context, sessionFile st
 	}
 
 	if h.workspacePath != "" {
-		if cwd := firstClaudeCodeCwd(msgs); cwd != "" && !sameFilesystemPath(cwd, h.workspacePath) {
+		cwd := firstClaudeCodeCwd(msgs)
+		if cwd != "" && !sameFilesystemPath(cwd, h.workspacePath) {
 			h.logger.Warn().
 				Str("session", sessionID).
 				Str("cwd", cwd).
 				Str("workspace_path", h.workspacePath).
 				Msg("skipping session whose cwd does not match bound workspace")
+			return harvestSkipped, nil
+		}
+		if cwd == "" && h.failClosedWithoutCwd {
+			h.logger.Warn().
+				Str("session", sessionID).
+				Str("workspace_path", h.workspacePath).
+				Msg("skipping cwd-less session in ambiguous encoded workspace leaf")
 			return harvestSkipped, nil
 		}
 	}

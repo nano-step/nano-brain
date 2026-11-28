@@ -74,7 +74,7 @@ Relative `CCS_DIR`/`CCS_HOME` values are rejected rather than guessed relative t
 
 Scanning multiple CCS profiles merges sessions from those profiles into workspace memory according to the transcript `cwd` and registered workspace path. It does not create a separate memory namespace per CCS profile. If profile separation is required, use an explicit restrictive `session_dirs` list or separate nano-brain workspaces/instances.
 
-Claude's encoded leaf directory names are lossy. For modern transcripts containing `cwd`, nano-brain validates that transcript `cwd` against the registered workspace before persistence. This prevents lossy encoded-name collisions from attributing a transcript to the wrong workspace. Older transcripts without `cwd` retain the legacy encoded-directory behavior.
+Claude's encoded leaf directory names are lossy. For modern transcripts containing `cwd`, nano-brain validates that transcript `cwd` against the registered workspace before persistence. This prevents lossy encoded-name collisions from attributing a transcript to the wrong workspace. Older transcripts without `cwd` retain the legacy encoded-directory behavior only when the leaf maps to one registered workspace; if multiple registered workspaces collide in the same encoded leaf, cwd-less transcripts are skipped fail-closed because safe attribution is impossible.
 
 ## Real-transcript E2E measurement
 

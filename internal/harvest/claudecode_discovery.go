@@ -58,7 +58,37 @@ func (h *ClaudeCodeDiscoveryHarvester) HarvestAll(ctx context.Context, enqueuer 
 	}
 	sort.Slice(workspaces, func(i, j int) bool { return workspaces[i].Path < workspaces[j].Path })
 
-	seenLeaves := make(map[string]struct{})
+	for _, binding := range discoverClaudeLeafBindings(baseDirs, workspaces) {
+		boundWorkspaces := make([]sqlc.Workspace, 0, len(binding.workspaces))
+		for _, ws := range binding.workspaces {
+			boundWorkspaces = append(boundWorkspaces, ws)
+		}
+		sort.Slice(boundWorkspaces, func(i, j int) bool { return boundWorkspaces[i].Path < boundWorkspaces[j].Path })
+		ambiguousCwdLess := len(boundWorkspaces) > 1
+
+		for _, ws := range boundWorkspaces {
+			leaf := NewClaudeCodeHarvesterWithWorkspacePath(h.db, h.logger, binding.leafDir, ws.Hash, ws.Path, ambiguousCwdLess)
+			leaf.setSummarizer(h.summarizer)
+			harvestedN, skippedN, errN := leaf.HarvestAll(ctx, enqueuer)
+			harvested += harvestedN
+			skipped += skippedN
+			errCount += errN
+		}
+	}
+	return harvested, skipped, errCount
+}
+
+type claudeLeafBinding struct {
+	leafDir    string
+	workspaces map[string]sqlc.Workspace
+}
+
+// discoverClaudeLeafBindings groups all registered workspaces that encode to
+// the same physical leaf. The group size is needed before harvesting: modern
+// transcripts can be attributed by cwd, but cwd-less transcripts are ambiguous
+// when the group contains multiple distinct workspaces.
+func discoverClaudeLeafBindings(baseDirs []string, workspaces []sqlc.Workspace) []*claudeLeafBinding {
+	bindings := make(map[string]*claudeLeafBinding)
 	for _, baseDir := range baseDirs {
 		for _, ws := range workspaces {
 			for _, workspaceCandidate := range claudeWorkspacePathCandidates(ws.Path) {
@@ -67,22 +97,30 @@ func (h *ClaudeCodeDiscoveryHarvester) HarvestAll(ctx context.Context, enqueuer 
 				if statErr != nil || !info.IsDir() {
 					continue
 				}
-				key := canonicalFilesystemPath(leafDir) + "\x00" + ws.Hash
-				if _, dup := seenLeaves[key]; dup {
-					continue
+				key := canonicalFilesystemPath(leafDir)
+				binding, ok := bindings[key]
+				if !ok {
+					binding = &claudeLeafBinding{
+						leafDir:    filepath.Clean(leafDir),
+						workspaces: make(map[string]sqlc.Workspace),
+					}
+					bindings[key] = binding
 				}
-				seenLeaves[key] = struct{}{}
-
-				leaf := NewClaudeCodeHarvesterWithWorkspacePath(h.db, h.logger, leafDir, ws.Hash, ws.Path)
-				leaf.setSummarizer(h.summarizer)
-				harvestedN, skippedN, errN := leaf.HarvestAll(ctx, enqueuer)
-				harvested += harvestedN
-				skipped += skippedN
-				errCount += errN
+				binding.workspaces[ws.Hash] = ws
 			}
 		}
 	}
-	return harvested, skipped, errCount
+
+	keys := make([]string, 0, len(bindings))
+	for key := range bindings {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make([]*claudeLeafBinding, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, bindings[key])
+	}
+	return out
 }
 
 func claudeWorkspacePathCandidates(workspacePath string) []string {
